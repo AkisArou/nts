@@ -40,75 +40,76 @@ from such a run, and saying which they are from is cheaper than implying they
 are something else.
 
 <!-- benchmarks:start -->
-| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| absences | 187.3 ns | 187.7 ns | **188.1 ns** | 553.5 ns | 436.2 ns | 796.1 ns | 666.6 ns | 1.00x | 0.24x | 0.28x | 1.27x |
-| accumulate | 1.09 us | 1.43 us | **1.07 us** | 2.09 us | 2.09 us | 2.78 us | 20.97 us | 0.99x | 0.39x | 0.05x | 1.00x |
-| array-from (rc) | 511.08 us | 1.79 ms | **1.79 ms** | 972.11 us | 928.44 us | 458.79 us | 1.21 ms | 3.50x | 3.90x | 1.47x | 1.05x |
-| array-methods | 2.40 us | 1.27 us | **1.30 us** | 1.57 us | 1.37 us | 5.72 us | 5.50 us | 0.54x | 0.23x | 0.24x | 1.15x |
-| array-mutations (rc) | 572.7 ns | 632.5 ns | **633.6 ns** | 1.68 us | 2.46 us | 1.65 us | 3.59 us | 1.11x | 0.38x | 0.18x | 0.68x |
-| array-predicates (rc) | 2.44 us | 2.19 us | **2.09 us** | 3.83 us | 2.25 us | 4.59 us | 5.26 us | 0.86x | 0.46x | 0.40x | 1.70x |
-| arrays | 1.31 us | 1.39 us | **1.39 us** | 1.35 us | 1.32 us | 2.47 us | 2.05 us | 1.06x | 0.56x | 0.68x | 1.02x |
-| awfy-bounce | 4.05 us | 5.14 us | **5.15 us** | 4.49 us | 4.43 us | 12.68 us | 10.66 us | 1.27x | 0.41x | 0.48x | 1.01x |
-| awfy-list | 7.26 us | 7.66 us | **7.65 us** | 7.82 us | 6.31 us | 16.07 us | 13.05 us | 1.05x | 0.48x | 0.59x | 1.24x† |
-| awfy-mandelbrot | 22.59 ms | 22.47 ms | **22.46 ms** | 21.86 ms | 26.15 ms | 21.96 ms | 21.96 ms | 0.99x | 1.02x | 1.02x | 0.84x |
-| awfy-nbody | 6.94 ms | 6.52 ms | **7.68 ms** | 7.66 ms | 7.70 ms | 77.64 ms | 14.21 ms | 1.11x | 0.10x | 0.54x | 0.99x |
-| awfy-permute | 10.42 us | 10.01 us | **10.03 us** | 11.83 us | 16.55 us | 21.15 us | 16.42 us | 0.96x | 0.47x | 0.61x | 0.71x |
-| awfy-queens | 4.61 us | 7.05 us | **6.91 us** | 10.65 us | 8.54 us | 16.70 us | 14.20 us | 1.50x | 0.41x | 0.49x | 1.25x |
-| awfy-sieve | 3.70 us | 6.81 us | **4.71 us** | 4.25 us | 4.52 us | 9.99 us | 10.33 us | 1.27x | 0.47x | 0.46x | 0.94x† |
-| awfy-towers | 12.41 us | 19.16 us | **17.86 us** | 17.92 us | 18.89 us | 31.67 us | 20.30 us | 1.44x | 0.56x | 0.88x | 0.95x |
-| bigint | 335.4 ns | 330.2 ns | **333.7 ns** | 630.5 ns | 3.86 us | 3.65 us | 3.70 us | 1.00x | 0.09x | 0.09x | 0.16x |
-| bytes | 422.40 us | 447.87 us | **449.27 us** | 719.75 us | 654.64 us | 509.10 us | 725.80 us | 1.06x | 0.88x | 0.62x | 1.10x |
-| case-convert (rc) | 6.07 us | 2.45 us | **2.43 us** | 3.23 us | 3.39 us | 2.98 us | 3.46 us | 0.40x | 0.81x | 0.70x | 0.95x |
-| checksum | 4.78 us | 4.78 us | **4.78 us** | 4.79 us | 4.79 us | 5.47 us | 22.84 us | 1.00x | 0.87x | 0.21x | 1.00x |
-| closure-merge | 7.01 us | 21.21 us | **21.13 us** | 2.07 us | 2.04 us | 19.88 us | 12.23 us | 3.01x | 1.06x | 1.73x | 1.01x |
-| closures | 1.10 us | 1.12 us | **1.11 us** | 1.93 us | 2.23 us | 2.93 us | 17.55 us | 1.01x | 0.38x | 0.06x | 0.86x |
-| dispatch | 27.85 us | 21.42 us | **22.28 us** | 17.03 us | 24.97 us | 39.48 us | 13.53 us | 0.80x | 0.56x | 1.65x | 0.68x† |
-| elementwise | 142.71 us | 131.70 us | **132.16 us** | 58.54 us | 56.57 us | 910.60 us | 589.05 us | 0.93x | 0.15x | 0.22x | 1.03x |
-| erasure-stored-typed | 67.22 us | 71.21 us | **71.20 us** | 68.56 us | 69.56 us | 109.49 us | 68.66 us | 1.06x | 0.65x | 1.04x | 0.99x |
-| erasure-stored-unknown | 67.22 us | 70.36 us | **70.43 us** | 68.07 us | 70.83 us | 87.41 us | 68.70 us | 1.05x | 0.81x | 1.03x | 0.96x |
-| erasure-typed | 133.76 us | 133.83 us | **133.78 us** | 133.78 us | 133.76 us | 135.64 us | 81.65 us | 1.00x | 0.99x | 1.64x | 1.00x |
-| erasure-unknown | 133.80 us | 133.80 us | **133.78 us** | 133.80 us | 133.85 us | 135.45 us | 81.47 us | 1.00x | 0.99x | 1.64x | 1.00x |
-| exceptions | 20.53 us | 33.43 us | **33.42 us** | 33.45 us | 3.02 ms | 14.14 ms | 2.32 ms | 1.63x | 0.00x | 0.01x | 0.01x |
-| fib | 301.02 us | 545.58 us | **541.89 us** | 485.71 us | 469.88 us | 986.17 us | 667.52 us | 1.80x | 0.55x | 0.81x | 1.03x |
-| generator | 161.18 us | 171.64 us | **171.63 us** | 166.73 us | 168.32 us | 3.18 ms | 3.11 ms | 1.06x | 0.05x | 0.06x | 0.99x |
-| generator-dispatched | 572.87 us | 582.67 us | **584.11 us** | 167.73 us | 170.14 us | 3.21 ms | 837.89 us | 1.02x | 0.18x | 0.70x | 0.99x |
-| generic-classes | 187.8 ns | 188.5 ns | **188.5 ns** | 1.62 us | 1.38 us | 1.39 us | 1.89 us | 1.00x | 0.14x | 0.10x | 1.17x |
-| growth-fixed | 151.26 us | 155.52 us | **155.60 us** | 165.98 us | 166.00 us | 305.38 us | 264.63 us | 1.03x | 0.51x | 0.59x | 1.00x |
-| growth-grown | 151.82 us | 624.80 us | **623.57 us** | 168.32 us | 165.94 us | 307.01 us | 265.11 us | 4.11x | 2.03x | 2.35x | 1.01x |
-| in-narrowing | 1.43 us | 1.47 us | **1.44 us** | 1.36 us | 1.35 us | 9.86 us | 9.94 us | 1.01x | 0.15x | 0.14x | 1.00x |
-| instanceof | 69.33 us | 42.78 us | **42.56 us** | 49.43 us | 44.20 us | 982.76 us | 190.48 us | 0.61x | 0.04x | 0.22x | 1.12x |
-| json-build-append (rc) | -- | 18.52 us | **19.15 us** | 15.62 us | -- | 14.89 us | 7.35 us | -- | 1.29x | 2.61x | -- |
-| json-build-join (rc) | -- | 19.75 us | **20.13 us** | 15.42 us | -- | 20.54 us | 12.39 us | -- | 0.98x | 1.62x | -- |
-| json-parse | -- | 1.62 ms | **1.63 ms** | 688.27 us | -- | 762.60 us | 1.14 ms | -- | 2.13x | 1.43x | -- |
-| json-scan | -- | 2.19 us | **2.06 us** | 2.56 us | -- | 1.67 us | 1.95 us | -- | 1.24x | 1.06x | -- |
-| json-serialize (rc) | -- | 13.46 us | **14.11 us** | 14.78 us | -- | 12.14 us | 6.54 us | -- | 1.16x | 2.16x | -- |
-| json-stringify-doc (rc) | -- | -- | **--** | refused | -- | 1.37 ms | 2.33 ms | -- | -- | -- | -- |
-| json-stringify-fused (rc) | -- | 714.47 us | **694.87 us** | 731.59 us | -- | 705.46 us | 1.52 ms | -- | 0.98x | 0.46x | -- |
-| json-stringify-inline (rc) | -- | 970.19 us | **932.91 us** | 769.08 us | -- | 763.72 us | 1.27 ms | -- | 1.22x | 0.74x | -- |
-| json-stringify-typed (rc) | -- | 1.17 ms | **1.13 ms** | 948.09 us | -- | 847.07 us | 848.40 us | -- | 1.33x | 1.33x | -- |
-| logical-assignment | 49.54 us | 59.23 us | **50.48 us** | 54.70 us | 58.56 us | 345.51 us | 68.32 us | 1.02x | 0.15x | 0.74x | 0.93x |
-| loop | 653.8 ns | 650.2 ns | **650.3 ns** | 1.12 us | 1.49 us | 666.7 ns | 664.4 ns | 0.99x | 0.98x | 0.98x | 0.75x |
-| map-and-set (rc) | 19.06 us | 5.17 us | **5.18 us** | 8.58 us | 10.57 us | 6.91 us | 5.55 us | 0.27x | 0.75x | 0.93x | 0.81x |
-| module-closures | 2.28 us | 2.29 us | **2.30 us** | 4.52 us | 4.27 us | 5.18 us | 34.73 us | 1.01x | 0.44x | 0.07x | 1.06x |
-| node-utf8 (rc) | -- | 36.33 us | **39.43 us** | 45.54 us | 7.23 us | 37.34 us | 33.13 us | -- | 1.06x | 1.19x | 6.30x |
-| number-format (rc) | 836.4 ns | 706.5 ns | **727.0 ns** | 883.6 ns | 881.3 ns | 1.41 us | 828.8 ns | 0.87x | 0.51x | 0.88x | 1.00x |
-| number-format-double (rc) | -- | 4.52 us | **4.50 us** | 5.44 us | 4.88 us | 9.02 us | 5.37 us | -- | 0.50x | 0.84x | 1.12x |
-| objects (rc) | 1.51 us | 1.51 us | **1.52 us** | 2.00 us | 2.02 us | 1.80 us | 1.41 us | 1.00x | 0.84x | 1.08x | 0.99x† |
-| optional-chain | 9.14 us | 33.43 us | **33.44 us** | 42.64 us | 33.45 us | 350.61 us | 169.31 us | 3.66x | 0.10x | 0.20x | 1.27x |
-| pipeline (rc) | 28.65 us | 26.62 us | **26.61 us** | 56.15 us | 55.99 us | 116.79 us | 124.70 us | 0.93x | 0.23x | 0.21x | 1.00x |
-| strings | 337.5 ns | 210.8 ns | **215.0 ns** | 1.50 us | 1.50 us | 2.37 us | 2.59 us | 0.64x | 0.09x | 0.08x | 1.00x |
-| substrings (rc) | 1.69 us | 1.85 us | **2.31 us** | 2.11 us | 5.34 us | 6.64 us | 24.20 us | 1.36x | 0.35x | 0.10x | 0.39x |
-| symbol-keyed-map | 13.73 us | 20.94 us | **21.24 us** | 24.23 us | 8.32 us | 40.71 us | 7.47 us | 1.55x | 0.52x | 2.84x | 2.91x† |
-| symbol-keys | 302.5 ns | 312.3 ns | **313.7 ns** | 316.6 ns | 305.3 ns | 1.63 us | 474.6 ns | 1.04x | 0.19x | 0.66x | 1.04x |
-| upcast | 3.97 us | 4.77 us | **5.44 us** | 7.77 us | 7.53 us | 9.57 us | 10.10 us | 1.37x | 0.57x | 0.54x | 1.03x |
-| user-iterable | 29.67 us | 635.98 us | **641.25 us** | 348.74 us | 373.21 us | 401.03 us | 633.64 us | 21.61x | 1.60x | 1.01x | 0.93x |
 
-† one half of this ratio is known to move — see the table below.          **A ratio is unquotable when either half moves**, whichever half it is:          the bar is ours over theirs, so a moving denominator moves the bar.
+| case                       |       C++ |   nts (C) |    nts (LLVM) | nts (JVM) |      Java |        V8 |       Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |
+| -------------------------- | --------: | --------: | ------------: | --------: | --------: | --------: | --------: | ------: | -----: | ------: | -------------: |
+| absences                   |  187.3 ns |  187.7 ns |  **188.1 ns** |  553.5 ns |  436.2 ns |  796.1 ns |  666.6 ns |   1.00x |  0.24x |   0.28x |          1.27x |
+| accumulate                 |   1.09 us |   1.43 us |   **1.07 us** |   2.09 us |   2.09 us |   2.78 us |  20.97 us |   0.99x |  0.39x |   0.05x |          1.00x |
+| array-from (rc)            | 511.08 us |   1.79 ms |   **1.79 ms** | 972.11 us | 928.44 us | 458.79 us |   1.21 ms |   3.50x |  3.90x |   1.47x |          1.05x |
+| array-methods              |   2.40 us |   1.27 us |   **1.30 us** |   1.57 us |   1.37 us |   5.72 us |   5.50 us |   0.54x |  0.23x |   0.24x |          1.15x |
+| array-mutations (rc)       |  572.7 ns |  632.5 ns |  **633.6 ns** |   1.68 us |   2.46 us |   1.65 us |   3.59 us |   1.11x |  0.38x |   0.18x |          0.68x |
+| array-predicates (rc)      |   2.44 us |   2.19 us |   **2.09 us** |   3.83 us |   2.25 us |   4.59 us |   5.26 us |   0.86x |  0.46x |   0.40x |          1.70x |
+| arrays                     |   1.31 us |   1.39 us |   **1.39 us** |   1.35 us |   1.32 us |   2.47 us |   2.05 us |   1.06x |  0.56x |   0.68x |          1.02x |
+| awfy-bounce                |   4.05 us |   5.14 us |   **5.15 us** |   4.49 us |   4.43 us |  12.68 us |  10.66 us |   1.27x |  0.41x |   0.48x |          1.01x |
+| awfy-list                  |   7.26 us |   7.66 us |   **7.65 us** |   7.82 us |   6.31 us |  16.07 us |  13.05 us |   1.05x |  0.48x |   0.59x |         1.24x† |
+| awfy-mandelbrot            |  22.59 ms |  22.47 ms |  **22.46 ms** |  21.86 ms |  26.15 ms |  21.96 ms |  21.96 ms |   0.99x |  1.02x |   1.02x |          0.84x |
+| awfy-nbody                 |   6.94 ms |   6.52 ms |   **7.68 ms** |   7.66 ms |   7.70 ms |  77.64 ms |  14.21 ms |   1.11x |  0.10x |   0.54x |          0.99x |
+| awfy-permute               |  10.42 us |  10.01 us |  **10.03 us** |  11.83 us |  16.55 us |  21.15 us |  16.42 us |   0.96x |  0.47x |   0.61x |          0.71x |
+| awfy-queens                |   4.61 us |   7.05 us |   **6.91 us** |  10.65 us |   8.54 us |  16.70 us |  14.20 us |   1.50x |  0.41x |   0.49x |          1.25x |
+| awfy-sieve                 |   3.70 us |   6.81 us |   **4.71 us** |   4.25 us |   4.52 us |   9.99 us |  10.33 us |   1.27x |  0.47x |   0.46x |         0.94x† |
+| awfy-towers                |  12.41 us |  19.16 us |  **17.86 us** |  17.92 us |  18.89 us |  31.67 us |  20.30 us |   1.44x |  0.56x |   0.88x |          0.95x |
+| bigint                     |  335.4 ns |  330.2 ns |  **333.7 ns** |  630.5 ns |   3.86 us |   3.65 us |   3.70 us |   1.00x |  0.09x |   0.09x |          0.16x |
+| bytes                      | 422.40 us | 447.87 us | **449.27 us** | 719.75 us | 654.64 us | 509.10 us | 725.80 us |   1.06x |  0.88x |   0.62x |          1.10x |
+| case-convert (rc)          |   6.07 us |   2.45 us |   **2.43 us** |   3.23 us |   3.39 us |   2.98 us |   3.46 us |   0.40x |  0.81x |   0.70x |          0.95x |
+| checksum                   |   4.78 us |   4.78 us |   **4.78 us** |   4.79 us |   4.79 us |   5.47 us |  22.84 us |   1.00x |  0.87x |   0.21x |          1.00x |
+| closure-merge              |   7.01 us |  21.21 us |  **21.13 us** |   2.07 us |   2.04 us |  19.88 us |  12.23 us |   3.01x |  1.06x |   1.73x |          1.01x |
+| closures                   |   1.10 us |   1.12 us |   **1.11 us** |   1.93 us |   2.23 us |   2.93 us |  17.55 us |   1.01x |  0.38x |   0.06x |          0.86x |
+| dispatch                   |  27.85 us |  21.42 us |  **22.28 us** |  17.03 us |  24.97 us |  39.48 us |  13.53 us |   0.80x |  0.56x |   1.65x |         0.68x† |
+| elementwise                | 142.71 us | 131.70 us | **132.16 us** |  58.54 us |  56.57 us | 910.60 us | 589.05 us |   0.93x |  0.15x |   0.22x |          1.03x |
+| erasure-stored-typed       |  67.22 us |  71.21 us |  **71.20 us** |  68.56 us |  69.56 us | 109.49 us |  68.66 us |   1.06x |  0.65x |   1.04x |          0.99x |
+| erasure-stored-unknown     |  67.22 us |  70.36 us |  **70.43 us** |  68.07 us |  70.83 us |  87.41 us |  68.70 us |   1.05x |  0.81x |   1.03x |          0.96x |
+| erasure-typed              | 133.76 us | 133.83 us | **133.78 us** | 133.78 us | 133.76 us | 135.64 us |  81.65 us |   1.00x |  0.99x |   1.64x |          1.00x |
+| erasure-unknown            | 133.80 us | 133.80 us | **133.78 us** | 133.80 us | 133.85 us | 135.45 us |  81.47 us |   1.00x |  0.99x |   1.64x |          1.00x |
+| exceptions                 |  20.53 us |  33.43 us |  **33.42 us** |  33.45 us |   3.02 ms |  14.14 ms |   2.32 ms |   1.63x |  0.00x |   0.01x |          0.01x |
+| fib                        | 301.02 us | 545.58 us | **541.89 us** | 485.71 us | 469.88 us | 986.17 us | 667.52 us |   1.80x |  0.55x |   0.81x |          1.03x |
+| generator                  | 161.18 us | 171.64 us | **171.63 us** | 166.73 us | 168.32 us |   3.18 ms |   3.11 ms |   1.06x |  0.05x |   0.06x |          0.99x |
+| generator-dispatched       | 572.87 us | 582.67 us | **584.11 us** | 167.73 us | 170.14 us |   3.21 ms | 837.89 us |   1.02x |  0.18x |   0.70x |          0.99x |
+| generic-classes            |  187.8 ns |  188.5 ns |  **188.5 ns** |   1.62 us |   1.38 us |   1.39 us |   1.89 us |   1.00x |  0.14x |   0.10x |          1.17x |
+| growth-fixed               | 151.26 us | 155.52 us | **155.60 us** | 165.98 us | 166.00 us | 305.38 us | 264.63 us |   1.03x |  0.51x |   0.59x |          1.00x |
+| growth-grown               | 151.82 us | 624.80 us | **623.57 us** | 168.32 us | 165.94 us | 307.01 us | 265.11 us |   4.11x |  2.03x |   2.35x |          1.01x |
+| in-narrowing               |   1.43 us |   1.47 us |   **1.44 us** |   1.36 us |   1.35 us |   9.86 us |   9.94 us |   1.01x |  0.15x |   0.14x |          1.00x |
+| instanceof                 |  69.33 us |  42.78 us |  **42.56 us** |  49.43 us |  44.20 us | 982.76 us | 190.48 us |   0.61x |  0.04x |   0.22x |          1.12x |
+| json-build-append (rc)     |        -- |  18.52 us |  **19.15 us** |  15.62 us |        -- |  14.89 us |   7.35 us |      -- |  1.29x |   2.61x |             -- |
+| json-build-join (rc)       |        -- |  19.75 us |  **20.13 us** |  15.42 us |        -- |  20.54 us |  12.39 us |      -- |  0.98x |   1.62x |             -- |
+| json-parse                 |        -- |   1.62 ms |   **1.63 ms** | 688.27 us |        -- | 762.60 us |   1.14 ms |      -- |  2.13x |   1.43x |             -- |
+| json-scan                  |        -- |   2.19 us |   **2.06 us** |   2.56 us |        -- |   1.67 us |   1.95 us |      -- |  1.24x |   1.06x |             -- |
+| json-serialize (rc)        |        -- |  13.46 us |  **14.11 us** |  14.78 us |        -- |  12.14 us |   6.54 us |      -- |  1.16x |   2.16x |             -- |
+| json-stringify-doc (rc)    |        -- |        -- |        **--** |   refused |        -- |   1.37 ms |   2.33 ms |      -- |     -- |      -- |             -- |
+| json-stringify-fused (rc)  |        -- | 714.47 us | **694.87 us** | 731.59 us |        -- | 705.46 us |   1.52 ms |      -- |  0.98x |   0.46x |             -- |
+| json-stringify-inline (rc) |        -- | 970.19 us | **932.91 us** | 769.08 us |        -- | 763.72 us |   1.27 ms |      -- |  1.22x |   0.74x |             -- |
+| json-stringify-typed (rc)  |        -- |   1.17 ms |   **1.13 ms** | 948.09 us |        -- | 847.07 us | 848.40 us |      -- |  1.33x |   1.33x |             -- |
+| logical-assignment         |  49.54 us |  59.23 us |  **50.48 us** |  54.70 us |  58.56 us | 345.51 us |  68.32 us |   1.02x |  0.15x |   0.74x |          0.93x |
+| loop                       |  653.8 ns |  650.2 ns |  **650.3 ns** |   1.12 us |   1.49 us |  666.7 ns |  664.4 ns |   0.99x |  0.98x |   0.98x |          0.75x |
+| map-and-set (rc)           |  19.06 us |   5.17 us |   **5.18 us** |   8.58 us |  10.57 us |   6.91 us |   5.55 us |   0.27x |  0.75x |   0.93x |          0.81x |
+| module-closures            |   2.28 us |   2.29 us |   **2.30 us** |   4.52 us |   4.27 us |   5.18 us |  34.73 us |   1.01x |  0.44x |   0.07x |          1.06x |
+| node-utf8 (rc)             |        -- |  36.33 us |  **39.43 us** |  45.54 us |   7.23 us |  37.34 us |  33.13 us |      -- |  1.06x |   1.19x |          6.30x |
+| number-format (rc)         |  836.4 ns |  706.5 ns |  **727.0 ns** |  883.6 ns |  881.3 ns |   1.41 us |  828.8 ns |   0.87x |  0.51x |   0.88x |          1.00x |
+| number-format-double (rc)  |        -- |   4.52 us |   **4.50 us** |   5.44 us |   4.88 us |   9.02 us |   5.37 us |      -- |  0.50x |   0.84x |          1.12x |
+| objects (rc)               |   1.51 us |   1.51 us |   **1.52 us** |   2.00 us |   2.02 us |   1.80 us |   1.41 us |   1.00x |  0.84x |   1.08x |         0.99x† |
+| optional-chain             |   9.14 us |  33.43 us |  **33.44 us** |  42.64 us |  33.45 us | 350.61 us | 169.31 us |   3.66x |  0.10x |   0.20x |          1.27x |
+| pipeline (rc)              |  28.65 us |  26.62 us |  **26.61 us** |  56.15 us |  55.99 us | 116.79 us | 124.70 us |   0.93x |  0.23x |   0.21x |          1.00x |
+| strings                    |  337.5 ns |  210.8 ns |  **215.0 ns** |   1.50 us |   1.50 us |   2.37 us |   2.59 us |   0.64x |  0.09x |   0.08x |          1.00x |
+| substrings (rc)            |   1.69 us |   1.85 us |   **2.31 us** |   2.11 us |   5.34 us |   6.64 us |  24.20 us |   1.36x |  0.35x |   0.10x |          0.39x |
+| symbol-keyed-map           |  13.73 us |  20.94 us |  **21.24 us** |  24.23 us |   8.32 us |  40.71 us |   7.47 us |   1.55x |  0.52x |   2.84x |         2.91x† |
+| symbol-keys                |  302.5 ns |  312.3 ns |  **313.7 ns** |  316.6 ns |  305.3 ns |   1.63 us |  474.6 ns |   1.04x |  0.19x |   0.66x |          1.04x |
+| upcast                     |   3.97 us |   4.77 us |   **5.44 us** |   7.77 us |   7.53 us |   9.57 us |  10.10 us |   1.37x |  0.57x |   0.54x |          1.03x |
+| user-iterable              |  29.67 us | 635.98 us | **641.25 us** | 348.74 us | 373.21 us | 401.03 us | 633.64 us |  21.61x |  1.60x |   1.01x |          0.93x |
+
+† one half of this ratio is known to move — see the table below. **A ratio is unquotable when either half moves**, whichever half it is: the bar is ours over theirs, so a moving denominator moves the bar.
 
 Every ratio is nts divided by the other, so **lower is better and 1.00 is parity**: `nts/C++` under 1.00 beats hand-written C++, and `nts/V8` and `nts/Bun` under 1.00 beat those engines.
 
-There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that *does* run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement.
+There are two backends and both are measured, in the same run on the same machine: `nts (C)` is the C backend and `nts (LLVM)` is the LLVM one, which is the primary target and is still learning constructs. A `--` there is a program it refuses, not a program it gets wrong — every variant that _does_ run must produce the same checksum as every other, so a bench run is a cross-backend correctness check as well as a measurement.
 
 **The ratios are the LLVM backend's**, because a ratio is a claim about what a program compiled by this compiler costs, and that is the backend a program will be compiled by. Where it refuses one, the ratio is `--` rather than quietly reporting the other backend's number under the same heading.
 
@@ -122,30 +123,31 @@ The suite also measures the same TypeScript with number specialization switched 
 
 `Java` is a hand-written reference for the same benchmark, on the same JVM in the same run — the only reference here written in the language the column beside it compiles to, which is what makes `nts (JVM)/Java` a statement about codegen with the runtime divided out. Every other ratio in this table mixes a codegen difference with an engine difference and cannot separate them. On the `awfy-*` rows it is Are We Fast Yet's **own** Java, unchanged; everywhere else it is a `ref.java` beside the case, whose comment says what a competent Java programmer would write and why. A reference must decline anything that costs one lane and not the other — no boxing where the subject boxes nothing, no field narrower than the f64 a TypeScript `number` is — and four of these were corrected for exactly that, in both directions.
 
-**Below about 1.10x, this column is at its resolution and should be read with the fixed-count driver rather than from here.** The number is a best-of-five, which is the right statistic against a tight distribution and a kind one against a wide one — and where a JIT settles two ways, ours is the wide one. `tooling/bench/counted.sh` calls a case's own entry point N times and again at 2N and subtracts, which removes startup and warmup and reports a median; records 0154 and 0155 are three rows that read differently under it, in both directions, one of them a loss published as a win. The spread table below catches a row that is unstable *within* one invocation and cannot catch one that settles differently between them.
+**Below about 1.10x, this column is at its resolution and should be read with the fixed-count driver rather than from here.** The number is a best-of-five, which is the right statistic against a tight distribution and a kind one against a wide one — and where a JIT settles two ways, ours is the wide one. `tooling/bench/counted.sh` calls a case's own entry point N times and again at 2N and subtracts, which removes startup and warmup and reports a median; records 0154 and 0155 are three rows that read differently under it, in both directions, one of them a loss published as a win. The spread table below catches a row that is unstable _within_ one invocation and cannot catch one that settles differently between them.
 
 **The JVM column excludes startup, deliberately and at this lane's own cost.** It is timed inside its own process after the same 20,000 warmup iterations bounded by 300 ms that `V8` and `Bun` get, then calibrated, then best-of-five. A JIT's first iterations measure the compiler rather than the code, so including them would report how long HotSpot took to decide, not what it decided. The honest consequence is that **cold start is absent from this table and is the one number where this lane loses by two orders of magnitude** — it belongs in a column of its own rather than smuggled into these.
 
-`V8` is node and `Bun` is JavaScriptCore, both running the *same* TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
+`V8` is node and `Bun` is JavaScriptCore, both running the _same_ TypeScript source the compiler consumes — the harness imports the `.ts` directly, so there is no second copy of the program to drift. Both are timed inside their own process after 20,000 warmup iterations, so neither startup nor a cold JIT is in either column, and both must produce the same checksum as everything else. Bun is skipped where it is not installed.
 
-**A ratio moving is not this compiler moving.** Every column is measured in the same run, so a row can worsen while the program gets faster — and did: `json-stringify-doc` went from 6.01 ms to 4.78 ms on one change while its `nts/V8` went from 2.24x to **3.00x**, because the same change bought node 1.7x against our 1.26x. Nothing regressed; V8 exploits the streaming shape better than we do, and the ratio reports that gap rather than the program. Compare a row against the previous run's *absolute* numbers before reading its ratio as a direction.
+**A ratio moving is not this compiler moving.** Every column is measured in the same run, so a row can worsen while the program gets faster — and did: `json-stringify-doc` went from 6.01 ms to 4.78 ms on one change while its `nts/V8` went from 2.24x to **3.00x**, because the same change bought node 1.7x against our 1.26x. Nothing regressed; V8 exploits the streaming shape better than we do, and the ratio reports that gap rather than the program. Compare a row against the previous run's _absolute_ numbers before reading its ratio as a direction.
 
 And where two rows are one algorithm written two ways, the hosts disagree about which way is better: on `json-stringify-typed` against `json-stringify-inline`, Bun prefers the factored source and this compiler prefers the inlined one, in opposite directions on the same pair. **No single source is optimal for every column**, so those rows measure a tradeoff rather than a result, and they are kept as a pair for exactly that reason.
 
-Measured at `f55d42cf`, one case at a time, on cores pinned away from the other sessions sharing this checkout, with the benchmark lock held so nothing else was running. Written by `nts-bench` built in `/home/akisarou/.cache/nts-jvm-sweep/tooling/bench`, which is also what decided *this* file: the destination is the binary's `CARGO_MANIFEST_DIR`, fixed when it was compiled rather than when it was run.
+Measured at `f55d42cf`, one case at a time, on cores pinned away from the other sessions sharing this checkout, with the benchmark lock held so nothing else was running. Written by `nts-bench` built in `/home/akisarou/.cache/nts-jvm-sweep/tooling/bench`, which is also what decided _this_ file: the destination is the binary's `CARGO_MANIFEST_DIR`, fixed when it was compiled rather than when it was run.
 
 **These rows disagreed with themselves.** Measured five times from the same binary, their passes did not agree, so each published number says which shape the JIT settled into rather than how fast the program is, and a rerun may land on another shape. They are listed because the table cannot show it: a flipped row and a solid one are the same number on the page.
 
-| case | column | spread | observed |
-| --- | --- | ---: | --- |
-| awfy-list | Java | 1.33x | this run |
-| awfy-sieve | nts (JVM) | 1.26x | this run |
-| awfy-sieve | Java | 1.27x | a previous sitting, and a second harness — confirmed: two modes out of one binary |
-| dispatch | nts (JVM) | 1.92x | this run |
-| dispatch | Java | 1.11x | this run |
-| objects (rc) | nts (JVM) | 1.29x | this run |
-| objects (rc) | Java | 1.57x | this run |
-| symbol-keyed-map | Java | 1.11x | this run |
+| case             | column    | spread | observed                                                                          |
+| ---------------- | --------- | -----: | --------------------------------------------------------------------------------- |
+| awfy-list        | Java      |  1.33x | this run                                                                          |
+| awfy-sieve       | nts (JVM) |  1.26x | this run                                                                          |
+| awfy-sieve       | Java      |  1.27x | a previous sitting, and a second harness — confirmed: two modes out of one binary |
+| dispatch         | nts (JVM) |  1.92x | this run                                                                          |
+| dispatch         | Java      |  1.11x | this run                                                                          |
+| objects (rc)     | nts (JVM) |  1.29x | this run                                                                          |
+| objects (rc)     | Java      |  1.57x | this run                                                                          |
+| symbol-keyed-map | Java      |  1.11x | this run                                                                          |
+
 <!-- benchmarks:end -->
 
 ### What it can compile
@@ -156,42 +158,43 @@ and what to do next. The corpus below is the independent measure of the same
 question.
 
 <!-- corpus:start -->
+
 <sub>Written by `nts-suite`, compiled in `/home/akisarou/Projects/nts`. It edits that tree's README wherever it is run from, including a sealed worktree — the destination is chosen when the binary is built, not when it runs. Regenerate with `cargo run --release -p nts-suite`.</sub>
 
 184 single-file cases from TypeScript's own test suite, compiled as ordinary programs.
 
-| outcome | files |
-| --- | ---: |
-| lowered completely | **60** |
-| refused a construct | 37 |
-| rejected by the typechecker | 87 |
-| **the frontend fell over** | **0** |
-| **invalid HIR or a panic** | **0** |
+| outcome                     |  files |
+| --------------------------- | -----: |
+| lowered completely          | **60** |
+| refused a construct         |     37 |
+| rejected by the typechecker |     87 |
+| **the frontend fell over**  |  **0** |
+| **invalid HIR or a panic**  |  **0** |
 
 Of the 97 that typecheck, **61%** lower completely. The typechecker rejects the rest by design — a compiler's test suite is largely programs that are supposed to fail.
 
 The last two rows are the ones that must stay at zero: a panic or a rejected SSA form on arbitrary input is a bug however well the hand-written tests do, and so is a query this compiler makes that the typechecker cannot answer.
 
-The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are *sets* rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
+The second row was counted as a typecheck rejection until it was split out, which is how eight of these hid. Six are now survived: a batched query that crashes tsgo is bisected and retried, so one poisonous location costs its own type rather than the file. The two that remain are an enum member whose value is `NaN`, which tsgo cannot write as JSON at all — and they are reached through queries whose answers are _sets_ rather than positional lists, where dropping the one that failed would quietly change a type rather than leave a hole.
 
-What is stopping the rest, in order — and **read this table as breadth rather than as a work queue.** A refusal count and the lowered count are different currencies and do not convert: a file refused for three reasons does not lower when one of them is fixed. Default parameters cleared seven files out of this table in one commit and moved *lowered completely* by zero. The Node session watched the same thing at a larger scale — twenty-five name collisions cleared, two functions gained, and thirty-five *new* refusals, as functions that had stopped at the collision were walked further and refused for their real reasons.
+What is stopping the rest, in order — and **read this table as breadth rather than as a work queue.** A refusal count and the lowered count are different currencies and do not convert: a file refused for three reasons does not lower when one of them is fixed. Default parameters cleared seven files out of this table in one commit and moved _lowered completely_ by zero. The Node session watched the same thing at a larger scale — twenty-five name collisions cleared, two functions gained, and thirty-five _new_ refusals, as functions that had stopped at the collision were walked further and refused for their real reasons.
 
 So a tall row means a construct many files use, which is worth knowing. It does not mean that fixing it moves the number above it.
 
-| refused | files |
-| --- | ---: |
-| foreign function `foo`'s return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI | 7 |
-| `x`, a name from an enclosing scope | 6 |
-| a module declaration, which has code in it | 5 |
-| a class expression | 4 |
-| a tagged template whose tag takes a rest parameter, which wants the substitutions as one array | 4 |
-| `x`, captured above its own declaration, where it has no value yet | 3 |
-| a function returning the type parameter `T` | 3 |
-| an exported generic function this program never instantiates, so there is no copy for the export to name | 3 |
-| foreign function `f`'s parameter `opts` (which wants a c_int or c_double brand, a boolean, or a string), a type with no native ABI | 3 |
-| `a`, which `an anonymous type` does not declare | 2 |
-| a parameter of unrepresentable type (a union of `RegExp` | null | number | undefined) | 2 |
-| a parameter of unrepresentable type (a union of `RegExp` | null | number) | 2 |
+| refused                                                                                                                             | files |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| foreign function `foo`'s return (which wants a c_int or c_double brand, a boolean, or a string, or void), a type with no native ABI |     7 |
+| `x`, a name from an enclosing scope                                                                                                 |     6 |
+| a module declaration, which has code in it                                                                                          |     5 |
+| a class expression                                                                                                                  |     4 |
+| a tagged template whose tag takes a rest parameter, which wants the substitutions as one array                                      |     4 |
+| `x`, captured above its own declaration, where it has no value yet                                                                  |     3 |
+| a function returning the type parameter `T`                                                                                         |     3 |
+| an exported generic function this program never instantiates, so there is no copy for the export to name                            |     3 |
+| foreign function `f`'s parameter `opts` (which wants a c_int or c_double brand, a boolean, or a string), a type with no native ABI  |     3 |
+| `a`, which `an anonymous type` does not declare                                                                                     |     2 |
+| a parameter of unrepresentable type (a union of `RegExp`                                                                            |  null | number  | undefined) | 2   |
+| a parameter of unrepresentable type (a union of `RegExp`                                                                            |  null | number) | 2          |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.
 <!-- corpus:end -->
@@ -352,13 +355,6 @@ third_party/    typescript-go, test262, node, chromium and other pinned dependen
 - [`docs/README.md`](docs/README.md): what each document is and whether it is current.
 - `tooling/gate/`: nothing lands on `main` without passing the gate steps its change owes.
 - [`docs/records/`](docs/records): one file per decision, with the evidence for it.
-
-## Prior work and references
-
-The architecture builds on earlier ScriptC-based research, which already demonstrated C and LLVM native compilation, a substantial native IR and ABI model, native handles and thread admission, JVM lowering with Android runtime integration, and direct Blink calls from compiled native code. Its reference-counted runtime with a cycle collector is a useful bootstrap reference for the RC provider — but nts replaces ScriptC as its foundation rather than continuing to track it.
-
-- [jvm-www](https://github.com/AkisArou/jvm-www) — the JVM ownership work the Android design draws on
-- [Oxc](https://oxc.rs/) — used for source-oriented tooling only. Oxc accelerates source-oriented tooling; TypeScript supplies semantic authority; Native TypeScript owns compilation semantics.
 
 ## License
 
