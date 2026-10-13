@@ -84,6 +84,9 @@ pub enum BoundaryType {
     /// A promise an export answers: a JS promise settled as the program's is,
     /// with its settlement converted to JS. Never a parameter or a global.
     Promise,
+    /// An open value (`unknown`, `any`): a JS primitive, converted by value
+    /// (`boundary`). Never a global.
+    Value,
 }
 
 impl BoundaryType {
@@ -93,6 +96,9 @@ impl BoundaryType {
         }
         if matches!(ty, HirType::Managed(nts_core::hir::ManagedType::Promise(_))) {
             return Ok(Self::Promise);
+        }
+        if ty == &HirType::Erased {
+            return Ok(Self::Value);
         }
         slot(ty)?;
         match ty {

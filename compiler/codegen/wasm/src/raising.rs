@@ -21,10 +21,10 @@ use crate::{
     ir::{self, Function},
     module::{Builder, Func, FuncKey, Global, GlobalKey},
     strings,
-    types::{Physical, Slot as Scalar},
+    types::Physical,
 };
 use nts_core::hir::{HirType, ValueId};
-use wasm_encoder::{BlockType, GlobalType, HeapType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, GlobalType, Instruction as I, RefType, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
@@ -110,8 +110,7 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let payload = state(m, Slot::Payload)?;
     let mut f = match helper {
         Helper::Take => Function::new([ValType::Ref(RefType::ANYREF)]),
-        Helper::Uncaught => Function::new([ValType::I32, ValType::EXTERNREF]),
-        Helper::Raise => Function::default(),
+        Helper::Uncaught | Helper::Raise => Function::default(),
     };
     match helper {
         Helper::Raise => {
@@ -134,85 +133,15 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
 
 /// Throw an erased payload to the host as the JS value it denotes.
 ///
-/// Parameters: 0 payload, 1 the throwing function's name. Locals: 2 tag,
-/// 3 the JS value. A compiled object or function has no identity-preserving
-/// JS form yet, so it keeps its named refusal instead of becoming an opaque
-/// value or a manufactured Error.
+/// Parameters: 0 payload, 1 the throwing function's name. A compiled object
+/// or function has no identity-preserving JS form yet, so it keeps its named
+/// refusal instead of becoming an opaque value or a manufactured Error.
 fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
-    let tag = erased::callee(m, erased::Helper::Tag)?;
-    let number = erased::callee(m, erased::Helper::Number)?;
-    let boolean = erased::callee(m, erased::Helper::Boolean)?;
-    let to_number = m.import(
-        FuncKey::Host("toNumber"),
-        "nts:host/v1",
-        "toNumber",
-        vec![Physical::Scalar(Scalar::F64)],
-        Some(strings::STRING),
-        false,
-    );
-    let decline = m.import(
-        FuncKey::Host("uncaughtDecline"),
-        "nts:host/v1",
-        "uncaughtDecline",
-        vec![strings::STRING],
-        None,
-        false,
-    );
-    let undefined = m.host_global("undefined");
-    let yes = m.host_global("true");
-    let no = m.host_global("false");
+    let host = crate::boundary::host_value(m, crate::boundary::Purpose::Thrown)?;
     let js = m.js_tag();
     clear(f, m)?;
-    f.instruction(&I::LocalGet(0));
-    f.call(tag);
-    f.instruction(&I::LocalSet(2));
-    f.instruction(&I::Block(BlockType::Empty));
-    let case = |f: &mut Function, kind: i32| {
-        f.instructions(&[
-            I::LocalGet(2),
-            I::I32Const(kind),
-            I::I32Eq,
-            I::If(BlockType::Empty),
-        ]);
-    };
-    let found = |f: &mut Function| f.instructions(&[I::LocalSet(3), I::Br(1), I::End]);
-    // A small integer is an i31, which externalizes as the same JS number.
-    case(f, erased::NUMBER);
-    f.instructions(&[
-        I::LocalGet(0),
-        I::RefTestNonNull(HeapType::I31),
-        I::If(BlockType::Result(ValType::EXTERNREF)),
-        I::LocalGet(0),
-        I::ExternConvertAny,
-        I::Else,
-        I::LocalGet(0),
-    ]);
-    f.call(number);
-    f.call(to_number);
-    f.instruction(&I::End);
-    found(f);
-    case(f, erased::BOOLEAN);
-    f.instruction(&I::LocalGet(0));
-    f.call(boolean);
-    f.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
-    f.global_get(yes);
-    f.instruction(&I::Else);
-    f.global_get(no);
-    f.instruction(&I::End);
-    found(f);
-    case(f, erased::STRING);
-    f.instruction(&I::LocalGet(0));
-    erased::string_payload(f);
-    found(f);
-    case(f, erased::UNDEFINED);
-    f.global_get(undefined);
-    found(f);
-    case(f, erased::NULL);
-    f.instruction(&I::RefNull(HeapType::EXTERN));
-    found(f);
-    f.instruction(&I::LocalGet(1));
-    f.call(decline);
-    f.instructions(&[I::Unreachable, I::End, I::LocalGet(3)]);
+    f.instructions(&[I::LocalGet(0), I::LocalGet(1)]);
+    f.call(host);
     f.throw(js);
     Ok(())
 }

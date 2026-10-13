@@ -17,6 +17,10 @@ const wasm = instantiate();
 const js = await import(pathToFileURL(path.resolve(source)));
 const pool = [NaN, -Infinity, Infinity, -0, 0, 1, -1, 0.5, -0.5, 3, 7, 20,
   2147483647, -2147483648, 2147483648, 4294967295, Number.MAX_SAFE_INTEGER];
+// An open parameter (`unknown`, `any`): every primitive kind, and an object and
+// an array, which the boundary refuses by name.
+const values = [undefined, null, false, true, ...pool, '', 'a', '3', 'hello', {}, [1]];
+const poolOf = kind => kind === 'bool' ? [false, true] : kind === 'value' ? values : pool;
 let cases = 0, declined = 0;
 const refused = {};
 const reasonOf = error => String(error.message).replace(/^NTS5001: wasm (?:operation in|input to|result from|throw from) [^:]*: /, '');
@@ -24,7 +28,7 @@ for (const e of manifest.exports) {
   assert.equal(typeof js[e.name], 'function');
   const base = e.params.map(p => p.ty.kind === 'bool' ? true : 3);
   for (let at = 0; at < e.params.length; at++) {
-    for (const value of e.params[at].ty.kind === 'bool' ? [false, true] : pool) {
+    for (const value of poolOf(e.params[at].ty.kind)) {
       const args = base.with(at, value);
       let actual;
       try { actual = wasm[e.name](...args); }

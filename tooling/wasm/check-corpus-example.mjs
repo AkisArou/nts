@@ -124,6 +124,9 @@ try {
         case 'bool': return [false, true];
         case 'string': return stringPool;
         case 'int': case 'float': return pool;
+        // Every primitive kind, and an object and an array, which the
+        // boundary refuses by name.
+        case 'value': return [undefined, null, false, true, ...pool, ...stringPool.slice(0, 4), {}, [1]];
         default: throw new Error(`unsupported census parameter type ${param.ty.kind}`);
       }
     });

@@ -772,6 +772,28 @@ cooked strings, shared by every call and every copy of the function.
   cases) and, with an open array's element read (1e), a-template-object-
   keeps-its-identity agree.
 
+### Open values at the public boundary (3o)
+
+An export whose parameters or result are `unknown` or `any` takes and gives
+JS values. A wrapper (`boundary.rs`) converts them around the program's own
+function.
+
+- **In:** a JS primitive becomes the open value it is.
+  - `null` and a string need no work: a JS string is already the open
+    string's payload.
+  - For anything else a host import (`valueKind`) says which primitive it
+    is: a number is boxed, and a boolean or `undefined` is its singleton.
+  - The glue refuses an object, a function, a symbol or a bigint by name
+    before the call: how one of those would cross is not decided yet.
+- **Out:** an open primitive becomes the JS value it denotes, through the
+  same helper a raise leaving the program is thrown with
+  (`value.toHost`). Any other kind refuses by name.
+- **Not for globals:** an open value as a public global is refused by name.
+- Fixture `open-boundary` (171 cases, 15 named refusals of objects). The
+  census rows unknown-returns (44), an-error-message-of-any-type (33) and
+  unknown-interpolated-into-a-template (62) now agree; their remaining
+  refusals are object inputs.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;

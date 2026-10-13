@@ -388,6 +388,16 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             "name => { throw new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); }".into(),
         ),
         "toNumber" => (function(&[F64], Some(STRING)), "value => value".into()),
+        // An open value's kind and number, as `boundary` reads them.
+        "valueKind" => (
+            function(&[STRING], Some(ValueType::I32)),
+            crate::boundary::VALUE_KIND.into(),
+        ),
+        "valueNumber" => (function(&[STRING], Some(F64)), "value => value".into()),
+        "resultDecline" => (
+            function(&[STRING], None),
+            "name => { throw new WasmInputDecline(name, 'an object, a function, a symbol or a bigint returned as an open value, which this boundary does not convert', 'result from'); }".into(),
+        ),
         // A bigint crosses as its two 64-bit lanes, which JS receives as
         // BigInts; the host's own BigInt formats and parses, as node does.
         "bigintText" => (
@@ -544,6 +554,18 @@ fn parameter(
                 arg.clone()
             }
         }
+        // A primitive crosses by value; nothing yet says how anything else
+        // would, so it is refused here, by name.
+        BoundaryType::Value => {
+            refuse(
+                out,
+                format!(
+                    "({arg} !== null && typeof {arg} === 'object') || typeof {arg} === 'function' || typeof {arg} === 'symbol' || typeof {arg} === 'bigint'"
+                ),
+                "an object, a function, a symbol or a bigint as an open value, which this boundary does not convert",
+            );
+            arg.clone()
+        }
         BoundaryType::Void | BoundaryType::Float { .. } | BoundaryType::Promise => {
             return Err(format!(
                 "public parameter {at} of `{}` has no JS boundary type",
@@ -608,7 +630,9 @@ fn deliver(ty: &BoundaryType, value: &str, name: &str, captures: &mut Captures) 
             )
         }
         BoundaryType::Int { signed: false, .. } => format!("return {value} >>> 0;"),
-        BoundaryType::Int { .. } | BoundaryType::Float { .. } => format!("return {value};"),
+        BoundaryType::Int { .. } | BoundaryType::Float { .. } | BoundaryType::Value => {
+            format!("return {value};")
+        }
         BoundaryType::Promise => format!("return toPromise(x, {value}, {name});"),
     }
 }

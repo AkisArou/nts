@@ -98,6 +98,12 @@ pub(crate) enum FuncKey {
     /// An element of an open value, read through whichever array storage it
     /// has.
     OpenElement,
+    /// An export taking or answering open values, around its target.
+    Boundary(Func),
+    /// A JS primitive made an open value.
+    FromHost,
+    /// An open primitive made the JS value it denotes.
+    HostValue(crate::boundary::Purpose),
 }
 
 /// Every global the module can contain, named by what it means.
@@ -784,6 +790,7 @@ fn manifest(
                 .program_func(emitted)
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
             let id = crate::promises::entry(m, id, func)
+                .and_then(|id| crate::boundary::entry(m, id, func))
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
             m.export_func(published, id);
             let params = func
@@ -801,12 +808,14 @@ fn manifest(
         } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {
             initialized_global(program, index(*at), global, published)?;
             let ty = BoundaryType::from_hir(&global.ty)
-                .and_then(|ty| {
-                    if ty == BoundaryType::Promise {
+                .and_then(|ty| match ty {
+                    BoundaryType::Promise => {
                         Err("a promise global at the public boundary".to_owned())
-                    } else {
-                        Ok(ty)
                     }
+                    BoundaryType::Value => {
+                        Err("an open value as a global at the public boundary".to_owned())
+                    }
+                    _ => Ok(ty),
                 })
                 .map_err(|why| {
                     EmitError::Declined(vec![Diagnostic::error(

@@ -14,6 +14,7 @@ mod array_sort;
 mod arrays;
 mod bigints;
 mod body;
+mod boundary;
 mod buffer_methods;
 mod buffers;
 mod callable_plan;

@@ -472,6 +472,33 @@ fn source_templates_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Open values at the public boundary: every primitive kind through and back,
+/// `-0`, NaN and numbers past a small integer, `undefined` apart from `null`.
+/// An object or an array passed in (10) or made and returned (5) is refused
+/// by name.
+#[test]
+fn source_open_boundary_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/open-boundary");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "open-boundary",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 171, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(
+        output["refused"],
+        serde_json::json!({
+            "an object, a function, a symbol or a bigint as an open value, which this boundary does not convert": 10,
+            "an object, a function, a symbol or a bigint returned as an open value, which this boundary does not convert": 5,
+        }),
+        "{output}"
+    );
+}
+
 /// A bigint in 128 bits: arithmetic and its signs, the edges at -2^127 and
 /// 2^127 - 1, shifts by negative and huge counts, conversion both ways,
 /// asIntN/asUintN and an erased bigint. Where node's answer passes 128 bits
