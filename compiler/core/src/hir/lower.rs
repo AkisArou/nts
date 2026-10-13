@@ -46301,6 +46301,28 @@ impl<'a> FuncBuilder<'a> {
         let written = args.len();
         let (args, lent) =
             self.native_arguments(id, &target.clone(), args, written, Some(receiver))?;
+        // **A read of a sequence the program types as an array** --
+        // `entry.contentBoxSize`, a `FrozenArray` lib.dom spells
+        // `ReadonlyArray<ResizeObserverSize>` and nts:dom answers as
+        // `ResizeObserverSizeSequence` -- is the sequence copied into a new
+        // array, as a method's result is (`array_of_sequence`). Typed as the
+        // property alone, the call's handle reached the program as the
+        // array, and C cast it: its length was read from the Blink object
+        // and it was indexed (the Chromium lane's
+        // lib-dom-a-sequence-attribute-read-as-its-array). A fresh copy per
+        // read is exact but for `===` between two reads, which a frozen
+        // array answers true.
+        if written == 0
+            && let Some(sequence) = self.sequence_for_array(id, with_this.return_type)
+        {
+            let array = self
+                .type_of(id)
+                .ok_or_else(|| self.unrepresentable(id, "an array made of a sequence"))?;
+            let handle = target.result.representation();
+            let call =
+                self.finish_call_typed(id, callee, args, lent, Some(declaration), Some(handle))?;
+            return self.array_of_sequence(id, call, sequence, array);
+        }
         // **A read is typed as the getter declares its result, then as the
         // property.** The node read is the property (`el.onclick`), and the
         // getter (`_get_onclick`) spells the same type separately: two ids for
@@ -72071,6 +72093,33 @@ impl<'a> FuncBuilder<'a> {
             .or(typed)
             .or_else(|| self.type_of(id))
             .ok_or_else(|| self.unrepresentable(id, "a call result"))?;
+        // **A native handle is never the program's array or string.** A call
+        // typed as the node it lowers takes the program's type, and where the
+        // native function answers a pointer that type is not a conversion but
+        // a cast in C: a `ResizeObserverSizeSequence *` read as `NtsArray *`
+        // had its length read out of the Blink object (the Chromium lane's
+        // lib-dom-a-sequence-attribute-read-as-its-array). Whatever reaches
+        // here that way is refused by name, so the next such path fails
+        // loudly instead of reading memory.
+        if let Callee::Native(target) = &callee
+            && matches!(target.result.representation(), HirType::NativePointer(_))
+            && matches!(
+                ty,
+                HirType::Managed(ManagedType::Array(_) | ManagedType::String)
+            )
+        {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "a native function's handle result read as {}, which no conversion makes",
+                    if matches!(ty, HirType::Managed(ManagedType::String)) {
+                        "a string"
+                    } else {
+                        "an array"
+                    }
+                ),
+            ));
+        }
         let origin = self.origin(id);
         let call = self.push(
             OpKind::Call {

@@ -1,4 +1,9 @@
-// expect: lacks-c nts_dom_ResizeObserverSizeSequence_item(
+// expect: emits-c nts_dom_ResizeObserverSizeSequence_item(
+//
+// **Fixed 2026-10-13, kept as a guard**: the read is the sequence copied into
+// a new array through `item`, as a method's result is (`call_bound_method`),
+// and a native handle result can no longer be retyped as an array by a cast
+// (`push_call`). What follows is the defect as it was found.
 //
 // A bound attribute lib.dom types as an array is read as if the sequence the
 // binding answers were that array: `entry.contentBoxSize` --
