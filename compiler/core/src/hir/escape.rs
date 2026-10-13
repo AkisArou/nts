@@ -123,6 +123,9 @@ pub struct Escapes {
     /// read escape: what is *in* them leaves, and they themselves need not. Kept
     /// so [`leaks_its_fields`] can publish a parameter this frame only forwards.
     contents_leave: FxHashSet<ValueId>,
+    /// Parameter slots whose contents this function's result may be. See
+    /// [`returned_contents`].
+    contents_returned: FxHashSet<u32>,
 }
 
 impl Escapes {
@@ -339,6 +342,9 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
     // in the same direction. See `leaks_its_fields`.
     let mut leaking: Vec<FxHashSet<u32>> =
         program.funcs.iter().map(|_| FxHashSet::default()).collect();
+    // And none starts by handing its parameters' contents back.
+    let mut contents_returned: Vec<FxHashSet<u32>> =
+        program.funcs.iter().map(|_| FxHashSet::default()).collect();
     let mut results: Vec<Escapes> = Vec::new();
 
     for _ in 0..ROUND_CAP {
@@ -357,6 +363,7 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
                         handed_back: &handed_back,
                         put_into: &put_into,
                         leaking: &leaking,
+                        contents_returned: &contents_returned,
                     },
                 )
             })
@@ -383,6 +390,11 @@ pub fn analyze_program(program: &Program) -> Vec<Escapes> {
             // read only once it has converged.
             for slot in leaks_its_fields(func, &results[index]) {
                 if leaking[index].insert(slot) {
+                    changed = true;
+                }
+            }
+            for slot in &results[index].contents_returned {
+                if contents_returned[index].insert(*slot) {
                     changed = true;
                 }
             }
@@ -506,6 +518,9 @@ struct Summaries<'a> {
     /// Parameter slots whose *contents* the callee lets escape. See
     /// [`leaks_its_fields`].
     leaking: &'a [FxHashSet<u32>],
+    /// Parameter slots whose contents the callee's result may be. See
+    /// [`returned_contents`].
+    contents_returned: &'a [FxHashSet<u32>],
 }
 
 // One walk over every operation, each arm a different way a value escapes;
@@ -528,6 +543,9 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     // it read escape. What is *in* them escapes; they themselves need not.
     // See `leaks_its_fields`.
     let mut contents_leave: FxHashSet<ValueId> = FxHashSet::default();
+    // What a call's result may be the contents of: if the result escapes, what
+    // is in the argument leaves. See `returned_contents`.
+    let mut contents_read_by: Vec<(ValueId, ValueId)> = Vec::new();
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
     let repeated = repeats(func);
@@ -643,6 +661,11 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                                 aliased_by.push((*value, *argument));
                             }
                         }
+                        for slot in &of.contents_returned[*target] {
+                            if let Some(argument) = args.get(*slot as usize) {
+                                contents_read_by.push((*value, *argument));
+                            }
+                        }
                         put_where_it_went(
                             &mut escapes,
                             func,
@@ -708,10 +731,51 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     // containers nest -- a cell inside a closure inside an array -- and because
     // a container can be shown to escape below the store that filled it.
     //
-    // Monotone and bounded: the set only grows, and it is bounded by the values
-    // in the function, so this terminates without a round cap.
+    // **And when anything read out of the container escapes.** A read of a
+    // field or an element may be whatever was stored there, so a read that
+    // leaves the frame takes the container's contents with it, while the
+    // container itself may stay. `const h = new Holder(new Item()); return
+    // h.value` confined both and returned a pointer into the dead frame: the
+    // store's rule asked only whether `h` escaped, and nothing asked about
+    // the read -- `leaks_its_fields` publishes the same fact across a call,
+    // and this is it inside one function. RC was killed 17 times out of 29 on
+    // the shape, and the other backends read the dead stack by luck.
+    //
+    // Only for a container this function made, which is the only kind a
+    // store confines. A parameter's read is `leaks_its_fields`' question, and
+    // returning one is not leaking it: `reader(o) { return o.f }` hands the
+    // caller what it already holds, and marking `o`'s contents would send
+    // every object the caller put in `o` to the heap.
+    //
+    // Monotone and bounded: the sets only grow, and they are bounded by the
+    // values in the function, so this terminates without a round cap.
+    //
+    // **And when a call's result is what the argument held**: `valueOf(h) {
+    // return h.value }` read in a callee, returned by the caller -- the same
+    // dead frame one call away, which `leaks_its_fields` does not see because
+    // returning a read is not leaking it. Handed on rather than returned, the
+    // result takes a parameter's contents too, which is that function's to
+    // publish.
+    let read_from = reads_from_containers(func);
+    let handed_on = handed_to_an_op(func);
     loop {
-        let before = escapes.values.len();
+        let before = (escapes.values.len(), contents_leave.len());
+        for (container, read) in &read_from {
+            if escapes.escapes(*read) {
+                contents_leave.extend(
+                    super::carried_values(func, *container).filter(|at| made_here(func, *at)),
+                );
+            }
+        }
+        for (result, argument) in &contents_read_by {
+            if escapes.escapes(*result) {
+                let held_by_the_caller = !handed_on.contains(result);
+                contents_leave.extend(
+                    super::carried_values(func, *argument)
+                        .filter(|at| !held_by_the_caller || made_here(func, *at)),
+                );
+            }
+        }
         for (container, stored) in &reachable_from {
             if escapes.escapes(*container) || contents_leave.contains(container) {
                 escaped(&mut escapes, func, *stored);
@@ -727,12 +791,98 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
                 escaped(&mut escapes, func, *argument);
             }
         }
-        if escapes.values.len() == before {
+        if (escapes.values.len(), contents_leave.len()) == before {
             break;
         }
     }
+    escapes.contents_returned = returned_contents(func, &read_from, &contents_read_by, &aliased_by);
     escapes.contents_leave = contents_leave;
     escapes
+}
+
+/// Everything an operation takes as an operand: a value in here is handed to
+/// something, and one that is not reaches at most a terminator.
+fn handed_to_an_op(func: &Func) -> FxHashSet<ValueId> {
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .flat_map(|value| super::verify::operands(&func.values[value.0 as usize].kind))
+        .collect()
+}
+
+/// The parameter slots whose contents this function's result may be: a read
+/// out of a parameter that is returned, a call's result that is such a read
+/// one call further in, and a call that hands back a read it was given.
+///
+/// The fourth obligation, beside [`stores_into`], [`returned_params`] and
+/// [`leaks_its_fields`]. Returning `o.f` is not leaking it -- the caller holds
+/// `o` -- but the caller's *result* is now what `o` held, and if the caller
+/// lets that escape, so do `o`'s contents. Recomputed each round, because the
+/// second and third cases read callees' answers.
+fn returned_contents(
+    func: &Func,
+    read_from: &[(ValueId, ValueId)],
+    contents_read_by: &[(ValueId, ValueId)],
+    aliased_by: &[(ValueId, ValueId)],
+) -> FxHashSet<u32> {
+    let returned: FxHashSet<ValueId> = func
+        .blocks
+        .iter()
+        .filter_map(|block| match block.terminator {
+            Terminator::Return(Some(value)) => Some(value),
+            _ => None,
+        })
+        .flat_map(|value| super::carried_values(func, value))
+        .collect();
+    let mut slots = FxHashSet::default();
+    for (container, read) in read_from {
+        if returned.contains(read) {
+            slots.extend(params_under(func, *container));
+        }
+    }
+    for (result, argument) in contents_read_by {
+        if returned.contains(result) {
+            slots.extend(params_under(func, *argument));
+        }
+    }
+    for (result, argument) in aliased_by {
+        if returned.contains(result) {
+            for (container, read) in read_from {
+                if read == argument {
+                    slots.extend(params_under(func, *container));
+                }
+            }
+        }
+    }
+    slots
+}
+
+/// Whether `value` is an allocation `func` made -- the only container a store
+/// confines what goes into it (see the `FieldSet` arm of [`analyze`]).
+fn made_here(func: &Func, value: ValueId) -> bool {
+    matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }
+    )
+}
+
+/// Every read out of a container in `func`, as (container, what was read): a
+/// field, an element, a shared field. What the read may be is anything stored
+/// into that container. See the store fixpoint in [`analyze`].
+fn reads_from_containers(func: &Func) -> Vec<(ValueId, ValueId)> {
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter_map(|value| {
+            let container = match &func.values[value.0 as usize].kind {
+                OpKind::FieldGet { object, .. } | OpKind::OpenFieldGet { object, .. } => *object,
+                OpKind::ArrayGet { array, .. } => *array,
+                OpKind::SharedFieldGet { value, .. } => *value,
+                _ => return None,
+            };
+            Some((container, *value))
+        })
+        .collect()
 }
 
 /// What leaving a block does to what it carries.
@@ -1777,6 +1927,127 @@ mod tests {
         let escapes = analyze_program(&program);
         assert!(escapes[0].is_frame_local(ValueId(0)));
         assert!(escapes[0].is_frame_local(ValueId(1)));
+    }
+
+    /// `const h = new H(); h.f = new X(); return h.f` -- what is read out of a
+    /// container may be what went in, so returning the read takes `X` out of
+    /// the frame, and `h` may stay. RC was killed on this shape with `X` on
+    /// the stack. The control differs in one thing: the read is not returned.
+    #[test]
+    fn a_read_that_leaves_takes_what_was_stored_with_it() {
+        let make = |returned: bool| Program {
+            funcs: vec![func(
+                "make",
+                0,
+                vec![
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(OpKind::ObjectNew { frame: false }, object()),
+                    op(
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(1),
+                        },
+                        HirType::Void,
+                    ),
+                    op(
+                        OpKind::FieldGet {
+                            object: ValueId(0),
+                            field: 0,
+                        },
+                        object(),
+                    ),
+                ],
+                vec![Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                    terminator: Terminator::Return(returned.then_some(ValueId(3))),
+                }],
+            )],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+            ..Program::default()
+        };
+        let escapes = analyze_program(&make(true));
+        assert!(escapes[0].is_frame_local(ValueId(0)), "the holder stays");
+        assert!(escapes[0].escapes(ValueId(1)), "what it held is returned");
+        let control = analyze_program(&make(false));
+        assert!(control[0].is_frame_local(ValueId(1)), "read and kept here");
+    }
+
+    /// The same read one call away: `valueOf(o) { return o.f }`, and a caller
+    /// that returns what it answers. `valueOf` leaks nothing -- its caller holds
+    /// `o` -- but publishes that its result is what `o` held, so the caller's
+    /// `X` leaves with the result. The control drops the result.
+    #[test]
+    fn a_callee_returning_what_its_argument_held_takes_it_out() {
+        let make = |returned: bool| Program {
+            funcs: vec![
+                func(
+                    "valueOf",
+                    1,
+                    vec![
+                        op(OpKind::Param(0), object()),
+                        op(
+                            OpKind::FieldGet {
+                                object: ValueId(0),
+                                field: 0,
+                            },
+                            object(),
+                        ),
+                    ],
+                    vec![Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(0), ValueId(1)],
+                        terminator: Terminator::Return(Some(ValueId(1))),
+                    }],
+                ),
+                func(
+                    "caller",
+                    0,
+                    vec![
+                        op(OpKind::ObjectNew { frame: false }, object()),
+                        op(OpKind::ObjectNew { frame: false }, object()),
+                        op(
+                            OpKind::FieldSet {
+                                object: ValueId(0),
+                                field: 0,
+                                value: ValueId(1),
+                            },
+                            HirType::Void,
+                        ),
+                        op(
+                            OpKind::Call {
+                                callee: Callee::Direct("valueOf".to_owned()),
+                                args: vec![ValueId(0)],
+                                frame: None,
+                            },
+                            object(),
+                        ),
+                    ],
+                    vec![Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                        terminator: Terminator::Return(returned.then_some(ValueId(3))),
+                    }],
+                ),
+            ],
+            layouts: Vec::new(),
+            globals: Vec::new(),
+            ..Program::default()
+        };
+        let escapes = analyze_program(&make(true));
+        assert!(
+            !escapes[0].escapes(ValueId(0)),
+            "`valueOf` keeps its receiver"
+        );
+        assert!(escapes[1].is_frame_local(ValueId(0)), "the holder stays");
+        assert!(escapes[1].escapes(ValueId(1)), "what it held is returned");
+        let control = analyze_program(&make(false));
+        assert!(
+            control[1].is_frame_local(ValueId(1)),
+            "the answer is dropped"
+        );
     }
 
     /// ...but not when the collector can *buffer* the container.
