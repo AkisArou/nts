@@ -74397,10 +74397,24 @@ impl<'a> FuncBuilder<'a> {
         element: &HirType,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
-        let mut length = None;
+        let unshift = !helper.starts_with("nts_array_push");
+        // **Every argument first, then the inserts.** JavaScript evaluates a
+        // call's arguments before the call: `a.push(a.length, a.length)` reads
+        // the length twice before either append, and `[9].unshift(1, 2)` puts
+        // `1, 2` at the front in that order. Interleaved, the second read saw
+        // the first append, and one-at-a-time unshifts reversed the run -- 86
+        // of 116 cases wrong on every backend
+        // (examples/a-push-and-an-unshift-of-several-arguments).
+        let mut pending = Vec::with_capacity(arguments.len());
         for argument in arguments {
             if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT) {
-                length = Some(self.push_each(id, helper, receiver, *argument, element)?);
+                if unshift {
+                    return Err(self.unsupported(
+                        *argument,
+                        "a spread into `unshift`, which keeps the spread's order at the front",
+                    ));
+                }
+                pending.push(Pending::Spread(self.spread_source(*argument)?));
                 continue;
             }
             // Coerced, not only lowered expecting: a value with a type of its
@@ -74410,16 +74424,30 @@ impl<'a> FuncBuilder<'a> {
             // refuses at a parameter. See `lower_array_literal`, which had the
             // same hole and the same segfault.
             let value = self.lower_expecting(*argument, element)?;
-            let value = self.coerce(value, element, *argument)?;
-            length = Some(self.push(
-                OpKind::Call {
-                    callee: Callee::External(helper.to_owned()),
-                    args: vec![receiver, value],
-                    frame: None,
-                },
-                HirType::NUMBER,
-                origin.clone(),
-            ));
+            pending.push(Pending::Value(self.coerce(value, element, *argument)?));
+        }
+        // An unshift inserts its run last to first, so the run keeps its order
+        // at the front. Each call answers the length after it, and the last
+        // call made is the length the expression has.
+        if unshift {
+            pending.reverse();
+        }
+        let mut length = None;
+        for item in pending {
+            length = Some(match item {
+                Pending::Value(value) => self.push(
+                    OpKind::Call {
+                        callee: Callee::External(helper.to_owned()),
+                        args: vec![receiver, value],
+                        frame: None,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                ),
+                Pending::Spread(spread) => {
+                    self.append_each(id, helper, receiver, spread, element)?
+                }
+            });
         }
         length.map_or_else(
             || {
@@ -74430,39 +74458,49 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
-    /// `xs.push(...ys)`: every element of `ys`, appended in order through the
-    /// same helper one argument takes, each coerced to what `xs` holds.
-    ///
-    /// **`ys`'s length is read once, before the first append**, because the
-    /// spread is evaluated before the call: `xs.push(...xs)` appends the
-    /// elements `xs` had, and a loop re-reading the length would chase its
-    /// own appends forever. An `unshift(...ys)` would have to keep `ys`'s order
-    /// at the front, which one-at-a-time unshifts reverse, so it stays refused.
-    fn push_each(
+    /// The array a `...ys` argument spreads, and its length **read when the
+    /// argument is evaluated** -- before any append, so `xs.push(...xs)`
+    /// appends the elements `xs` had, and a loop re-reading the length would
+    /// chase its own appends forever.
+    fn spread_source(&mut self, spread: NodeId) -> Result<Spread, Diagnostic> {
+        let node = *self
+            .children(spread)
+            .first()
+            .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
+        let source = self.lower_expression(node)?;
+        let HirType::Managed(ManagedType::Array(slot)) = self.values[source.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(node, "a spread of something that is not an array"));
+        };
+        let origin = self.origin(spread);
+        let count = self.push(OpKind::Length(source), HirType::NUMBER, origin);
+        Ok(Spread {
+            node,
+            source,
+            slot: *slot,
+            count,
+        })
+    }
+
+    /// `xs.push(...ys)`'s appends: every element of `ys` the argument saw, in
+    /// order, through the helper one argument takes, each coerced to what `xs`
+    /// holds. An earlier append only grows `xs` at its end, so the elements
+    /// below `count` are still the ones the spread read.
+    fn append_each(
         &mut self,
         id: NodeId,
         helper: &str,
         receiver: ValueId,
-        spread: NodeId,
+        spread: Spread,
         element: &HirType,
     ) -> Result<ValueId, Diagnostic> {
-        if !helper.starts_with("nts_array_push") {
-            return Err(self.unsupported(
-                spread,
-                "a spread into `unshift`, which keeps the spread's order at the front",
-            ));
-        }
-        let source_node = *self
-            .children(spread)
-            .first()
-            .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
-        let source = self.lower_expression(source_node)?;
-        let HirType::Managed(ManagedType::Array(slot)) = self.values[source.0 as usize].ty.clone()
-        else {
-            return Err(self.unsupported(source_node, "a spread of something that is not an array"));
-        };
+        let Spread {
+            node: source_node,
+            source,
+            slot,
+            count,
+        } = spread;
         let origin = self.origin(id);
-        let count = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let (header, body, done) = (self.new_block(), self.new_block(), self.new_block());
         let at = self.push_block_param(header, HirType::NUMBER, origin.clone());
@@ -74488,15 +74526,15 @@ impl<'a> FuncBuilder<'a> {
             else_args: Vec::new(),
         });
         self.switch_to(body);
-        // In range by the loop's bound, which was the length when it began
-        // and only grows if `xs` is `ys`.
+        // In range by the loop's bound, which was the length when the
+        // argument was evaluated and only grows if `xs` is `ys`.
         let read = self.push(
             OpKind::ArrayGet {
                 array: source,
                 index: at,
                 checked: false,
             },
-            *slot,
+            slot,
             origin.clone(),
         );
         let value = self.coerce(read, element, source_node)?;
@@ -81922,4 +81960,18 @@ fn symbol_tagged(lowerer: &FuncBuilder<'_>, decl: NodeId) -> bool {
         .native
         .as_ref()
         .is_some_and(|n| n.symbol.is_some() || n.selector.is_some())
+}
+
+/// One argument of a `push` or an `unshift`, evaluated before any insert.
+enum Pending {
+    Value(ValueId),
+    Spread(Spread),
+}
+
+/// A `...ys` argument as it was evaluated: the array and the length it had.
+struct Spread {
+    node: NodeId,
+    source: ValueId,
+    slot: HirType,
+    count: ValueId,
 }
