@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: a string field through the cast=none;an unknown field through the cast (control)=Ctx;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: a string field through the cast=Ctx;an unknown field through the cast (control)=Ctx;",
   "node": "exit 1; nts: uncaught Observed: a string field through the cast=Ctx;an unknown field through the cast (control)=Ctx;",
-  "measured_with": "4dd1d9705fe78a2a",
+  "measured_with": "d3d4b757f2b58740",
   "source": "measured"
 }

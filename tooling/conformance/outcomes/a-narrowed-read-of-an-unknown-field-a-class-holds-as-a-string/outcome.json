@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: a class's string field=Ctx;a literal's number field=none;an unknown field (control)=Ctx;",
+  "node": "exit 1; nts: uncaught Observed: a class's string field=Ctx;a literal's number field=none;an unknown field (control)=Ctx;",
+  "measured_with": "d3d4b757f2b58740",
+  "source": "measured"
+}

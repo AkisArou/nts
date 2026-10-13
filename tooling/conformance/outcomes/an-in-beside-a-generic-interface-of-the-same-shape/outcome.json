@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: a box's status=fulfilled;a literal without a reason=rejected without a reason;made with a reason=rejected;made without one=rejected without a reason;",
+  "node": "exit 1; nts: uncaught Observed: a box's status=fulfilled;a literal without a reason=rejected without a reason;made with a reason=rejected;made without one=rejected without a reason;",
+  "measured_with": "d3d4b757f2b58740",
+  "source": "measured"
+}
