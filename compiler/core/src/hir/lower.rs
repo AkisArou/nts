@@ -646,17 +646,50 @@ impl Hierarchy {
         // Bounded, because a hierarchy that contains a cycle is not one and
         // walking it would not stop.
         for _ in 0..64 {
-            let here = at?;
+            let Some(here) = at else { break };
             if self.declares_itself(here, member) {
                 return Some(here);
             }
             at = self.base.get(&here).copied();
         }
         // Nothing on the base chain declares it, so the only remaining source
-        // is an interface -- which is the case where `ty` IS the interface, and
-        // `declares_itself` above has already answered it, or where a class
-        // inherits the obligation without implementing it, which is not a
-        // program TypeScript accepts.
+        // is an interface: `ty` is one and the member is inherited from an
+        // interface it extends -- `tagged.label()` where `Tagged extends
+        // Named` and `Named` declares `label`, refused as "no declaration in
+        // the hierarchy" through `Tagged` and through a `Named` it was
+        // assigned to alike. A class that inherits the obligation without
+        // implementing it is not a program TypeScript accepts.
+        self.declaring_above(ty, member)
+    }
+
+    /// The nearest interface above the interface `ty`, breadth first through
+    /// the interfaces it extends (its `implements` edges), that declares
+    /// `member`. Where two do, TypeScript requires the declarations to agree,
+    /// and the first named is the one the slot belongs to. Only for an
+    /// interface: the interfaces a class implements contribute no
+    /// implementation, which `declaring` exists to find.
+    fn declaring_above(&self, ty: TypeId, member: &str) -> Option<TypeId> {
+        if !self.faces.contains(&ty) {
+            return None;
+        }
+        let mut pending: std::collections::VecDeque<TypeId> = self
+            .implements
+            .get(&ty)
+            .into_iter()
+            .flatten()
+            .copied()
+            .collect();
+        let mut seen = rustc_hash::FxHashSet::default();
+        // Bounded like the base walk: a cycle is not a hierarchy.
+        while let Some(here) = pending.pop_front() {
+            if !seen.insert(here) || seen.len() > 64 {
+                continue;
+            }
+            if self.declares_itself(here, member) {
+                return Some(here);
+            }
+            pending.extend(self.implements.get(&here).into_iter().flatten().copied());
+        }
         None
     }
 
@@ -677,6 +710,11 @@ impl Hierarchy {
     /// up to it. The extra walk was a second route to an answer one route
     /// already gives, and a second route that agrees is not free -- it is a
     /// thing to keep agreeing.
+    ///
+    /// **Except for a member the interface does not declare.** A call through
+    /// `Tagged` to the `label` it inherits from `Named` asks about `Tagged`,
+    /// which the slot loop never numbered `label` against; the slot is
+    /// `Named`'s, found by the one walk `declaring` also falls back to.
     fn root_declaring(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let mut found = None;
         let mut at = Some(ty);
@@ -687,7 +725,13 @@ impl Hierarchy {
             }
             at = self.base.get(&here).copied();
         }
-        found
+        // A member an interface inherits from one it extends: the slot is the
+        // one the slot loop numbered against the interface that declares it
+        // (`Self::declaring_above`), asked the same question.
+        found.or_else(|| {
+            self.declaring_above(ty, member)
+                .and_then(|above| self.root_declaring(above, member))
+        })
     }
 
     /// Whether this type declares `member` itself.
