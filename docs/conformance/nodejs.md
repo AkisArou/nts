@@ -96,7 +96,7 @@ profile does not even attempt:
 | `tls` | 220 | Needs a TLS provider. There is no crypto in this profile. |
 | `worker_threads` | 144 | Needs a second isolate and thread. |
 | `crypto` | 128 | Needs a crypto provider: ciphers, hashes, key handling. |
-| `child_process` | 112 | Phase two in `docs/node-js.md`, not started. Needs process spawning and IPC. |
+| `child_process` | 112 | Phase two of the rejected Node RFC (record 0012), not started. Needs process spawning and IPC. |
 | `repl` | 101 | A developer tool rather than a runtime API; needs `vm` and the module loader. |
 | `vm` | 97 | Needs engine-level compilation and realm control. |
 | `cluster` | 83 | Needs `child_process` plus handle sharing between processes. |
@@ -25043,7 +25043,7 @@ a reader would act on.
 
 ## The 75 was 50: an addon that loads and publishes nothing
 
-**Correcting the number published twice tonight in this file and once in `next-goal.md`.**
+**Correcting the number published twice tonight in this file and once in `next-goal.md` (since removed).**
 The compiled axis is **50 across 26 modules**, not 75. Twenty-five of the 75 were
 `cluster`, and all twenty-five asserted nothing.
 

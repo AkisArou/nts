@@ -1222,7 +1222,7 @@ correctness does not depend on arm64 running by luck.
 
 ## Rules this lane keeps
 
-These come from `native-lane-goal.md` and the GTK lane: two arms per claim, one
+These come from `native-lane-goal.md` (removed; in git history) and the GTK lane: two arms per claim, one
 variable per arm, and assertions on the artifact rather than the status. Commits
 use explicit paths and stage only this lane's hunks. Builds and tests run from a
 worktree at HEAD plus only this lane's change (`~/.cache/nts/apple/wt`), because

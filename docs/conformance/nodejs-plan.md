@@ -923,7 +923,7 @@ a leverage argument and the leverage is four exclusions.
 Ordered by what is reachable rather than by size:
 
 **Tier 1 — no new provider needed.**
-`dns` (30 tests) and `tty` (3 tests) are both phase two in `docs/node-js.md`
+`dns` (30 tests) and `tty` (3 tests) are both phase two of the Node RFC that record 0012 rejected
 and blocked on nothing. `net` already does name resolution through its own
 binding, so `dns` is largely surfacing a capability that exists. `tty` is tiny
 and closes two real gaps: `process.stdin`'s terminal branch currently reads a

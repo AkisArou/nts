@@ -136,7 +136,7 @@ Regular expressions, closure capture from an enclosing scope, `Math.random`,
 ordinary compiler reach, and they are the same queue
 [`docs/conformance/typescript.md`](conformance/typescript.md) §15 already keeps.
 The regex rows in particular are an independent argument for the direction
-already recorded in `docs/icu-i18n.md`.
+already recorded in `runtime/ecmascript/DATE-TEMPORAL-INTL.md`.
 
 ### The one that reported no refusal did not compile
 

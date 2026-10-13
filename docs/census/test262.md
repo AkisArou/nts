@@ -641,7 +641,7 @@ Of what is left:
 - `less-than/S11.8.1_A4.12_T1.js` and `greater-than/S11.8.2_A4.12_T1.js` -- a
   matched pair, and both reduce to **lone surrogates**: `"\uD800" < "\uDC00"`.
   Every other case in both files agrees. This is the UTF-16 representation
-  question `docs/icu-i18n.md` covers, not a comparison bug.
+  question `runtime/ecmascript/DATE-TEMPORAL-INTL.md` covers, not a comparison bug.
 - `in/S8.12.6_A2_T1.js` -- `"valueOf" in {}`, where the receiver is an
   *unannotated* empty object literal. `typescript.md` carries why that one shape
   is excluded and what it would take.

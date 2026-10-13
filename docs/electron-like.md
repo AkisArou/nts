@@ -19,8 +19,8 @@ traces. Both backends pass. The owned shell and Blink target need no tracked
 Chromium source changes. The supported E2 subset passes; E3 remains partial
 because general event semantics, generated-await cancellation, rejection
 maintenance and task/timer posting are unresolved. React is outside the
-current work. See [bring-up](../runtime/chromium/experiments/bringup.md) and
-[DOM/scheduling evidence](../runtime/chromium/experiments/dom-and-microtasks.md).
+current work. See [bring-up](../runtime/chromium/docs/bringup.md) and
+[DOM/scheduling evidence](../runtime/chromium/docs/dom-and-microtasks.md).
 
 V8 stays enabled. The investigation covers the complete native renderer
 architecture: callback entry, document/module lifetime, heap ownership,
@@ -28,7 +28,7 @@ scheduling, typed binding generation, explicit V8 interop, and deployment.
 The first cost experiment compares per-operation and per-callback Blink entry,
 fresh versus prepared native inputs, and short versus long callbacks against
 ordinary page JavaScript on unmodified Chromium. See
-[architecture and cost experiments](../runtime/chromium/experiments/architecture-and-costs.md).
+[architecture and cost experiments](../runtime/chromium/docs/costs.md).
 Debug timing is diagnostic; production choices require optimized-engine
 measurements and semantic acceptance. This does not finalize the original
 proposal's handle, HIR, GC or ABI designs.
@@ -174,7 +174,7 @@ After the user reclaimed disk space, checkout, build, and sandboxed baseline
 execution completed on the initial 32 GiB host.
 The source and tool pins, build profile, and commands are documented in
 [`third_party/chromium`](../third_party/chromium/README.md). The
-[validation record](../runtime/chromium/experiments/bringup.md) captures
+[validation record](../runtime/chromium/docs/bringup.md) captures
 the observed gate results and their limits.
 
 **Gate:** a real window loads fixture HTML/CSS/JS, browser and renderer run
@@ -287,7 +287,7 @@ delivery. Checkpoint collection leaves one owned counter; four disposals drop
 a managed host task and destroy an empty environment. This is a subset of E3.
 Generated resume tasks have null drop callbacks, and the available compiler
 does not retain the tested managed async parameter. Pending-await cancellation
-and host rejection maintenance remain [reduced blockers](../runtime/chromium/experiments/contracts/README.md).
+and host rejection maintenance remain [reduced blockers](../runtime/chromium/contracts/README.md).
 
 ### E4: source facade, limited V8 interop, and packaged origin
 

@@ -942,8 +942,8 @@ without claiming a MIR layer or a host-GC provider already exists.
 | `tooling/differential`, `conformance`, `gate`, `census`, `bench` | Refusal counts do not prove answers; artifacts need validator and linkage checks as well as Node comparison |
 | `docs/nts-config.md`; `tooling/config/src/target.ts` | Restore wasm with a real target constructor, not `linux({arch: 'wasm32'})`; exclude wasm from `NativeBackend` |
 | `runtime/web-platform`, `runtime/node`; Web platform plan | Typed portable algorithms and platform primitives have separate ownership; choose host-native APIs where their profile semantics agree |
-| `docs/react-integration.md`; `runtime/react` | React's observable ordering and compiler blockers carry over; target this repo's React runtime, with upstream as the oracle |
-| `docs/electron-like.md`; `docs/web-worker.md` | Browser wasm is a renderer-host option; it does not replace the existing direct native Blink lane. Worker ownership/transfer requires evidence, not TS type inference alone |
+| `docs/ideas/react-integration.md`; `runtime/react` | React's observable ordering and compiler blockers carry over; target this repo's React runtime, with upstream as the oracle |
+| `docs/electron-like.md`; `docs/ideas/web-worker.md` | Browser wasm is a renderer-host option; it does not replace the existing direct native Blink lane. Worker ownership/transfer requires evidence, not TS type inference alone |
 
 ### What preparation does today, and the requested provider change
 

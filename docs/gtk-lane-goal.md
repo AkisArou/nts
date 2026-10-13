@@ -2113,7 +2113,7 @@ do not need Shumate, GtkSourceView, WebKit or libspelling.
 
 ## Rules this lane keeps
 
-These are inherited from `native-lane-goal.md` and not repeated here: two arms per claim, one variable per arm, explicit-path commits, three states for a gate verdict. Three are specific to GTK:
+These are inherited from `native-lane-goal.md` (removed; in git history) and not repeated here: two arms per claim, one variable per arm, explicit-path commits, three states for a gate verdict. Three are specific to GTK:
 
 - **`G_DEBUG=fatal-criticals` on every run.** A GTK critical is a line on stderr and the program continues, which is exactly the silently wrong answer the controls exist to catch.
 - **The shim is a ledger.** A function in `native/*.h` that outlives the capability it stood in for is the first thing to look for in review.

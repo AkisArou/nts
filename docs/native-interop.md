@@ -1,5 +1,10 @@
 # TypeScript and C, in both directions
 
+> **Scalars have moved on.** This doc spells `c_int` as a branded `number` in a
+> `"c:stdint"` module. Today `c_int` and the other C scalars come from
+> `@nts/scalars` (see `runtime/native/libc.d.ts`), as `docs/scalar-numbers.md`
+> decided. Read the scalar passages below as history.
+
 The counterpart to `jvm-interop.md`, for the native lane. It is much shorter,
 because much less of it is true yet — and the parts that *are* true are true for
 a reason that does not generalise.
@@ -481,11 +486,11 @@ signatures can have opposite ownership contracts, and the header cannot say so.
 
 So the C lane cannot copy the JVM lane's approach, and the gap does not close by
 working harder on a binder. It closes by **the language carrying what the header
-cannot**, which is what `native-values-and-resource-flow.md` proposes.
+cannot**, which is what the native-values RFC proposed and `docs/native-operations.md` now carries.
 
 ## The state of the RFC
 
-`docs/native-values-and-resource-flow.md` is 1,366 lines and specifies native
+The native-values RFC (removed; in git history) was 1,366 lines and specifies native
 values, typed pointers, field access, address-of, inline arrays, and a
 `ResourceFlow` analysis over ownership. Measured against the tree:
 

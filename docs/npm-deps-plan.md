@@ -106,7 +106,7 @@ below — it is enough of a design question to have its own section.
 bad news is not a construct inside a vendored file nobody chose to read — it is
 *"your import of `cookie` cannot be compiled, because its entry needs a regular
 expression engine, at these 5 sites; the routes that would change that are a
-port in `libraries/` or the regex work in `docs/icu-i18n.md`."* Section A is the
+port in `libraries/` or the regex work in `runtime/ecmascript/DATE-TEMPORAL-INTL.md`."* Section A is the
 first instalment of this and section B is the rest.
 
 **Nothing silently degrades.** There is no JavaScript fallback and there is not
@@ -260,7 +260,7 @@ Measured, from the six packages that reached the lowerer plus the `mitt` walk:
 
 | what | seen in | note |
 |---|---|---|
-| a regular expression literal | `cookie` ×5, `content-type` ×4 | see `docs/icu-i18n.md`; this is an independent argument for the same direction |
+| a regular expression literal | `cookie` ×5, `content-type` ×4 | see `runtime/ecmascript/DATE-TEMPORAL-INTL.md`; this is an independent argument for the same direction |
 | a name from an enclosing scope | `brace-expansion`, `balanced-match` | already row 6 of the README corpus table |
 | an omitted argument for an optional parameter | `mitt` | pervasive in idiomatic npm code |
 | a method declaration in an object literal | `mitt` | already rows 8 and 12 of the corpus table |

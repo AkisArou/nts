@@ -1978,7 +1978,7 @@ compiled pool evidence.
 ## Proxy routing and the environment-owned runtime
 
 These commits followed the dispatcher-pool entry above and were recorded in
-`docs/web-platform-node-lane-handoff.md` rather than here. They are summarized now so
+`docs/web-platform-node-lane-handoff.md` (removed; in git history) rather than here. They are summarized now so
 the ledger is continuous again; each was verified in its own commit, and this entry
 does not re-measure them.
 

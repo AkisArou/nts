@@ -9,7 +9,7 @@ separately under:
 /home/akisarou/Projects/nts-web-platform-integration/runtime/web-platform
 ```
 
-It supersedes the earlier architectural suggestions in `docs/fetch-websocket.md`
+It supersedes the earlier architectural suggestions in an earlier chat transcript, `docs/fetch-websocket.md` (removed; in git history)
 where this document makes a different decision. The external tree is an
 implementation baseline, not a directory to copy without review.
 

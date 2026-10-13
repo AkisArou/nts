@@ -1,8 +1,8 @@
 # Native operations: example-led semantics
 
-This is the working revision of the native-operations part of
-[native-values-and-resource-flow.md](native-values-and-resource-flow.md).
-That document remains design history; its proposed API is not a fixed contract.
+This is the working revision of the native-operations part of the
+native-values RFC, `native-values-and-resource-flow.md` (removed; in git history).
+That RFC is design history; its proposed API is not a fixed contract.
 ResourceFlow follows native operations and is not implemented by this slice.
 
 ## First executable slice: a caller-owned buffer
