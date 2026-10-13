@@ -88,6 +88,8 @@ pub(crate) enum Helper {
     EqualNumber,
     EqualBoolean,
     EqualString,
+    /// `(value, fallback) -> number`: C's `nts_value_number_or`.
+    NumberOr,
 }
 
 impl Helper {
@@ -103,6 +105,7 @@ impl Helper {
             Self::EqualNumber => "value.equalNumber",
             Self::EqualBoolean => "value.equalBoolean",
             Self::EqualString => "value.equalString",
+            Self::NumberOr => "value.numberOr",
         }
     }
     fn body(self, m: &mut Builder<'_>) -> Result<Function, Failure> {
@@ -161,7 +164,8 @@ impl Helper {
             | Self::Equal
             | Self::EqualNumber
             | Self::EqualBoolean
-            | Self::EqualString => return crate::erased_ops::body(self, m, types),
+            | Self::EqualString
+            | Self::NumberOr => return crate::erased_ops::body(self, m, types),
         }
         f.instruction(&I::End);
         Ok(f)

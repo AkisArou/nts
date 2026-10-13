@@ -77,6 +77,7 @@ pub(crate) enum FuncKey {
     /// A reader the promise boundary exports, by what it reads.
     PromiseBoundary(u32),
     Buffer(crate::buffers::Helper),
+    BufferMethod(crate::buffer_methods::Helper),
 }
 
 /// Every global the module can contain, named by what it means.

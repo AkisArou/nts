@@ -224,6 +224,7 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::F64Ceil
             | I::F64Floor
             | I::F64Trunc
+            | I::F64Nearest
             | I::F64Sqrt
             | I::F64Add
             | I::F64Sub

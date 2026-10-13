@@ -195,14 +195,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_buffer_new_resizable", Support::WasmHelper),
     ("nts_buffer_resizable", Support::Intrinsic),
     ("nts_buffer_resize", Support::WasmHelper),
-    (
-        "nts_buffer_slice",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_transfer",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_buffer_slice", Support::WasmHelper),
+    ("nts_buffer_transfer", Support::WasmHelper),
     (
         "nts_callback_enter",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
@@ -1331,10 +1325,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     ("nts_value_is_view", Support::Intrinsic),
     ("nts_value_number", Support::WasmHelper),
-    (
-        "nts_value_number_or",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_value_number_or", Support::WasmHelper),
     ("nts_value_of_boolean", Support::WasmHelper),
     (
         "nts_value_of_handle",
@@ -1393,14 +1384,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_view_check_fn",
         Support::Decline("buffer/view/DataView representation"),
     ),
-    (
-        "nts_view_copy_within",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_fill",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_view_copy_within", Support::WasmHelper),
+    ("nts_view_fill", Support::WasmHelper),
     (
         "nts_view_from_bytes",
         Support::Decline("buffer/view/DataView representation"),
@@ -1421,28 +1406,16 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_view_index_fn",
         Support::Decline("buffer/view/DataView representation"),
     ),
-    (
-        "nts_view_join",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_view_join", Support::WasmHelper),
     ("nts_view_length", Support::WasmHelper),
     ("nts_view_new", Support::WasmHelper),
     (
         "nts_view_put",
         Support::Decline("buffer/view/DataView representation"),
     ),
-    (
-        "nts_view_set",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_slice",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_subarray",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_view_set", Support::WasmHelper),
+    ("nts_view_slice", Support::WasmHelper),
+    ("nts_view_subarray", Support::WasmHelper),
     (
         "nts_view_unlend",
         Support::Decline("buffer/view/DataView representation"),

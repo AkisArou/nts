@@ -56,6 +56,7 @@ impl Helper {
             Self::EqualNumber => (&[Erased, Number], Boolean),
             Self::EqualBoolean => (&[Erased, Boolean], Boolean),
             Self::EqualString => (&[Erased, String], Boolean),
+            Self::NumberOr => (&[Erased, Number], Number),
         }
     }
     pub(crate) fn signature(self) -> (Vec<Physical>, Physical) {
@@ -80,6 +81,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         "nts_value_eq_number" | "nts_value_eq_number_fn" => Some(Helper::EqualNumber),
         "nts_value_eq_boolean" | "nts_value_eq_boolean_fn" => Some(Helper::EqualBoolean),
         "nts_value_eq_string" => Some(Helper::EqualString),
+        "nts_value_number_or" => Some(Helper::NumberOr),
         _ => None,
     }
 }
@@ -218,10 +220,59 @@ pub(crate) fn body(
         Helper::EqualNumber | Helper::EqualBoolean | Helper::EqualString => {
             typed_equality(helper, m, types)
         }
+        Helper::NumberOr => number_or(m, types),
         Helper::BoxNumber | Helper::Number | Helper::Tag => Err(Failure::Invariant(format!(
             "primitive helper {helper:?} routed to operators"
         ))),
     }
+}
+/// C's `nts_value_number_or`: the fallback for undefined and null, a number
+/// as itself, a boolean as 1 or 0, and NaN for anything else, as C answers.
+///
+/// Params: value, fallback. Locals: tag.
+fn number_or(m: &mut Builder<'_>, types: ErasedTypes) -> Result<Function, Failure> {
+    let tag = erased::callee(m, Helper::Tag)?;
+    let number = erased::callee(m, Helper::Number)?;
+    let mut f = Function::new([ValType::I32]);
+    f.instruction(&I::LocalGet(0));
+    f.call(tag);
+    f.instructions(&[
+        I::LocalSet(2),
+        I::LocalGet(2),
+        I::I32Const(UNDEFINED),
+        I::I32Eq,
+        I::LocalGet(2),
+        I::I32Const(NULL),
+        I::I32Eq,
+        I::I32Or,
+        I::If(BlockType::Empty),
+        I::LocalGet(1),
+        I::Return,
+        I::End,
+        I::LocalGet(2),
+        I::I32Const(NUMBER),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+    ]);
+    f.call(number);
+    f.instructions(&[
+        I::Return,
+        I::End,
+        I::LocalGet(2),
+        I::I32Const(BOOLEAN),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+    ]);
+    payload(&mut f, 0, types.boolean);
+    f.instructions(&[
+        I::F64ConvertI32U,
+        I::Return,
+        I::End,
+        I::F64Const(f64::NAN.into()),
+        I::End,
+    ]);
+    Ok(f)
 }
 fn payload(f: &mut Function, local: u32, ty: u32) {
     f.instructions(&[

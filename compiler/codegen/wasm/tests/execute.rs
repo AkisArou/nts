@@ -354,7 +354,8 @@ fn source_object_keys_agree_with_node() {
 
 /// One buffer through every width: what a view writes, a view of another
 /// width reads, little-endian and from unaligned offsets; a float32 store's
-/// rounding; views across a resize; and what an open value is.
+/// rounding; views across a resize; what an open value is; and the methods
+/// that cut, copy and convert, overlapping and across kinds.
 #[test]
 fn source_buffer_views_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/buffer-views");
@@ -366,7 +367,7 @@ fn source_buffer_views_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 153, "{output}");
+    assert_eq!(output["cases"], 306, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
 }
 

@@ -132,3 +132,117 @@ export function countersWrap(v: number): number {
   }
   return total;
 }
+
+// A subarray is a window on the same bytes at the same kind: a write through
+// it is a write to the original, and its byteLength is its own width's.
+export function windows(v: number): number {
+  const halves = new Uint16Array(8);
+  for (let i = 0; i < 8; i++) halves[i] = i * 1000 + 7;
+  const from = (v | 0) % 10;
+  const cut = halves.subarray(from, -2);
+  if (cut.length > 0) cut[0] = 65535;
+  let total = 0;
+  for (let i = 0; i < 8; i++) total = total * 3 + halves[i]!;
+  return total % 1000000007 + cut.length * 0.5 + cut.byteLength * 0.001 + cut.byteOffset * 10000;
+}
+
+// A slice is a copy: writing the original afterwards leaves it alone.
+export function copies(v: number): number {
+  const ints = new Int32Array(6);
+  for (let i = 0; i < 6; i++) ints[i] = i * (v | 0);
+  const copy = ints.slice(1, (v | 0) % 7);
+  ints[2] = 99;
+  let total = 0;
+  for (let i = 0; i < copy.length; i++) total = total * 5 + copy[i]!;
+  return total + copy.length * 1000000;
+}
+
+// `set` converts values between kinds, and reads a snapshot when both share a
+// buffer: the wider destination would overwrite bytes not yet read.
+export function setsAcrossKinds(v: number): number {
+  const buffer = new ArrayBuffer(16);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < 16; i++) bytes[i] = i * 17 + (v | 0);
+  const halves = new Uint16Array(buffer);
+  halves.set(bytes.subarray(0, 6), 1);
+  const singles = new Float32Array(4);
+  const ints = new Int32Array(4);
+  for (let i = 0; i < 4; i++) ints[i] = (i - 2) * (v | 0) * 1000;
+  singles.set(ints);
+  let total = 0;
+  for (let i = 0; i < 8; i++) total = total * 7 + halves[i]!;
+  return total % 1000000007 + singles[0]! * 0.001 + singles[3]!;
+}
+
+// The same kind moves bytes, overlapping too.
+export function setsWithinOneKind(v: number): number {
+  const bytes = new Uint8Array(12);
+  for (let i = 0; i < 12; i++) bytes[i] = i + (v | 0);
+  bytes.set(bytes.subarray(0, 8), 3);
+  let total = 0;
+  for (let i = 0; i < 12; i++) total = total * 3 + bytes[i]!;
+  return total;
+}
+
+export function fills(v: number): number {
+  const bytes = new Uint8Array(10);
+  bytes.fill(v, 2, -3);
+  const halves = new Int16Array(6);
+  halves.fill(v * 1000, -4);
+  const doubles = new Float64Array(3);
+  doubles.fill(v / 3, 1);
+  let total = 0;
+  for (let i = 0; i < 10; i++) total = total * 3 + bytes[i]!;
+  for (let i = 0; i < 6; i++) total = total * 3 + halves[i]!;
+  return total % 1000000007 + doubles[1]! + doubles[0]!;
+}
+
+// copyWithin reads what it has already written when the ranges overlap.
+export function copiesWithin(v: number): number {
+  const ints = new Int32Array(8);
+  for (let i = 0; i < 8; i++) ints[i] = i * 11 + (v | 0);
+  ints.copyWithin(2, 0, 5);
+  ints.copyWithin(-2, -6, (v | 0) % 9);
+  let total = 0;
+  for (let i = 0; i < 8; i++) total = total * 5 + ints[i]!;
+  return total % 1000000007;
+}
+
+export function joins(v: number): string {
+  const singles = new Float32Array(3);
+  singles[0] = v;
+  singles[1] = 0.1;
+  singles[2] = -2.5;
+  const bytes = new Int8Array(2);
+  bytes[0] = -v;
+  return singles.join("|") + "/" + bytes.join();
+}
+
+// A buffer's slice copies the bytes between ends counted from the back too.
+export function bufferSlices(v: number): number {
+  const buffer = new ArrayBuffer(10);
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < 10; i++) bytes[i] = i + 1;
+  const cut = buffer.slice((v | 0) % 12, -1);
+  const view = new Uint8Array(cut);
+  bytes[5] = 200;
+  let total = 0;
+  for (let i = 0; i < view.length; i++) total = total * 3 + view[i]!;
+  return total + cut.byteLength * 100000;
+}
+
+// transfer moves the bytes and detaches the old buffer: its length, and every
+// view over it, read 0. Growing zero-fills; a resizable one keeps its maximum.
+export function transfers(v: number): number {
+  const size = (v | 0) & 15;
+  const old = new ArrayBuffer(8, { maxByteLength: 32 });
+  const before = new Uint8Array(old);
+  for (let i = 0; i < 8; i++) before[i] = i + 10;
+  const moved = old.transfer(size);
+  const after = new Uint8Array(moved);
+  let total = 0;
+  for (let i = 0; i < after.length; i++) total = total * 3 + after[i]!;
+  const fixed = moved.transferToFixedLength(4);
+  return total + old.byteLength * 1000 + before.length * 100 + (old.detached ? 0.5 : 0)
+    + moved.maxByteLength * 0.001 + fixed.maxByteLength * 10000000 + (fixed.resizable ? 0.25 : 0);
+}

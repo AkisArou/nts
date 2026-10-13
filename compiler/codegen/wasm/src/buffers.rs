@@ -31,18 +31,18 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 pub(crate) const MAX_BYTES: u32 = (1 << 30) - 64;
 
 // A buffer's fields after the object root.
-const LENGTH: u32 = ROOT_FIELDS;
-const RESERVED: u32 = ROOT_FIELDS + 1;
-const RESIZABLE: u32 = ROOT_FIELDS + 2;
-const BYTES: u32 = ROOT_FIELDS + 3;
+pub(crate) const LENGTH: u32 = ROOT_FIELDS;
+pub(crate) const RESERVED: u32 = ROOT_FIELDS + 1;
+pub(crate) const RESIZABLE: u32 = ROOT_FIELDS + 2;
+pub(crate) const BYTES: u32 = ROOT_FIELDS + 3;
 // A view's. A DataView has the first three, then its tracking flag.
-const BUFFER: u32 = ROOT_FIELDS;
-const OFFSET: u32 = ROOT_FIELDS + 1;
+pub(crate) const BUFFER: u32 = ROOT_FIELDS;
+pub(crate) const OFFSET: u32 = ROOT_FIELDS + 1;
 /// Elements, when the view does not track its buffer.
-const ELEMENTS: u32 = ROOT_FIELDS + 2;
-const KIND: u32 = ROOT_FIELDS + 3;
-const WIDTH: u32 = ROOT_FIELDS + 4;
-const TRACKING: u32 = ROOT_FIELDS + 5;
+pub(crate) const ELEMENTS: u32 = ROOT_FIELDS + 2;
+pub(crate) const KIND: u32 = ROOT_FIELDS + 3;
+pub(crate) const WIDTH: u32 = ROOT_FIELDS + 4;
+pub(crate) const TRACKING: u32 = ROOT_FIELDS + 5;
 
 /// Which of the runtime's element kinds (`NTS_ELEMENT_*`) a view's element
 /// is. The numbering is `nts_core::hir::builtin::element_kind`'s, which the
@@ -166,13 +166,13 @@ pub(crate) const fn is_view(ty: &HirType) -> bool {
     matches!(ty, HirType::Managed(ManagedType::View(_)))
 }
 
-fn types(m: &Builder<'_>) -> Result<BufferTypes, Failure> {
+pub(crate) fn types(m: &Builder<'_>) -> Result<BufferTypes, Failure> {
     m.types
         .buffers
         .ok_or_else(|| Failure::Invariant("unplanned buffer types".into()))
 }
 
-fn reference(ty: u32, nullable: bool) -> RefType {
+pub(crate) const fn reference(ty: u32, nullable: bool) -> RefType {
     RefType {
         nullable,
         heap_type: HeapType::Concrete(ty),
@@ -673,7 +673,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
 
 /// `nts_to_index` of a parameter: `!(v >= 1) ? 0 : trunc(v)`, so NaN and
 /// everything below one is zero.
-fn index_of(f: &mut Function, param: u32) {
+pub(crate) fn index_of(f: &mut Function, param: u32) {
     f.instructions(&[
         I::LocalGet(param),
         I::F64Trunc,

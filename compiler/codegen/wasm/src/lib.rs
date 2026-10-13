@@ -13,6 +13,7 @@ mod array_methods;
 mod array_sort;
 mod arrays;
 mod body;
+mod buffer_methods;
 mod buffers;
 mod callable_plan;
 mod callables;
