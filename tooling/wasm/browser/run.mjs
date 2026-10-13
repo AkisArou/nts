@@ -48,11 +48,11 @@ const types = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.ts': 'tex
   '.wasm': 'application/wasm', '.json': 'application/json' };
 const shims = { 'node:assert/strict': 'assert', 'node:assert': 'assert', 'node:url': 'url',
   'node:path': 'path', 'node:fs': 'fs', 'node:fs/promises': 'fs-promises',
-  'node:module': 'module', 'node:vm': 'vm' };
+  'node:module': 'module', 'node:vm': 'vm', 'node:util': 'util.ts' };
 const encode = file => file.split('/').map(encodeURIComponent).join('/');
 
 function page() {
-  const imports = Object.fromEntries(Object.entries(shims).map(([name, file]) => [name, `/node/${file}.mjs`]));
+  const imports = Object.fromEntries(Object.entries(shims).map(([name, file]) => [name, `/node/${path.extname(file) ? file : `${file}.mjs`}`]));
   const argv = ['node', path.resolve(script), ...args];
   return `<!doctype html><meta charset="utf-8">
 <script type="importmap">${JSON.stringify({ imports })}</script>
@@ -120,7 +120,12 @@ async function serve(request, response, finish) {
   if (url.pathname === '/') return send(200, page(), 'text/html');
   if (url.pathname.startsWith('/node/')) {
     const file = path.join(here, 'node', path.basename(url.pathname));
-    return send(200, await readFile(file), 'text/javascript');
+    const content = await readFile(file);
+    // A shim written in TypeScript is served with its types stripped.
+    if (path.extname(file) === '.ts') {
+      return send(200, stripTypeScriptTypes(content.toString('utf8'), { mode: 'transform', sourceUrl: url.pathname }), 'text/javascript');
+    }
+    return send(200, content, 'text/javascript');
   }
   const body = () => new Promise(resolve => {
     const chunks = [];
