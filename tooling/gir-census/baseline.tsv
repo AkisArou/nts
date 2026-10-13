@@ -2,6 +2,7 @@ Adw-1	adw_breakpoint_add_settersv	an array
 Adw-1	adw_breakpoint_condition_new_and	a boxed record a parameter hands over, which the program's box would also free
 Adw-1	adw_breakpoint_condition_new_or	a boxed record a parameter hands over, which the program's box would also free
 Adw-1	adw_breakpoint_new	a boxed record a parameter hands over, which the program's box would also free
+Adw-1	AdwEnumListModel:enum-type (construct-only)	`a property value of C type Scalar(Size)`, a type this binder does not know
 Adw-1	adw_sidebar_setup_drop_target	an array
 Adw-1	AdwSpinRow::input	an out parameter of a type written through no slot here
 Adw-1	adw_spring_animation_new	a boxed record a parameter hands over, which the program's box would also free
@@ -29,6 +30,7 @@ Gdk-4.0	gdk_event_get_axes	an array
 Gdk-4.0	gdk_event_get_history	an array
 Gdk-4.0	gdk_gl_texture_builder_build	a callback whose context is not the next parameter
 Gdk-4.0	gdk_gl_texture_builder_get_sync	a `gpointer`
+Gdk-4.0	gdk_keyval_get_aliases	an array
 Gdk-4.0	gdk_rgba_equal	a record passed by value
 Gdk-4.0	gdk_rgba_hash	a record passed by value
 Gdk-4.0	gdk_texture_download	an array
@@ -77,6 +79,7 @@ Gio-2.0	g_dbus_connection_send_message_with_reply	the header disagrees: static a
 Gio-2.0	g_dbus_connection_signal_subscribe	a callback taking or returning a string
 Gio-2.0	g_dbus_escape_object_path_bytestring	an array
 Gio-2.0	g_dbus_message_get_header_fields	an array
+Gio-2.0	g_dbus_message_to_blob	`gsize*`, a pointer depth other than one
 Gio-2.0	GDBusObjectManagerClientClass_interface_proxy_properties_changed	the header disagrees: static assertion failed due to requirement '__builtin_types_compatible_p(void (*)(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *const *), void (*)(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *))': GDBusObjectManagerClientClass_interface_proxy_properties_changed -- declared `void GDBusObjectManagerClientClass_interface_proxy_properties_changed(struct _GDBusObjectManagerClient *, struct _GDBusObjectProxy *, struct _GDBusProxy *, struct _GVariant *, const char *)`
 Gio-2.0	GDBusObjectManagerClient::interface-proxy-properties-changed	an array
 Gio-2.0	g_dbus_object_manager_client_new	a callback taking or returning a string
@@ -103,6 +106,7 @@ Gio-2.0	g_input_stream_read	an array
 Gio-2.0	g_input_stream_read_async	an array
 Gio-2.0	g_keyfile_settings_backend_new	declared by none of the headers GIR names
 Gio-2.0	g_list_store_find_with_equal_func	a callback whose context is not the next parameter
+Gio-2.0	GListStore:item-type (construct-only)	`a property value of C type Scalar(Size)`, a type this binder does not know
 Gio-2.0	g_memory_input_stream_add_data	an array
 Gio-2.0	g_memory_input_stream_new_from_data	an array
 Gio-2.0	g_memory_output_stream_get_data	a `gpointer`
@@ -164,6 +168,7 @@ Gio-2.0	g_socket_receive_with_blocking	an array
 Gio-2.0	g_socket_send_message	an array
 Gio-2.0	g_socket_send_messages	an array
 Gio-2.0	g_socket_send_message_with_timeout	an array
+Gio-2.0	GSubprocess:argv (construct-only)	an array
 Gio-2.0	g_task_get_source_tag	a `gpointer`
 Gio-2.0	g_task_get_task_data	a `gpointer`
 Gio-2.0	g_task_propagate_pointer	a `gpointer`
@@ -171,6 +176,7 @@ Gio-2.0	g_task_return_pointer	a callback whose context is not the next parameter
 Gio-2.0	g_task_run_in_thread	a callback whose context is not the next parameter
 Gio-2.0	g_task_run_in_thread_sync	a callback whose context is not the next parameter
 Gio-2.0	g_task_set_task_data	a callback whose context is not the next parameter
+Gio-2.0	GThemedIcon:names (construct-only)	an array
 Gio-2.0	g_tls_certificate_get_dns_names	an array
 Gio-2.0	g_tls_certificate_get_ip_addresses	an array
 Gio-2.0	GTlsConnectionClass.get_binding_data	an array
@@ -187,6 +193,7 @@ Gio-2.0	g_unix_fd_list_new_from_array	an array
 Gio-2.0	g_unix_fd_list_peek_fds	an array
 Gio-2.0	g_unix_fd_list_steal_fds	an array
 Gio-2.0	g_unix_socket_address_new_with_type	an array
+Gio-2.0	GUnixSocketAddress:path-as-array (construct-only)	an array
 Gio-2.0	GVfsClass.local_file_add_info	a callback whose context is not the next parameter
 Gio-2.0	g_vfs_register_uri_scheme	a callback taking or returning a string
 GLib-2.0	g_access	declared by none of the headers GIR names
@@ -397,12 +404,6 @@ GLib-2.0	g_ref_count_compare	`grefcount*`, a pointer depth other than one
 GLib-2.0	g_ref_string_acquire	a `char *` buffer the callee may write into, which GIR calls a string
 GLib-2.0	g_ref_string_length	a `char *` buffer the callee may write into, which GIR calls a string
 GLib-2.0	g_ref_string_release	a `char *` buffer the callee may write into, which GIR calls a string
-GLib-2.0	g_regex_match_all_full	an array
-GLib-2.0	g_regex_match_full	an array
-GLib-2.0	g_regex_replace	an array
-GLib-2.0	g_regex_replace_eval	an array
-GLib-2.0	g_regex_replace_literal	an array
-GLib-2.0	g_regex_split_full	an array
 GLib-2.0	g_remove	declared by none of the headers GIR names
 GLib-2.0	g_rename	declared by none of the headers GIR names
 GLib-2.0	g_rmdir	declared by none of the headers GIR names
@@ -420,6 +421,7 @@ GLib-2.0	g_slice_alloc	a `gpointer`
 GLib-2.0	g_slice_copy	a `gpointer`
 GLib-2.0	g_slice_get_config_state	`guint*`, a pointer depth other than one
 GLib-2.0	g_source_add_unix_fd	a `gpointer`
+GLib-2.0	g_source_get_ready_time_ns	`uint64_t*`, a pointer depth other than one
 GLib-2.0	g_spawn_async_with_pipes_and_fds	an array
 GLib-2.0	g_spawn_command_line_sync	an array
 GLib-2.0	g_spawn_sync	an array
@@ -546,6 +548,7 @@ GObject-2.0	g_signal_chain_from_overridden	an array
 GObject-2.0	g_signal_emitv	an array
 GObject-2.0	g_signal_group_connect_data	a callback whose context is not its last parameter
 GObject-2.0	g_signal_group_connect_swapped	a callback whose context is not its last parameter
+GObject-2.0	GSignalGroup:target-type (construct-only)	`a property value of C type Scalar(Size)`, a type this binder does not know
 GObject-2.0	g_signal_list_ids	an array
 GObject-2.0	g_signal_override_class_handler	a callback with `scope="forever"`
 GObject-2.0	g_signal_query	an out parameter whose storage the caller allocates
@@ -628,11 +631,11 @@ Gtk-4.0	GtkAccessibleTextInterface_set_selection	the header disagrees: static as
 Gtk-4.0	gtk_accessible_update_property_value	an array
 Gtk-4.0	gtk_accessible_update_relation_value	an array
 Gtk-4.0	gtk_accessible_update_state_value	an array
+Gtk-4.0	gtk_alternative_trigger_newv	an array
 Gtk-4.0	GtkBuildableIface.custom_tag_start	an out parameter whose storage the caller allocates
 Gtk-4.0	gtk_buildable_parse_context_get_element_stack	an array
 Gtk-4.0	gtk_buildable_parse_context_pop	a `gpointer`
 Gtk-4.0	gtk_builder_cscope_add_callback_symbol	a callback whose context is not the next parameter
-Gtk-4.0	gtk_cclosure_expression_new	a callback whose context is not the next parameter
 Gtk-4.0	gtk_closure_expression_new	an array
 Gtk-4.0	GtkColorChooserInterface.add_palette	an array
 Gtk-4.0	gtk_column_view_scroll_to	a boxed record a parameter hands over, which the program's box would also free
@@ -646,10 +649,14 @@ Gtk-4.0	GtkEditable::insert-text	an out parameter of a type written through no s
 Gtk-4.0	gtk_editable_install_properties	`GObjectClass*`, a pointer depth other than one
 Gtk-4.0	GtkEntryBufferClass.get_text	`gsize*`, a pointer depth other than one
 Gtk-4.0	gtk_enumerate_printers	`GtkPrinter`, which the headers do not define as a tagged struct
+Gtk-4.0	GtkEnumList:enum-type (construct-only)	`a property value of C type Scalar(Size)`, a type this binder does not know
 Gtk-4.0	gtk_file_dialog_open_multiple_text_files_finish	a string out parameter
 Gtk-4.0	gtk_file_dialog_open_text_file_finish	a string out parameter
 Gtk-4.0	gtk_file_dialog_save_text_file_finish	a string out parameter
 Gtk-4.0	gtk_file_filter_get_attributes	an array
+Gtk-4.0	GtkFileFilter:mime-types (construct-only)	an array
+Gtk-4.0	GtkFileFilter:patterns (construct-only)	an array
+Gtk-4.0	GtkFileFilter:suffixes (construct-only)	an array
 Gtk-4.0	gtk_font_dialog_choose_font_and_features_finish	a string out parameter
 Gtk-4.0	GtkFrameClass.compute_child_allocation	`GtkAllocation*`, a pointer depth other than one
 Gtk-4.0	gtk_gesture_stylus_get_axes	an array
@@ -749,7 +756,6 @@ Gtk-4.0	gtk_print_unix_dialog_set_support_selection	`GtkPrintUnixDialog`, which 
 Gtk-4.0	gtk_recent_info_get_application_info	a string out parameter
 Gtk-4.0	gtk_recent_info_get_applications	an array
 Gtk-4.0	gtk_recent_info_get_groups	an array
-Gtk-4.0	gtk_scale_set_format_value_func	a callback taking or returning a string
 Gtk-4.0	gtk_shortcut_trigger_compare	`gconstpointer`, a pointer depth other than one
 Gtk-4.0	gtk_shortcut_trigger_equal	`gconstpointer`, a pointer depth other than one
 Gtk-4.0	gtk_shortcut_trigger_hash	`gconstpointer`, a pointer depth other than one
@@ -761,6 +767,7 @@ Gtk-4.0	gtk_snapshot_append_repeating_linear_gradient	an array
 Gtk-4.0	gtk_snapshot_append_repeating_radial_gradient	an array
 Gtk-4.0	gtk_snapshot_push_shadow	an array
 Gtk-4.0	GtkSpinButton::input	an out parameter of a type written through no slot here
+Gtk-4.0	GtkStringList:strings (construct-only)	an array
 Gtk-4.0	gtk_string_list_take	a string parameter the callee takes ownership of
 Gtk-4.0	gtk_svg_get_state_names	an array
 Gtk-4.0	GtkSymbolicPaintableInterface.snapshot_symbolic	an array
