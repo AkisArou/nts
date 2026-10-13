@@ -54,7 +54,9 @@ with page script's `unload`. Keep the app's state in what `main` creates.
 Module-level state is not per document yet, and the build refuses it
 (contracts/compiler-requests.md, 10). [`examples/notes`](examples/notes)
 (localStorage, a debounced save, search, keyboard shortcuts) and
-[`examples/paint`](examples/paint) (pointer events on the 2D canvas) are
+[`examples/paint`](examples/paint) (pointer events on the 2D canvas) and
+[`examples/board`](examples/board) (a kanban board: a template, a modal
+dialog, keyboard moves, drag and drop) are
 written against lib.dom alone, and each is checked against the same
 TypeScript run by V8; [`examples/todo`](examples/todo) is TodoMVC against
 `nts:dom`, the same app the TodoMVC benchmark measures.

@@ -1,0 +1,20 @@
+:root { --bg: #f4f5f7; --fg: #1d1d1f; --line: #d9d9de; --card: #fff; --accent: #2f6fd6; }
+:root.dark { --bg: #1c1c1e; --fg: #f2f2f7; --line: #3a3a3c; --card: #2c2c2e; --accent: #6ea0ff; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+header { padding: 12px; border-bottom: 1px solid var(--line); }
+#add { display: flex; gap: 8px; }
+#add input { flex: 1; max-width: 360px; }
+#board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px; height: calc(100vh - 100px); }
+section { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-height: 0; }
+section.over { border-color: var(--accent); }
+h2 { margin: 0 0 8px; font-size: 15px; }
+.count { opacity: 0.6; font-weight: normal; }
+ul { list-style: none; margin: 0; padding: 0; flex: 1; overflow: auto; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-bottom: 6px; cursor: grab; }
+.card:focus { outline: 2px solid var(--accent); }
+input { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+button { border: 1px solid var(--line); background: transparent; color: var(--accent); border-radius: 6px; padding: 4px 10px; }
+dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: inherit; }
+dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 0; margin: 8px 0 0; }
+.about { padding: 6px 12px; font-size: 12px; opacity: 0.6; }

@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Opts this page in: nts_app runs the app's main(document) once it has loaded. -->
+<meta name="nts-app">
+<title>board</title>
+<link rel="stylesheet" href="styles.css">
+<header>
+  <form id="add">
+    <input name="title" placeholder="A new card" aria-label="new card" autocomplete="off">
+    <button>Add</button>
+  </form>
+</header>
+<main id="board">
+  <section data-lane="todo"><h2>To do <span class="count"></span></h2><ul></ul></section>
+  <section data-lane="doing"><h2>Doing <span class="count"></span></h2><ul></ul></section>
+  <section data-lane="done"><h2>Done <span class="count"></span></h2><ul></ul></section>
+</main>
+<template id="card"><li class="card" draggable="true" tabindex="0"><span class="title"></span></li></template>
+<dialog id="edit">
+  <form method="dialog">
+    <input name="title" aria-label="title">
+    <menu><button value="cancel">Cancel</button><button value="save">Save</button></menu>
+  </form>
+</dialog>
+<footer class="about">Compiled TypeScript typed by the stock lib.dom.d.ts, no nts:dom import. Arrows move the focused card, Enter edits it, Delete removes it; cards drag between lanes.</footer>
