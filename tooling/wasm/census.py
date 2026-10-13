@@ -38,6 +38,9 @@ def main():
     parser.add_argument("--only", help="comma-separated project names for an explicit follow-up")
     parser.add_argument("--host", choices=["node", "browser"], default="node",
                         help="emit for this host; browser runs each oracle in headless Chromium")
+    parser.add_argument("--resume", action="store_true",
+                        help="keep the rows an interrupted report at --out holds, when the same"
+                             " binary, host and commit made it, and measure only the rest")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     binary = args.nts.resolve()
@@ -57,6 +60,22 @@ def main():
         "population": "bounded numeric/bool/string sweep; returns, primitive throws and live globals; not full M1 agree",
         "frontend_jobs": 1, "host": args.host, "rows": [],
     }
+    # A gate stops a census to have the machine to itself, so a long one can
+    # take several runs. Rows are appended whole, in the projects' order, so an
+    # interrupted report's rows are a finished prefix of this run's.
+    done = set()
+    previous_path = output / "report.json"
+    if args.resume and previous_path.is_file():
+        previous = json.loads(previous_path.read_text())
+        mismatched = [key for key in ("binary_sha256", "host", "source_commit", "root")
+                      if previous.get(key) != report[key]]
+        if mismatched:
+            raise SystemExit(f"--resume: the report at --out differs in {', '.join(mismatched)}")
+        names = {p.parent.name for p in projects}
+        report["rows"] = [row for row in previous["rows"] if row["name"] in names]
+        report["created_utc"] = previous["created_utc"]
+        report["resumed"] = previous.get("resumed", 0) + 1
+        done = {row["name"] for row in report["rows"]}
 
     def save():
         totals = dict.fromkeys(["emitted", "agree", "declined", "invalid", "wrong", "unmeasured", "timed_out", "cases", "thrown_cases", "input_declines"], 0)
@@ -74,6 +93,8 @@ def main():
     save()
     marker = Path(os.environ.get("NTS_GATE_MARKER", root.parent / "GATE-RUNNING"))
     for index, config in enumerate(projects):
+        if config.parent.name in done:
+            continue
         if marker.exists():
             raise SystemExit("gate active: retained partial report; resume after coordination")
         name = config.parent.name
