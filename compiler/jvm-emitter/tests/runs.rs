@@ -109,6 +109,14 @@ fn run_main(
         // the contention at the source beats trimming the output, which would
         // make the test tolerant of anything else the JVM decides to say.
         .arg("-XX:-UsePerfData")
+        // `System.out` encodes with the caller's locale, so under `LC_ALL=C`
+        // the literal test's `é` and astral character came out as `?` and it
+        // failed in a gate run that had exported the locale. The program was
+        // right and the capture was wrong, again: name the encoding, for the
+        // property JDK 19 reads and the one before it read, rather than trust
+        // the environment.
+        .arg("-Dstdout.encoding=UTF-8")
+        .arg("-Dsun.stdout.encoding=UTF-8")
         .arg("-cp")
         .arg(&dir)
         .arg(name)
