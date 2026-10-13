@@ -168,6 +168,9 @@ pub(crate) struct Builder<'p> {
     func_keys: BTreeMap<FuncKey, Func>,
     /// Each program function's HIR declaration, for its callers.
     declarations: FxHashMap<&'p str, &'p HirFunc>,
+    /// Every program function by name, abstract declarations included: one
+    /// index, so a lookup per class and column is not a scan of all of them.
+    hir_funcs: FxHashMap<&'p str, &'p HirFunc>,
     globals: Vec<GlobalEntry>,
     global_keys: BTreeMap<GlobalKey, Global>,
     /// Globals whose initializers are being built: a request for one of them
@@ -205,6 +208,7 @@ impl<'p> Builder<'p> {
             funcs: Vec::new(),
             func_keys: BTreeMap::new(),
             declarations: FxHashMap::default(),
+            hir_funcs: program.funcs.iter().map(|f| (f.name.as_str(), f)).collect(),
             globals: Vec::new(),
             global_keys: BTreeMap::new(),
             building: BTreeSet::new(),
@@ -385,6 +389,11 @@ impl<'p> Builder<'p> {
         );
         self.declarations.insert(&func.name, func);
         Ok(())
+    }
+
+    /// A program function's HIR, by name, abstract declarations included.
+    pub(crate) fn hir_func(&self, name: &str) -> Option<&'p HirFunc> {
+        self.hir_funcs.get(name).copied()
     }
 
     /// A program function, declared before any body is lowered.

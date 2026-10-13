@@ -60,12 +60,11 @@ pub(crate) fn row(
     let methods = m.program.native_methods(layout)?;
     let (by_column, length) = columns(m)?;
     for (column, slot) in by_column.iter().enumerate() {
-        let body = methods.get(column).copied().flatten().filter(|name| {
-            !m.program
-                .funcs
-                .iter()
-                .any(|f| &f.name == name && f.abstract_declaration)
-        });
+        let body = methods
+            .get(column)
+            .copied()
+            .flatten()
+            .filter(|name| m.hir_func(name).is_none_or(|f| !f.abstract_declaration));
         match (slot, body) {
             (Some(slot), Some(body)) => {
                 let entry = entry(m, class, *slot, body)?;
@@ -92,10 +91,7 @@ fn entry(m: &mut Builder<'_>, class: ClassId, slot: u32, body: &str) -> Result<F
         .object(&HirType::Managed(ManagedType::Object(class)))?;
     let physical = storage.physical;
     let func = m
-        .program
-        .funcs
-        .iter()
-        .find(|f| f.name == body)
+        .hir_func(body)
         .ok_or_else(|| Failure::Invariant(format!("unresolved row body `{body}`")))?;
     let convention = &m.types.row_conventions[&slot];
     let agrees = func.params.len() == convention.params.len() + 1

@@ -369,6 +369,11 @@ struct Builder<'a> {
     rows: bool,
     row_signatures: BTreeMap<u32, NodeId>,
     row_conventions: BTreeMap<u32, Convention>,
+    /// Every program function by name: one index for the row conventions.
+    funcs: FxHashMap<&'a str, &'a nts_core::hir::Func>,
+    /// Each row column's function type and convention, shared by every slot
+    /// that reads the column.
+    column_rows: BTreeMap<u32, (NodeId, Convention)>,
     /// Each interface layout's interface parent, forced by the layouts that
     /// hold both as prefixes: from the interface's layout to the parent's
     /// layout and type.
@@ -401,14 +406,35 @@ impl<'a> Builder<'a> {
             row_signatures: BTreeMap::new(),
             row_conventions: BTreeMap::new(),
             face_chain: FxHashMap::default(),
+            funcs: program.funcs.iter().map(|f| (f.name.as_str(), f)).collect(),
+            column_rows: BTreeMap::new(),
         }
     }
 
     /// The function type of `slot`'s row column, from the declaration a call
     /// through an interface names: the receiver as the object root, so every
     /// class's entry in the column has this one type.
+    /// The function type of `slot`'s row column. It belongs to the column, not
+    /// the slot: two slots that read one column (one adapter can fill two
+    /// interfaces' columns) share the type and the convention by construction,
+    /// so a call's cast to its slot's type holds for every entry there.
     fn row_signature(&mut self, slot: u32, declared: &str) -> Result<(), String> {
-        let convention = self.row_convention(slot, declared)?;
+        let column = self
+            .program
+            .native_column(slot)
+            .ok_or_else(|| format!("interface slot {slot} has no native column"))?;
+        let (signature, convention) = self.column_row(column, declared)?;
+        self.row_signatures.insert(slot, signature);
+        self.row_conventions.insert(slot, convention);
+        Ok(())
+    }
+
+    /// A row column's function type and convention, made once per column.
+    fn column_row(&mut self, column: u32, declared: &str) -> Result<(NodeId, Convention), String> {
+        if let Some(known) = self.column_rows.get(&column) {
+            return Ok(known.clone());
+        }
+        let convention = self.column_convention(column, declared)?;
         let object = self.root();
         let mut params = vec![PendingSlot::Defined(object, true)];
         for ty in &convention.params {
@@ -419,37 +445,31 @@ impl<'a> Builder<'a> {
         }
         let result = self.request(&convention.result)?;
         let signature = self.add(
-            format!("row<{slot}>"),
+            format!("row<{column}>"),
             None,
             true,
             Shape::Function(params, result),
         );
-        self.row_signatures.insert(slot, signature);
-        self.row_conventions.insert(slot, convention);
-        Ok(())
+        self.column_rows
+            .insert(column, (signature, convention.clone()));
+        Ok((signature, convention))
     }
 
-    /// The convention of `slot`'s column: what the bodies the rows hold there
+    /// The convention of a row column: what the bodies the rows hold there
     /// take and answer, which may be another declaration's than the one a
-    /// call names (one adapter can fill two interfaces' columns). Bodies that
-    /// disagree are refused by name; a column with none takes the call's own.
-    fn row_convention(&self, slot: u32, declared: &str) -> Result<Convention, String> {
+    /// call names. Bodies that disagree are refused by name; a column with
+    /// none takes the call's own declaration.
+    fn column_convention(&self, column: u32, declared: &str) -> Result<Convention, String> {
         let of = |name: &str| -> Result<Convention, String> {
             let func = self
-                .program
                 .funcs
-                .iter()
-                .find(|f| f.name == name)
+                .get(name)
                 .ok_or_else(|| format!("unresolved interface body `{name}`"))?;
             Ok(Convention {
                 params: func.params.iter().skip(1).map(|p| p.ty.clone()).collect(),
                 result: func.return_type.clone(),
             })
         };
-        let column = self
-            .program
-            .native_column(slot)
-            .ok_or_else(|| format!("interface slot {slot} has no native column"))?;
         let mut found: Option<(String, Convention)> = None;
         for layout in &self.program.layouts {
             let methods = self.program.native_methods(layout)?;
@@ -458,13 +478,7 @@ impl<'a> Builder<'a> {
             };
             // An interface's own row names its declaration, which no call
             // reaches: only bodies set the column's convention.
-            let abstract_ = self
-                .program
-                .funcs
-                .iter()
-                .find(|f| &f.name == body)
-                .is_some_and(|f| f.abstract_declaration);
-            if abstract_ {
+            if self.funcs.get(body).is_some_and(|f| f.abstract_declaration) {
                 continue;
             }
             let convention = of(body)?;
