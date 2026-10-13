@@ -1543,9 +1543,10 @@ class Generator:
 
     def overlay(self):
         """`lib-dom-bindings.d.ts`: which nts:dom declaration implements each
-        lib.dom.d.ts declaration a program may use (docs/lib-dom.md). The
-        program is typed by lib.dom.d.ts and lowered against nts:dom; this
-        file is the whole of the pairing, read by the compiler's binding step.
+        lib.dom.d.ts declaration a program may use
+        (runtime/chromium/docs/lib-dom.md). The program is typed by
+        lib.dom.d.ts and lowered against nts:dom; this file is the whole of
+        the pairing, read by the compiler's binding step.
 
         An interface lib.dom.d.ts declares that Blink's core defines is bound
         by its own nts:dom type, or, if that is not generated, by its nearest
@@ -1751,8 +1752,9 @@ declare module "nts:dom" {{
         overlay = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 //
 // What implements lib.dom.d.ts's declarations natively: each names the
-// nts:dom declaration a use of it lowers to (docs/lib-dom.md). Declarations
-// only -- lib.dom.d.ts types the program; nothing here changes a type.
+// nts:dom declaration a use of it lowers to (runtime/chromium/docs/lib-dom.md).
+// Declarations only -- lib.dom.d.ts types the program; nothing here changes a
+// type.
 
 {self.overlay()}
 """

@@ -2,8 +2,9 @@
 // Do not edit; regenerate.
 //
 // What implements lib.dom.d.ts's declarations natively: each names the
-// nts:dom declaration a use of it lowers to (docs/lib-dom.md). Declarations
-// only -- lib.dom.d.ts types the program; nothing here changes a type.
+// nts:dom declaration a use of it lowers to (runtime/chromium/docs/lib-dom.md).
+// Declarations only -- lib.dom.d.ts types the program; nothing here changes a
+// type.
 
 /**
  * @ntsBoundBy "nts:dom" AbortController
