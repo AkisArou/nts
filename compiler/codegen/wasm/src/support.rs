@@ -31,7 +31,7 @@ mod tests {
     use crate::{
         array_copy, array_join, array_lookup, array_methods, array_sort, bigints, buffer_methods,
         buffers, collections, conversions, dataviews, erased_ops, function_names, host, numeric,
-        promises, raising, string_split, strings, symbols, timers, values,
+        presence, promises, raising, string_split, strings, symbols, timers, values,
     };
     use std::collections::BTreeSet;
 
@@ -61,6 +61,12 @@ mod tests {
             || function_names::is_name(name)
         {
             Some(Support::WasmHelper)
+        } else if let Some(op) = presence::external(name) {
+            Some(if op.inline() {
+                Support::Intrinsic
+            } else {
+                Support::WasmHelper
+            })
         } else if let Some(op) = conversions::external(name) {
             Some(if op.inline() {
                 Support::Intrinsic

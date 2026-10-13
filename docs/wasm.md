@@ -714,6 +714,36 @@ are read off the value, from what the core decides per layout:
   boundary's "parameter facts" refusals (mathops, literals), a typed read
   past the end, and `s[i]` past the string.
 
+### Optional-property presence (3m)
+
+JavaScript tells `{}` apart from `{ x: undefined }`, and a struct slot cannot:
+`"x" in o`, `Object.hasOwn(o, "x")` and `delete o.x` need to know whether an
+optional property was ever written. The core numbers each optional property
+of a layout with one bit, base first, and emits `nts_presence_*` calls; C keeps
+the bits in the header word every object has.
+
+- **Where the bits live:** Wasm objects have no spare header word, so a
+  storage that records presence gets one `i32` right after the header (the
+  descriptor and the identity hash), ahead of its fields.
+- **Who pays:** only a *family* in which some call records or reads presence
+  by type. A family is what a Wasm subtype follows: declared bases and
+  interface prefixes. Every storage in it carries the word at the same field,
+  so a subclass read through its base, or a class through an interface, reads
+  the same bits. A program that never asks adds nothing to any object.
+- **Construction** writes the word as zero; the core's `init` then sets the
+  bits of every optional field the class declares, in one `or`.
+- **`"k" in v` over a value whose type says nothing** reads the word of the
+  family the value belongs to, one `ref.test` per family, and answers false
+  for a value of none, which no write can have reached. The core pairs that
+  read with the class test that decides the answer.
+- **A function value's family** carries no word: its header continues with
+  call entries. A presence call on one is refused by name.
+- Fixture `presence` (68 cases); the census row
+  has-own-over-an-optional-property (66 cases) now agrees. Rows
+  an-optional-property and in-over-an-object-with-an-optional-declarer still
+  stop on an object literal's class test (`Opts`), which waits on the core's
+  test by layout.
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;
@@ -2132,8 +2162,9 @@ ordinary arrays, erased-value tags/tests/conversions, class/closure metadata,
 TDZ/failure reporting and raising state. Exclude Promise/scheduler, symbols,
 Map/Table/Set, buffer/view/DataView, native allocation/ownership, all foreign
 families, native frame-storage helpers and tagged-template reflection. Optional
-field presence is a named M1 decline until a GC representation preserves its
-separate presence bit; null storage is not proof of property absence.
+field presence was a named M1 decline until a GC representation preserved its
+separate presence bit (null storage is not proof of property absence); 3m
+added that representation.
 
 Each appendix M1 name has one of four implementation categories:
 `numeric`, `string`, `array`, `value/control`. `_fn` aliases share semantics,
@@ -2270,9 +2301,9 @@ Reviewed decisions: shared HostGc, wasm-encoder plus wasmparser 0.261.0,
 explicit raising for M1, host-specific binaries, provisional size budgets and
 the M1 public boundary scope are approved. Pin the dependencies in Cargo.lock
 and check their license/MSRV against workspace policy before implementation.
-Optional-field presence must follow the upcoming core initialization/absence
-contract; ask the core owner when implementing it rather than adding a wasm-only
-presence convention. Keep wasm out of every existing `Backend::ALL` gate loop
+Optional-field presence follows the core's initialization/absence contract
+(`hir::presence`): the core's bit numbering, read from a word of Wasm's own
+(3m), with no wasm-only convention. Keep wasm out of every existing `Backend::ALL` gate loop
 and show that invariant in the M1a review.
 Dispatch/erasure optimizations remain measured choices, not claims derived from
 target features. M0 was documentation-only; the current scoped shared changes
@@ -2584,15 +2615,15 @@ or native storage does not become supported because its name shares a prefix.
 | `nts_post_delayed` | Decline: async/scheduler/host lifecycle (M5) |
 | `nts_post_from_any_thread` | Decline: async/scheduler/host lifecycle (M5) |
 | `nts_post_task` | Decline: async/scheduler/host lifecycle (M5) |
-| `nts_presence_clear` | Decline: optional-field presence representation |
-| `nts_presence_clear_fn` | Decline: optional-field presence representation |
-| `nts_presence_has` | Decline: optional-field presence representation |
-| `nts_presence_has_fn` | Decline: optional-field presence representation |
-| `nts_presence_has_value` | Decline: optional-field presence representation |
-| `nts_presence_init` | Decline: optional-field presence representation |
-| `nts_presence_init_fn` | Decline: optional-field presence representation |
-| `nts_presence_set` | Decline: optional-field presence representation |
-| `nts_presence_set_fn` | Decline: optional-field presence representation |
+| `nts_presence_clear` | M1 value/control |
+| `nts_presence_clear_fn` | M1 value/control |
+| `nts_presence_has` | M1 value/control |
+| `nts_presence_has_fn` | M1 value/control |
+| `nts_presence_has_value` | M1 value/control |
+| `nts_presence_init` | M1 value/control |
+| `nts_presence_init_fn` | M1 value/control |
+| `nts_presence_set` | M1 value/control |
+| `nts_presence_set_fn` | M1 value/control |
 | `nts_promise_adopt` | Decline: async/scheduler/host lifecycle (M5) |
 | `nts_promise_all` | Decline: async/scheduler/host lifecycle (M5) |
 | `nts_promise_claim` | Decline: async/scheduler/host lifecycle (M5) |

@@ -23,6 +23,9 @@ pub(crate) struct Object {
     pub(crate) field_base: u32,
     pub(crate) callable: Option<usize>,
     pub(crate) virtual_: Option<usize>,
+    /// The field holding which optional properties were written, where this
+    /// storage records them.
+    pub(crate) presence: Option<u32>,
     identity: u32,
     nominal: bool,
 }
@@ -44,6 +47,9 @@ pub(crate) struct Plan {
     /// Each identity's position in every display that holds it, where that
     /// position is the same in all of them; `None` where it is not.
     depths: BTreeMap<u32, Option<u32>>,
+    /// The topmost storage of each family carrying a presence word, and the
+    /// word's field: every storage that carries one extends exactly one.
+    pub(crate) presence_tops: Vec<(u32, u32)>,
 }
 fn identity(program: &Program, at: usize, ty: ClassId) -> Result<Identity, String> {
     let classes = program
@@ -127,6 +133,7 @@ impl Plan {
                     field_base: crate::gc::ROOT_FIELDS,
                     callable: None,
                     virtual_: None,
+                    presence: None,
                     identity: identities[&key],
                     nominal: matches!(key, Identity::Class(_)),
                 },
@@ -190,6 +197,17 @@ impl Plan {
         object.callable = root;
         object.field_base = fields;
         Ok(())
+    }
+    /// A presence word right after the header, ahead of the fields.
+    pub(crate) fn attach_presence(&mut self, ty: ClassId) -> Result<u32, String> {
+        let object = self
+            .objects
+            .get_mut(&ty)
+            .ok_or_else(|| format!("unplanned presence object {ty:?}"))?;
+        let word = object.field_base;
+        object.presence = Some(word);
+        object.field_base += 1;
+        Ok(word)
     }
     pub(crate) fn subtype(&self, mut from: u32, to: u32) -> bool {
         loop {

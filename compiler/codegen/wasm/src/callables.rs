@@ -390,7 +390,7 @@ pub(crate) fn static_value(b: &mut Body<'_, '_>, result: ValueId) -> Result<(), 
     };
     let types = b.types();
     let storage = types.objects.object(b.ty(result))?;
-    if !storage.fields.is_empty() {
+    if !storage.fields.is_empty() || storage.presence.is_some() {
         return Err(format!("static closure `{}` has captures", storage.name).into());
     }
     let global = b.m.global(GlobalKey::StaticClosure(class), |m| {

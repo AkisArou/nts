@@ -806,6 +806,8 @@ impl<'b, 'p> Body<'b, 'p> {
                     crate::string_split::call(self, result, args)?;
                 } else if crate::function_names::is_name(name) {
                     crate::function_names::call(self, result, args)?;
+                } else if let Some(op) = crate::presence::external(name) {
+                    crate::presence::call(self, result, op, args)?;
                 } else if let Some(conversion) = crate::numeric::external(name) {
                     crate::numeric::call(self, result, conversion, args)?;
                 } else {

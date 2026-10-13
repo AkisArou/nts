@@ -93,6 +93,8 @@ pub(crate) enum FuncKey {
     FunctionName,
     /// An object's or a function's text, read off its identity.
     ObjectText,
+    /// An open value's presence word, or zero.
+    PresenceOf,
 }
 
 /// Every global the module can contain, named by what it means.

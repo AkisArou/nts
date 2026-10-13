@@ -142,6 +142,10 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, frame: bool) -> Result<
     for entry in crate::callables::entries(b.m, class, storage)? {
         b.code.ref_func(entry);
     }
+    // No optional property written yet: construction records its own.
+    if storage.presence.is_some() {
+        b.instruction(&I::I32Const(0));
+    }
     for field in storage.fields.iter() {
         default(b, &field.ty)?;
     }
@@ -234,7 +238,11 @@ pub(crate) fn get(
 /// The receiver, as its storage: an interface whose values are the root (other
 /// owners reach it) is cast to the interface's storage, which every receiver
 /// a positional access reaches extends.
-fn load_storage(b: &mut Body<'_, '_>, receiver: ValueId, physical: u32) -> Result<(), Failure> {
+pub(crate) fn load_storage(
+    b: &mut Body<'_, '_>,
+    receiver: ValueId,
+    physical: u32,
+) -> Result<(), Failure> {
     b.load(receiver)?;
     let held = match b.types().value_slot(b.ty(receiver))? {
         Physical::Reference(RefType {

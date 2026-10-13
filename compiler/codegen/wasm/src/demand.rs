@@ -46,6 +46,10 @@ pub(crate) struct Demand {
     /// declaration the call names. No one dispatch hierarchy holds such a
     /// receiver, so these read its descriptor's row rather than a vtable.
     pub(crate) row_calls: BTreeMap<u32, (String, ObjectUse)>,
+    /// Each object type an optional property's presence is recorded on or
+    /// read from by type: its storage, and every storage it shares a prefix
+    /// with, carries the presence word.
+    pub(crate) presence: BTreeMap<ClassId, ObjectUse>,
 }
 
 /// Whether `ty` is an interface's type, as opposed to a class's or a literal's.
@@ -175,6 +179,12 @@ fn call(
             }
             demand.services.symbol_registry |=
                 matches!(name.as_str(), "nts_symbol_for" | "nts_symbol_key_for");
+            if crate::presence::external(name).is_some_and(crate::presence::Op::typed)
+                && let Some(receiver) = args.first()
+                && let HirType::Managed(ManagedType::Object(ty)) = func.value(*receiver).ty
+            {
+                record(&mut demand.presence, ty, func, id);
+            }
             // A job or a timer is a closure called, with nothing, from the
             // queue or the host.
             if matches!(name.as_str(), "nts_enqueue_job" | "nts_set_timeout")

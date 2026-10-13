@@ -13,7 +13,7 @@ use wasm_encoder::{
     StorageType, StructType, SubType, TypeSection,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct NodeId(usize);
 
 /// What an array's storage is keyed by. An object or array element is keyed
@@ -417,6 +417,7 @@ impl Plan {
                 name: "managed type graph".into(),
                 reason,
             })?;
+        builder.plan_presence(&resources.presence);
         for (&slot, (declared, use_)) in &resources.row_calls {
             builder
                 .row_signature(slot, declared)
@@ -650,6 +651,8 @@ struct Builder<'a> {
     /// Each layout's Wasm parent where interfaces hold it as a prefix: from
     /// the layout to the parent's layout and the type to plan it by.
     prefix_parents: FxHashMap<usize, (usize, TypeId)>,
+    /// The layouts whose storage carries a presence word.
+    presence: BTreeSet<usize>,
 }
 
 impl<'a> Builder<'a> {
@@ -684,6 +687,7 @@ impl<'a> Builder<'a> {
             row_signatures: BTreeMap::new(),
             row_conventions: BTreeMap::new(),
             prefix_parents: FxHashMap::default(),
+            presence: BTreeSet::new(),
             funcs: program.funcs.iter().map(|f| (f.name.as_str(), f)).collect(),
             column_rows: BTreeMap::new(),
         }
@@ -1278,6 +1282,11 @@ impl<'a> Builder<'a> {
         if let Some(vtable) = vtable {
             fields[0] = Field::value(PendingSlot::Defined(vtable, false), false);
         }
+        // Which optional properties were written: one word ahead of the
+        // fields, at the same place in every storage of the family.
+        if self.presence.contains(&at) {
+            fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        }
         // HIR fields include the base prefix; the descriptor is physical only.
         if let Some(base) = self.program.base_layout(layout) {
             let base_layout = &self.program.layouts[base];
@@ -1310,6 +1319,53 @@ impl<'a> Builder<'a> {
         self.nodes[id.0].base = Some(base);
         self.nodes[id.0].shape = Shape::Struct(fields);
         Ok(())
+    }
+
+    /// The layouts whose storage carries a presence word: every layout of a
+    /// family in which one is a presence receiver. A family is what a Wasm
+    /// subtype follows, declared bases and interface prefixes, so the word
+    /// sits at one field in all of them and a value of any reads it there,
+    /// as C reads its header's flags. A family holding a function value's
+    /// storage carries none: its header continues with entries, and a
+    /// presence call on it is refused by name. Pay for what is asked: a
+    /// program that records no presence adds no field anywhere.
+    fn plan_presence(&mut self, receivers: &BTreeMap<TypeId, crate::demand::ObjectUse>) {
+        fn find(family: &mut [usize], mut at: usize) -> usize {
+            while family[at] != at {
+                family[at] = family[family[at]];
+                at = family[at];
+            }
+            at
+        }
+        let layouts = &self.program.layouts;
+        let mut family: Vec<usize> = (0..layouts.len()).collect();
+        for (at, layout) in layouts.iter().enumerate() {
+            let base = layout.base.and_then(|ty| self.layout_of(ty));
+            let prefix = self.prefix_parents.get(&at).map(|&(parent, _)| parent);
+            for other in base.into_iter().chain(prefix) {
+                let (a, b) = (find(&mut family, at), find(&mut family, other));
+                family[a.max(b)] = a.min(b);
+            }
+        }
+        let (mut carrying, mut callable) = (BTreeSet::new(), BTreeSet::new());
+        for (at, layout) in layouts.iter().enumerate() {
+            let root = find(&mut family, at);
+            if crate::callable_plan::is_signature(self.program, layout)
+                || crate::callable_plan::is_callable_storage(self.program, layout)
+                || self.callable_plan.members.contains_key(&at)
+            {
+                callable.insert(root);
+            }
+            if layout.types.iter().any(|ty| receivers.contains_key(ty)) {
+                carrying.insert(root);
+            }
+        }
+        self.presence = (0..layouts.len())
+            .filter(|&at| {
+                let root = find(&mut family, at);
+                carrying.contains(&root) && !callable.contains(&root)
+            })
+            .collect();
     }
 
     /// The interfaces whose prefix receivers include the layout at `at`, by
@@ -1816,6 +1872,7 @@ impl<'a> Builder<'a> {
                 }
             }
         }
+        self.attach_presence(indices, &mut objects)?;
         let identity = objects
             .descriptors
             .iter()
@@ -1837,6 +1894,44 @@ impl<'a> Builder<'a> {
         }
         let collections = self.collection_metadata(indices, identity, &mut objects)?;
         Ok((objects, arrays, collections))
+    }
+
+    /// Each carrying layout's presence word, and the topmost storage of each
+    /// family: the one whose parent carries none.
+    fn attach_presence(
+        &self,
+        indices: &[u32],
+        objects: &mut crate::object_plan::Plan,
+    ) -> Result<(), String> {
+        let root = self.root.map(|root| root.object);
+        let carrying = self
+            .presence
+            .iter()
+            .filter_map(|at| self.objects.get(at).copied())
+            .filter(|&id| Some(id) != root)
+            .collect::<BTreeSet<_>>();
+        let mut tops = BTreeSet::new();
+        for at in &self.presence {
+            let Some(&id) = self.objects.get(at) else {
+                continue;
+            };
+            if !carrying.contains(&id) {
+                continue;
+            }
+            let mut word = None;
+            for ty in &self.program.layouts[*at].types {
+                word = Some(objects.attach_presence(*ty)?);
+            }
+            if let Some(word) = word
+                && !self.nodes[id.0]
+                    .base
+                    .is_some_and(|parent| carrying.contains(&parent))
+            {
+                tops.insert((indices[id.0], word));
+            }
+        }
+        objects.presence_tops = tops.into_iter().collect();
+        Ok(())
     }
 
     /// Each collection's storage and descriptor: an object, as `typeof`
@@ -2296,6 +2391,69 @@ mod tests {
         let mut module = wasm_encoder::Module::new();
         module.section(&plan.encode());
         module.finish()
+    }
+
+    /// A presence word goes only where a call records presence, and then to
+    /// every storage of that family at one field, right after the header: a
+    /// subclass's sits where its base's does, with its fields after it. A
+    /// layout of another family carries none, and its first field stays the
+    /// first after the header.
+    #[test]
+    fn a_presence_word_follows_the_header_in_each_storage_of_its_family() {
+        let mut f = function("records", &[object(2)], HirType::Void);
+        let receiver = value(&mut f, OpKind::Param(0), object(2));
+        let bit = value(&mut f, OpKind::ConstInt(0), test_common::U32);
+        let set = value(
+            &mut f,
+            OpKind::Call {
+                callee: nts_core::hir::Callee::External("nts_presence_set".into()),
+                args: vec![receiver, bit],
+                frame: None,
+            },
+            HirType::Void,
+        );
+        f.blocks
+            .push(block(&[receiver], &[bit, set], Terminator::Return(None)));
+        let mut asks = function("asks", &[object(1), object(3)], HirType::Void);
+        asks.blocks.push(block(&[], &[], Terminator::Return(None)));
+        let mut p = program(vec![f, asks]);
+        p.public_api.clear();
+        let number = HirType::Float { bits: 64 };
+        p.layouts.push(layout(
+            1,
+            "Base",
+            vec![field("x", number.clone()), field("maybe", HirType::Erased)],
+            None,
+        ));
+        p.layouts.push(layout(
+            2,
+            "Derived",
+            vec![
+                field("x", number.clone()),
+                field("maybe", HirType::Erased),
+                field("y", number.clone()),
+            ],
+            Some(1),
+        ));
+        p.layouts
+            .push(layout(3, "Apart", vec![field("x", number)], None));
+        let plan = Plan::build(&p).unwrap();
+        let storage = |id| plan.objects.object(&object(id)).unwrap();
+        for id in [1, 2] {
+            assert_eq!(storage(id).presence, Some(ROOT_FIELDS), "{id}");
+            assert_eq!(storage(id).field_base, ROOT_FIELDS + 1, "{id}");
+        }
+        assert_eq!(storage(3).presence, None);
+        assert_eq!(storage(3).field_base, ROOT_FIELDS);
+        assert_eq!(
+            plan.objects.presence_tops,
+            vec![(storage(1).physical, ROOT_FIELDS)]
+        );
+        assert!(plan.heap_subtype(
+            HeapType::Concrete(storage(2).physical),
+            HeapType::Concrete(storage(1).physical)
+        ));
+        crate::validate(&bytes(&plan)).unwrap();
     }
 
     /// Layouts are related only through their declared parents: two layouts

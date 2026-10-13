@@ -745,42 +745,15 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_post_task",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_presence_clear",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_clear_fn",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_has",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_has_fn",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_has_value",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_init",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_init_fn",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_set",
-        Support::Decline("optional-field presence representation"),
-    ),
-    (
-        "nts_presence_set_fn",
-        Support::Decline("optional-field presence representation"),
-    ),
+    ("nts_presence_clear", Support::Intrinsic),
+    ("nts_presence_clear_fn", Support::Intrinsic),
+    ("nts_presence_has", Support::Intrinsic),
+    ("nts_presence_has_fn", Support::Intrinsic),
+    ("nts_presence_has_value", Support::WasmHelper),
+    ("nts_presence_init", Support::Intrinsic),
+    ("nts_presence_init_fn", Support::Intrinsic),
+    ("nts_presence_set", Support::Intrinsic),
+    ("nts_presence_set_fn", Support::Intrinsic),
     ("nts_promise_adopt", Support::WasmHelper),
     (
         "nts_promise_all",
