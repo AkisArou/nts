@@ -386,7 +386,11 @@ pub(crate) fn erase_stack(body: &mut Body<'_, '_>, ty: &HirType) -> Result<(), F
             | ManagedType::Map(..)
             | ManagedType::Table(..)
             | ManagedType::Set(_)
-            | ManagedType::Promise(_),
+            | ManagedType::Promise(_)
+            | ManagedType::Buffer
+            | ManagedType::View(_)
+            | ManagedType::AnyView
+            | ManagedType::DataView,
         ) => {}
         HirType::Bool => {
             body.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
@@ -545,7 +549,11 @@ pub(crate) fn unerase_to(
             | ManagedType::Map(..)
             | ManagedType::Table(..)
             | ManagedType::Set(_)
-            | ManagedType::Promise(_),
+            | ManagedType::Promise(_)
+            | ManagedType::Buffer
+            | ManagedType::View(_)
+            | ManagedType::AnyView
+            | ManagedType::DataView,
         ) => {
             body.instruction(&I::Drop);
             unerase_reference(body, value, &ty)?;
@@ -584,6 +592,10 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
         &[reference.heap_type],
         "an erased value read as an object of a type it is not",
     )?;
+    // Every typed array is one struct type; its element kind is a field.
+    if let HirType::Managed(ManagedType::View(element)) = ty {
+        crate::buffers::kind_guard(body, value, element)?;
+    }
     body.load(value)?;
     body.instruction(&I::RefCastNonNull(reference.heap_type));
     body.instruction(&I::End);

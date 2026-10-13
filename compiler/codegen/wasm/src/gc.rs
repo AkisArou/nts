@@ -102,6 +102,14 @@ struct ErasedNodes {
 }
 
 #[derive(Debug, Clone, Copy)]
+struct BufferNodes {
+    bytes: NodeId,
+    buffer: NodeId,
+    view: NodeId,
+    dataview: NodeId,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct PromiseNodes {
     promise: NodeId,
     run: NodeId,
@@ -154,6 +162,27 @@ impl PromiseTypes {
     pub(crate) const fn count(self) -> u32 {
         self.base + 5
     }
+}
+
+/// An `ArrayBuffer`, a typed-array view and a `DataView`, as the C runtime's
+/// `NtsBuffer`, `NtsView` and `NtsDataView`: see `buffers.rs`.
+///
+/// One view type for every element kind and for `ArrayBufferView`: the kind is
+/// a field, as it is in C, because `set` between two views and an
+/// `instanceof` on an open value ask it at run time.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BufferTypes {
+    /// `(array (mut i8))`: a buffer's bytes, which every view over it shares.
+    pub(crate) bytes: u32,
+    /// `{ length, reserved, resizable, bytes }` after the root; `bytes` is
+    /// null once detached.
+    pub(crate) buffer: u32,
+    /// `{ buffer, offset, length, kind, width, tracking }` after the root.
+    pub(crate) view: u32,
+    /// `{ buffer, offset, length, tracking }` after the root.
+    pub(crate) dataview: u32,
+    pub(crate) buffer_descriptor: u32,
+    pub(crate) view_descriptor: u32,
 }
 
 #[derive(Debug)]
@@ -269,6 +298,31 @@ enum Kind {
     Func,
 }
 
+/// `count` descriptors for a runtime type that is not a class, under one new
+/// identity no class has: an object to `typeof`, whose kind its struct type
+/// answers. The first one's index.
+fn builtins(objects: &mut crate::object_plan::Plan, count: usize) -> Result<u32, String> {
+    let first = u32::try_from(objects.descriptors.len()).map_err(|_| "too many descriptors")?;
+    if count > 0 {
+        let identity = objects
+            .descriptors
+            .iter()
+            .map(|d| d.identity)
+            .max()
+            .map_or(Some(0), |id| id.checked_add(1))
+            .ok_or_else(|| "too many semantic identities".to_owned())?;
+        for _ in 0..count {
+            objects.descriptors.push(crate::object_plan::Descriptor {
+                identity,
+                kind: nts_core::hir::tags::OBJECT,
+                ancestry: Vec::new(),
+                class: None,
+            });
+        }
+    }
+    Ok(first)
+}
+
 /// Module-local storage assignments. Numeric operations still use the smaller
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
@@ -280,6 +334,7 @@ pub(crate) struct Plan {
     count: u32,
     pub(crate) erased: Option<ErasedTypes>,
     pub(crate) promise: Option<PromiseTypes>,
+    pub(crate) buffers: Option<BufferTypes>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -549,6 +604,7 @@ struct Builder<'a> {
     work: Vec<Work>,
     erased: Option<ErasedNodes>,
     promise: Option<PromiseNodes>,
+    buffers: Option<BufferNodes>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -589,6 +645,7 @@ impl<'a> Builder<'a> {
             work: Vec::new(),
             erased: None,
             promise: None,
+            buffers: None,
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -823,6 +880,60 @@ impl<'a> Builder<'a> {
         nodes
     }
 
+    /// The buffer, view and `DataView` types, planned together: a view holds its
+    /// buffer, and an erased value's tests ask for any of the three.
+    fn buffer_types(&mut self) -> BufferNodes {
+        if let Some(nodes) = self.buffers {
+            return nodes;
+        }
+        let root = self.root();
+        let i32 = |mutable| Field::value(PendingSlot::Scalar(Slot::I32), mutable);
+        let bytes = self.add(
+            "bytes".into(),
+            None,
+            true,
+            Shape::Array(Field {
+                slot: PendingSlot::Scalar(Slot::I32),
+                packed: Some(StorageType::I8),
+                mutable: true,
+            }),
+        );
+        let Shape::Struct(prefix) = self.nodes[root.0].shape.clone() else {
+            unreachable!("the object root is a struct")
+        };
+        let mut fields = prefix.clone();
+        fields.extend([
+            i32(true),
+            i32(true),
+            i32(true),
+            Field::value(PendingSlot::Defined(bytes, true), true),
+        ]);
+        let buffer = self.add("buffer".into(), Some(root), true, Shape::Struct(fields));
+        let window = |kind: bool| {
+            let mut fields = prefix.clone();
+            fields.extend([
+                Field::value(PendingSlot::Defined(buffer, false), false),
+                i32(false),
+                i32(false),
+            ]);
+            if kind {
+                fields.extend([i32(false), i32(false)]);
+            }
+            fields.push(i32(false));
+            Shape::Struct(fields)
+        };
+        let view = self.add("view".into(), Some(root), true, window(true));
+        let dataview = self.add("dataview".into(), Some(root), true, window(false));
+        let nodes = BufferNodes {
+            bytes,
+            buffer,
+            view,
+            dataview,
+        };
+        self.buffers = Some(nodes);
+        nodes
+    }
+
     fn erased_types(&mut self) {
         if self.erased.is_some() {
             return;
@@ -912,12 +1023,21 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::Date) => {
                 return Err(format!("collection/date storage outside M1b: {ty:?}"));
             }
-            HirType::Managed(
-                ManagedType::Buffer
-                | ManagedType::View(_)
-                | ManagedType::AnyView
-                | ManagedType::DataView,
-            ) => return Err(format!("buffer/view storage outside M1b: {ty:?}")),
+            HirType::Managed(ManagedType::Buffer) => {
+                PendingSlot::Defined(self.buffer_types().buffer, true)
+            }
+            HirType::Managed(ManagedType::View(element)) => {
+                if crate::buffers::kind(element).is_none() {
+                    return Err(format!("a view of {element:?}, which has no element kind"));
+                }
+                PendingSlot::Defined(self.buffer_types().view, true)
+            }
+            HirType::Managed(ManagedType::AnyView) => {
+                PendingSlot::Defined(self.buffer_types().view, true)
+            }
+            HirType::Managed(ManagedType::DataView) => {
+                PendingSlot::Defined(self.buffer_types().dataview, true)
+            }
             HirType::Managed(ManagedType::Symbol) => {
                 return Err("symbol storage outside M1b".into());
             }
@@ -1791,23 +1911,8 @@ impl<'a> Builder<'a> {
         let supers = self.supers(&ordered, &indices);
         let groups = self.encode(&ordered, &indices);
         let (mut objects, arrays, collections) = self.metadata(&indices)?;
-        let promise_descriptor =
-            u32::try_from(objects.descriptors.len()).map_err(|_| "too many descriptors")?;
-        if self.promise.is_some() {
-            let identity = objects
-                .descriptors
-                .iter()
-                .map(|d| d.identity)
-                .max()
-                .map_or(Some(0), |id| id.checked_add(1))
-                .ok_or_else(|| "too many semantic identities".to_owned())?;
-            objects.descriptors.push(crate::object_plan::Descriptor {
-                identity,
-                kind: nts_core::hir::tags::OBJECT,
-                ancestry: Vec::new(),
-                class: None,
-            });
-        }
+        let promise_descriptor = builtins(&mut objects, usize::from(self.promise.is_some()))?;
+        let buffer_descriptor = builtins(&mut objects, 2 * usize::from(self.buffers.is_some()))?;
         Ok(Plan {
             arrays,
             collections,
@@ -1841,6 +1946,14 @@ impl<'a> Builder<'a> {
                 promises: indices[nodes.promises.0],
                 descriptor: promise_descriptor,
                 base: ROOT_FIELDS,
+            }),
+            buffers: self.buffers.map(|nodes| BufferTypes {
+                bytes: indices[nodes.bytes.0],
+                buffer: indices[nodes.buffer.0],
+                view: indices[nodes.view.0],
+                dataview: indices[nodes.dataview.0],
+                buffer_descriptor,
+                view_descriptor: buffer_descriptor + 1,
             }),
             slots: self
                 .slots

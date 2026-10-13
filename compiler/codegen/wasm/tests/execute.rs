@@ -352,6 +352,24 @@ fn source_object_keys_agree_with_node() {
     assert_eq!(output["cases"], 48, "{output}");
 }
 
+/// One buffer through every width: what a view writes, a view of another
+/// width reads, little-endian and from unaligned offsets; a float32 store's
+/// rounding; views across a resize; and what an open value is.
+#[test]
+fn source_buffer_views_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/buffer-views");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "buffer-views",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 153, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

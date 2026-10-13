@@ -299,8 +299,8 @@ pub(crate) fn binary(
     Ok(())
 }
 /// Whether a value is a reference to an object root's descendant: an object,
-/// an array, a collection or a promise. It compares by identity, is truthy when
-/// present, and erases as itself.
+/// an array, a collection, a promise, a buffer or a view. It compares by
+/// identity, is truthy when present, and erases as itself.
 pub(crate) fn is_reference(ty: &HirType) -> bool {
     matches!(
         ty,
@@ -311,6 +311,10 @@ pub(crate) fn is_reference(ty: &HirType) -> bool {
                 | ManagedType::Table(..)
                 | ManagedType::Set(_)
                 | ManagedType::Promise(_)
+                | ManagedType::Buffer
+                | ManagedType::View(_)
+                | ManagedType::AnyView
+                | ManagedType::DataView
         )
     )
 }

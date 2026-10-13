@@ -9,6 +9,85 @@ use crate::{
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
 use wasm_encoder::Instruction as I;
 
+/// A runtime conversion answered at its call site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Conversion {
+    /// `ToInt32`'s bits, then this integer's width: `nts_to_uint8` and its
+    /// siblings, which a typed-array store calls. C's are `nts_to_uint32` and
+    /// a truncation, and `ToUint32`'s bits are `ToInt32`'s.
+    Narrow { bits: u8, signed: bool },
+    /// `nts_to_index`: zero for NaN and everything below one, else truncated.
+    Index,
+}
+
+pub(crate) fn external(name: &str) -> Option<Conversion> {
+    let narrow = |bits, signed| Conversion::Narrow { bits, signed };
+    Some(match name {
+        "nts_to_int8" | "nts_to_int8_fn" => narrow(8, true),
+        "nts_to_uint8" | "nts_to_uint8_fn" => narrow(8, false),
+        "nts_to_int16" | "nts_to_int16_fn" => narrow(16, true),
+        "nts_to_uint16" | "nts_to_uint16_fn" => narrow(16, false),
+        "nts_to_int32" | "nts_to_int32_fn" => narrow(32, true),
+        "nts_to_uint32" | "nts_to_uint32_fn" => narrow(32, false),
+        "nts_to_index" => Conversion::Index,
+        _ => return None,
+    })
+}
+
+pub(crate) fn call(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    conversion: Conversion,
+    args: &[ValueId],
+) -> Result<(), Failure> {
+    let &[value] = args else {
+        return Err(format!("{conversion:?} arity mismatch").into());
+    };
+    let to = b.ty(result).clone();
+    match conversion {
+        Conversion::Narrow { bits, signed } => {
+            let narrow = HirType::Int { bits, signed };
+            to_i32(b, exact_integer(b, value))?;
+            convert(
+                b,
+                &HirType::Int {
+                    bits: 32,
+                    signed: true,
+                },
+                &narrow,
+            )?;
+            convert(b, &narrow, &to)
+        }
+        Conversion::Index => {
+            push_as(b, value, &HirType::NUMBER)?;
+            b.instructions(&[I::F64Trunc, I::F64Const(0.0.into())]);
+            push_as(b, value, &HirType::NUMBER)?;
+            b.instructions(&[I::F64Const(1.0.into()), I::F64Ge, I::Select]);
+            convert(b, &HirType::NUMBER, &to)
+        }
+    }
+}
+
+/// The integer a `number` was converted from, when the conversion was exact:
+/// `ToInt32` of it is the integer's own low bits, with no float to truncate. A
+/// loop counter stored into a typed array arrives this way.
+fn exact_integer(b: &Body<'_, '_>, value: ValueId) -> ValueId {
+    match b.func.value(value).kind {
+        nts_core::hir::OpKind::Convert(from)
+            if matches!(
+                b.ty(from),
+                HirType::Int {
+                    bits: 8 | 16 | 32,
+                    ..
+                }
+            ) =>
+        {
+            from
+        }
+        _ => value,
+    }
+}
+
 pub(crate) fn constant_int(b: &mut Body<'_, '_>, value: i128, ty: &HirType) -> Result<(), Failure> {
     // Unsigned slots share wasm's signed bit-pattern encoding. Check the
     // logical range first, then encode the identical low bits.

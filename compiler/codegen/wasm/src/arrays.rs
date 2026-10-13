@@ -13,7 +13,7 @@ use crate::{
 use nts_core::hir::{HirType, ManagedType, OpKind, ValueId};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
-const U32: HirType = HirType::Int {
+pub(crate) const U32: HirType = HirType::Int {
     bits: 32,
     signed: false,
 };
@@ -24,8 +24,24 @@ pub(crate) fn operation(
     result: ValueId,
     kind: &OpKind,
 ) -> Result<(), Failure> {
+    // A view's element is the same operation over a buffer's bytes.
     match kind {
         OpKind::ArrayNew { length, .. } => new(b, result, *length),
+        OpKind::ArrayGet {
+            array,
+            index,
+            checked,
+        } if crate::buffers::is_view(b.ty(*array)) => {
+            crate::buffers::get(b, result, *array, *index, *checked)
+        }
+        OpKind::ArraySet {
+            array,
+            index,
+            value,
+            checked,
+        } if crate::buffers::is_view(b.ty(*array)) => {
+            crate::buffers::set(b, result, *array, *index, *value, *checked)
+        }
         OpKind::ArrayGet {
             array,
             index,
@@ -118,24 +134,34 @@ pub(crate) fn valid_index(
     append: bool,
 ) -> Result<(), Failure> {
     let ty = storage(b, array)?.wrapper;
+    within(b, value, append, |b| logical_length(b, array, ty))
+}
+/// Whether `value` is a whole index below the `i32` length `length` pushes,
+/// or at it when appending: an array's or a typed array's.
+pub(crate) fn within(
+    b: &mut Body<'_, '_>,
+    value: ValueId,
+    append: bool,
+    length: impl Fn(&mut Body<'_, '_>) -> Result<(), Failure>,
+) -> Result<(), Failure> {
     whole_nonnegative(b, value)?;
     match b.ty(value) {
         HirType::Int {
             bits: 8 | 16 | 32, ..
         } => {
             index(b, value)?;
-            logical_length(b, array, ty)?;
+            length(b)?;
             b.instruction(&if append { I::I32LeU } else { I::I32LtU });
         }
         HirType::Int { bits: 64, .. } => {
             b.load(value)?;
-            logical_length(b, array, ty)?;
+            length(b)?;
             b.instruction(&I::I64ExtendI32U);
             b.instruction(&if append { I::I64LeU } else { I::I64LtU });
         }
         HirType::Float { bits: 32 | 64 } => {
             number(b, value)?;
-            logical_length(b, array, ty)?;
+            length(b)?;
             b.instruction(&I::F64ConvertI32U);
             b.instruction(&if append { I::F64Le } else { I::F64Lt });
         }

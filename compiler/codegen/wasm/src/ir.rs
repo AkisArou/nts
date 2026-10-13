@@ -246,6 +246,9 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::F64ConvertI64U
             | I::F64PromoteF32
             | I::I64ReinterpretF64
+            | I::F64ReinterpretI64
+            | I::I32ReinterpretF32
+            | I::F32ReinterpretI32
             | I::I32Extend8S
             | I::I32Extend16S
             | I::I32TruncSatF32S

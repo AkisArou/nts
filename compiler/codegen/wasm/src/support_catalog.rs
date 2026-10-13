@@ -188,34 +188,13 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_boxed_unlend",
         Support::Decline("native memory/provider contract"),
     ),
-    (
-        "nts_buffer_byte_length",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_detached",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_max_byte_length",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_new",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_new_resizable",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_resizable",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_buffer_resize",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_buffer_byte_length", Support::Intrinsic),
+    ("nts_buffer_detached", Support::Intrinsic),
+    ("nts_buffer_max_byte_length", Support::Intrinsic),
+    ("nts_buffer_new", Support::WasmHelper),
+    ("nts_buffer_new_resizable", Support::WasmHelper),
+    ("nts_buffer_resizable", Support::Intrinsic),
+    ("nts_buffer_resize", Support::WasmHelper),
     (
         "nts_buffer_slice",
         Support::Decline("buffer/view/DataView representation"),
@@ -697,18 +676,12 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_is_array",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_is_buffer",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_is_buffer", Support::Intrinsic),
     (
         "nts_is_class",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_is_data_view",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_is_data_view", Support::Intrinsic),
     (
         "nts_is_date",
         Support::Decline("bigint/symbol/date/promise family"),
@@ -732,10 +705,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("numeric helper not yet implemented"),
     ),
     ("nts_is_set", Support::Decline("Map/Table/Set runtime")),
-    (
-        "nts_is_view_kind",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_is_view_kind", Support::Intrinsic),
     (
         "nts_landing_detail",
         Support::Decline("native setjmp landing state"),
@@ -1303,62 +1273,23 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_thrown_class",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_to_index",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int16",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int16_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int32",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int32_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int8",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_int8_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
+    ("nts_to_index", Support::Intrinsic),
+    ("nts_to_int16", Support::Intrinsic),
+    ("nts_to_int16_fn", Support::Intrinsic),
+    ("nts_to_int32", Support::Intrinsic),
+    ("nts_to_int32_fn", Support::Intrinsic),
+    ("nts_to_int8", Support::Intrinsic),
+    ("nts_to_int8_fn", Support::Intrinsic),
     (
         "nts_to_integer",
         Support::Decline("numeric helper not yet implemented"),
     ),
-    (
-        "nts_to_uint16",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_uint16_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_uint32",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_uint32_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_uint8",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
-    (
-        "nts_to_uint8_fn",
-        Support::Decline("numeric helper not yet implemented"),
-    ),
+    ("nts_to_uint16", Support::Intrinsic),
+    ("nts_to_uint16_fn", Support::Intrinsic),
+    ("nts_to_uint32", Support::Intrinsic),
+    ("nts_to_uint32_fn", Support::Intrinsic),
+    ("nts_to_uint8", Support::Intrinsic),
+    ("nts_to_uint8_fn", Support::Intrinsic),
     ("nts_uncaught", Support::WasmHelper),
     (
         "nts_unit",
@@ -1398,10 +1329,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_value_inspect",
         Support::Decline("value/control helper not yet implemented"),
     ),
-    (
-        "nts_value_is_view",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_value_is_view", Support::Intrinsic),
     ("nts_value_number", Support::WasmHelper),
     (
         "nts_value_number_or",
@@ -1450,18 +1378,9 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_value_to_string", Support::WasmHelper),
     ("nts_value_truthy", Support::WasmHelper),
     ("nts_value_truthy_fn", Support::WasmHelper),
-    (
-        "nts_view_buffer",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_byte_length",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_byte_offset",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_view_buffer", Support::Intrinsic),
+    ("nts_view_byte_length", Support::WasmHelper),
+    ("nts_view_byte_offset", Support::Intrinsic),
     (
         "nts_view_bytes",
         Support::Decline("buffer/view/DataView representation"),
@@ -1506,14 +1425,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_view_join",
         Support::Decline("buffer/view/DataView representation"),
     ),
-    (
-        "nts_view_length",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_view_new",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_view_length", Support::WasmHelper),
+    ("nts_view_new", Support::WasmHelper),
     (
         "nts_view_put",
         Support::Decline("buffer/view/DataView representation"),

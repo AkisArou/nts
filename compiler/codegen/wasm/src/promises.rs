@@ -241,7 +241,7 @@ pub(crate) fn call(
         Op::New => {
             let descriptor = objects::descriptor(b.m, p.descriptor)?;
             b.global_get(descriptor);
-            b.instructions_from(&[
+            b.instructions(&[
                 objects::UNHASHED,
                 I::I32Const(PENDING),
                 I::RefNull(HeapType::ANY),
@@ -262,11 +262,11 @@ pub(crate) fn call(
         | Op::RejectWith => settle_call(b, op, p, args)?,
         Op::IsRejected => {
             b.load(args[0])?;
-            b.instructions_from(&[field(p, p.state()), I::I32Const(REJECTED), I::I32Eq]);
+            b.instructions(&[field(p, p.state()), I::I32Const(REJECTED), I::I32Eq]);
         }
         Op::State => {
             b.load(args[0])?;
-            b.instructions_from(&[field(p, p.state()), I::F64ConvertI32U]);
+            b.instructions(&[field(p, p.state()), I::F64ConvertI32U]);
             numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())?;
         }
         Op::Number | Op::Reference | Op::Value | Op::Reason => read(b, result, op, args[0])?,
@@ -360,7 +360,7 @@ fn claim(b: &mut Body<'_, '_>, p: PromiseTypes, args: &[ValueId]) -> Result<(), 
     b.load(args[0])?;
     b.load(pair)?;
     numeric::convert(b, &b.ty(pair).clone(), &U32)?;
-    b.instructions_from(&[
+    b.instructions(&[
         I::I32Const(1),
         I::I32Add,
         store(p, p.resolutions()),
@@ -514,11 +514,6 @@ impl Body<'_, '_> {
         self.load(task.state)?;
         self.instruction(&I::StructNew(p.task));
         Ok(())
-    }
-    fn instructions_from(&mut self, instructions: &[I<'static>]) {
-        for instruction in instructions {
-            self.instruction(instruction);
-        }
     }
 }
 
