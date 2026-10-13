@@ -620,6 +620,11 @@ HIR value, with no allocation (`Slot::V128`).
   of node), `wideDivision` 62.4 / 22.7 / 12.7; `adds`, which divides
   nothing, 2.75 / 2.73. bigints pins the constant divisors past 2^32, at
   the word's extremes, over wide and narrow dividends of both signs.
+- **`asIntN`/`asUintN` with a width `ToIndex` rejects** (at or below -1, at
+  or past 2^53) refuse by name where node throws a RangeError; they answered
+  as some width before. The core is to throw that RangeError before the
+  helper (CompilerHelper), which leaves this refusal unreachable. bigints
+  pins it (`widthAsIndex`), with NaN, -0.9 and 2^53 - 1 as widths.
 
 ### Conversions and host services (3i)
 

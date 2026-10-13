@@ -176,3 +176,13 @@ export function constantDivisors(v: number): string {
   const small = `${narrow / 4294967296n}|${narrow % 4294967296n}|${narrow / -9223372036854775808n}|${narrow % -9223372036854775808n}`;
   return `${past}|${extremes}|${small}|${narrow / 1n}|${narrow % 1n}|${TOP / 3n}|${BOTTOM % 1000000007n}`;
 }
+
+// A width `ToIndex` rejects (at or below -1, at or past 2^53) throws a
+// RangeError in node; Wasm refuses it by name until the core throws it first.
+// NaN and a fraction above -1 are zero bits, and 2^53 - 1 is a width.
+export function widthAsIndex(v: number): string {
+  const k = v | 0;
+  if (k === 1) return String(BigInt.asIntN(-1, 5n));
+  if (k === -1) return String(BigInt.asUintN(2 ** 53, 5n));
+  return `${BigInt.asIntN(NaN, 5n)}|${BigInt.asUintN(-0.9, 5n)}|${BigInt.asIntN(2 ** 53 - 1, -5n)}|${BigInt.asUintN(2 ** 53 - 1, 5n)}`;
+}

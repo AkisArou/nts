@@ -28,6 +28,8 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, ValType};
 pub(crate) const PAST: &str = "a bigint past 128 bits, which this runtime does not hold";
 const BY_ZERO: &str = "a bigint divided by zero, where node throws a RangeError";
 const NOT_INTEGRAL: &str = "a number that is not an integer, which has no bigint";
+const BAD_WIDTH: &str =
+    "a bit width that is not a safe integer index, where node throws a RangeError";
 
 pub(crate) fn is_bigint(ty: &HirType) -> bool {
     ty == &HirType::BigInt
@@ -1542,6 +1544,20 @@ fn as_n(m: &mut Builder<'_>, signed: bool) -> Result<Function, Failure> {
     )?;
     let width = 3;
     let mut f = Function::new([ValType::I32]);
+    // `ToIndex` throws a RangeError for a width at or below -1 or at or past
+    // 2^53; NaN and a fraction above -1 are zero bits. The core is to throw
+    // it before the call; until it does, such a width refuses here by name
+    // rather than answering as some width.
+    f.instructions(&[
+        I::LocalGet(0),
+        I::F64Const((-1.0).into()),
+        I::F64Le,
+        I::LocalGet(0),
+        I::F64Const(9_007_199_254_740_992.0.into()),
+        I::F64Ge,
+        I::I32Or,
+    ]);
+    refuse_if(&mut f, m, 2, BAD_WIDTH)?;
     f.instructions(&[
         I::LocalGet(0),
         I::F64Const(128.0.into()),
