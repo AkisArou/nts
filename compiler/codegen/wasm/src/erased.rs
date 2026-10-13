@@ -462,7 +462,12 @@ pub(crate) fn projection_guard(
     contract::require(body)
 }
 
+/// The tag of an erased value. Of a typed one it is refused by name: a typed
+/// reference's null does not say which absence it stands for.
 pub(crate) fn tag(body: &mut Body<'_, '_>, result: ValueId, value: ValueId) -> Result<(), Failure> {
+    if body.ty(value) != &HirType::Erased {
+        return Err(format!("the tag of a typed {:?} value", body.ty(value)).into());
+    }
     body.load(value)?;
     call(body, Helper::Tag)?;
     numeric::convert(

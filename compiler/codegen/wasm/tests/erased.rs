@@ -153,3 +153,28 @@ fn erased_primitives_and_defined_immutable_singletons_execute_exactly() {
     let report = common::run("erased", &emitted, "tooling/wasm/check-erased.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 100);
 }
+
+/// A tag is read of an erased value only. A typed string's null does not say
+/// whether it stands for `null` or `undefined`, so its tag is refused by name,
+/// never left to an engine error.
+#[test]
+fn the_tag_of_a_typed_value_is_refused_by_name() {
+    let string = HirType::Managed(ManagedType::String);
+    let mut f = function("typedTag", &[], U32);
+    let null = value(&mut f, OpKind::ConstNull, string);
+    let tag = value(&mut f, OpKind::TagOf { value: null }, U32);
+    f.blocks
+        .push(block(&[], &[null, tag], Terminator::Return(Some(tag))));
+    let nts_codegen_wasm::EmitError::Declined(ds) =
+        nts_codegen_wasm::emit(&program(vec![f])).unwrap_err()
+    else {
+        panic!("expected a named decline")
+    };
+    assert!(
+        ds.iter().any(|d| d.code == "NTS5001"
+            && d.message.contains("typedTag")
+            && d.message
+                .contains("the tag of a typed Managed(String) value")),
+        "{ds:?}"
+    );
+}
