@@ -181,8 +181,10 @@ builds at one program-wide width.
   `any.convert_extern`; erasing one allocates nothing, and the box type is
   gone from the type plan.
 - A JS string is the one erased value outside `eq`, so the tag helper's first
-  test is `ref.test (ref null eq)`. It admits null, so a null reference, which
-  no erased value is, still reaches the cast that traps.
+  test is `ref.test (ref null eq)`. A null erased value is unreachable by
+  construction (an erased slot starts as the undefined singleton), so no test
+  reaches it. The nullable test is defensive: a would-be null still reaches
+  the cast that traps, rather than reading as a string.
 - **Speed is unchanged** on `tooling/wasm/bench/erased` (exploratory, load 5):
   eraseStrings 1.42 ns both ways, eraseNumbers 2.32 both. Every erased kernel
   is 2.7–7.5x behind node. V8 inlines all of the loop's helper calls (traced
@@ -203,8 +205,9 @@ builds at one program-wide width.
     (`outcomes/a-stored-null-read-through-an-unchecked-index`).
 - **`join`** over string and number arrays: the JS string builtin `concat`,
   with numbers through `Number.prototype.toString`. A null string slot joins as
-  "", as both absences do in node (C crashes there:
-  `outcomes/a-join-over-an-absent-string-element`).
+  "", as both absences do in node, and as C does since 8d958b079
+  (`outcomes/a-join-over-an-absent-string-element`). A null separator is
+  refused by name: `undefined` joins with "," and `null` with "null".
 - **`shift` and `unshift`** are `pop` and `push` at the front, the rest moved
   by `array.copy`. **`splice(start, count)`**, removal only, sits beside
   `slice` and clamps as C does.
@@ -212,6 +215,10 @@ builds at one program-wide width.
   sort, comparing with the JS string builtin `compare` (UTF-16 code units). A
   null slot is refused by name: node sorts `undefined` last and `null` as
   "null".
+- **A run-time refusal names its cause** beside the function, as in "a null
+  separator, which may stand for undefined or for null"; the generic
+  "internal typed value contract" is gone. The tag of a typed (non-erased)
+  value is refused by name at compile time.
 - Same-shape unrelated classes with fields only are one Wasm storage type and
   agree. When a declared parent separates their storage, `transfer` refuses
   the move by name (`fixtures/storage-of-other-parents`).
