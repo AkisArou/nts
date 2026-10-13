@@ -148,6 +148,13 @@ class ProbeObserver final : public content::RenderFrameObserver {
              .IsNull()) {
       dom_.reset(CreateDomContext(document));
       nts_chromium_probe_attach(probe_.get(), dom_.get());
+      // As an app runs (host/app.c): the host owns the checkpoints, so the
+      // runtime's promise jobs share Blink's microtask queue with
+      // queueMicrotask's and page script's, in one order (the lib.dom
+      // vectors' `microtasks`). --nts-collection=checkpoint keeps the
+      // runtime's own queue for an A/B, as on the benchmark pages.
+      if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
+        nts_chromium_probe_install_host(probe_.get(), dom_.get());
       const double dom_result =
           nts_chromium_probe_dom_run(probe_.get(), dom_.get());
       CHECK_EQ(dom_result, 0.0)

@@ -221,6 +221,36 @@ private:
   NtsDomDestroy destroy_;
 };
 
+// A compiled closure queueMicrotask was given: run once, as a microtask in
+// the queue page script's promise jobs and queueMicrotask share, then given
+// back. One the document's end leaves is given back unrun.
+class NtsMicrotask final : public blink::GarbageCollected<NtsMicrotask> {
+public:
+  NtsMicrotask(NtsDomContext *context, NtsDomMicrotaskCallback callback,
+               void *closure, NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  void Run();
+
+  // What gives the closure back, once; nothing after.
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = std::exchange(closure_, nullptr);
+    return std::exchange(destroy_, nullptr);
+  }
+  void Trace(blink::Visitor *) const {}
+
+private:
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
+  NtsDomMicrotaskCallback callback_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
+  NtsDomDestroy destroy_;
+};
+
 // A compiled closure to run in an idle period -- or once its timeout passes
 // -- in the queue page script's requestIdleCallback uses
 // (ScriptedIdleTaskController). It runs once and gives the closure back; a
@@ -588,6 +618,7 @@ public:
   void Trace(blink::Visitor *visitor) const {
     visitor->Trace(set);
     visitor->Trace(frames);
+    visitor->Trace(microtasks);
     visitor->Trace(idle);
     visitor->Trace(by_target);
     visitor->Trace(handlers);
@@ -621,6 +652,7 @@ public:
   }
   blink::HeapHashSet<blink::Member<NtsListener>> set;
   blink::HeapHashSet<blink::Member<NtsFrame>> frames;
+  blink::HeapHashSet<blink::Member<NtsMicrotask>> microtasks;
   // Idle callbacks that can still run.
   blink::HeapHashSet<blink::Member<NtsIdle>> idle;
   blink::HeapHashMap<blink::Member<blink::EventTarget>,
@@ -937,6 +969,17 @@ void NtsIdle::invoke(blink::IdleDeadline *deadline) {
   context->RunIdleCallback(callback, deadline, closure, destroy);
 }
 
+void NtsMicrotask::Run() {
+  NtsDomContext *context = context_;
+  const NtsDomMicrotaskCallback callback = callback_;
+  void *closure = nullptr;
+  const NtsDomDestroy destroy = Take(closure);
+  if (!context)
+    return;
+  context->listeners->microtasks.erase(this);
+  context->RunMicrotask(callback, closure, destroy);
+}
+
 void NtsFrame::Invoke(double time) {
   NtsDomContext *context = context_;
   const NtsDomFrameCallback callback = callback_;
@@ -1050,6 +1093,27 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
       [](void *state) {
         auto *call = static_cast<Call *>(state);
         call->callback(call->time, call->closure);
+        if (call->destroy)
+          call->destroy(call->closure);
+      },
+      &call);
+}
+
+void NtsDomContext::RunMicrotask(NtsDomMicrotaskCallback callback,
+                                 void *closure, NtsDomDestroy destroy) {
+  if (closed || !invoke)
+    return;
+  nts_dom::ProgramScope scope(this);
+  struct Call {
+    NtsDomMicrotaskCallback callback;
+    RAW_PTR_EXCLUSION void *closure; // see PlainPointers
+    NtsDomDestroy destroy;
+  } call{callback, closure, destroy};
+  invoke(
+      invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(call->closure);
         if (call->destroy)
           call->destroy(call->closure);
       },
@@ -1335,6 +1399,13 @@ void NtsDomContext::Close() {
     if (auto destroy = frame->Take(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<nts_dom::NtsMicrotask>> microtasks(listeners->microtasks);
+  listeners->microtasks.clear();
+  for (auto &task : microtasks) {
+    void *closure = nullptr;
+    if (auto destroy = task->Take(closure))
+      GiveBack(destroy, closure);
+  }
   blink::HeapVector<blink::Member<nts_dom::NtsIdle>> idle(listeners->idle);
   listeners->idle.clear();
   for (auto &task : idle) {
@@ -1528,6 +1599,7 @@ size_t nts_blink_dom_pending_promises(NtsDomContext *context) {
 }
 size_t nts_blink_dom_held_closures(NtsDomContext *context) {
   return context->listeners->set.size() + context->listeners->frames.size() +
+         context->listeners->microtasks.size() +
          context->listeners->idle.size() +
          context->listeners->timers.size() +
          context->listeners->held.size();
@@ -1760,6 +1832,17 @@ void nts_dom_listener_release(void *listener) {
   const auto found = counts.find(reinterpret_cast<NtsListener *>(listener));
   CHECK(found != counts.end());
   counts.erase(found);
+}
+
+void nts_dom_queue_microtask(NtsDomMicrotaskCallback callback, void *closure,
+                             NtsDomDestroy destroy) {
+  NtsDomContext &context = nts_dom::Current();
+  CHECK(context.invoke);
+  auto *task = blink::MakeGarbageCollected<nts_dom::NtsMicrotask>(
+      &context, callback, closure, destroy);
+  context.listeners->microtasks.insert(task);
+  context.event_loop->EnqueueMicrotask(
+      base::BindOnce(&nts_dom::NtsMicrotask::Run, blink::WrapPersistent(task)));
 }
 
 int32_t nts_dom_request_animation_frame(NtsDomFrameCallback callback,

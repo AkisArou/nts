@@ -7,6 +7,12 @@ declare module "nts:dom" {
   import type { Closure, HostClass, Ptr, ScopedClosure, StringView } from "c:types";
   import type { Float64, Int32 } from "@nts/scalars";
   /**
+   * `queueMicrotask(callback)`: once, as a microtask, in the queue page
+   * script's promise jobs and queueMicrotask share.
+   * @ntsSymbol nts_dom_queue_microtask
+   */
+  export function queueMicrotask(callback: Closure<() => void>): void;
+  /**
    * `requestAnimationFrame(callback)`: once, before the next frame, with its
    * time, in the queue page script's callbacks share.
    * @ntsSymbol nts_dom_request_animation_frame

@@ -2126,6 +2126,8 @@ declare function clearInterval(id: number | undefined): void;
 declare function requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
 /** @ntsBoundBy "nts:dom" cancelIdleCallback */
 declare function cancelIdleCallback(handle: number): void;
+/** @ntsBoundBy "nts:dom" queueMicrotask */
+declare function queueMicrotask(callback: VoidFunction): void;
 interface FileSystemDirectoryHandle {
     /** @ntsNoFold */
     readonly kind: "directory";

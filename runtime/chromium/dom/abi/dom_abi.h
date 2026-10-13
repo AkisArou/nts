@@ -121,6 +121,11 @@ void nts_dom_listener_release(void* listener);
 void* nts_dom_sequence_retain(void* sequence);
 void nts_dom_sequence_release(void* sequence);
 
+/* `queueMicrotask(callback)` for a compiled closure: called once, as a
+ * microtask in the queue page script's promise jobs and queueMicrotask share,
+ * then given back; the document's end gives back one still waiting. */
+void nts_dom_queue_microtask(void (*callback)(void* closure), void* closure,
+                             void (*destroy)(void* closure));
 /* `requestAnimationFrame(callback)` for a compiled closure: called once, with
  * the frame's time, in the queue page script's callbacks share, then given
  * back. Answers the id nts_dom_cancel_animation_frame takes, which gives the

@@ -328,12 +328,36 @@ export function libDomTranscript(): string {
 // not five pending chains). Each outcome is written on the transcript's
 // element as its own attribute, whatever order they settle in -- fulfilled,
 // or the rejection's name and message; the smoke waits for all of them.
+// Microtasks in the one queue page script's share: promise reactions and
+// queueMicrotask callbacks run in the order they were queued, and what one
+// queues runs after everything queued before it. Page script's order is
+// p1,m1,p2,m2,m3,m4.
+function orderMicrotasks(label: string): void {
+  const order = { text: "" };
+  const note = (step: string): void => {
+    order.text += (order.text === "" ? "" : ",") + step;
+  };
+  Promise.resolve().then((): void => {
+    note("p1");
+    queueMicrotask((): void => note("m3"));
+  });
+  queueMicrotask((): void => note("m1"));
+  Promise.resolve().then((): void => note("p2"));
+  queueMicrotask((): void => {
+    note("m2");
+    queueMicrotask((): void => {
+      note("m4");
+      document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, order.text);
+    });
+  });
+}
+
 export function startLibDomPromises(): void {
   setTimeout((): void => {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -353,6 +377,7 @@ export function startLibDomPromises(): void {
     // app.ts check's.)
     settle("clipboard", (): Promise<void> => navigator.clipboard.writeText("copied"));
     settleFetch("fetched");
+    orderMicrotasks("microtasks");
     // RequestInit's method, a ByteString read from the dictionary before
     // the fetch starts: refused, the promise rejected.
     settle("fetchWide", async (): Promise<void> => {

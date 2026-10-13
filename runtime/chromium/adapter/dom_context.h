@@ -80,6 +80,7 @@ using NtsDomDestroy = void (*)(void *);
 using NtsDomFrameCallback = void (*)(double, void *);
 using NtsDomIdleCallback = void (*)(NtsDomIdleDeadline *, void *);
 using NtsDomTimerCallback = void (*)(void *);
+using NtsDomMicrotaskCallback = void (*)(void *);
 
 // Whether the program is reading or writing an event handler attribute
 // (HandlerAccess). The program's handlers are their own world, as an
@@ -273,6 +274,7 @@ using nts_dom::NtsDomCancelCallback;
 using nts_dom::NtsDomDestroy;
 using nts_dom::NtsDomFrameCallback;
 using nts_dom::NtsDomIdleCallback;
+using nts_dom::NtsDomMicrotaskCallback;
 using nts_dom::NtsDomTimerCallback;
 
 
@@ -302,6 +304,9 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   // closure goes back once it has run.
   void RunFrame(NtsDomFrameCallback callback, double time, void *closure,
                 NtsDomDestroy destroy);
+  // A compiled microtask's call (queueMicrotask), the same with no argument.
+  void RunMicrotask(NtsDomMicrotaskCallback callback, void *closure,
+                    NtsDomDestroy destroy);
   // A compiled idle callback's call, the same with the IdleDeadline.
   void RunIdleCallback(NtsDomIdleCallback callback,
                        blink::IdleDeadline *deadline, void *closure,

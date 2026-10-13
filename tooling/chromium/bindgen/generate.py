@@ -1663,7 +1663,7 @@ class Generator:
         # read from lib.dom.d.ts so that it merges.
         bound_globals = ["document", "window", "requestAnimationFrame", "cancelAnimationFrame",
                          "setTimeout", "setInterval", "clearTimeout", "clearInterval",
-                         "requestIdleCallback", "cancelIdleCallback"]
+                         "requestIdleCallback", "cancelIdleCallback", "queueMicrotask"]
         globals_ = []
         lib_dom_text = open(libdom.LIB_DOM).read()
         for name in bound_globals:
