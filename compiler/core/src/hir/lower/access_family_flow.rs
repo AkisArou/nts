@@ -63,6 +63,17 @@ impl Bound {
         }
     }
 
+    /// Whether an actual owner was seen to reach `face`. Unlike
+    /// [`Self::permits`], a declaration-only type reaches nothing: it is
+    /// never an object a value can hold.
+    pub(super) fn reaches(&self, owner: TypeId, face: TypeId) -> bool {
+        self.actual.contains(&owner)
+            && self
+                .suppliers
+                .get(&face)
+                .is_some_and(|suppliers| suppliers.contains(&owner))
+    }
+
     pub(super) fn permits(&self, owner: TypeId, face: TypeId) -> bool {
         !self.actual.contains(&owner)
             || self

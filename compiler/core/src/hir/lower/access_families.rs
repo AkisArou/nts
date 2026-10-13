@@ -355,9 +355,15 @@ impl Families {
             .flatten()
             .filter_map(|index| self.licensed.get(*index))
     }
-    /// Every object type of the program whose shape fits `face` -- what a
-    /// value of a structural type can hold once it has been erased into a
-    /// union, where no conversion asked for a prefix.
+    /// The object types whose shape fits `face` and that the source flow
+    /// proves reach it -- what a value of a structural type can hold once it
+    /// has been erased into a union, where no conversion asked for a prefix.
+    ///
+    /// **Flowing, not merely fitting.** Every `{ done, value }` in a program
+    /// fits `ReadableStreamReadResult`'s arms, and an iterator result laid
+    /// out `{ value, done }` elsewhere made `done` look mixed and refused a
+    /// read nothing unrelated reaches. A conversion into a union reaches each
+    /// arm in the flow, so the owner a union really holds is here.
     pub(super) fn structural_owners(&self, probe: &FuncBuilder<'_>, face: TypeId) -> Vec<TypeId> {
         let Some(wanted) = properties(probe, face) else {
             return Vec::new();
@@ -365,7 +371,10 @@ impl Families {
         self.owners
             .candidates(wanted)
             .into_iter()
-            .filter(|owner| fits_the_face(probe, &probe.hierarchy, face, *owner, wanted))
+            .filter(|owner| {
+                self.flow.reaches(*owner, face)
+                    && fits_the_face(probe, &probe.hierarchy, face, *owner, wanted)
+            })
             .collect()
     }
     pub(super) fn carries(&self, owner: TypeId, face: TypeId) -> bool {
@@ -414,8 +423,19 @@ impl Families {
         // can hold any of them (`Self::structural_owners`).
         let literals = literal_owners(probe);
         let owners = Owners::collect(probe, hierarchy, &literals);
+        // The flow is asked of every face a field is read through, and of every
+        // object type a union names: a union's arm can hold the owners that
+        // flow into the union, and only those (`Self::structural_owners`).
+        let union_arms = union_arms(probe);
+        let flow = super::access_family_flow::Bound::collect(
+            probe,
+            &owners.all,
+            &literals,
+            used.keys().copied().chain(union_arms.iter().copied()),
+        );
         if used.is_empty() {
             return Self {
+                flow,
                 owners,
                 ..Self::default()
             };
@@ -437,12 +457,6 @@ impl Families {
                 })
                 .collect(),
         };
-        let flow = super::access_family_flow::Bound::collect(
-            probe,
-            &owners.all,
-            &sources.literals,
-            used.keys().copied(),
-        );
         let mut result = Self {
             flow,
             ..Self::default()
@@ -657,6 +671,35 @@ impl Owners {
         candidates.sort_unstable();
         candidates
     }
+}
+
+/// Every object type a union names: the faces the flow is asked about for
+/// unions, beside the ones a field is read through.
+fn union_arms(probe: &FuncBuilder<'_>) -> Vec<TypeId> {
+    let mut arms: Vec<TypeId> = probe
+        .snapshot
+        .types
+        .iter()
+        .filter_map(|record| match &record.kind {
+            TypeKind::Union(members) => Some(members),
+            _ => None,
+        })
+        .flatten()
+        .copied()
+        .filter(|member| {
+            matches!(
+                probe
+                    .snapshot
+                    .types
+                    .get(member.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Object { .. })
+            )
+        })
+        .collect();
+    arms.sort_unstable();
+    arms.dedup();
+    arms
 }
 
 fn properties<'a>(probe: &'a FuncBuilder<'_>, owner: TypeId) -> Option<&'a [PropertyRecord]> {
