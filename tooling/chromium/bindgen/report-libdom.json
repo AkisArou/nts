@@ -58,6 +58,16 @@
     "[RuntimeEnabled=CSSAnimationIterationComposite] experimental": 1,
     "interface SubtleCrypto": 1
   },
+  "literals": {
+    "proven": 2022,
+    "noFold": [
+      "FileSystemDirectoryHandle.kind: \"directory\" (interface)",
+      "FileSystemFileHandle.kind: \"file\" (interface)",
+      "SVGMarkerElement.SVG_MARKER_ORIENT_AUTO_START_REVERSE: 3 (interface)",
+      "WebGLRenderingContextBase.RGBA8: 0x8058 (interface)",
+      "SVGMarkerElement.SVG_MARKER_ORIENT_AUTO_START_REVERSE: 3 (var)"
+    ]
+  },
   "interfaces": {
     "EventTarget": {
       "bound": [

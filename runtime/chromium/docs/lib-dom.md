@@ -93,8 +93,21 @@ Each fact below was measured on the compiler at 6c08170ef.
     touch-event members Blink enables per platform.
   - The rest are not attributes or operations of that interface in Blink's
     IDL: 59 constants, 20 iterable members, 3 stringifiers and 4 others.
-    lib.dom types the constants as literals, so a read could lower to the
-    literal.
+- **Constants are lib.dom's literals, held to Blink's IDL.** lib.dom.d.ts
+  types each IDL constant as one literal (`readonly ELEMENT_NODE: 1`), on
+  the interface and on its `declare var`, and the compiler is to lower a
+  read of such a member to the literal itself, with no call (blockers
+  `lib-dom-a-constant-read-through-its-interface` and `-an-instance`). That
+  is exact only if the declaration is true, so every generation proves it:
+  of lib.dom's 2027 readonly single-literal members, 2022 are constants
+  Blink's IDL defines on that interface, mixin or callback interface, with
+  that value, and a value that differed would stop the generation. The 5 no
+  constant proves are re-declared `@ntsNoFold` in `lib-dom-bindings.d.ts`,
+  and read as any other member: `SVGMarkerElement`'s
+  `SVG_MARKER_ORIENT_AUTO_START_REVERSE` and WebGL 1's `RGBA8`, which
+  Blink does not define (page script reads `undefined`), and the
+  `kind` lib.dom narrows on the two `FileSystem*Handle`s
+  (`report-libdom.json`, `literals`).
   - The event-handler attributes (`onclick`) are bound both ways: written
     with a closure, whose `false` cancels the event, and read back as the
     closure written. `onerror` and `onbeforeunload` take other callback

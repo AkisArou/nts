@@ -61,6 +61,32 @@ def void_methods(text):
             for name, methods in returns.items()}
 
 
+LITERAL = r'-?(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?)n?|"[^"]*"|true|false'
+
+
+def literal_members(text):
+    """lib.dom.d.ts's readonly members typed as one literal (`readonly
+    ELEMENT_NODE: 1`), on an interface and on a `declare var` alike:
+    (kind, owner, member, literal), kind "interface" or "var"."""
+    out = []
+    for kind, pattern in (("interface", r"^interface (\w+)(?:<[^>]*>)?(?: extends [^{]+)? \{\n(.*?)^\}"),
+                          ("var", r"^declare var (\w+): \{\n(.*?)^\};")):
+        for block in re.finditer(pattern, text, re.M | re.S):
+            for member in re.finditer(rf"^\s{{4}}readonly ([A-Za-z_$][\w$]*): ({LITERAL});$", block.group(2), re.M):
+                out.append((kind, block.group(1), member.group(1), member.group(2)))
+    return out
+
+
+def literal_value(literal):
+    """A literal type's value, as Blink's IDL holds a constant's."""
+    if literal.startswith('"'):
+        return literal[1:-1]
+    if literal in ("true", "false"):
+        return literal == "true"
+    number = literal.rstrip("n")
+    return int(number, 0) if re.fullmatch(r"-?(?:0x[0-9a-fA-F]+|\d+)", number) else float(number)
+
+
 def bound_members(text):
     """What dom-idl.d.ts binds, per interface: methods and properties of each
     `XOwnMethods`, not the `_get_`/`_set_` methods behind properties."""
@@ -83,10 +109,12 @@ def absence(interface, member):
     return "other"
 
 
-def coverage(declarations, skips, allowlist):
+def coverage(declarations, skips, allowlist, literals):
     """report-libdom.json: each lib.dom.d.ts member of each allowlisted
     interface, bound by `declarations` (dom-idl.d.ts's text), skipped with
-    the generator's `skips` (report.json's), or absent."""
+    the generator's `skips` (report.json's), or absent; and `literals`, how
+    many of lib.dom's single-literal members Blink's IDL proves, and those it
+    does not (generate.py, literals)."""
     lib = interfaces(open(LIB_DOM).read())
     bound = bound_members(declarations)
     skipped = collections.defaultdict(dict)
@@ -133,7 +161,10 @@ def coverage(declarations, skips, allowlist):
         for kind, names in row["absent"].items():
             totals["absent: " + kind] += len(names)
     reasons = collections.Counter(" ".join(why.split()[:2]) for row in rows.values() for why in row["skipped"].values())
+    proven, unproven = literals
     return {"libDom": os.path.relpath(LIB_DOM, ROOT), "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
+            "literals": {"proven": proven, "noFold": [f"{owner}.{member}: {literal} ({kind})"
+                                                      for kind, owner, member, literal in unproven]},
             "interfaces": rows}
 
 
@@ -145,6 +176,8 @@ def main():
         print(f"  {key}: {count}")
     for reason, count in list(report["skippedBy"].items())[:8]:
         print(f"  skipped: {count:4} {reason}")
+    literals = report["literals"]
+    print(f"single-literal members: {literals['proven']} proven by Blink's IDL, {len(literals['noFold'])} not folded")
 
 
 if __name__ == "__main__":

@@ -2126,3 +2126,31 @@ declare function clearInterval(id: number | undefined): void;
 declare function requestIdleCallback(callback: IdleRequestCallback, options?: IdleRequestOptions): number;
 /** @ntsBoundBy "nts:dom" cancelIdleCallback */
 declare function cancelIdleCallback(handle: number): void;
+interface FileSystemDirectoryHandle {
+    /** @ntsNoFold */
+    readonly kind: "directory";
+}
+interface FileSystemFileHandle {
+    /** @ntsNoFold */
+    readonly kind: "file";
+}
+interface SVGMarkerElement {
+    /** @ntsNoFold */
+    readonly SVG_MARKER_ORIENT_AUTO_START_REVERSE: 3;
+}
+interface WebGLRenderingContextBase {
+    /** @ntsNoFold */
+    readonly RGBA8: 0x8058;
+}
+declare var SVGMarkerElement: {
+    prototype: SVGMarkerElement;
+    new(): SVGMarkerElement;
+    readonly SVG_MARKERUNITS_UNKNOWN: 0;
+    readonly SVG_MARKERUNITS_USERSPACEONUSE: 1;
+    readonly SVG_MARKERUNITS_STROKEWIDTH: 2;
+    readonly SVG_MARKER_ORIENT_UNKNOWN: 0;
+    readonly SVG_MARKER_ORIENT_AUTO: 1;
+    readonly SVG_MARKER_ORIENT_ANGLE: 2;
+    /** @ntsNoFold */
+    readonly SVG_MARKER_ORIENT_AUTO_START_REVERSE: 3;
+};

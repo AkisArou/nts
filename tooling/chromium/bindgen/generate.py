@@ -44,6 +44,7 @@ passed it.
 """
 
 import argparse
+import collections
 import itertools
 import json
 import os
@@ -301,6 +302,71 @@ class Generator:
         conversion is a static_cast from there, NULL to NULL."""
         receiver = interface.receiver if isinstance(interface, MixinView) else blink_class_name(interface)
         return f"ObjectOf<blink::{receiver}>({name})"
+
+    def literals(self):
+        """lib.dom.d.ts's readonly members typed as one literal (`readonly
+        ELEMENT_NODE: 1`), held to Blink's IDL. The compiler lowers a read of
+        one to its literal, with no call, on the declaration's word -- so each
+        must be a constant Blink defines there, with that value, at this pin.
+        A value that differs stops the generation. A member no constant
+        proves is re-declared `@ntsNoFold` in the overlay, and its read
+        lowers as any other member's: SVGMarkerElement's
+        SVG_MARKER_ORIENT_AUTO_START_REVERSE, which lib.dom types 3, is no
+        constant of Blink's, and page script reads it as undefined.
+
+        Returns how many are proven, and the unproven as
+        (kind, owner, member, literal)."""
+        import libdom
+        constants = collections.defaultdict(dict)
+        for definition in itertools.chain(self.database.interfaces, self.database.interface_mixins,
+                                          self.database.callback_interfaces, self.database.namespaces):
+            constants[definition.identifier].update((c.identifier, c.value.value) for c in definition.constants)
+        # lib.dom names a WebGL extension as its specification does
+        # (ANGLE_instanced_arrays); Blink's IDL renames it (ANGLEInstancedArrays).
+        spelled = collections.defaultdict(list)
+        for identifier in list(constants):
+            spelled[re.sub(r"[^a-z0-9]", "", identifier.lower())].append(identifier)
+        same = lambda a, b: isinstance(a, bool) == isinstance(b, bool) and a == b  # noqa: E731
+        proven, unproven, wrong = 0, [], []
+        for kind, owner, member, literal in libdom.literal_members(open(libdom.LIB_DOM).read()):
+            owners = [owner] if owner in constants else spelled.get(re.sub(r"[^a-z0-9]", "", owner.lower()), [])
+            found = [constants[name][member] for name in owners if member in constants[name]]
+            if len(found) != 1:
+                unproven.append((kind, owner, member, literal))
+            elif not same(found[0], libdom.literal_value(literal)):
+                wrong.append(f"{owner}.{member}: lib.dom.d.ts says {literal}, Blink's IDL {found[0]!r}")
+            else:
+                proven += 1
+        if wrong:
+            raise SystemExit("lib.dom.d.ts types a constant other than Blink defines it:\n  " + "\n  ".join(wrong))
+        return proven, unproven
+
+    @staticmethod
+    def unfolded(unproven):
+        """The overlay's re-declarations of the members `literals` cannot
+        prove, each `@ntsNoFold`: an interface's member in an interface of
+        that name, which merges; a `declare var`'s as lib.dom writes the whole
+        declaration, which a second declaration must repeat to merge."""
+        import libdom
+        text = open(libdom.LIB_DOM).read()
+        members = collections.defaultdict(list)
+        for kind, owner, member, literal in unproven:
+            members[(kind, owner)].append((member, literal))
+        out = []
+        for (kind, owner), listed in sorted(members.items()):
+            if kind == "interface":
+                head = re.search(rf"^interface {owner}\b[^{{]*\{{$", text, re.M).group(0)
+                if "<" in head:
+                    raise SystemExit(f"lib.dom.d.ts's {owner} is generic; re-declaring its members needs its parameters")
+                body = "".join(f"    /** @ntsNoFold */\n    readonly {member}: {literal};\n" for member, literal in listed)
+                out.append(f"interface {owner} {{\n{body}}}")
+            else:
+                declaration = re.search(rf"^declare var {owner}: \{{\n.*?^\}};", text, re.M | re.S).group(0)
+                for member, literal in listed:
+                    declaration = re.sub(rf"^(\s{{4}})(readonly {re.escape(member)}: )", r"\1/** @ntsNoFold */\n\1\2",
+                                         declaration, count=1, flags=re.M)
+                out.append(declaration)
+        return out
 
     def ancestors(self, interface):
         chain = []
@@ -1546,7 +1612,7 @@ class Generator:
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
         return lines
 
-    def overlay(self):
+    def overlay(self, unproven):
         """`lib-dom-bindings.d.ts`: which nts:dom declaration implements each
         lib.dom.d.ts declaration a program may use
         (runtime/chromium/docs/lib-dom.md). The program is typed by
@@ -1601,6 +1667,9 @@ class Generator:
                 lines.append(f'/** @ntsBoundBy "nts:dom" {identifier} */\ninterface {identifier} {{}}')
         for declaration, bound in globals_:
             lines.append(f'/** @ntsBoundBy "nts:dom" {bound} */\n{declaration}')
+        # lib.dom's single-literal members Blink's IDL does not prove: read as
+        # members, not folded to their literal (literals).
+        lines += self.unfolded(unproven)
         return "\n".join(lines)
 
     def files(self):
@@ -1754,6 +1823,7 @@ declare module "nts:dom" {{
 {chr(10).join(types)}
 }}
 """
+        literals = self.literals()
         overlay = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 //
 // What implements lib.dom.d.ts's declarations natively: each names the
@@ -1761,11 +1831,11 @@ declare module "nts:dom" {{
 // Declarations only -- lib.dom.d.ts types the program; nothing here changes a
 // type.
 
-{self.overlay()}
+{self.overlay(literals[1])}
 """
         import libdom
         report = {"bound": len(self.functions), "skipped": self.skipped}
-        lib_dom = libdom.coverage(declarations, self.skipped, self.allowlist)
+        lib_dom = libdom.coverage(declarations, self.skipped, self.allowlist, literals)
         return {
             os.path.join(LANE, "dom", "abi", "dom_idl.h"): header,
             os.path.join(LANE, "adapter", "dom_idl.cc"): adapter,
