@@ -129,6 +129,8 @@ pub(crate) fn call(
             contract::nonnull(b, source, "`set` from a null typed array")?;
             b.load(source)?;
             crate::arrays::number(b, args[2])?;
+            // The function's name, for a refusal inside the helper.
+            strings::constant(b, &b.func.name.clone());
         }
         Op::Join => {
             let separator = args[1];
@@ -180,7 +182,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Some(Physical::Reference(buffers::reference(t.view, false))),
         ),
         Helper::Slice => (vec![view, f64, f64], Some(view)),
-        Helper::Set => (vec![view, view, f64], None),
+        Helper::Set => (vec![view, view, f64, strings::STRING], None),
         Helper::Fill | Helper::CopyWithin => (vec![view, f64, f64, f64], None),
         Helper::Join => (vec![view, strings::STRING], Some(strings::STRING)),
         Helper::BufferSlice => (vec![buffer, f64, f64], Some(buffer)),
@@ -608,12 +610,13 @@ fn slice(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
 /// snapshot when both views share a buffer, since a wider destination would
 /// overwrite elements not yet read.
 ///
-/// Params: view, source, offset. Locals: at, count, room, index, reading.
+/// Params: view, source, offset, the caller's name. Locals: at, count, room,
+/// index, reading.
 fn set(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
     let get = callee(m, Helper::Get)?;
     let put = callee(m, Helper::Put)?;
     let snapshot = callee(m, Helper::Slice)?;
-    let (at, n, room, index, reading) = (3, 4, 5, 6, 7);
+    let (at, n, room, index, reading) = (4, 5, 6, 7, 8);
     let mut f = Function::new([
         ValType::I32,
         ValType::I32,
@@ -683,14 +686,16 @@ fn set(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
         I::F64ConvertI32U,
     ]);
     f.call(snapshot);
-    f.instructions(&[
-        I::LocalTee(reading),
-        I::RefIsNull,
-        I::If(BlockType::Empty),
-        I::Return,
-        I::End,
-        I::End,
-    ]);
+    // A snapshot that cannot be had is refused, as C's failed slice is loud: a
+    // `set` silently dropped would be a wrong answer.
+    f.instructions(&[I::LocalTee(reading), I::RefIsNull, I::If(BlockType::Empty)]);
+    contract::refuse_in(
+        &mut f,
+        m,
+        3,
+        "a typed array's `set` whose snapshot of its source could not be allocated",
+    )?;
+    f.instructions(&[I::End, I::End]);
     convert(&mut f, (get, put), at, n, index, reading);
     f.instruction(&I::End);
     Ok(f)
