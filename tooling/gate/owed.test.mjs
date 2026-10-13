@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { allSteps, gateSteps, owed, parseNameStatus } from "./owed.mjs";
+import { allSteps, changedPaths, gateSteps, owed, parseNameStatus } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -87,6 +87,23 @@ test("what the bindings generator writes still owes its readers", () => {
   owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"]);
   // And together, the generator's change owes what its output owes.
   superset(stepsFor("tooling/chromium/bindgen/generate.py", "runtime/chromium/dom/types/dom-idl.d.ts"), ["blockers", "integrity"], "a regeneration");
+});
+
+test("a gate test owes the tooling step, not the full gate", () => {
+  // all.sh runs them as `node --test tooling/gate/*.test.mjs`: a glob, which
+  // the step map expands to the files it matches.
+  for (const p of ["tooling/gate/owed.test.mjs", "tooling/gate/cputime.test.mjs"]) {
+    const steps = stepsFor(p);
+    assert.ok(steps.includes("tooling"), `${p} owes ${steps.join(" ")}`);
+    assert.ok(steps.length < allSteps().length, `${p} owes the full gate`);
+  }
+});
+
+test("a range is the same change as the commits in it", () => {
+  // e936aecf4 is one commit, so its range and the commit agree.
+  const one = (argv) => changedPaths(argv).map((c) => `${c.path}:${c.added}:${c.deleted}`).sort();
+  assert.deepEqual(one(["--range", "e936aecf4^..e936aecf4"]), one(["--commit", "e936aecf4"]));
+  assert.throws(() => changedPaths(["--range", "e936aecf4"]), /A\.\.B/);
 });
 
 test("documentation owes its two readers, not the gate", () => {

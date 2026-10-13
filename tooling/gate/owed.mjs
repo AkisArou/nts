@@ -4,6 +4,8 @@
 //   node tooling/gate/owed.mjs                  uncommitted and untracked changes
 //   node tooling/gate/owed.mjs --since <rev>    everything since <rev>, plus uncommitted
 //   node tooling/gate/owed.mjs --commit <rev>   one commit's changes
+//   node tooling/gate/owed.mjs --range <a>..<b> the commits after <a> up to <b>, and
+//                                               nothing uncommitted: what a landing gates
 //   node tooling/gate/owed.mjs --run            also run the owed gate steps
 //   node tooling/gate/owed.mjs --self-test
 //
@@ -68,7 +70,7 @@
 // what the binary is built from.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, globSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -481,11 +483,21 @@ export function parseNameStatus(text) {
   return out;
 }
 
-function changedPaths(argv) {
+export function changedPaths(argv) {
   const git = (...args) => execFileSync("git", args, { cwd: TREE, encoding: "utf8" });
   const at = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : null);
   const commit = at("--commit");
   if (commit) return parseNameStatus(git("diff", "--name-status", "-M", `${commit}^`, commit));
+  // Two commits and nothing else: no working tree and no untracked files. What
+  // a landing gates is a commit, and a tree's uncommitted or linked files (a
+  // symlinked submodule, a node_modules link) are not part of it -- read from
+  // a worktree they made every change owe the full gate.
+  const range = at("--range");
+  if (range) {
+    const [from, to] = range.split("..");
+    if (!from || !to) throw new Error(`--range wants A..B, got ${range}`);
+    return parseNameStatus(git("diff", "--name-status", "-M", from, to));
+  }
   const since = at("--since");
   const tracked = parseNameStatus(git("diff", "--name-status", "-M", since ?? "HEAD"));
   const untracked = git("ls-files", "--others", "--exclude-standard").split("\n").filter(Boolean).map((path) => ({ path, added: true, deleted: false }));
@@ -667,9 +679,19 @@ export function stepInputs() {
     // every example for its nts.config.ts -- so a bare quoted top directory of
     // programs, or a short path into one, is kept.
     const DATA = /^(examples|benches|runtime|docs)(\/|$)/;
+    // A glob names the files it matches, not the directory it sits in:
+    // `node --test tooling/gate/*.test.mjs` reads each test file, and cut back
+    // to `tooling/gate` it was a directory of two segments, dropped below as
+    // too wide -- so no step was found to run the gate's own tests, and a
+    // change to one owed the full gate.
+    const expand = (p) => {
+      if (!/[*?]/.test(p)) return [p];
+      const files = globSync(p, { cwd: TREE });
+      return files.length > 0 ? files : [p.replace(/\/[^/]*[*?].*$/, "")];
+    };
     const named = (body) => [
       ...[...code(body).matchAll(PATH)]
-        .map((m) => m[1].replace(/\/\*.*$/, "").replace(/\/$/, ""))
+        .flatMap((m) => expand(m[1].replace(/\/$/, "")))
         .filter((p) => p.split("/").length > 2 || /\.[a-z]+$/.test(p) || DATA.test(p)),
       ...[...code(body).matchAll(/["'](examples|benches)["']/g)].map((m) => m[1]),
     ];
