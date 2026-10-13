@@ -1,4 +1,4 @@
-# What tools/gen-widgets.ts left out of src/widgets.ts, and why (GTK 4.22.5).
+# What tools/gen-widgets.ts left out of src/widgets.ts, and why (GTK 4.24.1).
 GtkAccessible.accessible-role	no setter in the bindings
 GtkActionable.action-target	no setter in the bindings
 GtkAppChooser.content-type	construct-only: a change would need a new widget
@@ -105,6 +105,8 @@ GtkStack.visible-child	removing it leaves its value: GIR gives no default
 GtkStackSidebar.stack	removing it leaves its value: GIR gives no default
 GtkStatusbar::text-popped	deprecated
 GtkStatusbar::text-pushed	deprecated
+GtkSvgWidget.stylesheet	a GBytes | null, which a JSX attribute does not carry yet
+GtkSvgWidget::error	a handler argument JSX cannot type yet: GError
 GtkText.buffer	removing it leaves its value: GIR gives no default
 GtkTextView.tabs	removing it leaves its value: GIR gives no default
 GtkVideo.file	a GFile | null: an interface only classes the bindings do not declare implement

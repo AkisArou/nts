@@ -1,4 +1,4 @@
-# What tools/gen-widgets.ts left out of src/adw/widgets.ts, and why (libadwaita 1.9.4).
+# What tools/gen-widgets.ts left out of src/adw/widgets.ts, and why (libadwaita 1.10.0).
 AdwAboutDialog.appdata-resource-path	construct-only: a change would need a new widget
 AdwAboutWindow.application-icon	deprecated
 AdwAboutWindow.application-name	deprecated
