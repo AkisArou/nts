@@ -246,3 +246,31 @@ export function transfers(v: number): number {
   return total + old.byteLength * 1000 + before.length * 100 + (old.detached ? 0.5 : 0)
     + moved.maxByteLength * 0.001 + fixed.maxByteLength * 10000000 + (fixed.resizable ? 0.25 : 0);
 }
+
+// A DataView chooses width and byte order per access, at any offset. What it
+// writes big-endian a typed array over the same bytes reads little-endian.
+export function dataViewOrders(v: number): number {
+  if (v !== v) return -1; // NaN's bits are the implementation's to choose.
+  const buffer = new ArrayBuffer(24);
+  const view = new DataView(buffer, 1);
+  view.setFloat64(1, v);
+  view.setUint16(10, v * 7 + 3, true);
+  view.setInt32(13, v * 1000);
+  view.setFloat32(18, v, true);
+  const bytes = new Uint8Array(buffer);
+  let total = 0;
+  for (let i = 0; i < 24; i++) total = (total * 3 + bytes[i]!) % 1000000007;
+  return total + view.getInt16(10) * 0.5 + view.getUint32(13, true) * 0.001
+    + view.getFloat64(1) + view.getFloat32(18, true) + view.getInt8(2);
+}
+
+// A tracking view follows a resize; a fixed one keeps its length.
+export function dataViewLengths(v: number): number {
+  const steps = ((v | 0) & 7) + 4;
+  const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+  const tracking = new DataView(buffer, 2);
+  const fixed = new DataView(buffer, 1, 3);
+  buffer.resize(steps);
+  return tracking.byteLength * 100 + fixed.byteLength * 10 + fixed.byteOffset
+    + (fixed.buffer === buffer ? 0.5 : 0);
+}

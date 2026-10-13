@@ -417,106 +417,43 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_cycle_candidates",
         Support::Decline("native memory/provider contract"),
     ),
-    (
-        "nts_dataview_buffer",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_byte_length",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_byte_offset",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_dataview_buffer", Support::Intrinsic),
+    ("nts_dataview_byte_length", Support::Intrinsic),
+    ("nts_dataview_byte_offset", Support::Intrinsic),
     (
         "nts_dataview_get_bigint64",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("bigint/symbol/date/promise family"),
     ),
     (
         "nts_dataview_get_biguint64",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("bigint/symbol/date/promise family"),
     ),
-    (
-        "nts_dataview_get_float32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_float64",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_int16",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_int32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_int8",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_uint16",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_uint32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_get_uint8",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_over",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_part",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_dataview_get_float32", Support::WasmHelper),
+    ("nts_dataview_get_float64", Support::WasmHelper),
+    ("nts_dataview_get_int16", Support::WasmHelper),
+    ("nts_dataview_get_int32", Support::WasmHelper),
+    ("nts_dataview_get_int8", Support::WasmHelper),
+    ("nts_dataview_get_uint16", Support::WasmHelper),
+    ("nts_dataview_get_uint32", Support::WasmHelper),
+    ("nts_dataview_get_uint8", Support::WasmHelper),
+    ("nts_dataview_over", Support::WasmHelper),
+    ("nts_dataview_part", Support::WasmHelper),
     (
         "nts_dataview_set_bigint64",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("bigint/symbol/date/promise family"),
     ),
     (
         "nts_dataview_set_biguint64",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("bigint/symbol/date/promise family"),
     ),
-    (
-        "nts_dataview_set_float32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_float64",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_int16",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_int32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_int8",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_uint16",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_uint32",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
-    (
-        "nts_dataview_set_uint8",
-        Support::Decline("buffer/view/DataView representation"),
-    ),
+    ("nts_dataview_set_float32", Support::WasmHelper),
+    ("nts_dataview_set_float64", Support::WasmHelper),
+    ("nts_dataview_set_int16", Support::WasmHelper),
+    ("nts_dataview_set_int32", Support::WasmHelper),
+    ("nts_dataview_set_int8", Support::WasmHelper),
+    ("nts_dataview_set_uint16", Support::WasmHelper),
+    ("nts_dataview_set_uint32", Support::WasmHelper),
+    ("nts_dataview_set_uint8", Support::WasmHelper),
     (
         "nts_date_new",
         Support::Decline("bigint/symbol/date/promise family"),
@@ -1374,51 +1311,51 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_view_byte_offset", Support::Intrinsic),
     (
         "nts_view_bytes",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("foreign/native ABI or ownership"),
     ),
     (
         "nts_view_check",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("C and LLVM element access; Wasm lowers ArrayGet on a view itself"),
     ),
     (
         "nts_view_check_fn",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("C and LLVM element access; Wasm lowers ArrayGet on a view itself"),
     ),
     ("nts_view_copy_within", Support::WasmHelper),
     ("nts_view_fill", Support::WasmHelper),
     (
         "nts_view_from_bytes",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("foreign/native ABI or ownership"),
     ),
     (
         "nts_view_from_elements",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("foreign/native ABI or ownership"),
     ),
     (
         "nts_view_get",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("run-time-kind element access no lowering calls"),
     ),
     (
         "nts_view_index",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("C and LLVM element access; Wasm lowers ArrayGet on a view itself"),
     ),
     (
         "nts_view_index_fn",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("C and LLVM element access; Wasm lowers ArrayGet on a view itself"),
     ),
     ("nts_view_join", Support::WasmHelper),
     ("nts_view_length", Support::WasmHelper),
     ("nts_view_new", Support::WasmHelper),
     (
         "nts_view_put",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("run-time-kind element access no lowering calls"),
     ),
     ("nts_view_set", Support::WasmHelper),
     ("nts_view_slice", Support::WasmHelper),
     ("nts_view_subarray", Support::WasmHelper),
     (
         "nts_view_unlend",
-        Support::Decline("buffer/view/DataView representation"),
+        Support::Decline("foreign/native ABI or ownership"),
     ),
     (
         "nts_winrt_activate",

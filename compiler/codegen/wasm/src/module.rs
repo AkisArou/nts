@@ -78,6 +78,7 @@ pub(crate) enum FuncKey {
     PromiseBoundary(u32),
     Buffer(crate::buffers::Helper),
     BufferMethod(crate::buffer_methods::Helper),
+    DataView(crate::dataviews::Helper),
 }
 
 /// Every global the module can contain, named by what it means.

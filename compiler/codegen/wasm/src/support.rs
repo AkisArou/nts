@@ -30,7 +30,8 @@ mod tests {
     use super::{Support, catalog, helper_support};
     use crate::{
         array_copy, array_join, array_lookup, array_methods, array_sort, buffer_methods, buffers,
-        collections, erased_ops, host, numeric, promises, raising, strings, timers, values,
+        collections, dataviews, erased_ops, host, numeric, promises, raising, strings, timers,
+        values,
     };
     use std::collections::BTreeSet;
 
@@ -57,6 +58,12 @@ mod tests {
             Some(Support::Intrinsic)
         } else if buffer_methods::external(name).is_some() {
             Some(Support::WasmHelper)
+        } else if let Some(op) = dataviews::external(name) {
+            Some(if op.inline() {
+                Support::Intrinsic
+            } else {
+                Support::WasmHelper
+            })
         } else if let Some(op) = promises::external(name) {
             Some(if op.inline() {
                 Support::Intrinsic

@@ -183,6 +183,7 @@ pub(crate) struct BufferTypes {
     pub(crate) dataview: u32,
     pub(crate) buffer_descriptor: u32,
     pub(crate) view_descriptor: u32,
+    pub(crate) dataview_descriptor: u32,
 }
 
 #[derive(Debug)]
@@ -1912,7 +1913,7 @@ impl<'a> Builder<'a> {
         let groups = self.encode(&ordered, &indices);
         let (mut objects, arrays, collections) = self.metadata(&indices)?;
         let promise_descriptor = builtins(&mut objects, usize::from(self.promise.is_some()))?;
-        let buffer_descriptor = builtins(&mut objects, 2 * usize::from(self.buffers.is_some()))?;
+        let buffer_descriptor = builtins(&mut objects, 3 * usize::from(self.buffers.is_some()))?;
         Ok(Plan {
             arrays,
             collections,
@@ -1954,6 +1955,7 @@ impl<'a> Builder<'a> {
                 dataview: indices[nodes.dataview.0],
                 buffer_descriptor,
                 view_descriptor: buffer_descriptor + 1,
+                dataview_descriptor: buffer_descriptor + 2,
             }),
             slots: self
                 .slots

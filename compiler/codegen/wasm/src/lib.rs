@@ -20,6 +20,7 @@ mod callables;
 mod cfg;
 mod collections;
 mod contract;
+mod dataviews;
 mod demand;
 mod erased;
 mod erased_ops;
