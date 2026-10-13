@@ -36,3 +36,10 @@ export function anObject(n: number): string {
   const object: unknown = { n };
   return "" + object;
 }
+
+/** An object literal's own `toString` is not callable through its type, so
+ * the core refuses how it prints. */
+export function anObjectWithItsOwnText(n: number): string {
+  const object: unknown = { n, toString: (): string => "own" };
+  return "" + object;
+}

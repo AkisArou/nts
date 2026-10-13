@@ -1,5 +1,6 @@
 // The value-text fixture against node: `String(v)` of every erased tag, a
-// boolean's text, and an object refused by name.
+// boolean's text, a plain object's, and an object whose printing the core
+// refuses, refused by name.
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -17,6 +18,7 @@ for (let i = 0; i < oracle.count(); i++) {
 for (const n of [-1, 0, 1]) same(wasm.aBoolean(n), oracle.aBoolean(n), `aBoolean(${n})`);
 same(wasm.kindCount(), oracle.kindCount(), 'kindCount');
 for (let i = 0; i < oracle.kindCount(); i++) same(wasm.kindOf(i), oracle.kindOf(i), `kindOf(${i})`);
-assert.throws(() => wasm.anObject(1), e => e instanceof WasmInputDecline && e.message.includes('String() of an object or a function'));
+same(wasm.anObject(1), oracle.anObject(1), 'anObject');
+assert.throws(() => wasm.anObjectWithItsOwnText(1), e => e instanceof WasmInputDecline && e.message.includes('String() of an object or a function'));
 cases++;
 console.log(JSON.stringify({ cases }));

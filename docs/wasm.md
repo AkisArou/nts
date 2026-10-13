@@ -653,6 +653,33 @@ several layouts reach. Wasm reads both the way the JVM does:
     time.
   - four census rows.
 
+### Function names and object text (3k)
+
+Where the type does not settle a function's `name` or a value's text, both
+are read off the value, from what the core decides per layout:
+`Program::function_names` and `Program::printed`.
+- **One jump on identity.** A value's descriptor carries its semantic
+  identity. `objects::identity_switch` is one `br_table` from it into each
+  layout's answer.
+- **A name** is the layout's literal. A bound function is `"bound "` and its
+  target's name, read from its first field (the helper calls itself, so
+  `bound bound f` works).
+- **`String()` of an object or a function**, by what `printed` says:
+  - the class's own `toString`, or the compiler's for the `Error` family,
+    called on the value cast to the parameter's storage;
+  - `"[object Object]"`;
+  - `function NAME() { [native code] }` for a function, and
+    `function () { [native code] }` for a bound one.
+- **Refused by name:** an identity whose layouts disagree, or that the core
+  refuses, as C stops. Two classes merged into one layout that print
+  differently are one such case: the decision is per layout.
+- **Tests:**
+  - the function-text fixture (51 cases);
+  - value-text now answers a plain object, and refuses an object literal
+    carrying its own `toString`;
+  - rows: a-function-named-where-it-is-written (143 cases, none refused)
+    and a-method-used-as-a-value (299).
+
 ### Measurements at 301fac624 (exploratory; no quiet window)
 
 - **Census, 519 examples:** 223 agree, 290 declined, 6 invalid (pre-existing;

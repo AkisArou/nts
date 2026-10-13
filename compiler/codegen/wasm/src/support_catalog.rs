@@ -494,10 +494,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_environment_platform",
         Support::Decline("native memory/provider contract"),
     ),
-    (
-        "nts_function_name",
-        Support::Decline("value/control helper not yet implemented"),
-    ),
+    ("nts_function_name", Support::WasmHelper),
     (
         "nts_function_to_string",
         Support::Decline("value/control helper not yet implemented"),

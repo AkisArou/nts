@@ -270,6 +270,64 @@ pub(crate) fn set(
     });
     Ok(())
 }
+/// Push the semantic identity of the object root held in local `value`, which
+/// the caller has tested to be one.
+pub(crate) fn push_identity(f: &mut Function, root: gc::RootTypes, value: u32) {
+    f.instructions(&[
+        I::LocalGet(value),
+        I::RefCastNonNull(HeapType::Concrete(root.object)),
+        I::StructGet {
+            struct_type_index: root.object,
+            field_index: 0,
+        },
+        I::StructGet {
+            struct_type_index: root.descriptor,
+            field_index: 0,
+        },
+    ]);
+}
+
+/// Jump on the identity in local `identity` to the case naming it: one
+/// `br_table`, each case's code emitted by `answer`, which must not fall
+/// through (it returns or refuses). Any other identity continues after it.
+pub(crate) fn identity_switch<C>(
+    f: &mut Function,
+    identity: u32,
+    cases: &[(u32, C)],
+    mut answer: impl FnMut(&mut Function, &C) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    // One block per case inside one for the fallthrough: the table branches to
+    // the end of a case's block, where its code is.
+    let past = u32::try_from(cases.len()).map_err(|_| "too many identity cases")?;
+    let mut targets = Vec::new();
+    for (case, (id, _)) in cases.iter().enumerate() {
+        let id = usize::try_from(*id).map_err(|_| "identity")?;
+        if targets.len() <= id {
+            targets.resize(id + 1, past);
+        }
+        targets[id] = u32::try_from(case).map_err(|_| "too many identity cases")?;
+    }
+    f.instruction(&I::Block(BlockType::Empty));
+    for _ in cases {
+        f.instruction(&I::Block(BlockType::Empty));
+    }
+    f.instructions(&[
+        I::LocalGet(identity),
+        I::BrTable(targets.into(), past),
+        I::End,
+    ]);
+    for (case, (_, value)) in cases.iter().enumerate() {
+        answer(f, value)?;
+        if case + 1 < cases.len() {
+            f.instruction(&I::End);
+        }
+    }
+    if !cases.is_empty() {
+        f.instruction(&I::End);
+    }
+    Ok(())
+}
+
 /// What a value matching no arm of an open read is refused as. The
 /// core's contract is that the arms over-approximate what arrives, so this is
 /// a program the checker should have rejected.

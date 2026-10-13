@@ -122,9 +122,9 @@ pub(crate) fn call(
 }
 
 /// `String(v)` of an erased value, by its tag: the absences and booleans by
-/// name, a number by `Number.prototype.toString`, a string as itself. An object
-/// or a function prints as its type says it does, which nothing here records
-/// yet, so it is refused by name rather than answered `"[object Object]"`.
+/// name, a number by `Number.prototype.toString`, a string as itself, and an
+/// object or a function as the core says its layout prints
+/// ([`crate::printed`]).
 ///
 /// Params: the value, and the calling function's name for the refusal.
 fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
@@ -196,11 +196,29 @@ fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
                 crate::bigints::erased_text(m, &mut f, 0)?;
                 f.instructions(&[I::Br(1), I::End]);
             }
+            // An object or a function, where the program has any.
+            if m.types.root.is_some() {
+                let object = crate::printed::callee(m)?;
+                f.instructions(&[
+                    I::LocalGet(2),
+                    I::I32Const(erased::OBJECT),
+                    I::I32Eq,
+                    I::LocalGet(2),
+                    I::I32Const(erased::FUNCTION),
+                    I::I32Eq,
+                    I::I32Or,
+                    I::If(BlockType::Empty),
+                    I::LocalGet(0),
+                    I::LocalGet(1),
+                ]);
+                f.call(object);
+                f.instructions(&[I::Br(1), I::End]);
+            }
             contract::refuse_in(
                 &mut f,
                 m,
                 1,
-                "String() of an object or a function, whose type says nothing here about how it prints",
+                "String() of a value with no tag this runtime knows",
             )?;
             f.instructions(&[I::End, I::End]);
             Ok(f)

@@ -462,6 +462,24 @@ fn source_conversions_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
 }
 
+/// A function's name and a value's text read off its identity: declarations,
+/// arrows, methods, bound (twice) functions, a class's own `toString`, a
+/// plain object and the error family.
+#[test]
+fn source_function_text_agrees_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/function-text");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "function-text",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// A member read through a slot several layouts reach, shared or at each
 /// arm's own index: same-shape layouts, a subclass at its base's arm, and an
 /// arm never allocated.
@@ -561,7 +579,7 @@ fn source_value_text_agrees_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 37, "{output}");
+    assert_eq!(output["cases"], 38, "{output}");
 }
 
 /// An owner of another field order whose storage is the same Wasm type as the

@@ -87,6 +87,10 @@ pub(crate) enum FuncKey {
     ToNumber(bool),
     /// `split` into an array of strings, by the array's wrapper.
     StringSplit(u32),
+    /// A function value's name, read off its identity.
+    FunctionName,
+    /// An object's or a function's text, read off its identity.
+    ObjectText,
 }
 
 /// Every global the module can contain, named by what it means.
