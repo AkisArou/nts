@@ -1157,6 +1157,28 @@ impl FuncBuilder<'_> {
             ));
         };
         let layout = self.layout_of(id, type_id)?;
+        // **A field the record does not have is not dropped.** The record is
+        // written field by field, so a member it has no field for vanished
+        // without a word: `new CustomEvent("ready", { bubbles: true, detail:
+        // 5 })` made an event whose detail was null, nts:dom's CustomEventInit
+        // having no field for an `any`, and `fetch(url, { method: "POST",
+        // body })` sent no body (the Chromium lane's
+        // lib-dom-a-dictionary-member-its-binding-has-no-field-for). Overload
+        // choice already prefers a binding that takes the member
+        // (`record_holds`); this is where none did.
+        if let Some(lost) = layout
+            .fields
+            .iter()
+            .find(|field| !record.fields.iter().any(|native| native.name == field.name))
+        {
+            return Err(self.unsupported(
+                id,
+                &format!(
+                    "`{}`, a member the binding's `{}` has no field for, which would be dropped",
+                    lost.name, record.name
+                ),
+            ));
+        }
         for native in &record.fields {
             let Some(field) = layout.index_of(&native.name) else {
                 // Read by a getter, which is code, and not a field: refused

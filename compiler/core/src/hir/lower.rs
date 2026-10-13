@@ -65507,8 +65507,83 @@ impl<'a> FuncBuilder<'a> {
             if matches!(self.represent(taken), Some(HirType::Float { .. } | HirType::Int { .. })) {
                 return matches!(self.represent(given), Some(HirType::Float { .. } | HirType::Int { .. }));
             }
+            if let Some(HirType::NativePointer(view)) = self.represent(taken)
+                && let super::native::Pointee::Record(record) = view.viewed()
+            {
+                return self.record_holds(record, *argument, given);
+            }
             true
         })
+    }
+
+    /// Whether every member `argument` can carry is a field of `record`, the C
+    /// record a binding takes a dictionary by.
+    ///
+    /// **A member the record has no field for is dropped without a word**:
+    /// the record is written field by field from the object
+    /// (`copy_into_native_record`), so `new CustomEvent("ready", { bubbles:
+    /// true, detail: 5 })` made an event whose detail was null, nts:dom's
+    /// `CustomEventInit` having no field for an `any`, and `fetch(url, { method:
+    /// "POST", body })` sent no body (the Chromium lane's
+    /// lib-dom-a-dictionary-member-its-binding-has-no-field-for). The call is
+    /// typechecked against lib.dom's dictionary and lowered to the binding's
+    /// record, so nothing else compares the two. An overload this does not
+    /// fit is not taken -- a binding offering the members as parameters is
+    /// chosen instead -- and with none left the call is refused by name.
+    ///
+    /// A literal says which members it writes, a nested literal for a
+    /// nested record included. Any other object may hold every property its
+    /// type declares, an optional one too, so each of them must have a field.
+    fn record_holds(
+        &self,
+        record: &super::native::Record,
+        argument: NodeId,
+        given: TypeId,
+    ) -> bool {
+        let field = |name: &str| record.fields.iter().find(|field| field.name == name);
+        if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            let parts = match self.snapshot.types.get(given.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts.clone(),
+                _ => vec![given],
+            };
+            return parts.iter().all(|part| {
+                match self.snapshot.types.get(part.0 as usize).map(|r| &r.kind) {
+                    Some(TypeKind::Object { properties }) => {
+                        properties.iter().all(|p| field(&p.name).is_some())
+                    }
+                    Some(TypeKind::Null | TypeKind::Undefined) => true,
+                    _ => false,
+                }
+            });
+        }
+        self.children(argument)
+            .into_iter()
+            .all(|member| match self.kind_of(member) {
+                Some(syntax::PROPERTY_ASSIGNMENT) => {
+                    let [name, value] = self.children(member)[..] else {
+                        return false;
+                    };
+                    let Some(native) = self.literal_name(name).and_then(|name| field(&name)) else {
+                        return false;
+                    };
+                    match (&native.ty, self.snapshot.node_types.get(&value)) {
+                        (super::native::Pointee::Record(inner), Some(&ty)) => {
+                            self.record_holds(inner, value, ty)
+                        }
+                        _ => true,
+                    }
+                }
+                Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => {
+                    let [name, ..] = self.children(member)[..] else {
+                        return false;
+                    };
+                    self.literal_name(name)
+                        .is_some_and(|name| field(&name).is_some())
+                }
+                // A spread, a method or an accessor: which members it writes is
+                // not written here.
+                _ => false,
+            })
     }
 
     /// The function implementing a call's callee, where a binding implements
