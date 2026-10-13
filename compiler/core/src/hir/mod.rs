@@ -80,6 +80,7 @@ pub mod specialize;
 pub mod split;
 pub mod substring;
 pub mod verify;
+pub mod views;
 pub mod zero_sign;
 
 use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
