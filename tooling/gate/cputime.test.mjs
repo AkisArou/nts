@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { PERF_ARGS, followInstructions, instructionsWork, parsePerf } from "./cputime.mjs";
 
 // `nts hir --prepared runtime/node/events`, twice, each counted by two perfs
@@ -57,18 +58,36 @@ test("counts are taken raw: the scaled ones cannot be undone", () => {
   assert.ok(undo(RUN1_SCALED) / parsePerf(RUN1_RAW) > 1.4);
 });
 
+/** Resolves once `pid` is stopped (state `T` in /proc), which `kill -STOP $$` makes it. */
+function stopped(pid) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const poll = setInterval(() => {
+      let state = "";
+      try { state = readFileSync(`/proc/${pid}/stat`, "utf8").replace(/^.*\) /s, "")[0]; } catch {}
+      if (state === "T") { clearInterval(poll); resolve(); }
+      else if (Date.now() - started > 10_000) { clearInterval(poll); reject(new Error(`${pid} never stopped (state ${state || "gone"})`)); }
+    }, 5);
+  });
+}
+
 test("on this machine, the same work counts the same", { skip: instructionsWork() ?? false }, async () => {
   const counts = [];
   for (let i = 0; i < 3; i++) {
-    const child = spawn("sh", ["-c", "i=0; while [ $i -lt 1000000 ]; do i=$((i+1)); done"], { stdio: "ignore" });
-    counts.push(await followInstructions(child));
+    // **Stopped until perf is counting.** perf attaches after a child starts
+    // and misses what it ran first, and how much grows with the machine's
+    // load: three runs read 24.49, 22.54 and 24.70 G at a load of ~10
+    // (2026-10-15) and failed this test on a JVM tooling landing. Started
+    // stopped and continued once perf holds its counter, the loop is counted
+    // whole, so the spread is what the instrument does with the same work --
+    // the question -- and not when perf happened to arrive.
+    const child = spawn("sh", ["-c", "kill -STOP $$; i=0; while [ $i -lt 1000000 ]; do i=$((i+1)); done"], { stdio: "ignore" });
+    await stopped(child.pid);
+    counts.push(await followInstructions(child, { onAttached: () => process.kill(child.pid, "SIGCONT") }));
   }
   for (const c of counts) assert.ok(c > 1e8, `counted ${c}`);
   const spread = Math.max(...counts) / Math.min(...counts) - 1;
-  // 3%, not 1%: perf attaches after the child starts and loses what it ran
-  // first -- measured at 1-2% on this box -- so three identical runs under a
-  // gate's load read 24.50, 24.57 and 24.75 G (1.02%) and failed a 1% bound
-  // (2026-10-08). The table's own threshold is 2x, so 3% still catches an
-  // instrument that has stopped counting the same thing.
+  // 3%, kept from when attaching late cost 1-2%; with nothing lost to the
+  // attach the spread is far smaller, and the table's own threshold is 2x.
   assert.ok(spread < 0.03, `three runs read ${counts.map((c) => (c / 1e9).toFixed(2)).join(", ")} G`);
 });

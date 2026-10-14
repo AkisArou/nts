@@ -8,7 +8,7 @@
 // status and a timeout's SIGTERM would kill the wrapper and leave the compiler
 // running. The last sample is at most one interval before the process ends,
 // so a measurement is short by at most that much per busy thread.
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,10 +124,36 @@ export function instructionsWork() {
   return probed;
 }
 
-/** Follow `child` until it exits; resolves to its user-space instructions, or null. */
-export function followInstructions(child) {
+/**
+ * Follow `child` until it exits; resolves to its user-space instructions, or null.
+ *
+ * `onAttached`, when given, is called once perf holds a counter on the child,
+ * which is when perf's own process has a `perf_event` descriptor open. Before
+ * that, whatever the child runs is not counted: perf attaches *after* the
+ * child starts, and on a loaded machine the gap grew to 2 G of a 24 G loop. A
+ * caller that starts its child stopped and continues it here loses nothing.
+ */
+export function followInstructions(child, { onAttached } = {}) {
   const out = join(tmpdir(), `nts-instructions-${process.pid}-${child.pid}.txt`);
   const perf = spawn("perf", [...PERF_ARGS, "-p", String(child.pid), "-o", out], { stdio: "ignore" });
+  if (onAttached) {
+    const counting = () => {
+      try {
+        return readdirSync(`/proc/${perf.pid}/fd`).some((fd) => {
+          try { return readlinkSync(`/proc/${perf.pid}/fd/${fd}`).includes("perf_event"); } catch { return false; }
+        });
+      } catch {
+        return false;
+      }
+    };
+    const poll = setInterval(() => {
+      if (counting() || perf.exitCode !== null) {
+        clearInterval(poll);
+        onAttached();
+      }
+    }, 5);
+    perf.on("close", () => clearInterval(poll));
+  }
   let stopper;
   child.on("exit", () => { stopper = setTimeout(() => perf.kill("SIGINT"), 5000); });
   return new Promise((resolve) => {
