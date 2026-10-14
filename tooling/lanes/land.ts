@@ -66,6 +66,19 @@ const LANES: Record<string, Lane> = JSON.parse(readFileSync(new URL("./lanes.jso
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
+// `--accept-unrun=apple,windows --because=<why>`: land a range that touches a
+// platform whose programs did not run, once, on purpose. The user's call, never
+// a lane's (2026-10-14, the corpora move: its Apple and Windows projects change
+// only in path strings, and both platforms' setups were down on main itself).
+// Both flags or neither; the reason goes into the land note beside the run.
+const acceptUnrun = (argv.find((a) => a.startsWith("--accept-unrun="))?.slice("--accept-unrun=".length) ?? "")
+  .split(",")
+  .filter(Boolean);
+const because = argv.find((a) => a.startsWith("--because="))?.slice("--because=".length) ?? "";
+if (acceptUnrun.length > 0 && because.trim() === "") {
+  console.error("land: --accept-unrun needs --because=<why>, which goes into the land note");
+  process.exit(2);
+}
 const target = argv.find((a) => !a.startsWith("--"));
 
 const git = (args: string[], cwd = process.cwd()): string =>
@@ -403,7 +416,9 @@ function gate(root: string, base: string, landing: string, members: string[]): G
       return { ok: false, run, state: "red", message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}` };
     }
     const touched = git(["diff", "--name-only", base, landing], root).split("\n").filter(Boolean);
-    const notRun = unrun(summary.steps ?? [], touched);
+    const notRun = unrun(summary.steps ?? [], touched).filter(
+      (line) => !acceptUnrun.includes(line.slice(0, line.indexOf(":"))),
+    );
     if (notRun.length > 0) {
       return {
         ok: false,
@@ -414,7 +429,8 @@ function gate(root: string, base: string, landing: string, members: string[]): G
     }
     const named = String(summary.identities?.commit ?? "");
     if (named.length < 7 || !landing.startsWith(named)) return { ok: false, run, state: "red", message: `the summary names ${named || "no commit"}, not ${short}` };
-    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}` };
+    const accepted = acceptUnrun.length > 0 ? `; accepted unrun: ${acceptUnrun.join(", ")} -- ${because}` : "";
+    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}` };
   } finally {
     if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
   }
