@@ -1594,10 +1594,14 @@ the compiler's supported input contract produce the harness's named decline,
 not a validator/runtime trap. Sparse growth and holes must follow the prepared
 array contract; decline shapes whose storage cannot express them.
 In particular, HIR's zero fill of a typed `new Array(n)` is not an undefined
-element representation. Wasm checks initialization before admitting observations:
-stores in the allocation block prove individual constant slots ready, complete
-initialization permits aliases/escape, and length-only use needs no such proof.
-Branch-local stores cannot prove readiness on all paths. Unproven typed holes
+element representation. Wasm checks initialization before admitting observations
+(`array_init.rs`), as a forward must-analysis over the control-flow graph: a
+constant slot is ready at a point when a store wrote it on every path from the
+allocation to there. An element read needs its slot, complete initialization
+permits aliases/escape, and length-only use needs no such proof. So an array
+literal whose elements branch (a ternary, `??`, a bigint power's exponent check,
+a call that may raise) is admitted, while a store on one branch only, or in a
+loop body the loop may skip, proves nothing where the paths meet. Unproven typed holes
 decline by function and source origin; `zeroed: false` retains HIR's explicit
 promise that lowering fills every slot before observation. Erased backing starts
 with the undefined singleton. This admission check changes no native lane.

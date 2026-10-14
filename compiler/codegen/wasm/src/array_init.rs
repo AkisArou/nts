@@ -1,29 +1,24 @@
 //! Refuse observable typed holes which prepared HIR's zero fill cannot represent.
 //!
-//! An allocation may be inspected for length before initialization. Element
-//! reads require an initialized slot, and aliases/escapes require every slot.
-//! Only stores in the allocation block contribute to this conservative proof:
-//! stores on another branch must never establish readiness on all paths.
+//! A typed `ArrayNew { zeroed: true }` holds zeros, not `undefined`, so a slot
+//! may be observed only once a store has written it. The proof is a forward
+//! must-analysis over the control-flow graph: a constant slot is written at a
+//! point when a store wrote it on every path from the allocation to there. So
+//! the stores after a branch inside an array literal (a ternary, `??`, a guard
+//! that throws) still count, and a store on only one branch proves nothing
+//! where the branches meet. The length may be read before initialization; an
+//! element read needs its slot; any other use (an alias, an escape, a block
+//! argument) needs every slot.
 
 use crate::{EmitError, error::Failure};
 use nts_core::hir::{BlockId, Func, HirType, ManagedType, OpKind, ValueId};
 use rustc_hash::FxHashMap;
 use std::collections::BTreeSet;
 
-struct State {
-    owner: BlockId,
-    length: Option<u32>,
-    initialized: BTreeSet<u32>,
-    filled: bool,
-}
-impl State {
-    fn complete(&self) -> bool {
-        self.filled
-            || self
-                .length
-                .is_some_and(|n| self.initialized.len() == n as usize)
-    }
-}
+/// The constant slots proven written of each allocation that is not yet
+/// complete. A complete allocation has no entry, and neither has one not yet
+/// made: either admits every use, so absence is the analysis's top.
+type Pending = FxHashMap<ValueId, BTreeSet<u32>>;
 
 fn constant(func: &Func, id: ValueId) -> Option<u32> {
     let op = func.value(id);
@@ -85,11 +80,11 @@ fn decline(func: &Func, id: ValueId) -> EmitError {
         .at(&func.name, &func.value(id).origin)
 }
 
-pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
-    let order = nts_codegen_common::block_order(func);
-    let mut states = FxHashMap::<ValueId, State>::default();
-    for &block in &order {
-        for &id in &func.blocks[block.0 as usize].ops {
+/// Each typed zeroed allocation, with its length when that is a constant.
+fn allocations(func: &Func) -> FxHashMap<ValueId, Option<u32>> {
+    let mut lengths = FxHashMap::default();
+    for block in &func.blocks {
+        for &id in &block.ops {
             let op = func.value(id);
             if let OpKind::ArrayNew {
                 length,
@@ -98,68 +93,122 @@ pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
                 && let HirType::Managed(ManagedType::Array(element)) = &op.ty
                 && element.as_ref() != &HirType::Erased
             {
-                states.insert(
-                    id,
-                    State {
-                        owner: block,
-                        length: constant(func, length),
-                        initialized: BTreeSet::new(),
-                        filled: false,
-                    },
-                );
+                lengths.insert(id, constant(func, length));
             }
-            for allocation in nts_core::hir::operands_of(&op.kind) {
-                let Some(state) = states.get_mut(&allocation) else {
-                    continue;
-                };
-                if state.owner != block || state.complete() {
-                    continue;
-                }
-                if readies(func, &op.kind, allocation) {
-                    state.filled = true;
-                } else if let OpKind::ArraySet { array, index, .. } = op.kind
-                    && array == allocation
-                    && harmless(func, &op.kind, allocation)
-                    && let Some(index) = constant(func, index)
-                    && state.length.is_none_or(|n| index < n)
-                {
-                    state.initialized.insert(index);
-                } else if let OpKind::ArrayGet { array, index, .. } = op.kind
-                    && array == allocation
-                    && constant(func, index).is_some_and(|n| state.initialized.contains(&n))
-                {
-                    // The earlier guarded store must have succeeded on this
-                    // execution before the read. Other slots remain unproven.
-                } else if !harmless(func, &op.kind, allocation) {
-                    return Err(decline(func, id));
+        }
+    }
+    lengths
+}
+
+/// What holds on entry to a block: a slot is written only where every
+/// predecessor wrote it. A predecessor not yet visited constrains nothing.
+fn meet<'a>(mut outs: impl Iterator<Item = &'a Pending>) -> Pending {
+    let mut met = outs.next().cloned().unwrap_or_default();
+    for out in outs {
+        for (allocation, slots) in out {
+            match met.get_mut(allocation) {
+                Some(have) => have.retain(|slot| slots.contains(slot)),
+                None => {
+                    met.insert(*allocation, slots.clone());
                 }
             }
         }
     }
-    // The first scan deliberately ignores uses outside the allocation block.
-    // Its final state is sound there: SSA dominance places the entire defining
-    // block before any such use. No branch-local stores contributed to it.
-    for &block in &order {
-        let body = &func.blocks[block.0 as usize];
-        for &id in &body.ops {
-            let kind = &func.value(id).kind;
-            for allocation in nts_core::hir::operands_of(kind) {
-                if let Some(state) = states.get(&allocation)
-                    && state.owner != block
-                    && !state.complete()
-                    && !harmless(func, kind, allocation)
-                {
-                    return Err(decline(func, id));
-                }
-            }
-        }
-        for allocation in nts_core::hir::operands_of_terminator(&body.terminator) {
-            if let Some(state) = states.get(&allocation)
-                && !state.complete()
+    met
+}
+
+/// Runs `block` over `pending`. With `check`, a use the facts do not admit
+/// declines.
+fn transfer(
+    func: &Func,
+    block: BlockId,
+    lengths: &FxHashMap<ValueId, Option<u32>>,
+    pending: &mut Pending,
+    check: bool,
+) -> Result<(), EmitError> {
+    let body = &func.blocks[block.0 as usize];
+    for &id in &body.ops {
+        let kind = &func.value(id).kind;
+        for allocation in nts_core::hir::operands_of(kind) {
+            let Some(slots) = pending.get_mut(&allocation) else {
+                continue;
+            };
+            let length = lengths[&allocation];
+            if readies(func, kind, allocation) {
+                pending.remove(&allocation);
+            } else if let OpKind::ArraySet { array, index, .. } = *kind
+                && array == allocation
+                && harmless(func, kind, allocation)
+                && let Some(index) = constant(func, index)
+                && length.is_none_or(|n| index < n)
             {
-                return Err(decline(func, allocation));
+                slots.insert(index);
+                if length.is_some_and(|n| slots.len() == n as usize) {
+                    pending.remove(&allocation);
+                }
+            } else if let OpKind::ArrayGet { array, index, .. } = *kind
+                && array == allocation
+                && constant(func, index).is_some_and(|n| slots.contains(&n))
+            {
+                // A guarded store wrote this slot on every path to here.
+            } else if check && !harmless(func, kind, allocation) {
+                return Err(decline(func, id));
             }
         }
+        if let Some(&length) = lengths.get(&id)
+            && length != Some(0)
+        {
+            pending.insert(id, BTreeSet::new());
+        }
+    }
+    if check
+        && let Some(allocation) = nts_core::hir::operands_of_terminator(&body.terminator)
+            .into_iter()
+            .find(|allocation| pending.contains_key(allocation))
+    {
+        return Err(decline(func, allocation));
+    }
+    Ok(())
+}
+
+pub(crate) fn check(func: &Func) -> Result<(), EmitError> {
+    let lengths = allocations(func);
+    if lengths.is_empty() {
+        return Ok(());
+    }
+    let order = nts_codegen_common::block_order(func);
+    let mut predecessors = vec![Vec::new(); func.blocks.len()];
+    for &block in &order {
+        for next in func.blocks[block.0 as usize].terminator.successors() {
+            predecessors[next.0 as usize].push(block);
+        }
+    }
+    let mut outs: Vec<Option<Pending>> = vec![None; func.blocks.len()];
+    let entry = |outs: &[Option<Pending>], block: BlockId| {
+        meet(
+            predecessors[block.0 as usize]
+                .iter()
+                .filter_map(|p| outs[p.0 as usize].as_ref()),
+        )
+    };
+    // To a fixed point: facts only shrink, so a loop settles in a few passes.
+    loop {
+        let mut changed = false;
+        for &block in &order {
+            let mut pending = entry(&outs, block);
+            transfer(func, block, &lengths, &mut pending, false)?;
+            if outs[block.0 as usize].as_ref() != Some(&pending) {
+                outs[block.0 as usize] = Some(pending);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    for &block in &order {
+        let mut pending = entry(&outs, block);
+        transfer(func, block, &lengths, &mut pending, true)?;
     }
     Ok(())
 }

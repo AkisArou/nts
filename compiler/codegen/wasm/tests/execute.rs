@@ -137,6 +137,26 @@ fn source_typed_holes_decline_instead_of_returning_zero() {
     );
 }
 
+/// Typed array literals whose elements branch (a ternary, `??`, `&&`, a
+/// bigint power's exponent check, a call that may raise): the stores after
+/// each branch sit in later blocks, and the initialization proof follows them
+/// there, so none of these declines as a hole.
+#[test]
+fn source_branching_array_literals_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-literals");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-literals",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 119, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 #[test]
 fn source_array_helpers_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-methods");

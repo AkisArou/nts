@@ -1,4 +1,5 @@
-//! Definite slot initialization, source-shaped holes and alias/branch controls.
+//! Definite slot initialization, source-shaped holes and alias/branch/loop
+//! controls.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 use common::hir::{F64, U32, block, function, program, value};
@@ -130,6 +131,93 @@ fn a_store_on_only_one_branch_is_not_a_definite_initialization() {
             args: vec![],
         },
     ));
+    let mut reads = vec![];
+    let answer = get(&mut f, &mut reads, a, at);
+    f.blocks
+        .push(block(&[], &reads, Terminator::Return(Some(answer))));
+    declined(f);
+}
+
+fn branch(cond: ValueId, then: u32, otherwise: u32) -> Terminator {
+    Terminator::Branch {
+        cond,
+        then_target: BlockId(then),
+        then_args: vec![],
+        else_target: BlockId(otherwise),
+        else_args: vec![],
+    }
+}
+fn jump(target: u32) -> Terminator {
+    Terminator::Jump {
+        target: BlockId(target),
+        args: vec![],
+    }
+}
+fn emits(f: Func) {
+    nts_codegen_wasm::emit(&program(vec![f])).unwrap();
+}
+
+#[test]
+fn stores_after_a_guard_that_throws_initialize_every_slot() {
+    // `[2n ** 70n, x]`: each element's guard branches to a throw, so the
+    // stores after it sit in a later block, which every path to the escape
+    // passes through.
+    let (mut f, mut ops, a, at, n) = base("guarded");
+    let cond = op(&mut f, &mut ops, OpKind::ConstBool(false), HirType::Bool);
+    f.blocks.push(block(&[], &ops, branch(cond, 1, 2)));
+    f.blocks.push(block(&[], &[], Terminator::Unreachable));
+    let mut stores = vec![];
+    set(&mut f, &mut stores, a, at, n);
+    let other = op(&mut f, &mut stores, OpKind::ConstInt(1), U32);
+    set(&mut f, &mut stores, a, other, n);
+    let erased = op(
+        &mut f,
+        &mut stores,
+        OpKind::Erase {
+            value: a,
+            absent: nts_core::hir::Absent::Impossible,
+        },
+        HirType::Erased,
+    );
+    let restored = op(
+        &mut f,
+        &mut stores,
+        OpKind::Unerase { value: erased },
+        array(),
+    );
+    let answer = get(&mut f, &mut stores, restored, other);
+    f.blocks
+        .push(block(&[], &stores, Terminator::Return(Some(answer))));
+    emits(f);
+}
+
+#[test]
+fn a_store_on_both_arms_is_written_where_they_meet() {
+    // `[c ? x : y, ...]` lowered as a store on each arm.
+    let (mut f, mut ops, a, at, n) = base("bothArms");
+    let cond = op(&mut f, &mut ops, OpKind::ConstBool(true), HirType::Bool);
+    f.blocks.push(block(&[], &ops, branch(cond, 1, 2)));
+    for _ in 0..2 {
+        let mut stores = vec![];
+        set(&mut f, &mut stores, a, at, n);
+        f.blocks.push(block(&[], &stores, jump(3)));
+    }
+    let mut reads = vec![];
+    let answer = get(&mut f, &mut reads, a, at);
+    f.blocks
+        .push(block(&[], &reads, Terminator::Return(Some(answer))));
+    emits(f);
+}
+
+#[test]
+fn a_store_in_a_loop_body_does_not_cover_the_path_that_skips_it() {
+    let (mut f, mut ops, a, at, n) = base("loopHole");
+    let cond = op(&mut f, &mut ops, OpKind::ConstBool(false), HirType::Bool);
+    f.blocks.push(block(&[], &ops, jump(1)));
+    f.blocks.push(block(&[], &[], branch(cond, 2, 3)));
+    let mut stores = vec![];
+    set(&mut f, &mut stores, a, at, n);
+    f.blocks.push(block(&[], &stores, jump(1)));
     let mut reads = vec![];
     let answer = get(&mut f, &mut reads, a, at);
     f.blocks
