@@ -1417,8 +1417,11 @@ class Generator:
     def stringifier(self, interface):
         """`range.toString()`: an anonymous `stringifier;` (Range, Selection)
         is a `toString` operation calling the implementation's own, as V8's
-        binding does. A stringifier attribute (`stringifier attribute href`)
-        is bound as its attribute, and an operation named toString as one."""
+        binding does -- with the ExceptionState of one marked
+        `[RaisesException]` (DOMMatrixReadOnly's, for a matrix that is not
+        finite), whose exception the program's call throws. A stringifier
+        attribute (`stringifier attribute href`) is bound as its attribute,
+        and an operation named toString as one."""
         stringifier = getattr(interface, "stringifier", None)
         if stringifier is None or stringifier.attribute is not None:
             return
@@ -1433,9 +1436,10 @@ class Generator:
             self.skip(interface, "stringifier", str(why))
             return
         method = operation.code_generator_info.property_implemented_as or "toString"
+        raises = "RaisesException" in operation.extended_attributes
         function = Function(interface, f"nts_dom_{interface.identifier}_toString", [],
                             Result("const NtsStringView*", "StringView", "string"),
-                            f"receiver->{method}()", False, False)
+                            f"receiver->{method}({'exception_state' if raises else ''})", raises, False)
         self.include(operation)
         self.functions.append(function)
         self.members.setdefault(interface.identifier, []).append(self.method_line(interface, "toString", function))

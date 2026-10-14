@@ -473,6 +473,61 @@ export function libDomTranscript(): string {
       (range.endContainer === paragraph) + ":" + range.endOffset + "|" + range.collapsed);
   }
 
+  // SVG by its own interfaces: a length set as a number and read in its
+  // unit, one set in ems and converted, an animated value's base and the
+  // attribute it writes, a path's length and a text's advance (measured by
+  // layout), an SVG element's style and dataset (HTMLOrSVGElement), and a
+  // gradient's units, an enumeration.
+  {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("width", "200");
+    svg.setAttribute("height", "100");
+    svg.setAttribute("style", "font-size: 10px");
+    const circle = document.createElementNS(ns, "circle");
+    circle.setAttribute("r", "10");
+    circle.cx.baseVal.value = 20;
+    const rect = document.createElementNS(ns, "rect");
+    rect.width.baseVal.valueAsString = "2em";
+    const width = rect.width.baseVal;
+    const em = width.valueInSpecifiedUnits + ":" + width.unitType;
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", "M0 0 L30 40 L30 0");
+    const text = document.createElementNS(ns, "text");
+    text.textContent = "nts";
+    const gradient = document.createElementNS(ns, "linearGradient");
+    gradient.gradientUnits.baseVal = 1;
+    svg.append(circle, rect, path);
+    svg.appendChild(text);
+    svg.appendChild(gradient);
+    root.appendChild(svg);
+    // Converted once in the document, where an em has a font size to
+    // resolve against (Blink's NotSupportedError before). SVGLength.
+    // SVG_LENGTHTYPE_PX and SVGUnitTypes.SVG_UNIT_TYPE_USERSPACEONUSE by value:
+    // a constant read through its interface is the compiler's
+    // (workarounds.md, 31).
+    width.convertToSpecifiedUnits(5);
+    circle.style.fill = "red";
+    circle.dataset.kind = "dot";
+    log("svgLengths", circle.r.baseVal.value + "|" + circle.cx.baseVal.valueAsString + "|" + circle.getAttribute("cx") + "|" +
+      em + ">" + width.value + ":" + width.unitType + "|" + rect.getAttribute("width") + "|" + path.getTotalLength() + "|" +
+      (text.getComputedTextLength() > 0) + ":" + text.getNumberOfChars() + "|" + circle.getAttribute("style") + "|" +
+      circle.getAttribute("data-kind") + "|" + gradient.getAttribute("gradientUnits") + "|" + (circle.ownerSVGElement === svg));
+  }
+
+  // DOMMatrix: parsed from a transform list, read, inverted, multiplied by
+  // a literal, a point carried through, and written back as text.
+  {
+    const matrix = new DOMMatrix("translate(10px, 20px) scale(2)");
+    const inverse = matrix.inverse();
+    const doubled = matrix.multiply({ a: 2, d: 2 });
+    const point = matrix.transformPoint({ x: 1, y: 1 });
+    matrix.translateSelf(5, 5);
+    log("domMatrix", matrix.a + "," + matrix.e + "," + matrix.f + "|" + inverse.e + "," + inverse.a + "|" + doubled.a + "," +
+      doubled.e + "|" + point.x + "," + point.y + "," + point.w + "|" + matrix.is2D + "," + matrix.isIdentity + "|" +
+      matrix.toString() + "|" + new DOMMatrix().isIdentity);
+  }
+
   // Events of the types lib.dom's event maps name, made and read: their own
   // members, a nullable string a dictionary leaves out (null) against one it
   // gives as empty, and a handle member compared by identity.

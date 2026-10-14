@@ -391,10 +391,12 @@ interface DOMException {}
  */
 interface DOMImplementation {}
 /**
+ * @ntsBoundBy "nts:dom" DOMMatrix
  * @ntsIs nts_dom_is 117
  */
 interface DOMMatrix {}
 /**
+ * @ntsBoundBy "nts:dom" DOMMatrixReadOnly
  * @ntsIs nts_dom_is 118
  */
 interface DOMMatrixReadOnly {}
@@ -1325,449 +1327,472 @@ interface ResizeObserverSize {}
  */
 interface Response {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGAElement
  * @ntsIs nts_dom_is 390
  */
 interface SVGAElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAngle
  * @ntsIs nts_dom_is 391
  */
 interface SVGAngle {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGAnimateElement
  * @ntsIs nts_dom_is 392
  */
 interface SVGAnimateElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGAnimateMotionElement
  * @ntsIs nts_dom_is 393
  */
 interface SVGAnimateMotionElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGAnimateTransformElement
  * @ntsIs nts_dom_is 394
  */
 interface SVGAnimateTransformElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedAngle
  * @ntsIs nts_dom_is 395
  */
 interface SVGAnimatedAngle {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedBoolean
  * @ntsIs nts_dom_is 396
  */
 interface SVGAnimatedBoolean {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedEnumeration
  * @ntsIs nts_dom_is 397
  */
 interface SVGAnimatedEnumeration {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedInteger
  * @ntsIs nts_dom_is 398
  */
 interface SVGAnimatedInteger {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedLength
  * @ntsIs nts_dom_is 399
  */
 interface SVGAnimatedLength {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedLengthList
  * @ntsIs nts_dom_is 400
  */
 interface SVGAnimatedLengthList {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedNumber
  * @ntsIs nts_dom_is 401
  */
 interface SVGAnimatedNumber {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedNumberList
  * @ntsIs nts_dom_is 402
  */
 interface SVGAnimatedNumberList {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedPreserveAspectRatio
  * @ntsIs nts_dom_is 403
  */
 interface SVGAnimatedPreserveAspectRatio {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedRect
  * @ntsIs nts_dom_is 404
  */
 interface SVGAnimatedRect {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedString
  * @ntsIs nts_dom_is 405
  */
 interface SVGAnimatedString {}
 /**
+ * @ntsBoundBy "nts:dom" SVGAnimatedTransformList
  * @ntsIs nts_dom_is 406
  */
 interface SVGAnimatedTransformList {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGAnimationElement
  * @ntsIs nts_dom_is 407
  */
 interface SVGAnimationElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGCircleElement
  * @ntsIs nts_dom_is 408
  */
 interface SVGCircleElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGClipPathElement
  * @ntsIs nts_dom_is 409
  */
 interface SVGClipPathElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGComponentTransferFunctionElement
  * @ntsIs nts_dom_is 410
  */
 interface SVGComponentTransferFunctionElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGDefsElement
  * @ntsIs nts_dom_is 411
  */
 interface SVGDefsElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGDescElement
  * @ntsIs nts_dom_is 412
  */
 interface SVGDescElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGElement
  * @ntsIs nts_dom_is 413
  */
 interface SVGElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGEllipseElement
  * @ntsIs nts_dom_is 414
  */
 interface SVGEllipseElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEBlendElement
  * @ntsIs nts_dom_is 415
  */
 interface SVGFEBlendElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEColorMatrixElement
  * @ntsIs nts_dom_is 416
  */
 interface SVGFEColorMatrixElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEComponentTransferElement
  * @ntsIs nts_dom_is 417
  */
 interface SVGFEComponentTransferElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFECompositeElement
  * @ntsIs nts_dom_is 418
  */
 interface SVGFECompositeElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEConvolveMatrixElement
  * @ntsIs nts_dom_is 419
  */
 interface SVGFEConvolveMatrixElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEDiffuseLightingElement
  * @ntsIs nts_dom_is 420
  */
 interface SVGFEDiffuseLightingElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEDisplacementMapElement
  * @ntsIs nts_dom_is 421
  */
 interface SVGFEDisplacementMapElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEDistantLightElement
  * @ntsIs nts_dom_is 422
  */
 interface SVGFEDistantLightElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEDropShadowElement
  * @ntsIs nts_dom_is 423
  */
 interface SVGFEDropShadowElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEFloodElement
  * @ntsIs nts_dom_is 424
  */
 interface SVGFEFloodElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEFuncAElement
  * @ntsIs nts_dom_is 425
  */
 interface SVGFEFuncAElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEFuncBElement
  * @ntsIs nts_dom_is 426
  */
 interface SVGFEFuncBElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEFuncGElement
  * @ntsIs nts_dom_is 427
  */
 interface SVGFEFuncGElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEFuncRElement
  * @ntsIs nts_dom_is 428
  */
 interface SVGFEFuncRElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEGaussianBlurElement
  * @ntsIs nts_dom_is 429
  */
 interface SVGFEGaussianBlurElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEImageElement
  * @ntsIs nts_dom_is 430
  */
 interface SVGFEImageElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEMergeElement
  * @ntsIs nts_dom_is 431
  */
 interface SVGFEMergeElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEMergeNodeElement
  * @ntsIs nts_dom_is 432
  */
 interface SVGFEMergeNodeElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEMorphologyElement
  * @ntsIs nts_dom_is 433
  */
 interface SVGFEMorphologyElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEOffsetElement
  * @ntsIs nts_dom_is 434
  */
 interface SVGFEOffsetElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFEPointLightElement
  * @ntsIs nts_dom_is 435
  */
 interface SVGFEPointLightElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFESpecularLightingElement
  * @ntsIs nts_dom_is 436
  */
 interface SVGFESpecularLightingElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFESpotLightElement
  * @ntsIs nts_dom_is 437
  */
 interface SVGFESpotLightElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFETileElement
  * @ntsIs nts_dom_is 438
  */
 interface SVGFETileElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFETurbulenceElement
  * @ntsIs nts_dom_is 439
  */
 interface SVGFETurbulenceElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGFilterElement
  * @ntsIs nts_dom_is 440
  */
 interface SVGFilterElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGForeignObjectElement
  * @ntsIs nts_dom_is 441
  */
 interface SVGForeignObjectElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGGElement
  * @ntsIs nts_dom_is 442
  */
 interface SVGGElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGGeometryElement
  * @ntsIs nts_dom_is 443
  */
 interface SVGGeometryElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGGradientElement
  * @ntsIs nts_dom_is 444
  */
 interface SVGGradientElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGGraphicsElement
  * @ntsIs nts_dom_is 445
  */
 interface SVGGraphicsElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGImageElement
  * @ntsIs nts_dom_is 446
  */
 interface SVGImageElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGLength
  * @ntsIs nts_dom_is 447
  */
 interface SVGLength {}
 /**
+ * @ntsBoundBy "nts:dom" SVGLengthList
  * @ntsIs nts_dom_is 448
  */
 interface SVGLengthList {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGLineElement
  * @ntsIs nts_dom_is 449
  */
 interface SVGLineElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGLinearGradientElement
  * @ntsIs nts_dom_is 450
  */
 interface SVGLinearGradientElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGMPathElement
  * @ntsIs nts_dom_is 451
  */
 interface SVGMPathElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGMarkerElement
  * @ntsIs nts_dom_is 452
  */
 interface SVGMarkerElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGMaskElement
  * @ntsIs nts_dom_is 453
  */
 interface SVGMaskElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGMetadataElement
  * @ntsIs nts_dom_is 455
  */
 interface SVGMetadataElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGNumber
  * @ntsIs nts_dom_is 456
  */
 interface SVGNumber {}
 /**
+ * @ntsBoundBy "nts:dom" SVGNumberList
  * @ntsIs nts_dom_is 457
  */
 interface SVGNumberList {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGPathElement
  * @ntsIs nts_dom_is 458
  */
 interface SVGPathElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGPatternElement
  * @ntsIs nts_dom_is 459
  */
 interface SVGPatternElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGPointList
  * @ntsIs nts_dom_is 461
  */
 interface SVGPointList {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGPolygonElement
  * @ntsIs nts_dom_is 462
  */
 interface SVGPolygonElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGPolylineElement
  * @ntsIs nts_dom_is 463
  */
 interface SVGPolylineElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGPreserveAspectRatio
  * @ntsIs nts_dom_is 464
  */
 interface SVGPreserveAspectRatio {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGRadialGradientElement
  * @ntsIs nts_dom_is 465
  */
 interface SVGRadialGradientElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGRectElement
  * @ntsIs nts_dom_is 467
  */
 interface SVGRectElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGSVGElement
  * @ntsIs nts_dom_is 468
  */
 interface SVGSVGElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGScriptElement
  * @ntsIs nts_dom_is 469
  */
 interface SVGScriptElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGSetElement
  * @ntsIs nts_dom_is 470
  */
 interface SVGSetElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGStopElement
  * @ntsIs nts_dom_is 471
  */
 interface SVGStopElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGStringList
  * @ntsIs nts_dom_is 472
  */
 interface SVGStringList {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGStyleElement
  * @ntsIs nts_dom_is 473
  */
 interface SVGStyleElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGSwitchElement
  * @ntsIs nts_dom_is 474
  */
 interface SVGSwitchElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGSymbolElement
  * @ntsIs nts_dom_is 475
  */
 interface SVGSymbolElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTSpanElement
  * @ntsIs nts_dom_is 476
  */
 interface SVGTSpanElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTextContentElement
  * @ntsIs nts_dom_is 477
  */
 interface SVGTextContentElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTextElement
  * @ntsIs nts_dom_is 478
  */
 interface SVGTextElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTextPathElement
  * @ntsIs nts_dom_is 479
  */
 interface SVGTextPathElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTextPositioningElement
  * @ntsIs nts_dom_is 480
  */
 interface SVGTextPositioningElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGTitleElement
  * @ntsIs nts_dom_is 481
  */
 interface SVGTitleElement {}
 /**
+ * @ntsBoundBy "nts:dom" SVGTransform
  * @ntsIs nts_dom_is 482
  */
 interface SVGTransform {}
 /**
+ * @ntsBoundBy "nts:dom" SVGTransformList
  * @ntsIs nts_dom_is 483
  */
 interface SVGTransformList {}
 /**
+ * @ntsBoundBy "nts:dom" SVGUnitTypes
  * @ntsIs nts_dom_is 484
  */
 interface SVGUnitTypes {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGUseElement
  * @ntsIs nts_dom_is 485
  */
 interface SVGUseElement {}
 /**
- * @ntsBoundBy "nts:dom" Element
+ * @ntsBoundBy "nts:dom" SVGViewElement
  * @ntsIs nts_dom_is 486
  */
 interface SVGViewElement {}

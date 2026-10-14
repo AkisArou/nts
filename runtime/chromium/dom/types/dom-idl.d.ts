@@ -3631,6 +3631,14 @@ declare module "nts:dom" {
      */
     _set_onwebkitfullscreenerror_null(this: Document): void;
     /**
+     * @ntsSymbol nts_dom_Document_get_rootElement
+     */
+    _get_rootElement(this: Document): SVGSVGElement;
+    /**
+     * @ntsGet _get_rootElement
+     */
+    readonly rootElement: SVGSVGElement;
+    /**
      * @ntsSymbol nts_dom_Document_get_onabort
      */
     _get_onabort(this: Document): Closure<(event: Event) => void> | null;
@@ -25883,6 +25891,12 @@ declare module "nts:dom" {
      */
     createPattern(this: CanvasRenderingContext2D, image: HTMLVideoElement, repetitionType: StringView, error?: Ptr<DOMException | null>): CanvasPattern | null;
     /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_createPattern_SVGImageElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createPattern(this: CanvasRenderingContext2D, image: SVGImageElement, repetitionType: StringView, error?: Ptr<DOMException | null>): CanvasPattern | null;
+    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_createRadialGradient
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -25915,6 +25929,12 @@ declare module "nts:dom" {
      */
     drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_3_SVGImageElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    drawImage(this: CanvasRenderingContext2D, image: SVGImageElement, x: Float64, y: Float64, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLCanvasElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -25933,6 +25953,12 @@ declare module "nts:dom" {
      */
     drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, x: Float64, y: Float64, width: Float64, height: Float64, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_5_SVGImageElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    drawImage(this: CanvasRenderingContext2D, image: SVGImageElement, x: Float64, y: Float64, width: Float64, height: Float64, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLCanvasElement
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -25950,6 +25976,12 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     drawImage(this: CanvasRenderingContext2D, image: HTMLVideoElement, sx: Float64, sy: Float64, sw: Float64, sh: Float64, dx: Float64, dy: Float64, dw: Float64, dh: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_drawImage_9_SVGImageElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    drawImage(this: CanvasRenderingContext2D, image: SVGImageElement, sx: Float64, sy: Float64, sw: Float64, sh: Float64, dx: Float64, dy: Float64, dw: Float64, dh: Float64, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_ellipse_8
      * @ntsThrows error nts_dom_exception_take_message
@@ -26006,6 +26038,10 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     getImageData(this: CanvasRenderingContext2D, sx: Float64, sy: Float64, sw: Float64, sh: Float64, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+    /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_getTransform
+     */
+    getTransform(this: CanvasRenderingContext2D): DOMMatrix;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_isContextLost
      */
@@ -35158,6 +35194,6854 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_StorageEvent_1
    */
   export function newStorageEvent(type: StringView): StorageEvent;
+  export interface DOMMatrixReadOnlyOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_a
+     */
+    _get_a(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_a
+     */
+    readonly a: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_b
+     */
+    _get_b(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_b
+     */
+    readonly b: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_c
+     */
+    _get_c(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_c
+     */
+    readonly c: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_d
+     */
+    _get_d(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_d
+     */
+    readonly d: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_e
+     */
+    _get_e(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_e
+     */
+    readonly e: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_f
+     */
+    _get_f(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_f
+     */
+    readonly f: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m11
+     */
+    _get_m11(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m11
+     */
+    readonly m11: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m12
+     */
+    _get_m12(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m12
+     */
+    readonly m12: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m13
+     */
+    _get_m13(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m13
+     */
+    readonly m13: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m14
+     */
+    _get_m14(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m14
+     */
+    readonly m14: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m21
+     */
+    _get_m21(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m21
+     */
+    readonly m21: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m22
+     */
+    _get_m22(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m22
+     */
+    readonly m22: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m23
+     */
+    _get_m23(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m23
+     */
+    readonly m23: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m24
+     */
+    _get_m24(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m24
+     */
+    readonly m24: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m31
+     */
+    _get_m31(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m31
+     */
+    readonly m31: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m32
+     */
+    _get_m32(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m32
+     */
+    readonly m32: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m33
+     */
+    _get_m33(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m33
+     */
+    readonly m33: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m34
+     */
+    _get_m34(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m34
+     */
+    readonly m34: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m41
+     */
+    _get_m41(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m41
+     */
+    readonly m41: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m42
+     */
+    _get_m42(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m42
+     */
+    readonly m42: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m43
+     */
+    _get_m43(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m43
+     */
+    readonly m43: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_m44
+     */
+    _get_m44(this: DOMMatrixReadOnly): Float64;
+    /**
+     * @ntsGet _get_m44
+     */
+    readonly m44: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_is2D
+     */
+    _get_is2D(this: DOMMatrixReadOnly): boolean;
+    /**
+     * @ntsGet _get_is2D
+     */
+    readonly is2D: boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_get_isIdentity
+     */
+    _get_isIdentity(this: DOMMatrixReadOnly): boolean;
+    /**
+     * @ntsGet _get_isIdentity
+     */
+    readonly isIdentity: boolean;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_flipX
+     */
+    flipX(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_flipY
+     */
+    flipY(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_inverse
+     */
+    inverse(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiply(this: DOMMatrixReadOnly, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiply(this: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotate_3
+     */
+    rotate(this: DOMMatrixReadOnly, rotX: Float64, rotY: Float64, rotZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotate_2
+     */
+    rotate(this: DOMMatrixReadOnly, rotX: Float64, rotY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotate_1
+     */
+    rotate(this: DOMMatrixReadOnly, rotX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotate_0
+     */
+    rotate(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateAxisAngle_4
+     */
+    rotateAxisAngle(this: DOMMatrixReadOnly, x: Float64, y: Float64, z: Float64, angle: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateAxisAngle_3
+     */
+    rotateAxisAngle(this: DOMMatrixReadOnly, x: Float64, y: Float64, z: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateAxisAngle_2
+     */
+    rotateAxisAngle(this: DOMMatrixReadOnly, x: Float64, y: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateAxisAngle_1
+     */
+    rotateAxisAngle(this: DOMMatrixReadOnly, x: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateAxisAngle_0
+     */
+    rotateAxisAngle(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateFromVector_2
+     */
+    rotateFromVector(this: DOMMatrixReadOnly, x: Float64, y: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateFromVector_1
+     */
+    rotateFromVector(this: DOMMatrixReadOnly, x: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_rotateFromVector_0
+     */
+    rotateFromVector(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_6
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64, originY: Float64, originZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_5
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64, originY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_4
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_3
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64, scaleZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_2
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_1
+     */
+    scale(this: DOMMatrixReadOnly, scaleX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale_0
+     */
+    scale(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale3d_4
+     */
+    scale3d(this: DOMMatrixReadOnly, scale: Float64, originX: Float64, originY: Float64, originZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale3d_3
+     */
+    scale3d(this: DOMMatrixReadOnly, scale: Float64, originX: Float64, originY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale3d_2
+     */
+    scale3d(this: DOMMatrixReadOnly, scale: Float64, originX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale3d_1
+     */
+    scale3d(this: DOMMatrixReadOnly, scale: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scale3d_0
+     */
+    scale3d(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scaleNonUniform_2
+     */
+    scaleNonUniform(this: DOMMatrixReadOnly, scaleX: Float64, scaleY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scaleNonUniform_1
+     */
+    scaleNonUniform(this: DOMMatrixReadOnly, scaleX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_scaleNonUniform_0
+     */
+    scaleNonUniform(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_skewX_1
+     */
+    skewX(this: DOMMatrixReadOnly, sx: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_skewX_0
+     */
+    skewX(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_skewY_1
+     */
+    skewY(this: DOMMatrixReadOnly, sy: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_skewY_0
+     */
+    skewY(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_transformPoint_1
+     */
+    transformPoint(this: DOMMatrixReadOnly, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_transformPoint_0
+     */
+    transformPoint(this: DOMMatrixReadOnly): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_translate_3
+     */
+    translate(this: DOMMatrixReadOnly, tx: Float64, ty: Float64, tz: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_translate_2
+     */
+    translate(this: DOMMatrixReadOnly, tx: Float64, ty: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_translate_1
+     */
+    translate(this: DOMMatrixReadOnly, tx: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_translate_0
+     */
+    translate(this: DOMMatrixReadOnly): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_toString
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toString(this: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): StringView;
+  }
+  export type DOMMatrixReadOnlyMethods = DOMMatrixReadOnlyOwnMethods;
+  export type DOMMatrixReadOnly = HostClass<"NtsDomDOMMatrixReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMMatrixReadOnlyMethods;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrixReadOnly_fromMatrix(other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrixReadOnly_fromMatrix(error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMMatrixReadOnly_1_string
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newDOMMatrixReadOnly(init: StringView, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  /**
+   * @ntsSymbol nts_dom_new_DOMMatrixReadOnly_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newDOMMatrixReadOnly(error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  export interface DOMMatrixOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_a
+     */
+    _get_a(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_a
+     */
+    _set_a(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_a
+     * @ntsSet _set_a
+     */
+    a: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_b
+     */
+    _get_b(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_b
+     */
+    _set_b(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_b
+     * @ntsSet _set_b
+     */
+    b: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_c
+     */
+    _get_c(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_c
+     */
+    _set_c(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_c
+     * @ntsSet _set_c
+     */
+    c: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_d
+     */
+    _get_d(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_d
+     */
+    _set_d(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_d
+     * @ntsSet _set_d
+     */
+    d: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_e
+     */
+    _get_e(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_e
+     */
+    _set_e(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_e
+     * @ntsSet _set_e
+     */
+    e: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_f
+     */
+    _get_f(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_f
+     */
+    _set_f(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_f
+     * @ntsSet _set_f
+     */
+    f: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m11
+     */
+    _get_m11(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m11
+     */
+    _set_m11(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m11
+     * @ntsSet _set_m11
+     */
+    m11: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m12
+     */
+    _get_m12(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m12
+     */
+    _set_m12(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m12
+     * @ntsSet _set_m12
+     */
+    m12: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m13
+     */
+    _get_m13(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m13
+     */
+    _set_m13(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m13
+     * @ntsSet _set_m13
+     */
+    m13: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m14
+     */
+    _get_m14(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m14
+     */
+    _set_m14(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m14
+     * @ntsSet _set_m14
+     */
+    m14: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m21
+     */
+    _get_m21(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m21
+     */
+    _set_m21(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m21
+     * @ntsSet _set_m21
+     */
+    m21: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m22
+     */
+    _get_m22(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m22
+     */
+    _set_m22(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m22
+     * @ntsSet _set_m22
+     */
+    m22: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m23
+     */
+    _get_m23(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m23
+     */
+    _set_m23(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m23
+     * @ntsSet _set_m23
+     */
+    m23: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m24
+     */
+    _get_m24(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m24
+     */
+    _set_m24(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m24
+     * @ntsSet _set_m24
+     */
+    m24: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m31
+     */
+    _get_m31(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m31
+     */
+    _set_m31(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m31
+     * @ntsSet _set_m31
+     */
+    m31: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m32
+     */
+    _get_m32(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m32
+     */
+    _set_m32(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m32
+     * @ntsSet _set_m32
+     */
+    m32: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m33
+     */
+    _get_m33(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m33
+     */
+    _set_m33(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m33
+     * @ntsSet _set_m33
+     */
+    m33: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m34
+     */
+    _get_m34(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m34
+     */
+    _set_m34(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m34
+     * @ntsSet _set_m34
+     */
+    m34: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m41
+     */
+    _get_m41(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m41
+     */
+    _set_m41(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m41
+     * @ntsSet _set_m41
+     */
+    m41: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m42
+     */
+    _get_m42(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m42
+     */
+    _set_m42(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m42
+     * @ntsSet _set_m42
+     */
+    m42: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m43
+     */
+    _get_m43(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m43
+     */
+    _set_m43(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m43
+     * @ntsSet _set_m43
+     */
+    m43: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_get_m44
+     */
+    _get_m44(this: DOMMatrix): Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_set_m44
+     */
+    _set_m44(this: DOMMatrix, value: Float64): void;
+    /**
+     * @ntsGet _get_m44
+     * @ntsSet _set_m44
+     */
+    m44: Float64;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_invertSelf
+     */
+    invertSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiplySelf(this: DOMMatrix, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiplySelf(this: DOMMatrix, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    preMultiplySelf(this: DOMMatrix, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    preMultiplySelf(this: DOMMatrix, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateAxisAngleSelf_4
+     */
+    rotateAxisAngleSelf(this: DOMMatrix, x: Float64, y: Float64, z: Float64, angle: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateAxisAngleSelf_3
+     */
+    rotateAxisAngleSelf(this: DOMMatrix, x: Float64, y: Float64, z: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateAxisAngleSelf_2
+     */
+    rotateAxisAngleSelf(this: DOMMatrix, x: Float64, y: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateAxisAngleSelf_1
+     */
+    rotateAxisAngleSelf(this: DOMMatrix, x: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateAxisAngleSelf_0
+     */
+    rotateAxisAngleSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateFromVectorSelf_2
+     */
+    rotateFromVectorSelf(this: DOMMatrix, x: Float64, y: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateFromVectorSelf_1
+     */
+    rotateFromVectorSelf(this: DOMMatrix, x: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateFromVectorSelf_0
+     */
+    rotateFromVectorSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateSelf_3
+     */
+    rotateSelf(this: DOMMatrix, rotX: Float64, rotY: Float64, rotZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateSelf_2
+     */
+    rotateSelf(this: DOMMatrix, rotX: Float64, rotY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateSelf_1
+     */
+    rotateSelf(this: DOMMatrix, rotX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_rotateSelf_0
+     */
+    rotateSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scale3dSelf_4
+     */
+    scale3dSelf(this: DOMMatrix, scale: Float64, originX: Float64, originY: Float64, originZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scale3dSelf_3
+     */
+    scale3dSelf(this: DOMMatrix, scale: Float64, originX: Float64, originY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scale3dSelf_2
+     */
+    scale3dSelf(this: DOMMatrix, scale: Float64, originX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scale3dSelf_1
+     */
+    scale3dSelf(this: DOMMatrix, scale: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scale3dSelf_0
+     */
+    scale3dSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_6
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64, originY: Float64, originZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_5
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64, originY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_4
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64, scaleY: Float64, scaleZ: Float64, originX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_3
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64, scaleY: Float64, scaleZ: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_2
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64, scaleY: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_1
+     */
+    scaleSelf(this: DOMMatrix, scaleX: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_scaleSelf_0
+     */
+    scaleSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_setMatrixValue
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setMatrixValue(this: DOMMatrix, transformList: StringView, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_skewXSelf_1
+     */
+    skewXSelf(this: DOMMatrix, sx: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_skewXSelf_0
+     */
+    skewXSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_skewYSelf_1
+     */
+    skewYSelf(this: DOMMatrix, sy: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_skewYSelf_0
+     */
+    skewYSelf(this: DOMMatrix): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_translateSelf_3
+     */
+    translateSelf(this: DOMMatrix, tx: Float64, ty: Float64, tz: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_translateSelf_2
+     */
+    translateSelf(this: DOMMatrix, tx: Float64, ty: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_translateSelf_1
+     */
+    translateSelf(this: DOMMatrix, tx: Float64): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_translateSelf_0
+     */
+    translateSelf(this: DOMMatrix): DOMMatrix;
+  }
+  export type DOMMatrixMethods = DOMMatrixOwnMethods & DOMMatrixReadOnlyMethods;
+  export type DOMMatrix = HostClass<"NtsDomDOMMatrix", DOMMatrixReadOnly> & DOMMatrixMethods;
+  /** @ntsSymbol nts_dom_as_DOMMatrix */
+  export function asDOMMatrix(object: DOMMatrixReadOnly): DOMMatrix | null;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_1
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrix_fromMatrix(other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrix_fromMatrix(error?: Ptr<DOMException | null>): DOMMatrix;
+  /**
+   * @ntsSymbol nts_dom_new_DOMMatrix_1_string
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newDOMMatrix(init: StringView, error?: Ptr<DOMException | null>): DOMMatrix;
+  /**
+   * @ntsSymbol nts_dom_new_DOMMatrix_0
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newDOMMatrix(error?: Ptr<DOMException | null>): DOMMatrix;
+  export interface SVGElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_className
+     */
+    _get_className(this: SVGElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_className
+     */
+    readonly className: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ownerSVGElement
+     */
+    _get_ownerSVGElement(this: SVGElement): SVGSVGElement | null;
+    /**
+     * @ntsGet _get_ownerSVGElement
+     */
+    readonly ownerSVGElement: SVGSVGElement | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_viewportElement
+     */
+    _get_viewportElement(this: SVGElement): SVGElement | null;
+    /**
+     * @ntsGet _get_viewportElement
+     */
+    readonly viewportElement: SVGElement | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onabort
+     */
+    _get_onabort(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onabort */
+    readonly onabort: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onabort_void
+     */
+    _set_onabort_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onabort_boolean
+     */
+    _set_onabort_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onabort_null
+     */
+    _set_onabort_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onbeforeinput
+     */
+    _get_onbeforeinput(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforeinput */
+    readonly onbeforeinput: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforeinput_void
+     */
+    _set_onbeforeinput_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforeinput_boolean
+     */
+    _set_onbeforeinput_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforeinput_null
+     */
+    _set_onbeforeinput_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onbeforematch
+     */
+    _get_onbeforematch(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforematch */
+    readonly onbeforematch: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforematch_void
+     */
+    _set_onbeforematch_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforematch_boolean
+     */
+    _set_onbeforematch_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforematch_null
+     */
+    _set_onbeforematch_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onbeforetoggle
+     */
+    _get_onbeforetoggle(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbeforetoggle */
+    readonly onbeforetoggle: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforetoggle_void
+     */
+    _set_onbeforetoggle_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforetoggle_boolean
+     */
+    _set_onbeforetoggle_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onbeforetoggle_null
+     */
+    _set_onbeforetoggle_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onblur
+     */
+    _get_onblur(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onblur */
+    readonly onblur: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onblur_void
+     */
+    _set_onblur_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onblur_boolean
+     */
+    _set_onblur_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onblur_null
+     */
+    _set_onblur_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncancel
+     */
+    _get_oncancel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncancel */
+    readonly oncancel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncancel_void
+     */
+    _set_oncancel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncancel_boolean
+     */
+    _set_oncancel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncancel_null
+     */
+    _set_oncancel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncanplay
+     */
+    _get_oncanplay(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplay */
+    readonly oncanplay: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplay_void
+     */
+    _set_oncanplay_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplay_boolean
+     */
+    _set_oncanplay_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplay_null
+     */
+    _set_oncanplay_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncanplaythrough
+     */
+    _get_oncanplaythrough(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncanplaythrough */
+    readonly oncanplaythrough: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplaythrough_void
+     */
+    _set_oncanplaythrough_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplaythrough_boolean
+     */
+    _set_oncanplaythrough_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncanplaythrough_null
+     */
+    _set_oncanplaythrough_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onchange
+     */
+    _get_onchange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onchange */
+    readonly onchange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onchange_void
+     */
+    _set_onchange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onchange_boolean
+     */
+    _set_onchange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onchange_null
+     */
+    _set_onchange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onclick
+     */
+    _get_onclick(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclick */
+    readonly onclick: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclick_void
+     */
+    _set_onclick_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclick_boolean
+     */
+    _set_onclick_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclick_null
+     */
+    _set_onclick_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onclose
+     */
+    _get_onclose(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onclose */
+    readonly onclose: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclose_void
+     */
+    _set_onclose_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclose_boolean
+     */
+    _set_onclose_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onclose_null
+     */
+    _set_onclose_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncommand
+     */
+    _get_oncommand(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncommand */
+    readonly oncommand: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncommand_void
+     */
+    _set_oncommand_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncommand_boolean
+     */
+    _set_oncommand_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncommand_null
+     */
+    _set_oncommand_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncontentvisibilityautostatechange
+     */
+    _get_oncontentvisibilityautostatechange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontentvisibilityautostatechange */
+    readonly oncontentvisibilityautostatechange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontentvisibilityautostatechange_void
+     */
+    _set_oncontentvisibilityautostatechange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontentvisibilityautostatechange_boolean
+     */
+    _set_oncontentvisibilityautostatechange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontentvisibilityautostatechange_null
+     */
+    _set_oncontentvisibilityautostatechange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncontextlost
+     */
+    _get_oncontextlost(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextlost */
+    readonly oncontextlost: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextlost_void
+     */
+    _set_oncontextlost_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextlost_boolean
+     */
+    _set_oncontextlost_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextlost_null
+     */
+    _set_oncontextlost_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncontextmenu
+     */
+    _get_oncontextmenu(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextmenu */
+    readonly oncontextmenu: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextmenu_void
+     */
+    _set_oncontextmenu_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextmenu_boolean
+     */
+    _set_oncontextmenu_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextmenu_null
+     */
+    _set_oncontextmenu_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncontextrestored
+     */
+    _get_oncontextrestored(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncontextrestored */
+    readonly oncontextrestored: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextrestored_void
+     */
+    _set_oncontextrestored_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextrestored_boolean
+     */
+    _set_oncontextrestored_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncontextrestored_null
+     */
+    _set_oncontextrestored_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncuechange
+     */
+    _get_oncuechange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncuechange */
+    readonly oncuechange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncuechange_void
+     */
+    _set_oncuechange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncuechange_boolean
+     */
+    _set_oncuechange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncuechange_null
+     */
+    _set_oncuechange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondblclick
+     */
+    _get_ondblclick(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondblclick */
+    readonly ondblclick: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondblclick_void
+     */
+    _set_ondblclick_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondblclick_boolean
+     */
+    _set_ondblclick_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondblclick_null
+     */
+    _set_ondblclick_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondrag
+     */
+    _get_ondrag(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrag */
+    readonly ondrag: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrag_void
+     */
+    _set_ondrag_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrag_boolean
+     */
+    _set_ondrag_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrag_null
+     */
+    _set_ondrag_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondragend
+     */
+    _get_ondragend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragend */
+    readonly ondragend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragend_void
+     */
+    _set_ondragend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragend_boolean
+     */
+    _set_ondragend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragend_null
+     */
+    _set_ondragend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondragenter
+     */
+    _get_ondragenter(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragenter */
+    readonly ondragenter: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragenter_void
+     */
+    _set_ondragenter_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragenter_boolean
+     */
+    _set_ondragenter_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragenter_null
+     */
+    _set_ondragenter_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondragleave
+     */
+    _get_ondragleave(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragleave */
+    readonly ondragleave: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragleave_void
+     */
+    _set_ondragleave_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragleave_boolean
+     */
+    _set_ondragleave_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragleave_null
+     */
+    _set_ondragleave_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondragover
+     */
+    _get_ondragover(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragover */
+    readonly ondragover: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragover_void
+     */
+    _set_ondragover_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragover_boolean
+     */
+    _set_ondragover_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragover_null
+     */
+    _set_ondragover_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondragstart
+     */
+    _get_ondragstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondragstart */
+    readonly ondragstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragstart_void
+     */
+    _set_ondragstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragstart_boolean
+     */
+    _set_ondragstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondragstart_null
+     */
+    _set_ondragstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondrop
+     */
+    _get_ondrop(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondrop */
+    readonly ondrop: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrop_void
+     */
+    _set_ondrop_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrop_boolean
+     */
+    _set_ondrop_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondrop_null
+     */
+    _set_ondrop_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ondurationchange
+     */
+    _get_ondurationchange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ondurationchange */
+    readonly ondurationchange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondurationchange_void
+     */
+    _set_ondurationchange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondurationchange_boolean
+     */
+    _set_ondurationchange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ondurationchange_null
+     */
+    _set_ondurationchange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onemptied
+     */
+    _get_onemptied(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onemptied */
+    readonly onemptied: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onemptied_void
+     */
+    _set_onemptied_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onemptied_boolean
+     */
+    _set_onemptied_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onemptied_null
+     */
+    _set_onemptied_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onended
+     */
+    _get_onended(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onended */
+    readonly onended: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onended_void
+     */
+    _set_onended_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onended_boolean
+     */
+    _set_onended_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onended_null
+     */
+    _set_onended_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onfocus
+     */
+    _get_onfocus(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onfocus */
+    readonly onfocus: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onfocus_void
+     */
+    _set_onfocus_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onfocus_boolean
+     */
+    _set_onfocus_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onfocus_null
+     */
+    _set_onfocus_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onformdata
+     */
+    _get_onformdata(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onformdata */
+    readonly onformdata: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onformdata_void
+     */
+    _set_onformdata_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onformdata_boolean
+     */
+    _set_onformdata_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onformdata_null
+     */
+    _set_onformdata_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oninput
+     */
+    _get_oninput(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninput */
+    readonly oninput: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninput_void
+     */
+    _set_oninput_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninput_boolean
+     */
+    _set_oninput_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninput_null
+     */
+    _set_oninput_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oninvalid
+     */
+    _get_oninvalid(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oninvalid */
+    readonly oninvalid: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninvalid_void
+     */
+    _set_oninvalid_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninvalid_boolean
+     */
+    _set_oninvalid_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oninvalid_null
+     */
+    _set_oninvalid_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onkeydown
+     */
+    _get_onkeydown(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeydown */
+    readonly onkeydown: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeydown_void
+     */
+    _set_onkeydown_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeydown_boolean
+     */
+    _set_onkeydown_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeydown_null
+     */
+    _set_onkeydown_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onkeypress
+     */
+    _get_onkeypress(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeypress */
+    readonly onkeypress: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeypress_void
+     */
+    _set_onkeypress_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeypress_boolean
+     */
+    _set_onkeypress_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeypress_null
+     */
+    _set_onkeypress_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onkeyup
+     */
+    _get_onkeyup(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onkeyup */
+    readonly onkeyup: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeyup_void
+     */
+    _set_onkeyup_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeyup_boolean
+     */
+    _set_onkeyup_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onkeyup_null
+     */
+    _set_onkeyup_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onload
+     */
+    _get_onload(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onload */
+    readonly onload: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onload_void
+     */
+    _set_onload_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onload_boolean
+     */
+    _set_onload_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onload_null
+     */
+    _set_onload_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onloadeddata
+     */
+    _get_onloadeddata(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadeddata */
+    readonly onloadeddata: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadeddata_void
+     */
+    _set_onloadeddata_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadeddata_boolean
+     */
+    _set_onloadeddata_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadeddata_null
+     */
+    _set_onloadeddata_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onloadedmetadata
+     */
+    _get_onloadedmetadata(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadedmetadata */
+    readonly onloadedmetadata: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadedmetadata_void
+     */
+    _set_onloadedmetadata_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadedmetadata_boolean
+     */
+    _set_onloadedmetadata_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadedmetadata_null
+     */
+    _set_onloadedmetadata_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onloadstart
+     */
+    _get_onloadstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onloadstart */
+    readonly onloadstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadstart_void
+     */
+    _set_onloadstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadstart_boolean
+     */
+    _set_onloadstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onloadstart_null
+     */
+    _set_onloadstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmousedown
+     */
+    _get_onmousedown(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousedown */
+    readonly onmousedown: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousedown_void
+     */
+    _set_onmousedown_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousedown_boolean
+     */
+    _set_onmousedown_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousedown_null
+     */
+    _set_onmousedown_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmouseenter
+     */
+    _get_onmouseenter(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseenter */
+    readonly onmouseenter: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseenter_void
+     */
+    _set_onmouseenter_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseenter_boolean
+     */
+    _set_onmouseenter_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseenter_null
+     */
+    _set_onmouseenter_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmouseleave
+     */
+    _get_onmouseleave(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseleave */
+    readonly onmouseleave: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseleave_void
+     */
+    _set_onmouseleave_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseleave_boolean
+     */
+    _set_onmouseleave_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseleave_null
+     */
+    _set_onmouseleave_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmousemove
+     */
+    _get_onmousemove(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousemove */
+    readonly onmousemove: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousemove_void
+     */
+    _set_onmousemove_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousemove_boolean
+     */
+    _set_onmousemove_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousemove_null
+     */
+    _set_onmousemove_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmouseout
+     */
+    _get_onmouseout(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseout */
+    readonly onmouseout: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseout_void
+     */
+    _set_onmouseout_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseout_boolean
+     */
+    _set_onmouseout_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseout_null
+     */
+    _set_onmouseout_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmouseover
+     */
+    _get_onmouseover(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseover */
+    readonly onmouseover: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseover_void
+     */
+    _set_onmouseover_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseover_boolean
+     */
+    _set_onmouseover_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseover_null
+     */
+    _set_onmouseover_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmouseup
+     */
+    _get_onmouseup(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmouseup */
+    readonly onmouseup: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseup_void
+     */
+    _set_onmouseup_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseup_boolean
+     */
+    _set_onmouseup_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmouseup_null
+     */
+    _set_onmouseup_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onmousewheel
+     */
+    _get_onmousewheel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onmousewheel */
+    readonly onmousewheel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousewheel_void
+     */
+    _set_onmousewheel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousewheel_boolean
+     */
+    _set_onmousewheel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onmousewheel_null
+     */
+    _set_onmousewheel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpause
+     */
+    _get_onpause(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpause */
+    readonly onpause: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpause_void
+     */
+    _set_onpause_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpause_boolean
+     */
+    _set_onpause_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpause_null
+     */
+    _set_onpause_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onplay
+     */
+    _get_onplay(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplay */
+    readonly onplay: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplay_void
+     */
+    _set_onplay_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplay_boolean
+     */
+    _set_onplay_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplay_null
+     */
+    _set_onplay_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onplaying
+     */
+    _get_onplaying(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onplaying */
+    readonly onplaying: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplaying_void
+     */
+    _set_onplaying_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplaying_boolean
+     */
+    _set_onplaying_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onplaying_null
+     */
+    _set_onplaying_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onprogress
+     */
+    _get_onprogress(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onprogress */
+    readonly onprogress: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onprogress_void
+     */
+    _set_onprogress_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onprogress_boolean
+     */
+    _set_onprogress_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onprogress_null
+     */
+    _set_onprogress_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onratechange
+     */
+    _get_onratechange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onratechange */
+    readonly onratechange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onratechange_void
+     */
+    _set_onratechange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onratechange_boolean
+     */
+    _set_onratechange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onratechange_null
+     */
+    _set_onratechange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onreset
+     */
+    _get_onreset(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onreset */
+    readonly onreset: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onreset_void
+     */
+    _set_onreset_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onreset_boolean
+     */
+    _set_onreset_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onreset_null
+     */
+    _set_onreset_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onresize
+     */
+    _get_onresize(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onresize */
+    readonly onresize: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onresize_void
+     */
+    _set_onresize_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onresize_boolean
+     */
+    _set_onresize_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onresize_null
+     */
+    _set_onresize_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onscroll
+     */
+    _get_onscroll(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscroll */
+    readonly onscroll: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscroll_void
+     */
+    _set_onscroll_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscroll_boolean
+     */
+    _set_onscroll_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscroll_null
+     */
+    _set_onscroll_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onscrollend
+     */
+    _get_onscrollend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollend */
+    readonly onscrollend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollend_void
+     */
+    _set_onscrollend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollend_boolean
+     */
+    _set_onscrollend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollend_null
+     */
+    _set_onscrollend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onsecuritypolicyviolation
+     */
+    _get_onsecuritypolicyviolation(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsecuritypolicyviolation */
+    readonly onsecuritypolicyviolation: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsecuritypolicyviolation_void
+     */
+    _set_onsecuritypolicyviolation_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsecuritypolicyviolation_boolean
+     */
+    _set_onsecuritypolicyviolation_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsecuritypolicyviolation_null
+     */
+    _set_onsecuritypolicyviolation_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onseeked
+     */
+    _get_onseeked(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeked */
+    readonly onseeked: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeked_void
+     */
+    _set_onseeked_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeked_boolean
+     */
+    _set_onseeked_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeked_null
+     */
+    _set_onseeked_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onseeking
+     */
+    _get_onseeking(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onseeking */
+    readonly onseeking: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeking_void
+     */
+    _set_onseeking_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeking_boolean
+     */
+    _set_onseeking_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onseeking_null
+     */
+    _set_onseeking_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onselect
+     */
+    _get_onselect(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselect */
+    readonly onselect: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselect_void
+     */
+    _set_onselect_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselect_boolean
+     */
+    _set_onselect_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselect_null
+     */
+    _set_onselect_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onslotchange
+     */
+    _get_onslotchange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onslotchange */
+    readonly onslotchange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onslotchange_void
+     */
+    _set_onslotchange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onslotchange_boolean
+     */
+    _set_onslotchange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onslotchange_null
+     */
+    _set_onslotchange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onscrollsnapchange
+     */
+    _get_onscrollsnapchange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchange */
+    readonly onscrollsnapchange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchange_void
+     */
+    _set_onscrollsnapchange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchange_boolean
+     */
+    _set_onscrollsnapchange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchange_null
+     */
+    _set_onscrollsnapchange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onscrollsnapchanging
+     */
+    _get_onscrollsnapchanging(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onscrollsnapchanging */
+    readonly onscrollsnapchanging: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchanging_void
+     */
+    _set_onscrollsnapchanging_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchanging_boolean
+     */
+    _set_onscrollsnapchanging_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onscrollsnapchanging_null
+     */
+    _set_onscrollsnapchanging_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onstalled
+     */
+    _get_onstalled(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onstalled */
+    readonly onstalled: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onstalled_void
+     */
+    _set_onstalled_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onstalled_boolean
+     */
+    _set_onstalled_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onstalled_null
+     */
+    _set_onstalled_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onsubmit
+     */
+    _get_onsubmit(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsubmit */
+    readonly onsubmit: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsubmit_void
+     */
+    _set_onsubmit_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsubmit_boolean
+     */
+    _set_onsubmit_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsubmit_null
+     */
+    _set_onsubmit_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onsuspend
+     */
+    _get_onsuspend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onsuspend */
+    readonly onsuspend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsuspend_void
+     */
+    _set_onsuspend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsuspend_boolean
+     */
+    _set_onsuspend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onsuspend_null
+     */
+    _set_onsuspend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontimeupdate
+     */
+    _get_ontimeupdate(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontimeupdate */
+    readonly ontimeupdate: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontimeupdate_void
+     */
+    _set_ontimeupdate_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontimeupdate_boolean
+     */
+    _set_ontimeupdate_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontimeupdate_null
+     */
+    _set_ontimeupdate_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontoggle
+     */
+    _get_ontoggle(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontoggle */
+    readonly ontoggle: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontoggle_void
+     */
+    _set_ontoggle_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontoggle_boolean
+     */
+    _set_ontoggle_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontoggle_null
+     */
+    _set_ontoggle_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onvolumechange
+     */
+    _get_onvolumechange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onvolumechange */
+    readonly onvolumechange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onvolumechange_void
+     */
+    _set_onvolumechange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onvolumechange_boolean
+     */
+    _set_onvolumechange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onvolumechange_null
+     */
+    _set_onvolumechange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwaiting
+     */
+    _get_onwaiting(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwaiting */
+    readonly onwaiting: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwaiting_void
+     */
+    _set_onwaiting_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwaiting_boolean
+     */
+    _set_onwaiting_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwaiting_null
+     */
+    _set_onwaiting_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwebkitanimationend
+     */
+    _get_onwebkitanimationend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationend */
+    readonly onwebkitanimationend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationend_void
+     */
+    _set_onwebkitanimationend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationend_boolean
+     */
+    _set_onwebkitanimationend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationend_null
+     */
+    _set_onwebkitanimationend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwebkitanimationiteration
+     */
+    _get_onwebkitanimationiteration(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationiteration */
+    readonly onwebkitanimationiteration: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationiteration_void
+     */
+    _set_onwebkitanimationiteration_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationiteration_boolean
+     */
+    _set_onwebkitanimationiteration_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationiteration_null
+     */
+    _set_onwebkitanimationiteration_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwebkitanimationstart
+     */
+    _get_onwebkitanimationstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkitanimationstart */
+    readonly onwebkitanimationstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationstart_void
+     */
+    _set_onwebkitanimationstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationstart_boolean
+     */
+    _set_onwebkitanimationstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkitanimationstart_null
+     */
+    _set_onwebkitanimationstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwebkittransitionend
+     */
+    _get_onwebkittransitionend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwebkittransitionend */
+    readonly onwebkittransitionend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkittransitionend_void
+     */
+    _set_onwebkittransitionend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkittransitionend_boolean
+     */
+    _set_onwebkittransitionend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwebkittransitionend_null
+     */
+    _set_onwebkittransitionend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onwheel
+     */
+    _get_onwheel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onwheel */
+    readonly onwheel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwheel_void
+     */
+    _set_onwheel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwheel_boolean
+     */
+    _set_onwheel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onwheel_null
+     */
+    _set_onwheel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onauxclick
+     */
+    _get_onauxclick(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onauxclick */
+    readonly onauxclick: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onauxclick_void
+     */
+    _set_onauxclick_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onauxclick_boolean
+     */
+    _set_onauxclick_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onauxclick_null
+     */
+    _set_onauxclick_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ongotpointercapture
+     */
+    _get_ongotpointercapture(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ongotpointercapture */
+    readonly ongotpointercapture: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ongotpointercapture_void
+     */
+    _set_ongotpointercapture_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ongotpointercapture_boolean
+     */
+    _set_ongotpointercapture_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ongotpointercapture_null
+     */
+    _set_ongotpointercapture_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onlostpointercapture
+     */
+    _get_onlostpointercapture(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onlostpointercapture */
+    readonly onlostpointercapture: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onlostpointercapture_void
+     */
+    _set_onlostpointercapture_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onlostpointercapture_boolean
+     */
+    _set_onlostpointercapture_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onlostpointercapture_null
+     */
+    _set_onlostpointercapture_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerdown
+     */
+    _get_onpointerdown(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerdown */
+    readonly onpointerdown: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerdown_void
+     */
+    _set_onpointerdown_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerdown_boolean
+     */
+    _set_onpointerdown_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerdown_null
+     */
+    _set_onpointerdown_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointermove
+     */
+    _get_onpointermove(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointermove */
+    readonly onpointermove: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointermove_void
+     */
+    _set_onpointermove_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointermove_boolean
+     */
+    _set_onpointermove_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointermove_null
+     */
+    _set_onpointermove_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerrawupdate
+     */
+    _get_onpointerrawupdate(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerrawupdate */
+    readonly onpointerrawupdate: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerrawupdate_void
+     */
+    _set_onpointerrawupdate_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerrawupdate_boolean
+     */
+    _set_onpointerrawupdate_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerrawupdate_null
+     */
+    _set_onpointerrawupdate_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerup
+     */
+    _get_onpointerup(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerup */
+    readonly onpointerup: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerup_void
+     */
+    _set_onpointerup_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerup_boolean
+     */
+    _set_onpointerup_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerup_null
+     */
+    _set_onpointerup_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointercancel
+     */
+    _get_onpointercancel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointercancel */
+    readonly onpointercancel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointercancel_void
+     */
+    _set_onpointercancel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointercancel_boolean
+     */
+    _set_onpointercancel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointercancel_null
+     */
+    _set_onpointercancel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerover
+     */
+    _get_onpointerover(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerover */
+    readonly onpointerover: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerover_void
+     */
+    _set_onpointerover_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerover_boolean
+     */
+    _set_onpointerover_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerover_null
+     */
+    _set_onpointerover_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerout
+     */
+    _get_onpointerout(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerout */
+    readonly onpointerout: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerout_void
+     */
+    _set_onpointerout_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerout_boolean
+     */
+    _set_onpointerout_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerout_null
+     */
+    _set_onpointerout_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerenter
+     */
+    _get_onpointerenter(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerenter */
+    readonly onpointerenter: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerenter_void
+     */
+    _set_onpointerenter_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerenter_boolean
+     */
+    _set_onpointerenter_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerenter_null
+     */
+    _set_onpointerenter_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpointerleave
+     */
+    _get_onpointerleave(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpointerleave */
+    readonly onpointerleave: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerleave_void
+     */
+    _set_onpointerleave_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerleave_boolean
+     */
+    _set_onpointerleave_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpointerleave_null
+     */
+    _set_onpointerleave_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onselectstart
+     */
+    _get_onselectstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectstart */
+    readonly onselectstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectstart_void
+     */
+    _set_onselectstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectstart_boolean
+     */
+    _set_onselectstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectstart_null
+     */
+    _set_onselectstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onselectionchange
+     */
+    _get_onselectionchange(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onselectionchange */
+    readonly onselectionchange: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectionchange_void
+     */
+    _set_onselectionchange_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectionchange_boolean
+     */
+    _set_onselectionchange_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onselectionchange_null
+     */
+    _set_onselectionchange_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onanimationcancel
+     */
+    _get_onanimationcancel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationcancel */
+    readonly onanimationcancel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationcancel_void
+     */
+    _set_onanimationcancel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationcancel_boolean
+     */
+    _set_onanimationcancel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationcancel_null
+     */
+    _set_onanimationcancel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onanimationend
+     */
+    _get_onanimationend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationend */
+    readonly onanimationend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationend_void
+     */
+    _set_onanimationend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationend_boolean
+     */
+    _set_onanimationend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationend_null
+     */
+    _set_onanimationend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onanimationiteration
+     */
+    _get_onanimationiteration(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationiteration */
+    readonly onanimationiteration: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationiteration_void
+     */
+    _set_onanimationiteration_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationiteration_boolean
+     */
+    _set_onanimationiteration_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationiteration_null
+     */
+    _set_onanimationiteration_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onanimationstart
+     */
+    _get_onanimationstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onanimationstart */
+    readonly onanimationstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationstart_void
+     */
+    _set_onanimationstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationstart_boolean
+     */
+    _set_onanimationstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onanimationstart_null
+     */
+    _set_onanimationstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontransitionrun
+     */
+    _get_ontransitionrun(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionrun */
+    readonly ontransitionrun: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionrun_void
+     */
+    _set_ontransitionrun_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionrun_boolean
+     */
+    _set_ontransitionrun_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionrun_null
+     */
+    _set_ontransitionrun_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontransitionstart
+     */
+    _get_ontransitionstart(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionstart */
+    readonly ontransitionstart: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionstart_void
+     */
+    _set_ontransitionstart_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionstart_boolean
+     */
+    _set_ontransitionstart_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionstart_null
+     */
+    _set_ontransitionstart_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontransitionend
+     */
+    _get_ontransitionend(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitionend */
+    readonly ontransitionend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionend_void
+     */
+    _set_ontransitionend_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionend_boolean
+     */
+    _set_ontransitionend_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitionend_null
+     */
+    _set_ontransitionend_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_ontransitioncancel
+     */
+    _get_ontransitioncancel(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_ontransitioncancel */
+    readonly ontransitioncancel: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitioncancel_void
+     */
+    _set_ontransitioncancel_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitioncancel_boolean
+     */
+    _set_ontransitioncancel_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_ontransitioncancel_null
+     */
+    _set_ontransitioncancel_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncopy
+     */
+    _get_oncopy(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncopy */
+    readonly oncopy: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncopy_void
+     */
+    _set_oncopy_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncopy_boolean
+     */
+    _set_oncopy_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncopy_null
+     */
+    _set_oncopy_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_oncut
+     */
+    _get_oncut(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_oncut */
+    readonly oncut: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncut_void
+     */
+    _set_oncut_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncut_boolean
+     */
+    _set_oncut_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_oncut_null
+     */
+    _set_oncut_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_onpaste
+     */
+    _get_onpaste(this: SVGElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onpaste */
+    readonly onpaste: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpaste_void
+     */
+    _set_onpaste_void(this: SVGElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpaste_boolean
+     */
+    _set_onpaste_boolean(this: SVGElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_onpaste_null
+     */
+    _set_onpaste_null(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_dataset
+     */
+    _get_dataset(this: SVGElement): DOMStringMap;
+    /**
+     * @ntsGet _get_dataset
+     */
+    readonly dataset: DOMStringMap;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_nonce
+     */
+    _get_nonce(this: SVGElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_nonce
+     */
+    _set_nonce(this: SVGElement, value: StringView): void;
+    /**
+     * @ntsGet _get_nonce
+     * @ntsSet _set_nonce
+     */
+    nonce: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_autofocus
+     */
+    _get_autofocus(this: SVGElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_autofocus
+     */
+    _set_autofocus(this: SVGElement, value: boolean): void;
+    /**
+     * @ntsGet _get_autofocus
+     * @ntsSet _set_autofocus
+     */
+    autofocus: boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_tabIndex
+     */
+    _get_tabIndex(this: SVGElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_tabIndex
+     */
+    _set_tabIndex(this: SVGElement, value: Float64): void;
+    /**
+     * @ntsGet _get_tabIndex
+     * @ntsSet _set_tabIndex
+     */
+    tabIndex: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_focusGroup
+     */
+    _get_focusGroup(this: SVGElement): DOMTokenList;
+    /**
+     * @ntsGet _get_focusGroup
+     */
+    readonly focusGroup: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_focusGroupStart
+     */
+    _get_focusGroupStart(this: SVGElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_set_focusGroupStart
+     */
+    _set_focusGroupStart(this: SVGElement, value: boolean): void;
+    /**
+     * @ntsGet _get_focusGroupStart
+     * @ntsSet _set_focusGroupStart
+     */
+    focusGroupStart: boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_get_style
+     */
+    _get_style(this: SVGElement): CSSStyleDeclaration;
+    /**
+     * @ntsGet _get_style
+     */
+    readonly style: CSSStyleDeclaration;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_blur
+     */
+    blur(this: SVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_focus_1
+     */
+    focus(this: SVGElement, options: ByValue<FocusOptions> | Fields<FocusOptions>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_focus_0
+     */
+    focus(this: SVGElement): void;
+  }
+  export type SVGElementMethods = SVGElementOwnMethods & ElementMethods;
+  export type SVGElement = HostClass<"NtsDomSVGElement", Element> & SVGElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGElement */
+  export function asSVGElement(node: Node): SVGElement | null;
+  export interface SVGGraphicsElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGGraphicsElement_get_transform
+     */
+    _get_transform(this: SVGGraphicsElement): SVGAnimatedTransformList;
+    /**
+     * @ntsGet _get_transform
+     */
+    readonly transform: SVGAnimatedTransformList;
+    /**
+     * @ntsSymbol nts_dom_SVGGraphicsElement_get_nearestViewportElement
+     */
+    _get_nearestViewportElement(this: SVGGraphicsElement): SVGElement;
+    /**
+     * @ntsGet _get_nearestViewportElement
+     */
+    readonly nearestViewportElement: SVGElement;
+    /**
+     * @ntsSymbol nts_dom_SVGGraphicsElement_get_farthestViewportElement
+     */
+    _get_farthestViewportElement(this: SVGGraphicsElement): SVGElement;
+    /**
+     * @ntsGet _get_farthestViewportElement
+     */
+    readonly farthestViewportElement: SVGElement;
+    /**
+     * @ntsSymbol nts_dom_SVGGraphicsElement_get_requiredExtensions
+     */
+    _get_requiredExtensions(this: SVGGraphicsElement): SVGStringList;
+    /**
+     * @ntsGet _get_requiredExtensions
+     */
+    readonly requiredExtensions: SVGStringList;
+    /**
+     * @ntsSymbol nts_dom_SVGGraphicsElement_get_systemLanguage
+     */
+    _get_systemLanguage(this: SVGGraphicsElement): SVGStringList;
+    /**
+     * @ntsGet _get_systemLanguage
+     */
+    readonly systemLanguage: SVGStringList;
+  }
+  export type SVGGraphicsElementMethods = SVGGraphicsElementOwnMethods & SVGElementMethods;
+  export type SVGGraphicsElement = HostClass<"NtsDomSVGGraphicsElement", SVGElement> & SVGGraphicsElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGGraphicsElement */
+  export function asSVGGraphicsElement(node: Node): SVGGraphicsElement | null;
+  export interface SVGGeometryElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_get_pathLength
+     */
+    _get_pathLength(this: SVGGeometryElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_pathLength
+     */
+    readonly pathLength: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_getTotalLength
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getTotalLength(this: SVGGeometryElement, error?: Ptr<DOMException | null>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInFill_1
+     */
+    isPointInFill(this: SVGGeometryElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInFill_0
+     */
+    isPointInFill(this: SVGGeometryElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInStroke_1
+     */
+    isPointInStroke(this: SVGGeometryElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInStroke_0
+     */
+    isPointInStroke(this: SVGGeometryElement): boolean;
+  }
+  export type SVGGeometryElementMethods = SVGGeometryElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGGeometryElement = HostClass<"NtsDomSVGGeometryElement", SVGGraphicsElement> & SVGGeometryElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGGeometryElement */
+  export function asSVGGeometryElement(node: Node): SVGGeometryElement | null;
+  export interface SVGTextContentElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_get_textLength
+     */
+    _get_textLength(this: SVGTextContentElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_textLength
+     */
+    readonly textLength: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_get_lengthAdjust
+     */
+    _get_lengthAdjust(this: SVGTextContentElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_lengthAdjust
+     */
+    readonly lengthAdjust: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getCharNumAtPosition_1
+     */
+    getCharNumAtPosition(this: SVGTextContentElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getCharNumAtPosition_0
+     */
+    getCharNumAtPosition(this: SVGTextContentElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getComputedTextLength
+     */
+    getComputedTextLength(this: SVGTextContentElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getNumberOfChars
+     */
+    getNumberOfChars(this: SVGTextContentElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getRotationOfChar
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getRotationOfChar(this: SVGTextContentElement, charnum: Float64, error?: Ptr<DOMException | null>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getSubStringLength
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getSubStringLength(this: SVGTextContentElement, charnum: Float64, nchars: Float64, error?: Ptr<DOMException | null>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_selectSubString
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    selectSubString(this: SVGTextContentElement, charnum: Float64, nchars: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGTextContentElementMethods = SVGTextContentElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGTextContentElement = HostClass<"NtsDomSVGTextContentElement", SVGGraphicsElement> & SVGTextContentElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTextContentElement */
+  export function asSVGTextContentElement(node: Node): SVGTextContentElement | null;
+  export interface SVGTextPositioningElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGTextPositioningElement_get_x
+     */
+    _get_x(this: SVGTextPositioningElement): SVGAnimatedLengthList;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLengthList;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPositioningElement_get_y
+     */
+    _get_y(this: SVGTextPositioningElement): SVGAnimatedLengthList;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLengthList;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPositioningElement_get_dx
+     */
+    _get_dx(this: SVGTextPositioningElement): SVGAnimatedLengthList;
+    /**
+     * @ntsGet _get_dx
+     */
+    readonly dx: SVGAnimatedLengthList;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPositioningElement_get_dy
+     */
+    _get_dy(this: SVGTextPositioningElement): SVGAnimatedLengthList;
+    /**
+     * @ntsGet _get_dy
+     */
+    readonly dy: SVGAnimatedLengthList;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPositioningElement_get_rotate
+     */
+    _get_rotate(this: SVGTextPositioningElement): SVGAnimatedNumberList;
+    /**
+     * @ntsGet _get_rotate
+     */
+    readonly rotate: SVGAnimatedNumberList;
+  }
+  export type SVGTextPositioningElementMethods = SVGTextPositioningElementOwnMethods & SVGTextContentElementMethods;
+  export type SVGTextPositioningElement = HostClass<"NtsDomSVGTextPositioningElement", SVGTextContentElement> & SVGTextPositioningElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTextPositioningElement */
+  export function asSVGTextPositioningElement(node: Node): SVGTextPositioningElement | null;
+  export interface SVGGradientElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGGradientElement_get_gradientUnits
+     */
+    _get_gradientUnits(this: SVGGradientElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_gradientUnits
+     */
+    readonly gradientUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGGradientElement_get_gradientTransform
+     */
+    _get_gradientTransform(this: SVGGradientElement): SVGAnimatedTransformList;
+    /**
+     * @ntsGet _get_gradientTransform
+     */
+    readonly gradientTransform: SVGAnimatedTransformList;
+    /**
+     * @ntsSymbol nts_dom_SVGGradientElement_get_spreadMethod
+     */
+    _get_spreadMethod(this: SVGGradientElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_spreadMethod
+     */
+    readonly spreadMethod: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGGradientElement_get_href
+     */
+    _get_href(this: SVGGradientElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGGradientElementMethods = SVGGradientElementOwnMethods & SVGElementMethods;
+  export type SVGGradientElement = HostClass<"NtsDomSVGGradientElement", SVGElement> & SVGGradientElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGGradientElement */
+  export function asSVGGradientElement(node: Node): SVGGradientElement | null;
+  export interface SVGAnimationElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_targetElement
+     */
+    _get_targetElement(this: SVGAnimationElement): SVGElement;
+    /**
+     * @ntsGet _get_targetElement
+     */
+    readonly targetElement: SVGElement;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_onbegin
+     */
+    _get_onbegin(this: SVGAnimationElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onbegin */
+    readonly onbegin: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onbegin_void
+     */
+    _set_onbegin_void(this: SVGAnimationElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onbegin_boolean
+     */
+    _set_onbegin_boolean(this: SVGAnimationElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onbegin_null
+     */
+    _set_onbegin_null(this: SVGAnimationElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_onend
+     */
+    _get_onend(this: SVGAnimationElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onend */
+    readonly onend: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onend_void
+     */
+    _set_onend_void(this: SVGAnimationElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onend_boolean
+     */
+    _set_onend_boolean(this: SVGAnimationElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onend_null
+     */
+    _set_onend_null(this: SVGAnimationElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_onrepeat
+     */
+    _get_onrepeat(this: SVGAnimationElement): Closure<(event: Event) => void> | null;
+    /** @ntsGet _get_onrepeat */
+    readonly onrepeat: Closure<(event: Event) => void> | null;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onrepeat_void
+     */
+    _set_onrepeat_void(this: SVGAnimationElement, handler: Closure<(event: Event) => void>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onrepeat_boolean
+     */
+    _set_onrepeat_boolean(this: SVGAnimationElement, handler: Closure<(event: Event) => boolean>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_set_onrepeat_null
+     */
+    _set_onrepeat_null(this: SVGAnimationElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_requiredExtensions
+     */
+    _get_requiredExtensions(this: SVGAnimationElement): SVGStringList;
+    /**
+     * @ntsGet _get_requiredExtensions
+     */
+    readonly requiredExtensions: SVGStringList;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_get_systemLanguage
+     */
+    _get_systemLanguage(this: SVGAnimationElement): SVGStringList;
+    /**
+     * @ntsGet _get_systemLanguage
+     */
+    readonly systemLanguage: SVGStringList;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_beginElement
+     */
+    beginElement(this: SVGAnimationElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_beginElementAt
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    beginElementAt(this: SVGAnimationElement, offset: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_endElement
+     */
+    endElement(this: SVGAnimationElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_endElementAt
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    endElementAt(this: SVGAnimationElement, offset: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_getCurrentTime
+     */
+    getCurrentTime(this: SVGAnimationElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_getSimpleDuration
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getSimpleDuration(this: SVGAnimationElement, error?: Ptr<DOMException | null>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimationElement_getStartTime
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getStartTime(this: SVGAnimationElement, error?: Ptr<DOMException | null>): Float64;
+  }
+  export type SVGAnimationElementMethods = SVGAnimationElementOwnMethods & SVGElementMethods;
+  export type SVGAnimationElement = HostClass<"NtsDomSVGAnimationElement", SVGElement> & SVGAnimationElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGAnimationElement */
+  export function asSVGAnimationElement(node: Node): SVGAnimationElement | null;
+  export interface SVGComponentTransferFunctionElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_type
+     */
+    _get_type(this: SVGComponentTransferFunctionElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_tableValues
+     */
+    _get_tableValues(this: SVGComponentTransferFunctionElement): SVGAnimatedNumberList;
+    /**
+     * @ntsGet _get_tableValues
+     */
+    readonly tableValues: SVGAnimatedNumberList;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_slope
+     */
+    _get_slope(this: SVGComponentTransferFunctionElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_slope
+     */
+    readonly slope: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_intercept
+     */
+    _get_intercept(this: SVGComponentTransferFunctionElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_intercept
+     */
+    readonly intercept: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_amplitude
+     */
+    _get_amplitude(this: SVGComponentTransferFunctionElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_amplitude
+     */
+    readonly amplitude: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_exponent
+     */
+    _get_exponent(this: SVGComponentTransferFunctionElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_exponent
+     */
+    readonly exponent: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGComponentTransferFunctionElement_get_offset
+     */
+    _get_offset(this: SVGComponentTransferFunctionElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_offset
+     */
+    readonly offset: SVGAnimatedNumber;
+  }
+  export type SVGComponentTransferFunctionElementMethods = SVGComponentTransferFunctionElementOwnMethods & SVGElementMethods;
+  export type SVGComponentTransferFunctionElement = HostClass<"NtsDomSVGComponentTransferFunctionElement", SVGElement> & SVGComponentTransferFunctionElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGComponentTransferFunctionElement */
+  export function asSVGComponentTransferFunctionElement(node: Node): SVGComponentTransferFunctionElement | null;
+  export interface SVGAElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_target
+     */
+    _get_target(this: SVGAElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_target
+     */
+    readonly target: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_download
+     */
+    _get_download(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_download
+     */
+    _set_download(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_download
+     * @ntsSet _set_download
+     */
+    download: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_ping
+     */
+    _get_ping(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_ping
+     */
+    _set_ping(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_ping
+     * @ntsSet _set_ping
+     */
+    ping: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_rel
+     */
+    _get_rel(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_rel
+     */
+    _set_rel(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_rel
+     * @ntsSet _set_rel
+     */
+    rel: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_relList
+     */
+    _get_relList(this: SVGAElement): DOMTokenList;
+    /**
+     * @ntsGet _get_relList
+     */
+    readonly relList: DOMTokenList;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_hreflang
+     */
+    _get_hreflang(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_hreflang
+     */
+    _set_hreflang(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_hreflang
+     * @ntsSet _set_hreflang
+     */
+    hreflang: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_type
+     */
+    _get_type(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_type
+     */
+    _set_type(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_referrerPolicy
+     */
+    _get_referrerPolicy(this: SVGAElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_referrerPolicy
+     */
+    _set_referrerPolicy(this: SVGAElement, value: StringView): void;
+    /**
+     * @ntsGet _get_referrerPolicy
+     * @ntsSet _set_referrerPolicy
+     */
+    referrerPolicy: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_href
+     */
+    _get_href(this: SVGAElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_get_interestForElement
+     */
+    _get_interestForElement(this: SVGAElement): Element | null;
+    /**
+     * @ntsSymbol nts_dom_SVGAElement_set_interestForElement
+     */
+    _set_interestForElement(this: SVGAElement, value: Element | null): void;
+    /**
+     * @ntsGet _get_interestForElement
+     * @ntsSet _set_interestForElement
+     */
+    interestForElement: Element | null;
+  }
+  export type SVGAElementMethods = SVGAElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGAElement = HostClass<"NtsDomSVGAElement", SVGGraphicsElement> & SVGAElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGAElement */
+  export function asSVGAElement(node: Node): SVGAElement | null;
+  export interface SVGAngleOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_get_unitType
+     */
+    _get_unitType(this: SVGAngle): Float64;
+    /**
+     * @ntsGet _get_unitType
+     */
+    readonly unitType: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_get_value
+     */
+    _get_value(this: SVGAngle): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: SVGAngle, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_get_valueInSpecifiedUnits
+     */
+    _get_valueInSpecifiedUnits(this: SVGAngle): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_set_valueInSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_valueInSpecifiedUnits(this: SVGAngle, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_valueInSpecifiedUnits
+     * @ntsSet _set_valueInSpecifiedUnits
+     */
+    valueInSpecifiedUnits: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_get_valueAsString
+     */
+    _get_valueAsString(this: SVGAngle): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_set_valueAsString
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_valueAsString(this: SVGAngle, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_valueAsString
+     * @ntsSet _set_valueAsString
+     */
+    valueAsString: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_convertToSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertToSpecifiedUnits(this: SVGAngle, unitType: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGAngle_newValueSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    newValueSpecifiedUnits(this: SVGAngle, unitType: Float64, valueInSpecifiedUnits: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGAngleMethods = SVGAngleOwnMethods;
+  export type SVGAngle = HostClass<"NtsDomSVGAngle", null, "nts_dom_retain", "nts_dom_release"> & SVGAngleMethods;
+  export interface SVGAnimatedAngleOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedAngle_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedAngle): SVGAngle;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGAngle;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedAngle_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedAngle): SVGAngle;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGAngle;
+  }
+  export type SVGAnimatedAngleMethods = SVGAnimatedAngleOwnMethods;
+  export type SVGAnimatedAngle = HostClass<"NtsDomSVGAnimatedAngle", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedAngleMethods;
+  export interface SVGAnimatedBooleanOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedBoolean_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedBoolean): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedBoolean_set_baseVal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baseVal(this: SVGAnimatedBoolean, value: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baseVal
+     * @ntsSet _set_baseVal
+     */
+    baseVal: boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedBoolean_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedBoolean): boolean;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: boolean;
+  }
+  export type SVGAnimatedBooleanMethods = SVGAnimatedBooleanOwnMethods;
+  export type SVGAnimatedBoolean = HostClass<"NtsDomSVGAnimatedBoolean", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedBooleanMethods;
+  export interface SVGAnimatedEnumerationOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedEnumeration_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedEnumeration): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedEnumeration_set_baseVal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baseVal(this: SVGAnimatedEnumeration, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baseVal
+     * @ntsSet _set_baseVal
+     */
+    baseVal: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedEnumeration_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedEnumeration): Float64;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: Float64;
+  }
+  export type SVGAnimatedEnumerationMethods = SVGAnimatedEnumerationOwnMethods;
+  export type SVGAnimatedEnumeration = HostClass<"NtsDomSVGAnimatedEnumeration", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedEnumerationMethods;
+  export interface SVGAnimatedIntegerOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedInteger_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedInteger): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedInteger_set_baseVal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baseVal(this: SVGAnimatedInteger, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baseVal
+     * @ntsSet _set_baseVal
+     */
+    baseVal: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedInteger_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedInteger): Float64;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: Float64;
+  }
+  export type SVGAnimatedIntegerMethods = SVGAnimatedIntegerOwnMethods;
+  export type SVGAnimatedInteger = HostClass<"NtsDomSVGAnimatedInteger", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedIntegerMethods;
+  export interface SVGAnimatedLengthOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedLength_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedLength): SVGLength;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedLength_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedLength): SVGLength;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGLength;
+  }
+  export type SVGAnimatedLengthMethods = SVGAnimatedLengthOwnMethods;
+  export type SVGAnimatedLength = HostClass<"NtsDomSVGAnimatedLength", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedLengthMethods;
+  export interface SVGAnimatedLengthListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedLengthList_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedLengthList): SVGLengthList;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGLengthList;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedLengthList_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedLengthList): SVGLengthList;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGLengthList;
+  }
+  export type SVGAnimatedLengthListMethods = SVGAnimatedLengthListOwnMethods;
+  export type SVGAnimatedLengthList = HostClass<"NtsDomSVGAnimatedLengthList", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedLengthListMethods;
+  export interface SVGAnimatedNumberOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedNumber_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedNumber): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedNumber_set_baseVal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baseVal(this: SVGAnimatedNumber, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baseVal
+     * @ntsSet _set_baseVal
+     */
+    baseVal: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedNumber_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedNumber): Float64;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: Float64;
+  }
+  export type SVGAnimatedNumberMethods = SVGAnimatedNumberOwnMethods;
+  export type SVGAnimatedNumber = HostClass<"NtsDomSVGAnimatedNumber", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedNumberMethods;
+  export interface SVGAnimatedNumberListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedNumberList_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedNumberList): SVGNumberList;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGNumberList;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedNumberList_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedNumberList): SVGNumberList;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGNumberList;
+  }
+  export type SVGAnimatedNumberListMethods = SVGAnimatedNumberListOwnMethods;
+  export type SVGAnimatedNumberList = HostClass<"NtsDomSVGAnimatedNumberList", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedNumberListMethods;
+  export interface SVGAnimatedPreserveAspectRatioOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedPreserveAspectRatio_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedPreserveAspectRatio): SVGPreserveAspectRatio;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedPreserveAspectRatio_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedPreserveAspectRatio): SVGPreserveAspectRatio;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGPreserveAspectRatio;
+  }
+  export type SVGAnimatedPreserveAspectRatioMethods = SVGAnimatedPreserveAspectRatioOwnMethods;
+  export type SVGAnimatedPreserveAspectRatio = HostClass<"NtsDomSVGAnimatedPreserveAspectRatio", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedPreserveAspectRatioMethods;
+  export interface SVGAnimatedRectOwnMethods {
+  }
+  export type SVGAnimatedRectMethods = SVGAnimatedRectOwnMethods;
+  export type SVGAnimatedRect = HostClass<"NtsDomSVGAnimatedRect", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedRectMethods;
+  export interface SVGAnimatedStringOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedString_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedString): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedString_set_baseVal
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_baseVal(this: SVGAnimatedString, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_baseVal
+     * @ntsSet _set_baseVal
+     */
+    baseVal: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedString_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedString): StringView;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: StringView;
+  }
+  export type SVGAnimatedStringMethods = SVGAnimatedStringOwnMethods;
+  export type SVGAnimatedString = HostClass<"NtsDomSVGAnimatedString", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedStringMethods;
+  export interface SVGAnimatedTransformListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedTransformList_get_baseVal
+     */
+    _get_baseVal(this: SVGAnimatedTransformList): SVGTransformList;
+    /**
+     * @ntsGet _get_baseVal
+     */
+    readonly baseVal: SVGTransformList;
+    /**
+     * @ntsSymbol nts_dom_SVGAnimatedTransformList_get_animVal
+     */
+    _get_animVal(this: SVGAnimatedTransformList): SVGTransformList;
+    /**
+     * @ntsGet _get_animVal
+     */
+    readonly animVal: SVGTransformList;
+  }
+  export type SVGAnimatedTransformListMethods = SVGAnimatedTransformListOwnMethods;
+  export type SVGAnimatedTransformList = HostClass<"NtsDomSVGAnimatedTransformList", null, "nts_dom_retain", "nts_dom_release"> & SVGAnimatedTransformListMethods;
+  export interface SVGAnimateElementOwnMethods {
+  }
+  export type SVGAnimateElementMethods = SVGAnimateElementOwnMethods & SVGAnimationElementMethods;
+  export type SVGAnimateElement = HostClass<"NtsDomSVGAnimateElement", SVGAnimationElement> & SVGAnimateElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGAnimateElement */
+  export function asSVGAnimateElement(node: Node): SVGAnimateElement | null;
+  export interface SVGAnimateMotionElementOwnMethods {
+  }
+  export type SVGAnimateMotionElementMethods = SVGAnimateMotionElementOwnMethods & SVGAnimationElementMethods;
+  export type SVGAnimateMotionElement = HostClass<"NtsDomSVGAnimateMotionElement", SVGAnimationElement> & SVGAnimateMotionElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGAnimateMotionElement */
+  export function asSVGAnimateMotionElement(node: Node): SVGAnimateMotionElement | null;
+  export interface SVGAnimateTransformElementOwnMethods {
+  }
+  export type SVGAnimateTransformElementMethods = SVGAnimateTransformElementOwnMethods & SVGAnimationElementMethods;
+  export type SVGAnimateTransformElement = HostClass<"NtsDomSVGAnimateTransformElement", SVGAnimationElement> & SVGAnimateTransformElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGAnimateTransformElement */
+  export function asSVGAnimateTransformElement(node: Node): SVGAnimateTransformElement | null;
+  export interface SVGCircleElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGCircleElement_get_cx
+     */
+    _get_cx(this: SVGCircleElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cx
+     */
+    readonly cx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGCircleElement_get_cy
+     */
+    _get_cy(this: SVGCircleElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cy
+     */
+    readonly cy: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGCircleElement_get_r
+     */
+    _get_r(this: SVGCircleElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_r
+     */
+    readonly r: SVGAnimatedLength;
+  }
+  export type SVGCircleElementMethods = SVGCircleElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGCircleElement = HostClass<"NtsDomSVGCircleElement", SVGGeometryElement> & SVGCircleElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGCircleElement */
+  export function asSVGCircleElement(node: Node): SVGCircleElement | null;
+  export interface SVGClipPathElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGClipPathElement_get_clipPathUnits
+     */
+    _get_clipPathUnits(this: SVGClipPathElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_clipPathUnits
+     */
+    readonly clipPathUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGClipPathElement_get_transform
+     */
+    _get_transform(this: SVGClipPathElement): SVGAnimatedTransformList;
+    /**
+     * @ntsGet _get_transform
+     */
+    readonly transform: SVGAnimatedTransformList;
+  }
+  export type SVGClipPathElementMethods = SVGClipPathElementOwnMethods & SVGElementMethods;
+  export type SVGClipPathElement = HostClass<"NtsDomSVGClipPathElement", SVGElement> & SVGClipPathElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGClipPathElement */
+  export function asSVGClipPathElement(node: Node): SVGClipPathElement | null;
+  export interface SVGDefsElementOwnMethods {
+  }
+  export type SVGDefsElementMethods = SVGDefsElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGDefsElement = HostClass<"NtsDomSVGDefsElement", SVGGraphicsElement> & SVGDefsElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGDefsElement */
+  export function asSVGDefsElement(node: Node): SVGDefsElement | null;
+  export interface SVGDescElementOwnMethods {
+  }
+  export type SVGDescElementMethods = SVGDescElementOwnMethods & SVGElementMethods;
+  export type SVGDescElement = HostClass<"NtsDomSVGDescElement", SVGElement> & SVGDescElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGDescElement */
+  export function asSVGDescElement(node: Node): SVGDescElement | null;
+  export interface SVGEllipseElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGEllipseElement_get_cx
+     */
+    _get_cx(this: SVGEllipseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cx
+     */
+    readonly cx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGEllipseElement_get_cy
+     */
+    _get_cy(this: SVGEllipseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cy
+     */
+    readonly cy: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGEllipseElement_get_rx
+     */
+    _get_rx(this: SVGEllipseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_rx
+     */
+    readonly rx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGEllipseElement_get_ry
+     */
+    _get_ry(this: SVGEllipseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_ry
+     */
+    readonly ry: SVGAnimatedLength;
+  }
+  export type SVGEllipseElementMethods = SVGEllipseElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGEllipseElement = HostClass<"NtsDomSVGEllipseElement", SVGGeometryElement> & SVGEllipseElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGEllipseElement */
+  export function asSVGEllipseElement(node: Node): SVGEllipseElement | null;
+  export interface SVGFEBlendElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_in1
+     */
+    _get_in1(this: SVGFEBlendElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_in2
+     */
+    _get_in2(this: SVGFEBlendElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in2
+     */
+    readonly in2: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_mode
+     */
+    _get_mode(this: SVGFEBlendElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_mode
+     */
+    readonly mode: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_x
+     */
+    _get_x(this: SVGFEBlendElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_y
+     */
+    _get_y(this: SVGFEBlendElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_width
+     */
+    _get_width(this: SVGFEBlendElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_height
+     */
+    _get_height(this: SVGFEBlendElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEBlendElement_get_result
+     */
+    _get_result(this: SVGFEBlendElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEBlendElementMethods = SVGFEBlendElementOwnMethods & SVGElementMethods;
+  export type SVGFEBlendElement = HostClass<"NtsDomSVGFEBlendElement", SVGElement> & SVGFEBlendElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEBlendElement */
+  export function asSVGFEBlendElement(node: Node): SVGFEBlendElement | null;
+  export interface SVGFEColorMatrixElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_in1
+     */
+    _get_in1(this: SVGFEColorMatrixElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_type
+     */
+    _get_type(this: SVGFEColorMatrixElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_values
+     */
+    _get_values(this: SVGFEColorMatrixElement): SVGAnimatedNumberList;
+    /**
+     * @ntsGet _get_values
+     */
+    readonly values: SVGAnimatedNumberList;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_x
+     */
+    _get_x(this: SVGFEColorMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_y
+     */
+    _get_y(this: SVGFEColorMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_width
+     */
+    _get_width(this: SVGFEColorMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_height
+     */
+    _get_height(this: SVGFEColorMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEColorMatrixElement_get_result
+     */
+    _get_result(this: SVGFEColorMatrixElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEColorMatrixElementMethods = SVGFEColorMatrixElementOwnMethods & SVGElementMethods;
+  export type SVGFEColorMatrixElement = HostClass<"NtsDomSVGFEColorMatrixElement", SVGElement> & SVGFEColorMatrixElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEColorMatrixElement */
+  export function asSVGFEColorMatrixElement(node: Node): SVGFEColorMatrixElement | null;
+  export interface SVGFEComponentTransferElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_in1
+     */
+    _get_in1(this: SVGFEComponentTransferElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_x
+     */
+    _get_x(this: SVGFEComponentTransferElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_y
+     */
+    _get_y(this: SVGFEComponentTransferElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_width
+     */
+    _get_width(this: SVGFEComponentTransferElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_height
+     */
+    _get_height(this: SVGFEComponentTransferElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEComponentTransferElement_get_result
+     */
+    _get_result(this: SVGFEComponentTransferElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEComponentTransferElementMethods = SVGFEComponentTransferElementOwnMethods & SVGElementMethods;
+  export type SVGFEComponentTransferElement = HostClass<"NtsDomSVGFEComponentTransferElement", SVGElement> & SVGFEComponentTransferElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEComponentTransferElement */
+  export function asSVGFEComponentTransferElement(node: Node): SVGFEComponentTransferElement | null;
+  export interface SVGFECompositeElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_in2
+     */
+    _get_in2(this: SVGFECompositeElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in2
+     */
+    readonly in2: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_in1
+     */
+    _get_in1(this: SVGFECompositeElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_operator
+     */
+    _get_operator(this: SVGFECompositeElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_operator
+     */
+    readonly operator: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_k1
+     */
+    _get_k1(this: SVGFECompositeElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_k1
+     */
+    readonly k1: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_k2
+     */
+    _get_k2(this: SVGFECompositeElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_k2
+     */
+    readonly k2: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_k3
+     */
+    _get_k3(this: SVGFECompositeElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_k3
+     */
+    readonly k3: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_k4
+     */
+    _get_k4(this: SVGFECompositeElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_k4
+     */
+    readonly k4: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_x
+     */
+    _get_x(this: SVGFECompositeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_y
+     */
+    _get_y(this: SVGFECompositeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_width
+     */
+    _get_width(this: SVGFECompositeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_height
+     */
+    _get_height(this: SVGFECompositeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFECompositeElement_get_result
+     */
+    _get_result(this: SVGFECompositeElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFECompositeElementMethods = SVGFECompositeElementOwnMethods & SVGElementMethods;
+  export type SVGFECompositeElement = HostClass<"NtsDomSVGFECompositeElement", SVGElement> & SVGFECompositeElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFECompositeElement */
+  export function asSVGFECompositeElement(node: Node): SVGFECompositeElement | null;
+  export interface SVGFEConvolveMatrixElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_in1
+     */
+    _get_in1(this: SVGFEConvolveMatrixElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_orderX
+     */
+    _get_orderX(this: SVGFEConvolveMatrixElement): SVGAnimatedInteger;
+    /**
+     * @ntsGet _get_orderX
+     */
+    readonly orderX: SVGAnimatedInteger;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_orderY
+     */
+    _get_orderY(this: SVGFEConvolveMatrixElement): SVGAnimatedInteger;
+    /**
+     * @ntsGet _get_orderY
+     */
+    readonly orderY: SVGAnimatedInteger;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_kernelMatrix
+     */
+    _get_kernelMatrix(this: SVGFEConvolveMatrixElement): SVGAnimatedNumberList;
+    /**
+     * @ntsGet _get_kernelMatrix
+     */
+    readonly kernelMatrix: SVGAnimatedNumberList;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_divisor
+     */
+    _get_divisor(this: SVGFEConvolveMatrixElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_divisor
+     */
+    readonly divisor: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_bias
+     */
+    _get_bias(this: SVGFEConvolveMatrixElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_bias
+     */
+    readonly bias: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_targetX
+     */
+    _get_targetX(this: SVGFEConvolveMatrixElement): SVGAnimatedInteger;
+    /**
+     * @ntsGet _get_targetX
+     */
+    readonly targetX: SVGAnimatedInteger;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_targetY
+     */
+    _get_targetY(this: SVGFEConvolveMatrixElement): SVGAnimatedInteger;
+    /**
+     * @ntsGet _get_targetY
+     */
+    readonly targetY: SVGAnimatedInteger;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_edgeMode
+     */
+    _get_edgeMode(this: SVGFEConvolveMatrixElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_edgeMode
+     */
+    readonly edgeMode: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_kernelUnitLengthX
+     */
+    _get_kernelUnitLengthX(this: SVGFEConvolveMatrixElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthX
+     */
+    readonly kernelUnitLengthX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_kernelUnitLengthY
+     */
+    _get_kernelUnitLengthY(this: SVGFEConvolveMatrixElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthY
+     */
+    readonly kernelUnitLengthY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_preserveAlpha
+     */
+    _get_preserveAlpha(this: SVGFEConvolveMatrixElement): SVGAnimatedBoolean;
+    /**
+     * @ntsGet _get_preserveAlpha
+     */
+    readonly preserveAlpha: SVGAnimatedBoolean;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_x
+     */
+    _get_x(this: SVGFEConvolveMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_y
+     */
+    _get_y(this: SVGFEConvolveMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_width
+     */
+    _get_width(this: SVGFEConvolveMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_height
+     */
+    _get_height(this: SVGFEConvolveMatrixElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEConvolveMatrixElement_get_result
+     */
+    _get_result(this: SVGFEConvolveMatrixElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEConvolveMatrixElementMethods = SVGFEConvolveMatrixElementOwnMethods & SVGElementMethods;
+  export type SVGFEConvolveMatrixElement = HostClass<"NtsDomSVGFEConvolveMatrixElement", SVGElement> & SVGFEConvolveMatrixElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEConvolveMatrixElement */
+  export function asSVGFEConvolveMatrixElement(node: Node): SVGFEConvolveMatrixElement | null;
+  export interface SVGFEDiffuseLightingElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_in1
+     */
+    _get_in1(this: SVGFEDiffuseLightingElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_surfaceScale
+     */
+    _get_surfaceScale(this: SVGFEDiffuseLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_surfaceScale
+     */
+    readonly surfaceScale: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_diffuseConstant
+     */
+    _get_diffuseConstant(this: SVGFEDiffuseLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_diffuseConstant
+     */
+    readonly diffuseConstant: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_kernelUnitLengthX
+     */
+    _get_kernelUnitLengthX(this: SVGFEDiffuseLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthX
+     */
+    readonly kernelUnitLengthX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_kernelUnitLengthY
+     */
+    _get_kernelUnitLengthY(this: SVGFEDiffuseLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthY
+     */
+    readonly kernelUnitLengthY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_x
+     */
+    _get_x(this: SVGFEDiffuseLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_y
+     */
+    _get_y(this: SVGFEDiffuseLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_width
+     */
+    _get_width(this: SVGFEDiffuseLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_height
+     */
+    _get_height(this: SVGFEDiffuseLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDiffuseLightingElement_get_result
+     */
+    _get_result(this: SVGFEDiffuseLightingElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEDiffuseLightingElementMethods = SVGFEDiffuseLightingElementOwnMethods & SVGElementMethods;
+  export type SVGFEDiffuseLightingElement = HostClass<"NtsDomSVGFEDiffuseLightingElement", SVGElement> & SVGFEDiffuseLightingElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEDiffuseLightingElement */
+  export function asSVGFEDiffuseLightingElement(node: Node): SVGFEDiffuseLightingElement | null;
+  export interface SVGFEDisplacementMapElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_in1
+     */
+    _get_in1(this: SVGFEDisplacementMapElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_in2
+     */
+    _get_in2(this: SVGFEDisplacementMapElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in2
+     */
+    readonly in2: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_scale
+     */
+    _get_scale(this: SVGFEDisplacementMapElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_scale
+     */
+    readonly scale: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_xChannelSelector
+     */
+    _get_xChannelSelector(this: SVGFEDisplacementMapElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_xChannelSelector
+     */
+    readonly xChannelSelector: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_yChannelSelector
+     */
+    _get_yChannelSelector(this: SVGFEDisplacementMapElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_yChannelSelector
+     */
+    readonly yChannelSelector: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_x
+     */
+    _get_x(this: SVGFEDisplacementMapElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_y
+     */
+    _get_y(this: SVGFEDisplacementMapElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_width
+     */
+    _get_width(this: SVGFEDisplacementMapElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_height
+     */
+    _get_height(this: SVGFEDisplacementMapElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDisplacementMapElement_get_result
+     */
+    _get_result(this: SVGFEDisplacementMapElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEDisplacementMapElementMethods = SVGFEDisplacementMapElementOwnMethods & SVGElementMethods;
+  export type SVGFEDisplacementMapElement = HostClass<"NtsDomSVGFEDisplacementMapElement", SVGElement> & SVGFEDisplacementMapElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEDisplacementMapElement */
+  export function asSVGFEDisplacementMapElement(node: Node): SVGFEDisplacementMapElement | null;
+  export interface SVGFEDistantLightElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEDistantLightElement_get_azimuth
+     */
+    _get_azimuth(this: SVGFEDistantLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_azimuth
+     */
+    readonly azimuth: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDistantLightElement_get_elevation
+     */
+    _get_elevation(this: SVGFEDistantLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_elevation
+     */
+    readonly elevation: SVGAnimatedNumber;
+  }
+  export type SVGFEDistantLightElementMethods = SVGFEDistantLightElementOwnMethods & SVGElementMethods;
+  export type SVGFEDistantLightElement = HostClass<"NtsDomSVGFEDistantLightElement", SVGElement> & SVGFEDistantLightElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEDistantLightElement */
+  export function asSVGFEDistantLightElement(node: Node): SVGFEDistantLightElement | null;
+  export interface SVGFEDropShadowElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_in1
+     */
+    _get_in1(this: SVGFEDropShadowElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_dx
+     */
+    _get_dx(this: SVGFEDropShadowElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_dx
+     */
+    readonly dx: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_dy
+     */
+    _get_dy(this: SVGFEDropShadowElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_dy
+     */
+    readonly dy: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_stdDeviationX
+     */
+    _get_stdDeviationX(this: SVGFEDropShadowElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_stdDeviationX
+     */
+    readonly stdDeviationX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_stdDeviationY
+     */
+    _get_stdDeviationY(this: SVGFEDropShadowElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_stdDeviationY
+     */
+    readonly stdDeviationY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_x
+     */
+    _get_x(this: SVGFEDropShadowElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_y
+     */
+    _get_y(this: SVGFEDropShadowElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_width
+     */
+    _get_width(this: SVGFEDropShadowElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_height
+     */
+    _get_height(this: SVGFEDropShadowElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_get_result
+     */
+    _get_result(this: SVGFEDropShadowElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEDropShadowElement_setStdDeviation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setStdDeviation(this: SVGFEDropShadowElement, stdDeviationX: Float64, stdDeviationY: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGFEDropShadowElementMethods = SVGFEDropShadowElementOwnMethods & SVGElementMethods;
+  export type SVGFEDropShadowElement = HostClass<"NtsDomSVGFEDropShadowElement", SVGElement> & SVGFEDropShadowElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEDropShadowElement */
+  export function asSVGFEDropShadowElement(node: Node): SVGFEDropShadowElement | null;
+  export interface SVGFEFloodElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEFloodElement_get_x
+     */
+    _get_x(this: SVGFEFloodElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEFloodElement_get_y
+     */
+    _get_y(this: SVGFEFloodElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEFloodElement_get_width
+     */
+    _get_width(this: SVGFEFloodElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEFloodElement_get_height
+     */
+    _get_height(this: SVGFEFloodElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEFloodElement_get_result
+     */
+    _get_result(this: SVGFEFloodElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEFloodElementMethods = SVGFEFloodElementOwnMethods & SVGElementMethods;
+  export type SVGFEFloodElement = HostClass<"NtsDomSVGFEFloodElement", SVGElement> & SVGFEFloodElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEFloodElement */
+  export function asSVGFEFloodElement(node: Node): SVGFEFloodElement | null;
+  export interface SVGFEFuncAElementOwnMethods {
+  }
+  export type SVGFEFuncAElementMethods = SVGFEFuncAElementOwnMethods & SVGComponentTransferFunctionElementMethods;
+  export type SVGFEFuncAElement = HostClass<"NtsDomSVGFEFuncAElement", SVGComponentTransferFunctionElement> & SVGFEFuncAElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEFuncAElement */
+  export function asSVGFEFuncAElement(node: Node): SVGFEFuncAElement | null;
+  export interface SVGFEFuncBElementOwnMethods {
+  }
+  export type SVGFEFuncBElementMethods = SVGFEFuncBElementOwnMethods & SVGComponentTransferFunctionElementMethods;
+  export type SVGFEFuncBElement = HostClass<"NtsDomSVGFEFuncBElement", SVGComponentTransferFunctionElement> & SVGFEFuncBElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEFuncBElement */
+  export function asSVGFEFuncBElement(node: Node): SVGFEFuncBElement | null;
+  export interface SVGFEFuncGElementOwnMethods {
+  }
+  export type SVGFEFuncGElementMethods = SVGFEFuncGElementOwnMethods & SVGComponentTransferFunctionElementMethods;
+  export type SVGFEFuncGElement = HostClass<"NtsDomSVGFEFuncGElement", SVGComponentTransferFunctionElement> & SVGFEFuncGElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEFuncGElement */
+  export function asSVGFEFuncGElement(node: Node): SVGFEFuncGElement | null;
+  export interface SVGFEFuncRElementOwnMethods {
+  }
+  export type SVGFEFuncRElementMethods = SVGFEFuncRElementOwnMethods & SVGComponentTransferFunctionElementMethods;
+  export type SVGFEFuncRElement = HostClass<"NtsDomSVGFEFuncRElement", SVGComponentTransferFunctionElement> & SVGFEFuncRElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEFuncRElement */
+  export function asSVGFEFuncRElement(node: Node): SVGFEFuncRElement | null;
+  export interface SVGFEGaussianBlurElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_in1
+     */
+    _get_in1(this: SVGFEGaussianBlurElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_stdDeviationX
+     */
+    _get_stdDeviationX(this: SVGFEGaussianBlurElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_stdDeviationX
+     */
+    readonly stdDeviationX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_stdDeviationY
+     */
+    _get_stdDeviationY(this: SVGFEGaussianBlurElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_stdDeviationY
+     */
+    readonly stdDeviationY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_x
+     */
+    _get_x(this: SVGFEGaussianBlurElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_y
+     */
+    _get_y(this: SVGFEGaussianBlurElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_width
+     */
+    _get_width(this: SVGFEGaussianBlurElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_height
+     */
+    _get_height(this: SVGFEGaussianBlurElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_get_result
+     */
+    _get_result(this: SVGFEGaussianBlurElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEGaussianBlurElement_setStdDeviation
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setStdDeviation(this: SVGFEGaussianBlurElement, stdDeviationX: Float64, stdDeviationY: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGFEGaussianBlurElementMethods = SVGFEGaussianBlurElementOwnMethods & SVGElementMethods;
+  export type SVGFEGaussianBlurElement = HostClass<"NtsDomSVGFEGaussianBlurElement", SVGElement> & SVGFEGaussianBlurElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEGaussianBlurElement */
+  export function asSVGFEGaussianBlurElement(node: Node): SVGFEGaussianBlurElement | null;
+  export interface SVGFEImageElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGFEImageElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_x
+     */
+    _get_x(this: SVGFEImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_y
+     */
+    _get_y(this: SVGFEImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_width
+     */
+    _get_width(this: SVGFEImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_height
+     */
+    _get_height(this: SVGFEImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_result
+     */
+    _get_result(this: SVGFEImageElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEImageElement_get_href
+     */
+    _get_href(this: SVGFEImageElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGFEImageElementMethods = SVGFEImageElementOwnMethods & SVGElementMethods;
+  export type SVGFEImageElement = HostClass<"NtsDomSVGFEImageElement", SVGElement> & SVGFEImageElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEImageElement */
+  export function asSVGFEImageElement(node: Node): SVGFEImageElement | null;
+  export interface SVGFEMergeElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeElement_get_x
+     */
+    _get_x(this: SVGFEMergeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeElement_get_y
+     */
+    _get_y(this: SVGFEMergeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeElement_get_width
+     */
+    _get_width(this: SVGFEMergeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeElement_get_height
+     */
+    _get_height(this: SVGFEMergeElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeElement_get_result
+     */
+    _get_result(this: SVGFEMergeElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEMergeElementMethods = SVGFEMergeElementOwnMethods & SVGElementMethods;
+  export type SVGFEMergeElement = HostClass<"NtsDomSVGFEMergeElement", SVGElement> & SVGFEMergeElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEMergeElement */
+  export function asSVGFEMergeElement(node: Node): SVGFEMergeElement | null;
+  export interface SVGFEMergeNodeElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEMergeNodeElement_get_in1
+     */
+    _get_in1(this: SVGFEMergeNodeElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+  }
+  export type SVGFEMergeNodeElementMethods = SVGFEMergeNodeElementOwnMethods & SVGElementMethods;
+  export type SVGFEMergeNodeElement = HostClass<"NtsDomSVGFEMergeNodeElement", SVGElement> & SVGFEMergeNodeElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEMergeNodeElement */
+  export function asSVGFEMergeNodeElement(node: Node): SVGFEMergeNodeElement | null;
+  export interface SVGFEMorphologyElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_in1
+     */
+    _get_in1(this: SVGFEMorphologyElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_operator
+     */
+    _get_operator(this: SVGFEMorphologyElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_operator
+     */
+    readonly operator: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_radiusX
+     */
+    _get_radiusX(this: SVGFEMorphologyElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_radiusX
+     */
+    readonly radiusX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_radiusY
+     */
+    _get_radiusY(this: SVGFEMorphologyElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_radiusY
+     */
+    readonly radiusY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_x
+     */
+    _get_x(this: SVGFEMorphologyElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_y
+     */
+    _get_y(this: SVGFEMorphologyElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_width
+     */
+    _get_width(this: SVGFEMorphologyElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_height
+     */
+    _get_height(this: SVGFEMorphologyElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEMorphologyElement_get_result
+     */
+    _get_result(this: SVGFEMorphologyElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEMorphologyElementMethods = SVGFEMorphologyElementOwnMethods & SVGElementMethods;
+  export type SVGFEMorphologyElement = HostClass<"NtsDomSVGFEMorphologyElement", SVGElement> & SVGFEMorphologyElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEMorphologyElement */
+  export function asSVGFEMorphologyElement(node: Node): SVGFEMorphologyElement | null;
+  export interface SVGFEOffsetElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_in1
+     */
+    _get_in1(this: SVGFEOffsetElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_dx
+     */
+    _get_dx(this: SVGFEOffsetElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_dx
+     */
+    readonly dx: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_dy
+     */
+    _get_dy(this: SVGFEOffsetElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_dy
+     */
+    readonly dy: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_x
+     */
+    _get_x(this: SVGFEOffsetElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_y
+     */
+    _get_y(this: SVGFEOffsetElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_width
+     */
+    _get_width(this: SVGFEOffsetElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_height
+     */
+    _get_height(this: SVGFEOffsetElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFEOffsetElement_get_result
+     */
+    _get_result(this: SVGFEOffsetElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFEOffsetElementMethods = SVGFEOffsetElementOwnMethods & SVGElementMethods;
+  export type SVGFEOffsetElement = HostClass<"NtsDomSVGFEOffsetElement", SVGElement> & SVGFEOffsetElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEOffsetElement */
+  export function asSVGFEOffsetElement(node: Node): SVGFEOffsetElement | null;
+  export interface SVGFEPointLightElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFEPointLightElement_get_x
+     */
+    _get_x(this: SVGFEPointLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEPointLightElement_get_y
+     */
+    _get_y(this: SVGFEPointLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFEPointLightElement_get_z
+     */
+    _get_z(this: SVGFEPointLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_z
+     */
+    readonly z: SVGAnimatedNumber;
+  }
+  export type SVGFEPointLightElementMethods = SVGFEPointLightElementOwnMethods & SVGElementMethods;
+  export type SVGFEPointLightElement = HostClass<"NtsDomSVGFEPointLightElement", SVGElement> & SVGFEPointLightElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFEPointLightElement */
+  export function asSVGFEPointLightElement(node: Node): SVGFEPointLightElement | null;
+  export interface SVGFESpecularLightingElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_in1
+     */
+    _get_in1(this: SVGFESpecularLightingElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_surfaceScale
+     */
+    _get_surfaceScale(this: SVGFESpecularLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_surfaceScale
+     */
+    readonly surfaceScale: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_specularConstant
+     */
+    _get_specularConstant(this: SVGFESpecularLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_specularConstant
+     */
+    readonly specularConstant: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_specularExponent
+     */
+    _get_specularExponent(this: SVGFESpecularLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_specularExponent
+     */
+    readonly specularExponent: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_kernelUnitLengthX
+     */
+    _get_kernelUnitLengthX(this: SVGFESpecularLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthX
+     */
+    readonly kernelUnitLengthX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_kernelUnitLengthY
+     */
+    _get_kernelUnitLengthY(this: SVGFESpecularLightingElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_kernelUnitLengthY
+     */
+    readonly kernelUnitLengthY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_x
+     */
+    _get_x(this: SVGFESpecularLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_y
+     */
+    _get_y(this: SVGFESpecularLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_width
+     */
+    _get_width(this: SVGFESpecularLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_height
+     */
+    _get_height(this: SVGFESpecularLightingElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpecularLightingElement_get_result
+     */
+    _get_result(this: SVGFESpecularLightingElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFESpecularLightingElementMethods = SVGFESpecularLightingElementOwnMethods & SVGElementMethods;
+  export type SVGFESpecularLightingElement = HostClass<"NtsDomSVGFESpecularLightingElement", SVGElement> & SVGFESpecularLightingElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFESpecularLightingElement */
+  export function asSVGFESpecularLightingElement(node: Node): SVGFESpecularLightingElement | null;
+  export interface SVGFESpotLightElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_x
+     */
+    _get_x(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_y
+     */
+    _get_y(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_z
+     */
+    _get_z(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_z
+     */
+    readonly z: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_pointsAtX
+     */
+    _get_pointsAtX(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_pointsAtX
+     */
+    readonly pointsAtX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_pointsAtY
+     */
+    _get_pointsAtY(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_pointsAtY
+     */
+    readonly pointsAtY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_pointsAtZ
+     */
+    _get_pointsAtZ(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_pointsAtZ
+     */
+    readonly pointsAtZ: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_specularExponent
+     */
+    _get_specularExponent(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_specularExponent
+     */
+    readonly specularExponent: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFESpotLightElement_get_limitingConeAngle
+     */
+    _get_limitingConeAngle(this: SVGFESpotLightElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_limitingConeAngle
+     */
+    readonly limitingConeAngle: SVGAnimatedNumber;
+  }
+  export type SVGFESpotLightElementMethods = SVGFESpotLightElementOwnMethods & SVGElementMethods;
+  export type SVGFESpotLightElement = HostClass<"NtsDomSVGFESpotLightElement", SVGElement> & SVGFESpotLightElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFESpotLightElement */
+  export function asSVGFESpotLightElement(node: Node): SVGFESpotLightElement | null;
+  export interface SVGFETileElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_in1
+     */
+    _get_in1(this: SVGFETileElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_in1
+     */
+    readonly in1: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_x
+     */
+    _get_x(this: SVGFETileElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_y
+     */
+    _get_y(this: SVGFETileElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_width
+     */
+    _get_width(this: SVGFETileElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_height
+     */
+    _get_height(this: SVGFETileElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETileElement_get_result
+     */
+    _get_result(this: SVGFETileElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFETileElementMethods = SVGFETileElementOwnMethods & SVGElementMethods;
+  export type SVGFETileElement = HostClass<"NtsDomSVGFETileElement", SVGElement> & SVGFETileElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFETileElement */
+  export function asSVGFETileElement(node: Node): SVGFETileElement | null;
+  export interface SVGFETurbulenceElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_baseFrequencyX
+     */
+    _get_baseFrequencyX(this: SVGFETurbulenceElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_baseFrequencyX
+     */
+    readonly baseFrequencyX: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_baseFrequencyY
+     */
+    _get_baseFrequencyY(this: SVGFETurbulenceElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_baseFrequencyY
+     */
+    readonly baseFrequencyY: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_numOctaves
+     */
+    _get_numOctaves(this: SVGFETurbulenceElement): SVGAnimatedInteger;
+    /**
+     * @ntsGet _get_numOctaves
+     */
+    readonly numOctaves: SVGAnimatedInteger;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_seed
+     */
+    _get_seed(this: SVGFETurbulenceElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_seed
+     */
+    readonly seed: SVGAnimatedNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_stitchTiles
+     */
+    _get_stitchTiles(this: SVGFETurbulenceElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_stitchTiles
+     */
+    readonly stitchTiles: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_type
+     */
+    _get_type(this: SVGFETurbulenceElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_x
+     */
+    _get_x(this: SVGFETurbulenceElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_y
+     */
+    _get_y(this: SVGFETurbulenceElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_width
+     */
+    _get_width(this: SVGFETurbulenceElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_height
+     */
+    _get_height(this: SVGFETurbulenceElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFETurbulenceElement_get_result
+     */
+    _get_result(this: SVGFETurbulenceElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_result
+     */
+    readonly result: SVGAnimatedString;
+  }
+  export type SVGFETurbulenceElementMethods = SVGFETurbulenceElementOwnMethods & SVGElementMethods;
+  export type SVGFETurbulenceElement = HostClass<"NtsDomSVGFETurbulenceElement", SVGElement> & SVGFETurbulenceElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFETurbulenceElement */
+  export function asSVGFETurbulenceElement(node: Node): SVGFETurbulenceElement | null;
+  export interface SVGFilterElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_filterUnits
+     */
+    _get_filterUnits(this: SVGFilterElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_filterUnits
+     */
+    readonly filterUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_primitiveUnits
+     */
+    _get_primitiveUnits(this: SVGFilterElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_primitiveUnits
+     */
+    readonly primitiveUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_x
+     */
+    _get_x(this: SVGFilterElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_y
+     */
+    _get_y(this: SVGFilterElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_width
+     */
+    _get_width(this: SVGFilterElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_height
+     */
+    _get_height(this: SVGFilterElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGFilterElement_get_href
+     */
+    _get_href(this: SVGFilterElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGFilterElementMethods = SVGFilterElementOwnMethods & SVGElementMethods;
+  export type SVGFilterElement = HostClass<"NtsDomSVGFilterElement", SVGElement> & SVGFilterElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGFilterElement */
+  export function asSVGFilterElement(node: Node): SVGFilterElement | null;
+  export interface SVGForeignObjectElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGForeignObjectElement_get_x
+     */
+    _get_x(this: SVGForeignObjectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGForeignObjectElement_get_y
+     */
+    _get_y(this: SVGForeignObjectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGForeignObjectElement_get_width
+     */
+    _get_width(this: SVGForeignObjectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGForeignObjectElement_get_height
+     */
+    _get_height(this: SVGForeignObjectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+  }
+  export type SVGForeignObjectElementMethods = SVGForeignObjectElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGForeignObjectElement = HostClass<"NtsDomSVGForeignObjectElement", SVGGraphicsElement> & SVGForeignObjectElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGForeignObjectElement */
+  export function asSVGForeignObjectElement(node: Node): SVGForeignObjectElement | null;
+  export interface SVGGElementOwnMethods {
+  }
+  export type SVGGElementMethods = SVGGElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGGElement = HostClass<"NtsDomSVGGElement", SVGGraphicsElement> & SVGGElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGGElement */
+  export function asSVGGElement(node: Node): SVGGElement | null;
+  export interface SVGImageElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_x
+     */
+    _get_x(this: SVGImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_y
+     */
+    _get_y(this: SVGImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_width
+     */
+    _get_width(this: SVGImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_height
+     */
+    _get_height(this: SVGImageElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGImageElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_decoding
+     */
+    _get_decoding(this: SVGImageElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_set_decoding
+     */
+    _set_decoding(this: SVGImageElement, value: StringView): void;
+    /**
+     * @ntsGet _get_decoding
+     * @ntsSet _set_decoding
+     */
+    decoding: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_crossOrigin
+     */
+    _get_crossOrigin(this: SVGImageElement): StringView | null;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_set_crossOrigin
+     */
+    _set_crossOrigin(this: SVGImageElement, value: StringView | null): void;
+    /**
+     * @ntsGet _get_crossOrigin
+     * @ntsSet _set_crossOrigin
+     */
+    crossOrigin: StringView | null;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_get_href
+     */
+    _get_href(this: SVGImageElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGImageElement_decode
+     */
+    decode(this: SVGImageElement): Promise<void>;
+  }
+  export type SVGImageElementMethods = SVGImageElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGImageElement = HostClass<"NtsDomSVGImageElement", SVGGraphicsElement> & SVGImageElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGImageElement */
+  export function asSVGImageElement(node: Node): SVGImageElement | null;
+  export interface SVGLengthOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGLength_get_unitType
+     */
+    _get_unitType(this: SVGLength): Float64;
+    /**
+     * @ntsGet _get_unitType
+     */
+    readonly unitType: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_get_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _get_value(this: SVGLength, error?: Ptr<DOMException | null>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: SVGLength, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_get_valueInSpecifiedUnits
+     */
+    _get_valueInSpecifiedUnits(this: SVGLength): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_set_valueInSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_valueInSpecifiedUnits(this: SVGLength, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_valueInSpecifiedUnits
+     * @ntsSet _set_valueInSpecifiedUnits
+     */
+    valueInSpecifiedUnits: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_get_valueAsString
+     */
+    _get_valueAsString(this: SVGLength): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_set_valueAsString
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_valueAsString(this: SVGLength, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_valueAsString
+     * @ntsSet _set_valueAsString
+     */
+    valueAsString: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_convertToSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertToSpecifiedUnits(this: SVGLength, unitType: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGLength_newValueSpecifiedUnits
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    newValueSpecifiedUnits(this: SVGLength, unitType: Float64, valueInSpecifiedUnits: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGLengthMethods = SVGLengthOwnMethods;
+  export type SVGLength = HostClass<"NtsDomSVGLength", null, "nts_dom_retain", "nts_dom_release"> & SVGLengthMethods;
+  export interface SVGLengthListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_get_length
+     */
+    _get_length(this: SVGLengthList): Float64;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_get_numberOfItems
+     */
+    _get_numberOfItems(this: SVGLengthList): Float64;
+    /**
+     * @ntsGet _get_numberOfItems
+     */
+    readonly numberOfItems: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_appendItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    appendItem(this: SVGLengthList, newItem: SVGLength, error?: Ptr<DOMException | null>): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: SVGLengthList, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_getItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getItem(this: SVGLengthList, index: Float64, error?: Ptr<DOMException | null>): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_initialize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    initialize(this: SVGLengthList, newItem: SVGLength, error?: Ptr<DOMException | null>): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_insertItemBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertItemBefore(this: SVGLengthList, newItem: SVGLength, index: Float64, error?: Ptr<DOMException | null>): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_removeItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeItem(this: SVGLengthList, index: Float64, error?: Ptr<DOMException | null>): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLengthList_replaceItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceItem(this: SVGLengthList, newItem: SVGLength, index: Float64, error?: Ptr<DOMException | null>): SVGLength;
+  }
+  export type SVGLengthListMethods = SVGLengthListOwnMethods;
+  export type SVGLengthList = HostClass<"NtsDomSVGLengthList", null, "nts_dom_retain", "nts_dom_release"> & SVGLengthListMethods;
+  export interface SVGLinearGradientElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGLinearGradientElement_get_x1
+     */
+    _get_x1(this: SVGLinearGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x1
+     */
+    readonly x1: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLinearGradientElement_get_y1
+     */
+    _get_y1(this: SVGLinearGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y1
+     */
+    readonly y1: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLinearGradientElement_get_x2
+     */
+    _get_x2(this: SVGLinearGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x2
+     */
+    readonly x2: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLinearGradientElement_get_y2
+     */
+    _get_y2(this: SVGLinearGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y2
+     */
+    readonly y2: SVGAnimatedLength;
+  }
+  export type SVGLinearGradientElementMethods = SVGLinearGradientElementOwnMethods & SVGGradientElementMethods;
+  export type SVGLinearGradientElement = HostClass<"NtsDomSVGLinearGradientElement", SVGGradientElement> & SVGLinearGradientElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGLinearGradientElement */
+  export function asSVGLinearGradientElement(node: Node): SVGLinearGradientElement | null;
+  export interface SVGLineElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGLineElement_get_x1
+     */
+    _get_x1(this: SVGLineElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x1
+     */
+    readonly x1: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLineElement_get_y1
+     */
+    _get_y1(this: SVGLineElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y1
+     */
+    readonly y1: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLineElement_get_x2
+     */
+    _get_x2(this: SVGLineElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x2
+     */
+    readonly x2: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGLineElement_get_y2
+     */
+    _get_y2(this: SVGLineElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y2
+     */
+    readonly y2: SVGAnimatedLength;
+  }
+  export type SVGLineElementMethods = SVGLineElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGLineElement = HostClass<"NtsDomSVGLineElement", SVGGeometryElement> & SVGLineElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGLineElement */
+  export function asSVGLineElement(node: Node): SVGLineElement | null;
+  export interface SVGMarkerElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_refX
+     */
+    _get_refX(this: SVGMarkerElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_refX
+     */
+    readonly refX: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_refY
+     */
+    _get_refY(this: SVGMarkerElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_refY
+     */
+    readonly refY: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_markerUnits
+     */
+    _get_markerUnits(this: SVGMarkerElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_markerUnits
+     */
+    readonly markerUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_markerWidth
+     */
+    _get_markerWidth(this: SVGMarkerElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_markerWidth
+     */
+    readonly markerWidth: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_markerHeight
+     */
+    _get_markerHeight(this: SVGMarkerElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_markerHeight
+     */
+    readonly markerHeight: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_orientType
+     */
+    _get_orientType(this: SVGMarkerElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_orientType
+     */
+    readonly orientType: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_orientAngle
+     */
+    _get_orientAngle(this: SVGMarkerElement): SVGAnimatedAngle;
+    /**
+     * @ntsGet _get_orientAngle
+     */
+    readonly orientAngle: SVGAnimatedAngle;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_viewBox
+     */
+    _get_viewBox(this: SVGMarkerElement): SVGAnimatedRect;
+    /**
+     * @ntsGet _get_viewBox
+     */
+    readonly viewBox: SVGAnimatedRect;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGMarkerElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_setOrientToAngle
+     */
+    setOrientToAngle(this: SVGMarkerElement, angle: SVGAngle): void;
+    /**
+     * @ntsSymbol nts_dom_SVGMarkerElement_setOrientToAuto
+     */
+    setOrientToAuto(this: SVGMarkerElement): void;
+  }
+  export type SVGMarkerElementMethods = SVGMarkerElementOwnMethods & SVGElementMethods;
+  export type SVGMarkerElement = HostClass<"NtsDomSVGMarkerElement", SVGElement> & SVGMarkerElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGMarkerElement */
+  export function asSVGMarkerElement(node: Node): SVGMarkerElement | null;
+  export interface SVGMaskElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_maskUnits
+     */
+    _get_maskUnits(this: SVGMaskElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_maskUnits
+     */
+    readonly maskUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_maskContentUnits
+     */
+    _get_maskContentUnits(this: SVGMaskElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_maskContentUnits
+     */
+    readonly maskContentUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_x
+     */
+    _get_x(this: SVGMaskElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_y
+     */
+    _get_y(this: SVGMaskElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_width
+     */
+    _get_width(this: SVGMaskElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_height
+     */
+    _get_height(this: SVGMaskElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_requiredExtensions
+     */
+    _get_requiredExtensions(this: SVGMaskElement): SVGStringList;
+    /**
+     * @ntsGet _get_requiredExtensions
+     */
+    readonly requiredExtensions: SVGStringList;
+    /**
+     * @ntsSymbol nts_dom_SVGMaskElement_get_systemLanguage
+     */
+    _get_systemLanguage(this: SVGMaskElement): SVGStringList;
+    /**
+     * @ntsGet _get_systemLanguage
+     */
+    readonly systemLanguage: SVGStringList;
+  }
+  export type SVGMaskElementMethods = SVGMaskElementOwnMethods & SVGElementMethods;
+  export type SVGMaskElement = HostClass<"NtsDomSVGMaskElement", SVGElement> & SVGMaskElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGMaskElement */
+  export function asSVGMaskElement(node: Node): SVGMaskElement | null;
+  export interface SVGMetadataElementOwnMethods {
+  }
+  export type SVGMetadataElementMethods = SVGMetadataElementOwnMethods & SVGElementMethods;
+  export type SVGMetadataElement = HostClass<"NtsDomSVGMetadataElement", SVGElement> & SVGMetadataElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGMetadataElement */
+  export function asSVGMetadataElement(node: Node): SVGMetadataElement | null;
+  export interface SVGMPathElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGMPathElement_get_href
+     */
+    _get_href(this: SVGMPathElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGMPathElementMethods = SVGMPathElementOwnMethods & SVGElementMethods;
+  export type SVGMPathElement = HostClass<"NtsDomSVGMPathElement", SVGElement> & SVGMPathElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGMPathElement */
+  export function asSVGMPathElement(node: Node): SVGMPathElement | null;
+  export interface SVGNumberOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGNumber_get_value
+     */
+    _get_value(this: SVGNumber): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGNumber_set_value
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_value(this: SVGNumber, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: Float64;
+  }
+  export type SVGNumberMethods = SVGNumberOwnMethods;
+  export type SVGNumber = HostClass<"NtsDomSVGNumber", null, "nts_dom_retain", "nts_dom_release"> & SVGNumberMethods;
+  export interface SVGNumberListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_get_length
+     */
+    _get_length(this: SVGNumberList): Float64;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_get_numberOfItems
+     */
+    _get_numberOfItems(this: SVGNumberList): Float64;
+    /**
+     * @ntsGet _get_numberOfItems
+     */
+    readonly numberOfItems: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_appendItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    appendItem(this: SVGNumberList, newItem: SVGNumber, error?: Ptr<DOMException | null>): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: SVGNumberList, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_getItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getItem(this: SVGNumberList, index: Float64, error?: Ptr<DOMException | null>): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_initialize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    initialize(this: SVGNumberList, newItem: SVGNumber, error?: Ptr<DOMException | null>): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_insertItemBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertItemBefore(this: SVGNumberList, newItem: SVGNumber, index: Float64, error?: Ptr<DOMException | null>): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_removeItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeItem(this: SVGNumberList, index: Float64, error?: Ptr<DOMException | null>): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGNumberList_replaceItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceItem(this: SVGNumberList, newItem: SVGNumber, index: Float64, error?: Ptr<DOMException | null>): SVGNumber;
+  }
+  export type SVGNumberListMethods = SVGNumberListOwnMethods;
+  export type SVGNumberList = HostClass<"NtsDomSVGNumberList", null, "nts_dom_retain", "nts_dom_release"> & SVGNumberListMethods;
+  export interface SVGPathElementOwnMethods {
+  }
+  export type SVGPathElementMethods = SVGPathElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGPathElement = HostClass<"NtsDomSVGPathElement", SVGGeometryElement> & SVGPathElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGPathElement */
+  export function asSVGPathElement(node: Node): SVGPathElement | null;
+  export interface SVGPatternElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_patternUnits
+     */
+    _get_patternUnits(this: SVGPatternElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_patternUnits
+     */
+    readonly patternUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_patternContentUnits
+     */
+    _get_patternContentUnits(this: SVGPatternElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_patternContentUnits
+     */
+    readonly patternContentUnits: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_patternTransform
+     */
+    _get_patternTransform(this: SVGPatternElement): SVGAnimatedTransformList;
+    /**
+     * @ntsGet _get_patternTransform
+     */
+    readonly patternTransform: SVGAnimatedTransformList;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_x
+     */
+    _get_x(this: SVGPatternElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_y
+     */
+    _get_y(this: SVGPatternElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_width
+     */
+    _get_width(this: SVGPatternElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_height
+     */
+    _get_height(this: SVGPatternElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_viewBox
+     */
+    _get_viewBox(this: SVGPatternElement): SVGAnimatedRect;
+    /**
+     * @ntsGet _get_viewBox
+     */
+    readonly viewBox: SVGAnimatedRect;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGPatternElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_href
+     */
+    _get_href(this: SVGPatternElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_requiredExtensions
+     */
+    _get_requiredExtensions(this: SVGPatternElement): SVGStringList;
+    /**
+     * @ntsGet _get_requiredExtensions
+     */
+    readonly requiredExtensions: SVGStringList;
+    /**
+     * @ntsSymbol nts_dom_SVGPatternElement_get_systemLanguage
+     */
+    _get_systemLanguage(this: SVGPatternElement): SVGStringList;
+    /**
+     * @ntsGet _get_systemLanguage
+     */
+    readonly systemLanguage: SVGStringList;
+  }
+  export type SVGPatternElementMethods = SVGPatternElementOwnMethods & SVGElementMethods;
+  export type SVGPatternElement = HostClass<"NtsDomSVGPatternElement", SVGElement> & SVGPatternElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGPatternElement */
+  export function asSVGPatternElement(node: Node): SVGPatternElement | null;
+  export interface SVGPointListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGPointList_get_length
+     */
+    _get_length(this: SVGPointList): Float64;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGPointList_get_numberOfItems
+     */
+    _get_numberOfItems(this: SVGPointList): Float64;
+    /**
+     * @ntsGet _get_numberOfItems
+     */
+    readonly numberOfItems: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGPointList_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: SVGPointList, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGPointListMethods = SVGPointListOwnMethods;
+  export type SVGPointList = HostClass<"NtsDomSVGPointList", null, "nts_dom_retain", "nts_dom_release"> & SVGPointListMethods;
+  export interface SVGPolygonElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGPolygonElement_get_points
+     */
+    _get_points(this: SVGPolygonElement): SVGPointList;
+    /**
+     * @ntsGet _get_points
+     */
+    readonly points: SVGPointList;
+    /**
+     * @ntsSymbol nts_dom_SVGPolygonElement_get_animatedPoints
+     */
+    _get_animatedPoints(this: SVGPolygonElement): SVGPointList;
+    /**
+     * @ntsGet _get_animatedPoints
+     */
+    readonly animatedPoints: SVGPointList;
+  }
+  export type SVGPolygonElementMethods = SVGPolygonElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGPolygonElement = HostClass<"NtsDomSVGPolygonElement", SVGGeometryElement> & SVGPolygonElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGPolygonElement */
+  export function asSVGPolygonElement(node: Node): SVGPolygonElement | null;
+  export interface SVGPolylineElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGPolylineElement_get_points
+     */
+    _get_points(this: SVGPolylineElement): SVGPointList;
+    /**
+     * @ntsGet _get_points
+     */
+    readonly points: SVGPointList;
+    /**
+     * @ntsSymbol nts_dom_SVGPolylineElement_get_animatedPoints
+     */
+    _get_animatedPoints(this: SVGPolylineElement): SVGPointList;
+    /**
+     * @ntsGet _get_animatedPoints
+     */
+    readonly animatedPoints: SVGPointList;
+  }
+  export type SVGPolylineElementMethods = SVGPolylineElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGPolylineElement = HostClass<"NtsDomSVGPolylineElement", SVGGeometryElement> & SVGPolylineElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGPolylineElement */
+  export function asSVGPolylineElement(node: Node): SVGPolylineElement | null;
+  export interface SVGPreserveAspectRatioOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGPreserveAspectRatio_get_align
+     */
+    _get_align(this: SVGPreserveAspectRatio): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGPreserveAspectRatio_set_align
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_align(this: SVGPreserveAspectRatio, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_align
+     * @ntsSet _set_align
+     */
+    align: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGPreserveAspectRatio_get_meetOrSlice
+     */
+    _get_meetOrSlice(this: SVGPreserveAspectRatio): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGPreserveAspectRatio_set_meetOrSlice
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_meetOrSlice(this: SVGPreserveAspectRatio, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_meetOrSlice
+     * @ntsSet _set_meetOrSlice
+     */
+    meetOrSlice: Float64;
+  }
+  export type SVGPreserveAspectRatioMethods = SVGPreserveAspectRatioOwnMethods;
+  export type SVGPreserveAspectRatio = HostClass<"NtsDomSVGPreserveAspectRatio", null, "nts_dom_retain", "nts_dom_release"> & SVGPreserveAspectRatioMethods;
+  export interface SVGRadialGradientElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_cx
+     */
+    _get_cx(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cx
+     */
+    readonly cx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_cy
+     */
+    _get_cy(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_cy
+     */
+    readonly cy: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_r
+     */
+    _get_r(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_r
+     */
+    readonly r: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_fx
+     */
+    _get_fx(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_fx
+     */
+    readonly fx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_fy
+     */
+    _get_fy(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_fy
+     */
+    readonly fy: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRadialGradientElement_get_fr
+     */
+    _get_fr(this: SVGRadialGradientElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_fr
+     */
+    readonly fr: SVGAnimatedLength;
+  }
+  export type SVGRadialGradientElementMethods = SVGRadialGradientElementOwnMethods & SVGGradientElementMethods;
+  export type SVGRadialGradientElement = HostClass<"NtsDomSVGRadialGradientElement", SVGGradientElement> & SVGRadialGradientElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGRadialGradientElement */
+  export function asSVGRadialGradientElement(node: Node): SVGRadialGradientElement | null;
+  export interface SVGRectElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_x
+     */
+    _get_x(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_y
+     */
+    _get_y(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_width
+     */
+    _get_width(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_height
+     */
+    _get_height(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_rx
+     */
+    _get_rx(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_rx
+     */
+    readonly rx: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGRectElement_get_ry
+     */
+    _get_ry(this: SVGRectElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_ry
+     */
+    readonly ry: SVGAnimatedLength;
+  }
+  export type SVGRectElementMethods = SVGRectElementOwnMethods & SVGGeometryElementMethods;
+  export type SVGRectElement = HostClass<"NtsDomSVGRectElement", SVGGeometryElement> & SVGRectElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGRectElement */
+  export function asSVGRectElement(node: Node): SVGRectElement | null;
+  export interface SVGScriptElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGScriptElement_get_type
+     */
+    _get_type(this: SVGScriptElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGScriptElement_set_type
+     */
+    _set_type(this: SVGScriptElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGScriptElement_get_async
+     */
+    _get_async(this: SVGScriptElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGScriptElement_set_async
+     */
+    _set_async(this: SVGScriptElement, value: boolean): void;
+    /**
+     * @ntsGet _get_async
+     * @ntsSet _set_async
+     */
+    async: boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGScriptElement_get_href
+     */
+    _get_href(this: SVGScriptElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGScriptElementMethods = SVGScriptElementOwnMethods & SVGElementMethods;
+  export type SVGScriptElement = HostClass<"NtsDomSVGScriptElement", SVGElement> & SVGScriptElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGScriptElement */
+  export function asSVGScriptElement(node: Node): SVGScriptElement | null;
+  export interface SVGSetElementOwnMethods {
+  }
+  export type SVGSetElementMethods = SVGSetElementOwnMethods & SVGAnimationElementMethods;
+  export type SVGSetElement = HostClass<"NtsDomSVGSetElement", SVGAnimationElement> & SVGSetElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGSetElement */
+  export function asSVGSetElement(node: Node): SVGSetElement | null;
+  export interface SVGStopElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGStopElement_get_offset
+     */
+    _get_offset(this: SVGStopElement): SVGAnimatedNumber;
+    /**
+     * @ntsGet _get_offset
+     */
+    readonly offset: SVGAnimatedNumber;
+  }
+  export type SVGStopElementMethods = SVGStopElementOwnMethods & SVGElementMethods;
+  export type SVGStopElement = HostClass<"NtsDomSVGStopElement", SVGElement> & SVGStopElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGStopElement */
+  export function asSVGStopElement(node: Node): SVGStopElement | null;
+  export interface SVGStringListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_get_length
+     */
+    _get_length(this: SVGStringList): Float64;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_get_numberOfItems
+     */
+    _get_numberOfItems(this: SVGStringList): Float64;
+    /**
+     * @ntsGet _get_numberOfItems
+     */
+    readonly numberOfItems: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_appendItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    appendItem(this: SVGStringList, newItem: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: SVGStringList, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_getItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getItem(this: SVGStringList, index: Float64, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_initialize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    initialize(this: SVGStringList, newItem: StringView, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_insertItemBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertItemBefore(this: SVGStringList, item: StringView, index: Float64, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_removeItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeItem(this: SVGStringList, index: Float64, error?: Ptr<DOMException | null>): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStringList_replaceItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceItem(this: SVGStringList, newItem: StringView, index: Float64, error?: Ptr<DOMException | null>): StringView;
+  }
+  export type SVGStringListMethods = SVGStringListOwnMethods;
+  export type SVGStringList = HostClass<"NtsDomSVGStringList", null, "nts_dom_retain", "nts_dom_release"> & SVGStringListMethods;
+  export interface SVGStyleElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_get_type
+     */
+    _get_type(this: SVGStyleElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_set_type
+     */
+    _set_type(this: SVGStyleElement, value: StringView): void;
+    /**
+     * @ntsGet _get_type
+     * @ntsSet _set_type
+     */
+    type: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_get_media
+     */
+    _get_media(this: SVGStyleElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_set_media
+     */
+    _set_media(this: SVGStyleElement, value: StringView): void;
+    /**
+     * @ntsGet _get_media
+     * @ntsSet _set_media
+     */
+    media: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_get_title
+     */
+    _get_title(this: SVGStyleElement): StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_set_title
+     */
+    _set_title(this: SVGStyleElement, value: StringView): void;
+    /**
+     * @ntsGet _get_title
+     * @ntsSet _set_title
+     */
+    title: StringView;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_get_sheet
+     */
+    _get_sheet(this: SVGStyleElement): StyleSheet | null;
+    /**
+     * @ntsGet _get_sheet
+     */
+    readonly sheet: StyleSheet | null;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_get_disabled
+     */
+    _get_disabled(this: SVGStyleElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGStyleElement_set_disabled
+     */
+    _set_disabled(this: SVGStyleElement, value: boolean): void;
+    /**
+     * @ntsGet _get_disabled
+     * @ntsSet _set_disabled
+     */
+    disabled: boolean;
+  }
+  export type SVGStyleElementMethods = SVGStyleElementOwnMethods & SVGElementMethods;
+  export type SVGStyleElement = HostClass<"NtsDomSVGStyleElement", SVGElement> & SVGStyleElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGStyleElement */
+  export function asSVGStyleElement(node: Node): SVGStyleElement | null;
+  export interface SVGSVGElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_x
+     */
+    _get_x(this: SVGSVGElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_y
+     */
+    _get_y(this: SVGSVGElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_width
+     */
+    _get_width(this: SVGSVGElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_height
+     */
+    _get_height(this: SVGSVGElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_currentScale
+     */
+    _get_currentScale(this: SVGSVGElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_set_currentScale
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_currentScale(this: SVGSVGElement, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_currentScale
+     * @ntsSet _set_currentScale
+     */
+    currentScale: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_viewBox
+     */
+    _get_viewBox(this: SVGSVGElement): SVGAnimatedRect;
+    /**
+     * @ntsGet _get_viewBox
+     */
+    readonly viewBox: SVGAnimatedRect;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGSVGElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_get_zoomAndPan
+     */
+    _get_zoomAndPan(this: SVGSVGElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_set_zoomAndPan
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_zoomAndPan(this: SVGSVGElement, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_zoomAndPan
+     * @ntsSet _set_zoomAndPan
+     */
+    zoomAndPan: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_animationsPaused
+     */
+    animationsPaused(this: SVGSVGElement): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_createSVGAngle
+     */
+    createSVGAngle(this: SVGSVGElement): SVGAngle;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_createSVGLength
+     */
+    createSVGLength(this: SVGSVGElement): SVGLength;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_createSVGNumber
+     */
+    createSVGNumber(this: SVGSVGElement): SVGNumber;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_createSVGTransform
+     */
+    createSVGTransform(this: SVGSVGElement): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_deselectAll
+     */
+    deselectAll(this: SVGSVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_forceRedraw
+     */
+    forceRedraw(this: SVGSVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_getCurrentTime
+     */
+    getCurrentTime(this: SVGSVGElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_getElementById
+     */
+    getElementById(this: SVGSVGElement, elementId: StringView): Element;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_pauseAnimations
+     */
+    pauseAnimations(this: SVGSVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_setCurrentTime
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setCurrentTime(this: SVGSVGElement, seconds: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_suspendRedraw
+     */
+    suspendRedraw(this: SVGSVGElement, maxWaitMilliseconds: Float64): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_unpauseAnimations
+     */
+    unpauseAnimations(this: SVGSVGElement): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_unsuspendRedraw
+     */
+    unsuspendRedraw(this: SVGSVGElement, suspendHandleId: Float64): void;
+    /**
+     * @ntsSymbol nts_dom_SVGSVGElement_unsuspendRedrawAll
+     */
+    unsuspendRedrawAll(this: SVGSVGElement): void;
+  }
+  export type SVGSVGElementMethods = SVGSVGElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGSVGElement = HostClass<"NtsDomSVGSVGElement", SVGGraphicsElement> & SVGSVGElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGSVGElement */
+  export function asSVGSVGElement(node: Node): SVGSVGElement | null;
+  export interface SVGSwitchElementOwnMethods {
+  }
+  export type SVGSwitchElementMethods = SVGSwitchElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGSwitchElement = HostClass<"NtsDomSVGSwitchElement", SVGGraphicsElement> & SVGSwitchElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGSwitchElement */
+  export function asSVGSwitchElement(node: Node): SVGSwitchElement | null;
+  export interface SVGSymbolElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGSymbolElement_get_viewBox
+     */
+    _get_viewBox(this: SVGSymbolElement): SVGAnimatedRect;
+    /**
+     * @ntsGet _get_viewBox
+     */
+    readonly viewBox: SVGAnimatedRect;
+    /**
+     * @ntsSymbol nts_dom_SVGSymbolElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGSymbolElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+  }
+  export type SVGSymbolElementMethods = SVGSymbolElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGSymbolElement = HostClass<"NtsDomSVGSymbolElement", SVGGraphicsElement> & SVGSymbolElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGSymbolElement */
+  export function asSVGSymbolElement(node: Node): SVGSymbolElement | null;
+  export interface SVGTextElementOwnMethods {
+  }
+  export type SVGTextElementMethods = SVGTextElementOwnMethods & SVGTextPositioningElementMethods;
+  export type SVGTextElement = HostClass<"NtsDomSVGTextElement", SVGTextPositioningElement> & SVGTextElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTextElement */
+  export function asSVGTextElement(node: Node): SVGTextElement | null;
+  export interface SVGTextPathElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGTextPathElement_get_startOffset
+     */
+    _get_startOffset(this: SVGTextPathElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_startOffset
+     */
+    readonly startOffset: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPathElement_get_method
+     */
+    _get_method(this: SVGTextPathElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_method
+     */
+    readonly method: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPathElement_get_spacing
+     */
+    _get_spacing(this: SVGTextPathElement): SVGAnimatedEnumeration;
+    /**
+     * @ntsGet _get_spacing
+     */
+    readonly spacing: SVGAnimatedEnumeration;
+    /**
+     * @ntsSymbol nts_dom_SVGTextPathElement_get_href
+     */
+    _get_href(this: SVGTextPathElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGTextPathElementMethods = SVGTextPathElementOwnMethods & SVGTextContentElementMethods;
+  export type SVGTextPathElement = HostClass<"NtsDomSVGTextPathElement", SVGTextContentElement> & SVGTextPathElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTextPathElement */
+  export function asSVGTextPathElement(node: Node): SVGTextPathElement | null;
+  export interface SVGTitleElementOwnMethods {
+  }
+  export type SVGTitleElementMethods = SVGTitleElementOwnMethods & SVGElementMethods;
+  export type SVGTitleElement = HostClass<"NtsDomSVGTitleElement", SVGElement> & SVGTitleElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTitleElement */
+  export function asSVGTitleElement(node: Node): SVGTitleElement | null;
+  export interface SVGTransformOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_get_type
+     */
+    _get_type(this: SVGTransform): Float64;
+    /**
+     * @ntsGet _get_type
+     */
+    readonly type: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_get_angle
+     */
+    _get_angle(this: SVGTransform): Float64;
+    /**
+     * @ntsGet _get_angle
+     */
+    readonly angle: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_setRotate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setRotate(this: SVGTransform, angle: Float64, cx: Float64, cy: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_setScale
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setScale(this: SVGTransform, sx: Float64, sy: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_setSkewX
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setSkewX(this: SVGTransform, angle: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_setSkewY
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setSkewY(this: SVGTransform, angle: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGTransform_setTranslate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setTranslate(this: SVGTransform, tx: Float64, ty: Float64, error?: Ptr<DOMException | null>): void;
+  }
+  export type SVGTransformMethods = SVGTransformOwnMethods;
+  export type SVGTransform = HostClass<"NtsDomSVGTransform", null, "nts_dom_retain", "nts_dom_release"> & SVGTransformMethods;
+  export interface SVGTransformListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_get_length
+     */
+    _get_length(this: SVGTransformList): Float64;
+    /**
+     * @ntsGet _get_length
+     */
+    readonly length: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_get_numberOfItems
+     */
+    _get_numberOfItems(this: SVGTransformList): Float64;
+    /**
+     * @ntsGet _get_numberOfItems
+     */
+    readonly numberOfItems: Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_appendItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    appendItem(this: SVGTransformList, newItem: SVGTransform, error?: Ptr<DOMException | null>): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_clear
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    clear(this: SVGTransformList, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_consolidate
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    consolidate(this: SVGTransformList, error?: Ptr<DOMException | null>): SVGTransform | null;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_getItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    getItem(this: SVGTransformList, index: Float64, error?: Ptr<DOMException | null>): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_initialize
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    initialize(this: SVGTransformList, newItem: SVGTransform, error?: Ptr<DOMException | null>): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_insertItemBefore
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    insertItemBefore(this: SVGTransformList, newItem: SVGTransform, index: Float64, error?: Ptr<DOMException | null>): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_removeItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    removeItem(this: SVGTransformList, index: Float64, error?: Ptr<DOMException | null>): SVGTransform;
+    /**
+     * @ntsSymbol nts_dom_SVGTransformList_replaceItem
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    replaceItem(this: SVGTransformList, newItem: SVGTransform, index: Float64, error?: Ptr<DOMException | null>): SVGTransform;
+  }
+  export type SVGTransformListMethods = SVGTransformListOwnMethods;
+  export type SVGTransformList = HostClass<"NtsDomSVGTransformList", null, "nts_dom_retain", "nts_dom_release"> & SVGTransformListMethods;
+  export interface SVGTSpanElementOwnMethods {
+  }
+  export type SVGTSpanElementMethods = SVGTSpanElementOwnMethods & SVGTextPositioningElementMethods;
+  export type SVGTSpanElement = HostClass<"NtsDomSVGTSpanElement", SVGTextPositioningElement> & SVGTSpanElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGTSpanElement */
+  export function asSVGTSpanElement(node: Node): SVGTSpanElement | null;
+  export interface SVGUnitTypesOwnMethods {
+  }
+  export type SVGUnitTypesMethods = SVGUnitTypesOwnMethods;
+  export type SVGUnitTypes = HostClass<"NtsDomSVGUnitTypes", null, "nts_dom_retain", "nts_dom_release"> & SVGUnitTypesMethods;
+  export interface SVGUseElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGUseElement_get_x
+     */
+    _get_x(this: SVGUseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_x
+     */
+    readonly x: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGUseElement_get_y
+     */
+    _get_y(this: SVGUseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_y
+     */
+    readonly y: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGUseElement_get_width
+     */
+    _get_width(this: SVGUseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_width
+     */
+    readonly width: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGUseElement_get_height
+     */
+    _get_height(this: SVGUseElement): SVGAnimatedLength;
+    /**
+     * @ntsGet _get_height
+     */
+    readonly height: SVGAnimatedLength;
+    /**
+     * @ntsSymbol nts_dom_SVGUseElement_get_href
+     */
+    _get_href(this: SVGUseElement): SVGAnimatedString;
+    /**
+     * @ntsGet _get_href
+     */
+    readonly href: SVGAnimatedString;
+  }
+  export type SVGUseElementMethods = SVGUseElementOwnMethods & SVGGraphicsElementMethods;
+  export type SVGUseElement = HostClass<"NtsDomSVGUseElement", SVGGraphicsElement> & SVGUseElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGUseElement */
+  export function asSVGUseElement(node: Node): SVGUseElement | null;
+  export interface SVGViewElementOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_SVGViewElement_get_viewBox
+     */
+    _get_viewBox(this: SVGViewElement): SVGAnimatedRect;
+    /**
+     * @ntsGet _get_viewBox
+     */
+    readonly viewBox: SVGAnimatedRect;
+    /**
+     * @ntsSymbol nts_dom_SVGViewElement_get_preserveAspectRatio
+     */
+    _get_preserveAspectRatio(this: SVGViewElement): SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsGet _get_preserveAspectRatio
+     */
+    readonly preserveAspectRatio: SVGAnimatedPreserveAspectRatio;
+    /**
+     * @ntsSymbol nts_dom_SVGViewElement_get_zoomAndPan
+     */
+    _get_zoomAndPan(this: SVGViewElement): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGViewElement_set_zoomAndPan
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_zoomAndPan(this: SVGViewElement, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_zoomAndPan
+     * @ntsSet _set_zoomAndPan
+     */
+    zoomAndPan: Float64;
+  }
+  export type SVGViewElementMethods = SVGViewElementOwnMethods & SVGElementMethods;
+  export type SVGViewElement = HostClass<"NtsDomSVGViewElement", SVGElement> & SVGViewElementMethods;
+  /** @ntsSymbol nts_dom_as_SVGViewElement */
+  export function asSVGViewElement(node: Node): SVGViewElement | null;
   export interface ChildNodeOwnMethods {
     /**
      * @ntsSymbol nts_dom_ChildNode_after_sss

@@ -1,5 +1,5 @@
 {
-  "bound": 5837,
+  "bound": 6971,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -515,11 +515,6 @@
       "interface": "Document",
       "member": "set onautofill",
       "why": "[RuntimeEnabled=AutofillEvent] overridable"
-    },
-    {
-      "interface": "Document",
-      "member": "get rootElement",
-      "why": "interface SVGSVGElement is not bound"
     },
     {
       "interface": "Document",
@@ -2410,11 +2405,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "getLineDash/0",
       "why": "result type sequence<unrestricted double>"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "getTransform/0",
-      "why": "interface DOMMatrix is not bound"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -4365,6 +4355,316 @@
       "interface": "SecurityPolicyViolationEvent",
       "member": "get urlHash",
       "why": "[RuntimeEnabled=CSPHashesV1] overridable"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
+      "member": "toFloat32Array/0",
+      "why": "result type Float32Array"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
+      "member": "toFloat64Array/0",
+      "why": "result type Float64Array"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
+      "member": "toJSON/0",
+      "why": "result type object"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
+      "member": "fromFloat32Array/1",
+      "why": "parameter type Float32Array"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
+      "member": "fromFloat64Array/1",
+      "why": "parameter type Float64Array"
+    },
+    {
+      "interface": "DOMMatrix",
+      "member": "fromFloat32Array/1",
+      "why": "parameter type Float32Array"
+    },
+    {
+      "interface": "DOMMatrix",
+      "member": "fromFloat64Array/1",
+      "why": "parameter type Float64Array"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onbeforefilter",
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onbeforefilter",
+      "why": "[RuntimeEnabled=FilteringPrimitives] none"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get oncomplete",
+      "why": "[RuntimeEnabled=LoginElement] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set oncomplete",
+      "why": "[RuntimeEnabled=LoginElement] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onerror",
+      "why": "result type OnErrorEventHandler"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onerror",
+      "why": "parameter type OnErrorEventHandler"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onoverscrollcancel",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onoverscrollcancel",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onoverscrollchanging",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onoverscrollchanging",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onoverscrollend",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onoverscrollend",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onoverscrollstart",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onoverscrollstart",
+      "why": "[RuntimeEnabled=OverscrollGestures] experimental"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get ontouchcancel",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set ontouchcancel",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get ontouchend",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set ontouchend",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get ontouchmove",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set ontouchmove",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get ontouchstart",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set ontouchstart",
+      "why": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get onbeforexrselect",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "set onbeforexrselect",
+      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
+    },
+    {
+      "interface": "SVGElement",
+      "member": "get attributeStyleMap",
+      "why": "interface StylePropertyMap is not bound"
+    },
+    {
+      "interface": "SVGGraphicsElement",
+      "member": "getBBox/0",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGGraphicsElement",
+      "member": "getCTM/0",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGGraphicsElement",
+      "member": "getScreenCTM/0",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGGeometryElement",
+      "member": "getPointAtLength/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGTextContentElement",
+      "member": "getEndPositionOfChar/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGTextContentElement",
+      "member": "getExtentOfChar/1",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGTextContentElement",
+      "member": "getStartPositionOfChar/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGAnimatedRect",
+      "member": "get baseVal",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGAnimatedRect",
+      "member": "get animVal",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGPathElement",
+      "member": "getPathData/1",
+      "why": "[RuntimeEnabled=SVGPathDataAPI] experimental"
+    },
+    {
+      "interface": "SVGPathElement",
+      "member": "setPathData/1",
+      "why": "[RuntimeEnabled=SVGPathDataAPI] experimental"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "appendItem/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "getItem/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "initialize/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "insertItemBefore/2",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "removeItem/1",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGPointList",
+      "member": "replaceItem/2",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "get currentTranslate",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "checkEnclosure/2",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "checkIntersection/2",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "createSVGMatrix/0",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "createSVGPoint/0",
+      "why": "interface SVGPoint is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "createSVGRect/0",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "createSVGTransformFromMatrix/1",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "getEnclosureList/2",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGSVGElement",
+      "member": "getIntersectionList/2",
+      "why": "interface SVGRect is not bound"
+    },
+    {
+      "interface": "SVGTextPathElement",
+      "member": "get side",
+      "why": "[RuntimeEnabled=SVGTextPathSideAttribute] experimental"
+    },
+    {
+      "interface": "SVGTransform",
+      "member": "get matrix",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGTransform",
+      "member": "setMatrix/1",
+      "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "SVGTransformList",
+      "member": "createSVGTransformFromMatrix/1",
+      "why": "interface SVGMatrix is not bound"
     },
     {
       "interface": "ChildNode",

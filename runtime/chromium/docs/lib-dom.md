@@ -81,18 +81,28 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-13, 153 interfaces, 5296 functions):
-  - lib.dom.d.ts declares 2609 members on the bound interfaces.
-  - 2319 are bound, the CSS properties among them. Blink serves those
+  2026-10-14, 289 interfaces, 6971 functions):
+  - lib.dom.d.ts declares 3604 members on the bound interfaces.
+  - 3129 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 204 are in Blink's IDL but skipped, and `report.json` says why. The
-    largest groups: 56 defined in Blink's modules component on an interface
-    the allowlist does not take from there, 64 result types (`any`, frozen
-    arrays, promises, sequences, `object`), 15 parameter types, and 12
-    touch-event members Blink enables per platform.
+  - 246 are in Blink's IDL but skipped, and `report.json` says why. The
+    largest groups: 69 result types (`any`, frozen arrays, promises,
+    sequences, `object`), 64 naming an interface not bound, 60 defined in
+    Blink's modules component on an interface the allowlist does not take
+    from there, 16 parameter types, and 16 touch-event members Blink
+    enables per platform.
   - The rest are not attributes or operations of that interface in Blink's
-    IDL: 59 constants, 20 iterable members, 3 stringifiers and 4 others.
+    IDL: 176 constants, 20 iterable members, 4 stringifiers and 29 others
+    (the window event handlers lib.dom gives `SVGSVGElement`, and the like).
+- **Where lib.dom's type is not what Blink answers, the member stays out.**
+  lib.dom types `getBBox()` as a `DOMRect`, `createSVGPoint()` and
+  `getPointAtLength()` as a `DOMPoint`, and `getScreenCTM()` as a
+  `DOMMatrix`; Blink answers an `SVGRect`, `SVGPoint` and `SVGMatrix`,
+  classes of their own that are none of those (page script's `getBBox().top`
+  is `undefined`). Bound by lib.dom's type, the program would read an object
+  as a class it is not, so these are skipped ("interface SVGRect is not
+  bound") rather than bound to the name lib.dom gives them.
 - **Constants are lib.dom's literals, held to Blink's IDL.** lib.dom.d.ts
   types each IDL constant as one literal (`readonly ELEMENT_NODE: 1`), on
   the interface and on its `declare var`, and the compiler is to lower a

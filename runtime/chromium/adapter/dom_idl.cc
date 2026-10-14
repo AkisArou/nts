@@ -660,6 +660,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_request_usvstring.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscripturl.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_string_unrestricteddoublesequence.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
@@ -818,6 +820,8 @@
 #include "third_party/blink/renderer/core/fullscreen/document_fullscreen.h"
 #include "third_party/blink/renderer/core/fullscreen/element_fullscreen.h"
 #include "third_party/blink/renderer/core/geolocation/geolocation.h"
+#include "third_party/blink/renderer/core/geometry/dom_matrix.h"
+#include "third_party/blink/renderer/core/geometry/dom_matrix_read_only.h"
 #include "third_party/blink/renderer/core/geometry/dom_point.h"
 #include "third_party/blink/renderer/core/geometry/dom_point_read_only.h"
 #include "third_party/blink/renderer/core/geometry/dom_quad.h"
@@ -917,7 +921,101 @@
 #include "third_party/blink/renderer/core/scheduler/idle_deadline.h"
 #include "third_party/blink/renderer/core/scheduler/window_idle_tasks.h"
 #include "third_party/blink/renderer/core/script_tools/model_context_supplement.h"
+#include "third_party/blink/renderer/core/svg/svg_a_element.h"
+#include "third_party/blink/renderer/core/svg/svg_angle_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_motion_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_transform_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_angle.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_boolean.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_enumeration_base.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_integer.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length_list.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_number.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_number_list.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_rect.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_string.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_transform_list.h"
+#include "third_party/blink/renderer/core/svg/svg_animation_element.h"
+#include "third_party/blink/renderer/core/svg/svg_circle_element.h"
+#include "third_party/blink/renderer/core/svg/svg_clip_path_element.h"
+#include "third_party/blink/renderer/core/svg/svg_component_transfer_function_element.h"
+#include "third_party/blink/renderer/core/svg/svg_defs_element.h"
+#include "third_party/blink/renderer/core/svg/svg_desc_element.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
+#include "third_party/blink/renderer/core/svg/svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_ellipse_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_blend_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_color_matrix_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_component_transfer_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_composite_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_convolve_matrix_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_diffuse_lighting_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_displacement_map_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_distant_light_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_drop_shadow_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_flood_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_func_a_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_func_b_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_func_g_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_func_r_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_gaussian_blur_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_image_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_merge_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_merge_node_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_morphology_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_offset_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_point_light_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_specular_lighting_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_spot_light_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_tile_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_turbulence_element.h"
+#include "third_party/blink/renderer/core/svg/svg_filter_element.h"
+#include "third_party/blink/renderer/core/svg/svg_foreign_object_element.h"
+#include "third_party/blink/renderer/core/svg/svg_g_element.h"
+#include "third_party/blink/renderer/core/svg/svg_geometry_element.h"
+#include "third_party/blink/renderer/core/svg/svg_gradient_element.h"
+#include "third_party/blink/renderer/core/svg/svg_graphics_element.h"
+#include "third_party/blink/renderer/core/svg/svg_image_element.h"
+#include "third_party/blink/renderer/core/svg/svg_length_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_length_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_line_element.h"
+#include "third_party/blink/renderer/core/svg/svg_linear_gradient_element.h"
+#include "third_party/blink/renderer/core/svg/svg_marker_element.h"
+#include "third_party/blink/renderer/core/svg/svg_mask_element.h"
+#include "third_party/blink/renderer/core/svg/svg_metadata_element.h"
+#include "third_party/blink/renderer/core/svg/svg_mpath_element.h"
+#include "third_party/blink/renderer/core/svg/svg_number_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_path_element.h"
+#include "third_party/blink/renderer/core/svg/svg_pattern_element.h"
+#include "third_party/blink/renderer/core/svg/svg_point_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_polygon_element.h"
+#include "third_party/blink/renderer/core/svg/svg_polyline_element.h"
+#include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_radial_gradient_element.h"
+#include "third_party/blink/renderer/core/svg/svg_rect_element.h"
+#include "third_party/blink/renderer/core/svg/svg_script_element.h"
+#include "third_party/blink/renderer/core/svg/svg_set_element.h"
+#include "third_party/blink/renderer/core/svg/svg_stop_element.h"
+#include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_style_element.h"
+#include "third_party/blink/renderer/core/svg/svg_svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_switch_element.h"
+#include "third_party/blink/renderer/core/svg/svg_symbol_element.h"
+#include "third_party/blink/renderer/core/svg/svg_text_content_element.h"
+#include "third_party/blink/renderer/core/svg/svg_text_element.h"
+#include "third_party/blink/renderer/core/svg/svg_text_path_element.h"
+#include "third_party/blink/renderer/core/svg/svg_text_positioning_element.h"
+#include "third_party/blink/renderer/core/svg/svg_title_element.h"
+#include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_tspan_element.h"
+#include "third_party/blink/renderer/core/svg/svg_unit_types.h"
+#include "third_party/blink/renderer/core/svg/svg_use_element.h"
+#include "third_party/blink/renderer/core/svg/svg_view_element.h"
 #include "third_party/blink/renderer/core/testing/origin_trials_test_global.h"
 #include "third_party/blink/renderer/core/timing/global_performance.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
@@ -11032,6 +11130,12 @@ void nts_dom_Document_set_onwebkitfullscreenerror_null(NtsDomDocument* self) {
   blink::EventListener* previous = DocumentFullscreen::onwebkitfullscreenerror(*receiver);
   DocumentFullscreen::setOnwebkitfullscreenerror(*receiver, nullptr);
   context.Replaced(previous);
+}
+
+NtsDomSVGSVGElement* nts_dom_Document_get_rootElement(NtsDomDocument* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomSVGSVGElement>(SVGDocumentExtensions::rootElement(*receiver));
 }
 
 struct NtsHeader* nts_dom_Document_get_onabort(NtsDomDocument* self) {
@@ -38574,6 +38678,13 @@ NtsDomCanvasPattern* nts_dom_CanvasRenderingContext2D_createPattern_HTMLVideoEle
   return HandleOf<NtsDomCanvasPattern>(receiver->createPattern(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::HTMLVideoElement>(image)), NtsText(context, repetitionType), exception_state));
 }
 
+NtsDomCanvasPattern* nts_dom_CanvasRenderingContext2D_createPattern_SVGImageElement(NtsDomCanvasRenderingContext2D* self, NtsDomSVGImageElement* image, const NtsBorrowedString* repetitionType, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  return HandleOf<NtsDomCanvasPattern>(receiver->createPattern(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::SVGImageElement>(image)), NtsText(context, repetitionType), exception_state));
+}
+
 NtsDomCanvasGradient* nts_dom_CanvasRenderingContext2D_createRadialGradient(NtsDomCanvasRenderingContext2D* self, double x0, double y0, double r0, double x1, double y1, double r1, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -38626,6 +38737,13 @@ void nts_dom_CanvasRenderingContext2D_drawImage_3_HTMLVideoElement(NtsDomCanvasR
   receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::HTMLVideoElement>(image)), x, y, exception_state);
 }
 
+void nts_dom_CanvasRenderingContext2D_drawImage_3_SVGImageElement(NtsDomCanvasRenderingContext2D* self, NtsDomSVGImageElement* image, double x, double y, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::SVGImageElement>(image)), x, y, exception_state);
+}
+
 void nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLCanvasElement(NtsDomCanvasRenderingContext2D* self, NtsDomHTMLCanvasElement* image, double x, double y, double width, double height, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -38647,6 +38765,13 @@ void nts_dom_CanvasRenderingContext2D_drawImage_5_HTMLVideoElement(NtsDomCanvasR
   receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::HTMLVideoElement>(image)), x, y, width, height, exception_state);
 }
 
+void nts_dom_CanvasRenderingContext2D_drawImage_5_SVGImageElement(NtsDomCanvasRenderingContext2D* self, NtsDomSVGImageElement* image, double x, double y, double width, double height, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::SVGImageElement>(image)), x, y, width, height, exception_state);
+}
+
 void nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLCanvasElement(NtsDomCanvasRenderingContext2D* self, NtsDomHTMLCanvasElement* image, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -38666,6 +38791,13 @@ void nts_dom_CanvasRenderingContext2D_drawImage_9_HTMLVideoElement(NtsDomCanvasR
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
   receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::HTMLVideoElement>(image)), sx, sy, sw, sh, dx, dy, dw, dh, exception_state);
+}
+
+void nts_dom_CanvasRenderingContext2D_drawImage_9_SVGImageElement(NtsDomCanvasRenderingContext2D* self, NtsDomSVGImageElement* image, double sx, double sy, double sw, double sh, double dx, double dy, double dw, double dh, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  receiver->drawImage(blink::MakeGarbageCollected<blink::V8UnionCSSImageValueOrHTMLCanvasElementOrHTMLImageElementOrHTMLVideoElementOrImageBitmapOrOffscreenCanvasOrSVGImageElementOrVideoFrame>(ObjectOf<blink::SVGImageElement>(image)), sx, sy, sw, sh, dx, dy, dw, dh, exception_state);
 }
 
 void nts_dom_CanvasRenderingContext2D_ellipse_8(NtsDomCanvasRenderingContext2D* self, double x, double y, double radiusX, double radiusY, double rotation, double startAngle, double endAngle, bool anticlockwise, NtsDomException** error) {
@@ -38760,6 +38892,12 @@ NtsDomImageData* nts_dom_CanvasRenderingContext2D_getImageData_5(NtsDomCanvasRen
   auto* imageDataSettings_converted = NtsDomToImageDataSettings(context, imageDataSettings, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomImageData>(receiver->getImageData(sx_converted, sy_converted, sw_converted, sh_converted, imageDataSettings_converted, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_CanvasRenderingContext2D_getTransform(NtsDomCanvasRenderingContext2D* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->getTransform());
 }
 
 bool nts_dom_CanvasRenderingContext2D_isContextLost(NtsDomCanvasRenderingContext2D* self) {
@@ -48682,6 +48820,7956 @@ void nts_dom_StorageEvent_initStorageEvent_1(NtsDomStorageEvent* self, const Nts
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::StorageEvent>(self);
   receiver->initStorageEvent(NtsText(context, type), false, false, blink::String(), blink::String(), blink::String(), blink::AtomicString(""), nullptr);
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_new_DOMMatrixReadOnly_1_string(const NtsBorrowedString* init, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::Create(context.document->GetExecutionContext(), blink::MakeGarbageCollected<blink::V8UnionStringOrUnrestrictedDoubleSequence>(NtsText(context, init)), exception_state));
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_new_DOMMatrixReadOnly_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::Create(context.document->GetExecutionContext(), exception_state));
+}
+
+double nts_dom_DOMMatrixReadOnly_get_a(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->a());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_b(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->b());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_c(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->c());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_d(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->d());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_e(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->e());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_f(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->f());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m11(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m11());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m12(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m12());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m13(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m13());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m14(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m14());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m21(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m21());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m22(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m22());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m23(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m23());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m24(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m24());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m31(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m31());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m32(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m32());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m33(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m33());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m34(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m34());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m41(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m41());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m42(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m42());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m43(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m43());
+}
+
+double nts_dom_DOMMatrixReadOnly_get_m44(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<double>(receiver->m44());
+}
+
+bool nts_dom_DOMMatrixReadOnly_get_is2D(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<bool>(receiver->is2D());
+}
+
+bool nts_dom_DOMMatrixReadOnly_get_isIdentity(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return static_cast<bool>(receiver->isIdentity());
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_flipX(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->flipX());
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_flipY(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->flipY());
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_inverse(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->inverse());
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_1(NtsDomDOMMatrixReadOnly* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiply(other_converted, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_0(NtsDomDOMMatrixReadOnly* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiply(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_3(NtsDomDOMMatrixReadOnly* self, double rotX, double rotY, double rotZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotate(rotX, rotY, rotZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_2(NtsDomDOMMatrixReadOnly* self, double rotX, double rotY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotate(rotX, rotY));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_1(NtsDomDOMMatrixReadOnly* self, double rotX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotate(rotX));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotate(0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateAxisAngle_4(NtsDomDOMMatrixReadOnly* self, double x, double y, double z, double angle) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngle(x, y, z, angle));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateAxisAngle_3(NtsDomDOMMatrixReadOnly* self, double x, double y, double z) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngle(x, y, z, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateAxisAngle_2(NtsDomDOMMatrixReadOnly* self, double x, double y) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngle(x, y, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateAxisAngle_1(NtsDomDOMMatrixReadOnly* self, double x) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngle(x, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateAxisAngle_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngle(0, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateFromVector_2(NtsDomDOMMatrixReadOnly* self, double x, double y) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVector(x, y));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateFromVector_1(NtsDomDOMMatrixReadOnly* self, double x) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVector(x, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotateFromVector_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVector(0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_6(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY, double scaleZ, double originX, double originY, double originZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX, scaleY, scaleZ, originX, originY, originZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_5(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY, double scaleZ, double originX, double originY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX, scaleY, scaleZ, originX, originY, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_4(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY, double scaleZ, double originX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX, scaleY, scaleZ, originX, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_3(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY, double scaleZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX, scaleY, scaleZ, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_2(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX, scaleY, 1, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_1(NtsDomDOMMatrixReadOnly* self, double scaleX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(scaleX));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale(1));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale3d_4(NtsDomDOMMatrixReadOnly* self, double scale, double originX, double originY, double originZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3d(scale, originX, originY, originZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale3d_3(NtsDomDOMMatrixReadOnly* self, double scale, double originX, double originY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3d(scale, originX, originY, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale3d_2(NtsDomDOMMatrixReadOnly* self, double scale, double originX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3d(scale, originX, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale3d_1(NtsDomDOMMatrixReadOnly* self, double scale) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3d(scale, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scale3d_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3d(1, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scaleNonUniform_2(NtsDomDOMMatrixReadOnly* self, double scaleX, double scaleY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleNonUniform(scaleX, scaleY));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scaleNonUniform_1(NtsDomDOMMatrixReadOnly* self, double scaleX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleNonUniform(scaleX, 1));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_scaleNonUniform_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleNonUniform(1, 1));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_skewX_1(NtsDomDOMMatrixReadOnly* self, double sx) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewX(sx));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_skewX_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewX(0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_skewY_1(NtsDomDOMMatrixReadOnly* self, double sy) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewY(sy));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_skewY_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewY(0));
+}
+
+NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_1(NtsDomDOMMatrixReadOnly* self, NtsDomDOMPointInit point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return HandleOf<NtsDomDOMPoint>(receiver->transformPoint(point_converted));
+}
+
+NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_0(NtsDomDOMMatrixReadOnly* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMPoint>(receiver->transformPoint(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_3(NtsDomDOMMatrixReadOnly* self, double tx, double ty, double tz) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translate(tx, ty, tz));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_2(NtsDomDOMMatrixReadOnly* self, double tx, double ty) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translate(tx, ty, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_1(NtsDomDOMMatrixReadOnly* self, double tx) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translate(tx, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translate(0, 0, 0));
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromMatrix(other_converted, exception_state));
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromMatrix(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+const NtsStringView* nts_dom_DOMMatrixReadOnly_toString(NtsDomDOMMatrixReadOnly* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  return context.Lend(nts_dom::AsString(receiver->toString(exception_state)), false);
+}
+
+NtsDomDOMMatrix* nts_dom_as_DOMMatrix(NtsDomDOMMatrixReadOnly* object) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomDOMMatrix>(nts_dom_is(object, NTS_DOM_DOMMatrix) ? WrappableOf(object) : nullptr);
+}
+
+NtsDomDOMMatrix* nts_dom_new_DOMMatrix_1_string(const NtsBorrowedString* init, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::Create(context.document->GetExecutionContext(), blink::MakeGarbageCollected<blink::V8UnionStringOrUnrestrictedDoubleSequence>(NtsText(context, init)), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_new_DOMMatrix_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::Create(context.document->GetExecutionContext(), exception_state));
+}
+
+double nts_dom_DOMMatrix_get_a(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->a());
+}
+
+void nts_dom_DOMMatrix_set_a(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setA(value);
+}
+
+double nts_dom_DOMMatrix_get_b(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->b());
+}
+
+void nts_dom_DOMMatrix_set_b(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setB(value);
+}
+
+double nts_dom_DOMMatrix_get_c(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->c());
+}
+
+void nts_dom_DOMMatrix_set_c(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setC(value);
+}
+
+double nts_dom_DOMMatrix_get_d(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->d());
+}
+
+void nts_dom_DOMMatrix_set_d(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setD(value);
+}
+
+double nts_dom_DOMMatrix_get_e(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->e());
+}
+
+void nts_dom_DOMMatrix_set_e(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setE(value);
+}
+
+double nts_dom_DOMMatrix_get_f(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->f());
+}
+
+void nts_dom_DOMMatrix_set_f(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setF(value);
+}
+
+double nts_dom_DOMMatrix_get_m11(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m11());
+}
+
+void nts_dom_DOMMatrix_set_m11(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM11(value);
+}
+
+double nts_dom_DOMMatrix_get_m12(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m12());
+}
+
+void nts_dom_DOMMatrix_set_m12(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM12(value);
+}
+
+double nts_dom_DOMMatrix_get_m13(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m13());
+}
+
+void nts_dom_DOMMatrix_set_m13(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM13(value);
+}
+
+double nts_dom_DOMMatrix_get_m14(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m14());
+}
+
+void nts_dom_DOMMatrix_set_m14(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM14(value);
+}
+
+double nts_dom_DOMMatrix_get_m21(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m21());
+}
+
+void nts_dom_DOMMatrix_set_m21(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM21(value);
+}
+
+double nts_dom_DOMMatrix_get_m22(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m22());
+}
+
+void nts_dom_DOMMatrix_set_m22(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM22(value);
+}
+
+double nts_dom_DOMMatrix_get_m23(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m23());
+}
+
+void nts_dom_DOMMatrix_set_m23(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM23(value);
+}
+
+double nts_dom_DOMMatrix_get_m24(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m24());
+}
+
+void nts_dom_DOMMatrix_set_m24(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM24(value);
+}
+
+double nts_dom_DOMMatrix_get_m31(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m31());
+}
+
+void nts_dom_DOMMatrix_set_m31(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM31(value);
+}
+
+double nts_dom_DOMMatrix_get_m32(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m32());
+}
+
+void nts_dom_DOMMatrix_set_m32(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM32(value);
+}
+
+double nts_dom_DOMMatrix_get_m33(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m33());
+}
+
+void nts_dom_DOMMatrix_set_m33(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM33(value);
+}
+
+double nts_dom_DOMMatrix_get_m34(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m34());
+}
+
+void nts_dom_DOMMatrix_set_m34(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM34(value);
+}
+
+double nts_dom_DOMMatrix_get_m41(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m41());
+}
+
+void nts_dom_DOMMatrix_set_m41(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM41(value);
+}
+
+double nts_dom_DOMMatrix_get_m42(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m42());
+}
+
+void nts_dom_DOMMatrix_set_m42(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM42(value);
+}
+
+double nts_dom_DOMMatrix_get_m43(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m43());
+}
+
+void nts_dom_DOMMatrix_set_m43(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM43(value);
+}
+
+double nts_dom_DOMMatrix_get_m44(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return static_cast<double>(receiver->m44());
+}
+
+void nts_dom_DOMMatrix_set_m44(NtsDomDOMMatrix* self, double value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  receiver->setM44(value);
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_invertSelf(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->invertSelf());
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(other_converted, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->preMultiplySelf(other_converted, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->preMultiplySelf(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_4(NtsDomDOMMatrix* self, double x, double y, double z, double angle) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngleSelf(x, y, z, angle));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_3(NtsDomDOMMatrix* self, double x, double y, double z) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngleSelf(x, y, z, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_2(NtsDomDOMMatrix* self, double x, double y) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngleSelf(x, y, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_1(NtsDomDOMMatrix* self, double x) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngleSelf(x, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateAxisAngleSelf(0, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateFromVectorSelf_2(NtsDomDOMMatrix* self, double x, double y) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVectorSelf(x, y));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateFromVectorSelf_1(NtsDomDOMMatrix* self, double x) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVectorSelf(x, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateFromVectorSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateFromVectorSelf(0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateSelf_3(NtsDomDOMMatrix* self, double rotX, double rotY, double rotZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateSelf(rotX, rotY, rotZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateSelf_2(NtsDomDOMMatrix* self, double rotX, double rotY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateSelf(rotX, rotY));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateSelf_1(NtsDomDOMMatrix* self, double rotX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateSelf(rotX));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->rotateSelf(0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scale3dSelf_4(NtsDomDOMMatrix* self, double scale, double originX, double originY, double originZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3dSelf(scale, originX, originY, originZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scale3dSelf_3(NtsDomDOMMatrix* self, double scale, double originX, double originY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3dSelf(scale, originX, originY, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scale3dSelf_2(NtsDomDOMMatrix* self, double scale, double originX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3dSelf(scale, originX, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scale3dSelf_1(NtsDomDOMMatrix* self, double scale) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3dSelf(scale, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scale3dSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scale3dSelf(1, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_6(NtsDomDOMMatrix* self, double scaleX, double scaleY, double scaleZ, double originX, double originY, double originZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX, scaleY, scaleZ, originX, originY, originZ));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_5(NtsDomDOMMatrix* self, double scaleX, double scaleY, double scaleZ, double originX, double originY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX, scaleY, scaleZ, originX, originY, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_4(NtsDomDOMMatrix* self, double scaleX, double scaleY, double scaleZ, double originX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX, scaleY, scaleZ, originX, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_3(NtsDomDOMMatrix* self, double scaleX, double scaleY, double scaleZ) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX, scaleY, scaleZ, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_2(NtsDomDOMMatrix* self, double scaleX, double scaleY) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX, scaleY, 1, 0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_1(NtsDomDOMMatrix* self, double scaleX) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(scaleX));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_scaleSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->scaleSelf(1));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_setMatrixValue(NtsDomDOMMatrix* self, const NtsBorrowedString* transformList, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->setMatrixValue(context.document->GetExecutionContext(), NtsText(context, transformList), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_skewXSelf_1(NtsDomDOMMatrix* self, double sx) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewXSelf(sx));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_skewXSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewXSelf(0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_skewYSelf_1(NtsDomDOMMatrix* self, double sy) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewYSelf(sy));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_skewYSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->skewYSelf(0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_3(NtsDomDOMMatrix* self, double tx, double ty, double tz) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(tx, ty, tz));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_2(NtsDomDOMMatrix* self, double tx, double ty) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(tx, ty, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_1(NtsDomDOMMatrix* self, double tx) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(tx, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromMatrix(other_converted, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_0(NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromMatrix(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomSVGElement* nts_dom_as_SVGElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGElement>(nts_dom_is(node, NTS_DOM_SVGElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGElement_get_className(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->className());
+}
+
+NtsDomSVGSVGElement* nts_dom_SVGElement_get_ownerSVGElement(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomSVGSVGElement>(receiver->ownerSVGElement());
+}
+
+NtsDomSVGElement* nts_dom_SVGElement_get_viewportElement(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomSVGElement>(receiver->viewportElement());
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onabort(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onabort()));
+}
+
+void nts_dom_SVGElement_set_onabort_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onabort_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onabort_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onabort();
+  receiver->setOnabort(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onbeforeinput(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onbeforeinput()));
+}
+
+void nts_dom_SVGElement_set_onbeforeinput_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforeinput_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforeinput_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforeinput();
+  receiver->setOnbeforeinput(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onbeforematch(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onbeforematch()));
+}
+
+void nts_dom_SVGElement_set_onbeforematch_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforematch_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforematch_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforematch();
+  receiver->setOnbeforematch(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onbeforetoggle(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onbeforetoggle()));
+}
+
+void nts_dom_SVGElement_set_onbeforetoggle_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforetoggle_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onbeforetoggle_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbeforetoggle();
+  receiver->setOnbeforetoggle(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onblur(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onblur()));
+}
+
+void nts_dom_SVGElement_set_onblur_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onblur_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onblur_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onblur();
+  receiver->setOnblur(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncancel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncancel()));
+}
+
+void nts_dom_SVGElement_set_oncancel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncancel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncancel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncancel();
+  receiver->setOncancel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncanplay(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncanplay()));
+}
+
+void nts_dom_SVGElement_set_oncanplay_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncanplay_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncanplay_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplay();
+  receiver->setOncanplay(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncanplaythrough(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncanplaythrough()));
+}
+
+void nts_dom_SVGElement_set_oncanplaythrough_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncanplaythrough_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncanplaythrough_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncanplaythrough();
+  receiver->setOncanplaythrough(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onchange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onchange()));
+}
+
+void nts_dom_SVGElement_set_onchange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onchange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onchange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onchange();
+  receiver->setOnchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onclick(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onclick()));
+}
+
+void nts_dom_SVGElement_set_onclick_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onclick_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onclick_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclick();
+  receiver->setOnclick(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onclose(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onclose()));
+}
+
+void nts_dom_SVGElement_set_onclose_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onclose_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onclose_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onclose();
+  receiver->setOnclose(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncommand(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncommand()));
+}
+
+void nts_dom_SVGElement_set_oncommand_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncommand_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncommand_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncommand();
+  receiver->setOncommand(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncontentvisibilityautostatechange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncontentvisibilityautostatechange()));
+}
+
+void nts_dom_SVGElement_set_oncontentvisibilityautostatechange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontentvisibilityautostatechange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontentvisibilityautostatechange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontentvisibilityautostatechange();
+  receiver->setOncontentvisibilityautostatechange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncontextlost(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncontextlost()));
+}
+
+void nts_dom_SVGElement_set_oncontextlost_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextlost_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextlost_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextlost();
+  receiver->setOncontextlost(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncontextmenu(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncontextmenu()));
+}
+
+void nts_dom_SVGElement_set_oncontextmenu_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextmenu_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextmenu_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextmenu();
+  receiver->setOncontextmenu(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncontextrestored(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncontextrestored()));
+}
+
+void nts_dom_SVGElement_set_oncontextrestored_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextrestored_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncontextrestored_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncontextrestored();
+  receiver->setOncontextrestored(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncuechange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncuechange()));
+}
+
+void nts_dom_SVGElement_set_oncuechange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncuechange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncuechange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncuechange();
+  receiver->setOncuechange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondblclick(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondblclick()));
+}
+
+void nts_dom_SVGElement_set_ondblclick_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondblclick_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondblclick_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondblclick();
+  receiver->setOndblclick(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondrag(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondrag()));
+}
+
+void nts_dom_SVGElement_set_ondrag_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondrag_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondrag_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrag();
+  receiver->setOndrag(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondragend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondragend()));
+}
+
+void nts_dom_SVGElement_set_ondragend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragend();
+  receiver->setOndragend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondragenter(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondragenter()));
+}
+
+void nts_dom_SVGElement_set_ondragenter_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragenter_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragenter_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragenter();
+  receiver->setOndragenter(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondragleave(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondragleave()));
+}
+
+void nts_dom_SVGElement_set_ondragleave_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragleave_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragleave_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragleave();
+  receiver->setOndragleave(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondragover(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondragover()));
+}
+
+void nts_dom_SVGElement_set_ondragover_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragover_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragover_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragover();
+  receiver->setOndragover(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondragstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondragstart()));
+}
+
+void nts_dom_SVGElement_set_ondragstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondragstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondragstart();
+  receiver->setOndragstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondrop(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondrop()));
+}
+
+void nts_dom_SVGElement_set_ondrop_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondrop_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondrop_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondrop();
+  receiver->setOndrop(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ondurationchange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ondurationchange()));
+}
+
+void nts_dom_SVGElement_set_ondurationchange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondurationchange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ondurationchange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ondurationchange();
+  receiver->setOndurationchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onemptied(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onemptied()));
+}
+
+void nts_dom_SVGElement_set_onemptied_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onemptied_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onemptied_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onemptied();
+  receiver->setOnemptied(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onended(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onended()));
+}
+
+void nts_dom_SVGElement_set_onended_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onended_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onended_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onended();
+  receiver->setOnended(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onfocus(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onfocus()));
+}
+
+void nts_dom_SVGElement_set_onfocus_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onfocus_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onfocus_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onfocus();
+  receiver->setOnfocus(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onformdata(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onformdata()));
+}
+
+void nts_dom_SVGElement_set_onformdata_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onformdata_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onformdata_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onformdata();
+  receiver->setOnformdata(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oninput(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oninput()));
+}
+
+void nts_dom_SVGElement_set_oninput_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oninput_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oninput_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninput();
+  receiver->setOninput(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oninvalid(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oninvalid()));
+}
+
+void nts_dom_SVGElement_set_oninvalid_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oninvalid_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oninvalid_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oninvalid();
+  receiver->setOninvalid(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onkeydown(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onkeydown()));
+}
+
+void nts_dom_SVGElement_set_onkeydown_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeydown_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeydown_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeydown();
+  receiver->setOnkeydown(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onkeypress(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onkeypress()));
+}
+
+void nts_dom_SVGElement_set_onkeypress_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeypress_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeypress_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeypress();
+  receiver->setOnkeypress(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onkeyup(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onkeyup()));
+}
+
+void nts_dom_SVGElement_set_onkeyup_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeyup_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onkeyup_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onkeyup();
+  receiver->setOnkeyup(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onload(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onload()));
+}
+
+void nts_dom_SVGElement_set_onload_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onload_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onload_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onload();
+  receiver->setOnload(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onloadeddata(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onloadeddata()));
+}
+
+void nts_dom_SVGElement_set_onloadeddata_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadeddata_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadeddata_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadeddata();
+  receiver->setOnloadeddata(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onloadedmetadata(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onloadedmetadata()));
+}
+
+void nts_dom_SVGElement_set_onloadedmetadata_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadedmetadata_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadedmetadata_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadedmetadata();
+  receiver->setOnloadedmetadata(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onloadstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onloadstart()));
+}
+
+void nts_dom_SVGElement_set_onloadstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onloadstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onloadstart();
+  receiver->setOnloadstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmousedown(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmousedown()));
+}
+
+void nts_dom_SVGElement_set_onmousedown_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousedown_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousedown_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousedown();
+  receiver->setOnmousedown(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmouseenter(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmouseenter()));
+}
+
+void nts_dom_SVGElement_set_onmouseenter_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseenter_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseenter_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseenter();
+  receiver->setOnmouseenter(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmouseleave(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmouseleave()));
+}
+
+void nts_dom_SVGElement_set_onmouseleave_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseleave_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseleave_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseleave();
+  receiver->setOnmouseleave(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmousemove(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmousemove()));
+}
+
+void nts_dom_SVGElement_set_onmousemove_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousemove_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousemove_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousemove();
+  receiver->setOnmousemove(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmouseout(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmouseout()));
+}
+
+void nts_dom_SVGElement_set_onmouseout_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseout_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseout_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseout();
+  receiver->setOnmouseout(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmouseover(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmouseover()));
+}
+
+void nts_dom_SVGElement_set_onmouseover_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseover_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseover_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseover();
+  receiver->setOnmouseover(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmouseup(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmouseup()));
+}
+
+void nts_dom_SVGElement_set_onmouseup_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseup_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmouseup_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmouseup();
+  receiver->setOnmouseup(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onmousewheel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onmousewheel()));
+}
+
+void nts_dom_SVGElement_set_onmousewheel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousewheel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onmousewheel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onmousewheel();
+  receiver->setOnmousewheel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpause(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpause()));
+}
+
+void nts_dom_SVGElement_set_onpause_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpause_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpause_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpause();
+  receiver->setOnpause(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onplay(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onplay()));
+}
+
+void nts_dom_SVGElement_set_onplay_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onplay_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onplay_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplay();
+  receiver->setOnplay(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onplaying(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onplaying()));
+}
+
+void nts_dom_SVGElement_set_onplaying_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onplaying_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onplaying_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onplaying();
+  receiver->setOnplaying(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onprogress(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onprogress()));
+}
+
+void nts_dom_SVGElement_set_onprogress_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onprogress_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onprogress_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onprogress();
+  receiver->setOnprogress(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onratechange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onratechange()));
+}
+
+void nts_dom_SVGElement_set_onratechange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onratechange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onratechange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onratechange();
+  receiver->setOnratechange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onreset(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onreset()));
+}
+
+void nts_dom_SVGElement_set_onreset_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onreset_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onreset_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onreset();
+  receiver->setOnreset(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onresize(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onresize()));
+}
+
+void nts_dom_SVGElement_set_onresize_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onresize_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onresize_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onresize();
+  receiver->setOnresize(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onscroll(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onscroll()));
+}
+
+void nts_dom_SVGElement_set_onscroll_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscroll_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscroll_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscroll();
+  receiver->setOnscroll(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onscrollend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onscrollend()));
+}
+
+void nts_dom_SVGElement_set_onscrollend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollend();
+  receiver->setOnscrollend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onsecuritypolicyviolation(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onsecuritypolicyviolation()));
+}
+
+void nts_dom_SVGElement_set_onsecuritypolicyviolation_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsecuritypolicyviolation_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsecuritypolicyviolation_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsecuritypolicyviolation();
+  receiver->setOnsecuritypolicyviolation(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onseeked(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onseeked()));
+}
+
+void nts_dom_SVGElement_set_onseeked_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onseeked_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onseeked_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeked();
+  receiver->setOnseeked(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onseeking(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onseeking()));
+}
+
+void nts_dom_SVGElement_set_onseeking_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onseeking_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onseeking_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onseeking();
+  receiver->setOnseeking(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onselect(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onselect()));
+}
+
+void nts_dom_SVGElement_set_onselect_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselect_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselect_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselect();
+  receiver->setOnselect(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onslotchange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onslotchange()));
+}
+
+void nts_dom_SVGElement_set_onslotchange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onslotchange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onslotchange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onslotchange();
+  receiver->setOnslotchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onscrollsnapchange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onscrollsnapchange()));
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchange();
+  receiver->setOnscrollsnapchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchange();
+  receiver->setOnscrollsnapchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchange();
+  receiver->setOnscrollsnapchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onscrollsnapchanging(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onscrollsnapchanging()));
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchanging_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchanging();
+  receiver->setOnscrollsnapchanging(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchanging_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchanging();
+  receiver->setOnscrollsnapchanging(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onscrollsnapchanging_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onscrollsnapchanging();
+  receiver->setOnscrollsnapchanging(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onstalled(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onstalled()));
+}
+
+void nts_dom_SVGElement_set_onstalled_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onstalled_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onstalled_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onstalled();
+  receiver->setOnstalled(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onsubmit(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onsubmit()));
+}
+
+void nts_dom_SVGElement_set_onsubmit_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsubmit_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsubmit_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsubmit();
+  receiver->setOnsubmit(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onsuspend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onsuspend()));
+}
+
+void nts_dom_SVGElement_set_onsuspend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsuspend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onsuspend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onsuspend();
+  receiver->setOnsuspend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontimeupdate(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontimeupdate()));
+}
+
+void nts_dom_SVGElement_set_ontimeupdate_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontimeupdate_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontimeupdate_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontimeupdate();
+  receiver->setOntimeupdate(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontoggle(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontoggle()));
+}
+
+void nts_dom_SVGElement_set_ontoggle_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontoggle_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontoggle_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontoggle();
+  receiver->setOntoggle(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onvolumechange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onvolumechange()));
+}
+
+void nts_dom_SVGElement_set_onvolumechange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onvolumechange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onvolumechange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onvolumechange();
+  receiver->setOnvolumechange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwaiting(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwaiting()));
+}
+
+void nts_dom_SVGElement_set_onwaiting_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwaiting_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwaiting_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwaiting();
+  receiver->setOnwaiting(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwebkitanimationend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwebkitanimationend()));
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationend();
+  receiver->setOnwebkitanimationend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwebkitanimationiteration(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwebkitanimationiteration()));
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationiteration_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationiteration_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationiteration_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationiteration();
+  receiver->setOnwebkitanimationiteration(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwebkitanimationstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwebkitanimationstart()));
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkitanimationstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkitanimationstart();
+  receiver->setOnwebkitanimationstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwebkittransitionend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwebkittransitionend()));
+}
+
+void nts_dom_SVGElement_set_onwebkittransitionend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkittransitionend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwebkittransitionend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwebkittransitionend();
+  receiver->setOnwebkittransitionend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onwheel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onwheel()));
+}
+
+void nts_dom_SVGElement_set_onwheel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwheel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onwheel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onwheel();
+  receiver->setOnwheel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onauxclick(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onauxclick()));
+}
+
+void nts_dom_SVGElement_set_onauxclick_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onauxclick_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onauxclick_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onauxclick();
+  receiver->setOnauxclick(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ongotpointercapture(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ongotpointercapture()));
+}
+
+void nts_dom_SVGElement_set_ongotpointercapture_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ongotpointercapture_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ongotpointercapture_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ongotpointercapture();
+  receiver->setOngotpointercapture(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onlostpointercapture(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onlostpointercapture()));
+}
+
+void nts_dom_SVGElement_set_onlostpointercapture_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onlostpointercapture_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onlostpointercapture_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onlostpointercapture();
+  receiver->setOnlostpointercapture(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerdown(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerdown()));
+}
+
+void nts_dom_SVGElement_set_onpointerdown_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerdown_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerdown_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerdown();
+  receiver->setOnpointerdown(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointermove(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointermove()));
+}
+
+void nts_dom_SVGElement_set_onpointermove_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointermove_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointermove_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointermove();
+  receiver->setOnpointermove(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerrawupdate(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerrawupdate()));
+}
+
+void nts_dom_SVGElement_set_onpointerrawupdate_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerrawupdate_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerrawupdate_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerrawupdate();
+  receiver->setOnpointerrawupdate(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerup(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerup()));
+}
+
+void nts_dom_SVGElement_set_onpointerup_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerup_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerup_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerup();
+  receiver->setOnpointerup(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointercancel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointercancel()));
+}
+
+void nts_dom_SVGElement_set_onpointercancel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointercancel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointercancel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointercancel();
+  receiver->setOnpointercancel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerover(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerover()));
+}
+
+void nts_dom_SVGElement_set_onpointerover_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerover_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerover_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerover();
+  receiver->setOnpointerover(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerout(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerout()));
+}
+
+void nts_dom_SVGElement_set_onpointerout_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerout_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerout_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerout();
+  receiver->setOnpointerout(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerenter(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerenter()));
+}
+
+void nts_dom_SVGElement_set_onpointerenter_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerenter_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerenter_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerenter();
+  receiver->setOnpointerenter(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpointerleave(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpointerleave()));
+}
+
+void nts_dom_SVGElement_set_onpointerleave_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerleave_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpointerleave_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpointerleave();
+  receiver->setOnpointerleave(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onselectstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onselectstart()));
+}
+
+void nts_dom_SVGElement_set_onselectstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselectstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselectstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectstart();
+  receiver->setOnselectstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onselectionchange(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onselectionchange()));
+}
+
+void nts_dom_SVGElement_set_onselectionchange_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselectionchange_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onselectionchange_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onselectionchange();
+  receiver->setOnselectionchange(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onanimationcancel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onanimationcancel()));
+}
+
+void nts_dom_SVGElement_set_onanimationcancel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationcancel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationcancel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationcancel();
+  receiver->setOnanimationcancel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onanimationend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onanimationend()));
+}
+
+void nts_dom_SVGElement_set_onanimationend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationend();
+  receiver->setOnanimationend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onanimationiteration(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onanimationiteration()));
+}
+
+void nts_dom_SVGElement_set_onanimationiteration_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationiteration_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationiteration_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationiteration();
+  receiver->setOnanimationiteration(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onanimationstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onanimationstart()));
+}
+
+void nts_dom_SVGElement_set_onanimationstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onanimationstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onanimationstart();
+  receiver->setOnanimationstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontransitionrun(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontransitionrun()));
+}
+
+void nts_dom_SVGElement_set_ontransitionrun_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionrun_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionrun_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionrun();
+  receiver->setOntransitionrun(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontransitionstart(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontransitionstart()));
+}
+
+void nts_dom_SVGElement_set_ontransitionstart_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionstart_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionstart_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionstart();
+  receiver->setOntransitionstart(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontransitionend(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontransitionend()));
+}
+
+void nts_dom_SVGElement_set_ontransitionend_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionend_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitionend_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitionend();
+  receiver->setOntransitionend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_ontransitioncancel(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->ontransitioncancel()));
+}
+
+void nts_dom_SVGElement_set_ontransitioncancel_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitioncancel_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_ontransitioncancel_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->ontransitioncancel();
+  receiver->setOntransitioncancel(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncopy(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncopy()));
+}
+
+void nts_dom_SVGElement_set_oncopy_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncopy();
+  receiver->setOncopy(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncopy_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncopy();
+  receiver->setOncopy(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncopy_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncopy();
+  receiver->setOncopy(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_oncut(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->oncut()));
+}
+
+void nts_dom_SVGElement_set_oncut_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncut();
+  receiver->setOncut(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncut_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncut();
+  receiver->setOncut(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_oncut_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->oncut();
+  receiver->setOncut(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGElement_get_onpaste(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onpaste()));
+}
+
+void nts_dom_SVGElement_set_onpaste_void(NtsDomSVGElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpaste();
+  receiver->setOnpaste(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpaste_boolean(NtsDomSVGElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpaste();
+  receiver->setOnpaste(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGElement_set_onpaste_null(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onpaste();
+  receiver->setOnpaste(nullptr);
+  context.Replaced(previous);
+}
+
+NtsDomDOMStringMap* nts_dom_SVGElement_get_dataset(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomDOMStringMap>(receiver->dataset());
+}
+
+const NtsStringView* nts_dom_SVGElement_get_nonce(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->nonce()), false);
+}
+
+void nts_dom_SVGElement_set_nonce(NtsDomSVGElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  receiver->setNonce(NtsText(context, value));
+}
+
+bool nts_dom_SVGElement_get_autofocus(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return static_cast<bool>(receiver->FastHasAttribute(svg_names::kAutofocusAttr));
+}
+
+void nts_dom_SVGElement_set_autofocus(NtsDomSVGElement* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  receiver->SetBooleanAttribute(svg_names::kAutofocusAttr, value);
+}
+
+double nts_dom_SVGElement_get_tabIndex(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return static_cast<double>(receiver->tabIndex());
+}
+
+void nts_dom_SVGElement_set_tabIndex(NtsDomSVGElement* self, double value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto value_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), conversion);
+  receiver->setTabIndex(value_converted);
+}
+
+NtsDomDOMTokenList* nts_dom_SVGElement_get_focusGroup(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomDOMTokenList>(receiver->focusGroup());
+}
+
+bool nts_dom_SVGElement_get_focusGroupStart(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return static_cast<bool>(receiver->FastHasAttribute(svg_names::kFocusgroupstartAttr));
+}
+
+void nts_dom_SVGElement_set_focusGroupStart(NtsDomSVGElement* self, bool value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  receiver->SetBooleanAttribute(svg_names::kFocusgroupstartAttr, value);
+}
+
+NtsDomCSSStyleDeclaration* nts_dom_SVGElement_get_style(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  return HandleOf<NtsDomCSSStyleDeclaration>(receiver->style());
+}
+
+void nts_dom_SVGElement_blur(NtsDomSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  receiver->blur();
+}
+
+void nts_dom_SVGElement_focus_1(NtsDomSVGElement* self, NtsDomFocusOptions options) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* options_converted = NtsDomToFocusOptions(context, options, conversion);
+  receiver->focusForBindings(options_converted);
+}
+
+void nts_dom_SVGElement_focus_0(NtsDomSVGElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  receiver->focusForBindings(blink::FocusOptions::Create(context.v8_isolate.get()));
+}
+
+NtsDomSVGGraphicsElement* nts_dom_as_SVGGraphicsElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGGraphicsElement>(nts_dom_is(node, NTS_DOM_SVGGraphicsElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedTransformList* nts_dom_SVGGraphicsElement_get_transform(NtsDomSVGGraphicsElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGraphicsElement>(self);
+  return HandleOf<NtsDomSVGAnimatedTransformList>(receiver->transform());
+}
+
+NtsDomSVGElement* nts_dom_SVGGraphicsElement_get_nearestViewportElement(NtsDomSVGGraphicsElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGraphicsElement>(self);
+  return HandleOf<NtsDomSVGElement>(receiver->nearestViewportElement());
+}
+
+NtsDomSVGElement* nts_dom_SVGGraphicsElement_get_farthestViewportElement(NtsDomSVGGraphicsElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGraphicsElement>(self);
+  return HandleOf<NtsDomSVGElement>(receiver->farthestViewportElement());
+}
+
+NtsDomSVGStringList* nts_dom_SVGGraphicsElement_get_requiredExtensions(NtsDomSVGGraphicsElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGraphicsElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->requiredExtensions());
+}
+
+NtsDomSVGStringList* nts_dom_SVGGraphicsElement_get_systemLanguage(NtsDomSVGGraphicsElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGraphicsElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->systemLanguage());
+}
+
+NtsDomSVGGeometryElement* nts_dom_as_SVGGeometryElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGGeometryElement>(nts_dom_is(node, NTS_DOM_SVGGeometryElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGGeometryElement_get_pathLength(NtsDomSVGGeometryElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->pathLength());
+}
+
+double nts_dom_SVGGeometryElement_getTotalLength(NtsDomSVGGeometryElement* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  return static_cast<double>(receiver->getTotalLength(exception_state));
+}
+
+bool nts_dom_SVGGeometryElement_isPointInFill_1(NtsDomSVGGeometryElement* self, NtsDomDOMPointInit point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return static_cast<bool>(receiver->isPointInFill(point_converted));
+}
+
+bool nts_dom_SVGGeometryElement_isPointInFill_0(NtsDomSVGGeometryElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  return static_cast<bool>(receiver->isPointInFill(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
+bool nts_dom_SVGGeometryElement_isPointInStroke_1(NtsDomSVGGeometryElement* self, NtsDomDOMPointInit point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return static_cast<bool>(receiver->isPointInStroke(point_converted));
+}
+
+bool nts_dom_SVGGeometryElement_isPointInStroke_0(NtsDomSVGGeometryElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  return static_cast<bool>(receiver->isPointInStroke(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
+NtsDomSVGTextContentElement* nts_dom_as_SVGTextContentElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTextContentElement>(nts_dom_is(node, NTS_DOM_SVGTextContentElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGTextContentElement_get_textLength(NtsDomSVGTextContentElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->textLength());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGTextContentElement_get_lengthAdjust(NtsDomSVGTextContentElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->lengthAdjust());
+}
+
+double nts_dom_SVGTextContentElement_getCharNumAtPosition_1(NtsDomSVGTextContentElement* self, NtsDomDOMPointInit point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return static_cast<double>(receiver->getCharNumAtPosition(point_converted));
+}
+
+double nts_dom_SVGTextContentElement_getCharNumAtPosition_0(NtsDomSVGTextContentElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  return static_cast<double>(receiver->getCharNumAtPosition(blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
+double nts_dom_SVGTextContentElement_getComputedTextLength(NtsDomSVGTextContentElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  return static_cast<double>(receiver->getComputedTextLength());
+}
+
+double nts_dom_SVGTextContentElement_getNumberOfChars(NtsDomSVGTextContentElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  return static_cast<double>(receiver->getNumberOfChars());
+}
+
+double nts_dom_SVGTextContentElement_getRotationOfChar(NtsDomSVGTextContentElement* self, double charnum, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  const auto charnum_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), charnum), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return static_cast<double>(receiver->getRotationOfChar(charnum_converted, exception_state));
+}
+
+double nts_dom_SVGTextContentElement_getSubStringLength(NtsDomSVGTextContentElement* self, double charnum, double nchars, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  const auto charnum_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), charnum), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto nchars_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), nchars), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return static_cast<double>(receiver->getSubStringLength(charnum_converted, nchars_converted, exception_state));
+}
+
+void nts_dom_SVGTextContentElement_selectSubString(NtsDomSVGTextContentElement* self, double charnum, double nchars, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  const auto charnum_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), charnum), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto nchars_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), nchars), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->selectSubString(charnum_converted, nchars_converted, exception_state);
+}
+
+NtsDomSVGTextPositioningElement* nts_dom_as_SVGTextPositioningElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTextPositioningElement>(nts_dom_is(node, NTS_DOM_SVGTextPositioningElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLengthList* nts_dom_SVGTextPositioningElement_get_x(NtsDomSVGTextPositioningElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPositioningElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLengthList>(receiver->x());
+}
+
+NtsDomSVGAnimatedLengthList* nts_dom_SVGTextPositioningElement_get_y(NtsDomSVGTextPositioningElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPositioningElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLengthList>(receiver->y());
+}
+
+NtsDomSVGAnimatedLengthList* nts_dom_SVGTextPositioningElement_get_dx(NtsDomSVGTextPositioningElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPositioningElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLengthList>(receiver->dx());
+}
+
+NtsDomSVGAnimatedLengthList* nts_dom_SVGTextPositioningElement_get_dy(NtsDomSVGTextPositioningElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPositioningElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLengthList>(receiver->dy());
+}
+
+NtsDomSVGAnimatedNumberList* nts_dom_SVGTextPositioningElement_get_rotate(NtsDomSVGTextPositioningElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPositioningElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumberList>(receiver->rotate());
+}
+
+NtsDomSVGGradientElement* nts_dom_as_SVGGradientElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGGradientElement>(nts_dom_is(node, NTS_DOM_SVGGradientElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGGradientElement_get_gradientUnits(NtsDomSVGGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->gradientUnits());
+}
+
+NtsDomSVGAnimatedTransformList* nts_dom_SVGGradientElement_get_gradientTransform(NtsDomSVGGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedTransformList>(receiver->gradientTransform());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGGradientElement_get_spreadMethod(NtsDomSVGGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->spreadMethod());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGGradientElement_get_href(NtsDomSVGGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGAnimationElement* nts_dom_as_SVGAnimationElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGAnimationElement>(nts_dom_is(node, NTS_DOM_SVGAnimationElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGElement* nts_dom_SVGAnimationElement_get_targetElement(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return HandleOf<NtsDomSVGElement>(receiver->targetElement());
+}
+
+struct NtsHeader* nts_dom_SVGAnimationElement_get_onbegin(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onbegin()));
+}
+
+void nts_dom_SVGAnimationElement_set_onbegin_void(NtsDomSVGAnimationElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbegin();
+  receiver->setOnbegin(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onbegin_boolean(NtsDomSVGAnimationElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbegin();
+  receiver->setOnbegin(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onbegin_null(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onbegin();
+  receiver->setOnbegin(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGAnimationElement_get_onend(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onend()));
+}
+
+void nts_dom_SVGAnimationElement_set_onend_void(NtsDomSVGAnimationElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onend();
+  receiver->setOnend(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onend_boolean(NtsDomSVGAnimationElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onend();
+  receiver->setOnend(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onend_null(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onend();
+  receiver->setOnend(nullptr);
+  context.Replaced(previous);
+}
+
+struct NtsHeader* nts_dom_SVGAnimationElement_get_onrepeat(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  return static_cast<struct NtsHeader*>(context.HandlerClosure(receiver->onrepeat()));
+}
+
+void nts_dom_SVGAnimationElement_set_onrepeat_void(NtsDomSVGAnimationElement* self, void (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onrepeat();
+  receiver->setOnrepeat(context.Handler(handler, nullptr, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onrepeat_boolean(NtsDomSVGAnimationElement* self, bool (*handler)(NtsDomEvent*, void*), void* handler_closure, void (*handler_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onrepeat();
+  receiver->setOnrepeat(context.Handler(nullptr, handler, handler_closure, handler_destroy));
+  context.Replaced(previous);
+}
+
+void nts_dom_SVGAnimationElement_set_onrepeat_null(NtsDomSVGAnimationElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  nts_dom::HandlerAccess access;
+  blink::EventListener* previous = receiver->onrepeat();
+  receiver->setOnrepeat(nullptr);
+  context.Replaced(previous);
+}
+
+NtsDomSVGStringList* nts_dom_SVGAnimationElement_get_requiredExtensions(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->requiredExtensions());
+}
+
+NtsDomSVGStringList* nts_dom_SVGAnimationElement_get_systemLanguage(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->systemLanguage());
+}
+
+void nts_dom_SVGAnimationElement_beginElement(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  receiver->beginElement();
+}
+
+void nts_dom_SVGAnimationElement_beginElementAt(NtsDomSVGAnimationElement* self, double offset, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  const auto offset_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->beginElementAt(offset_converted);
+}
+
+void nts_dom_SVGAnimationElement_endElement(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  receiver->endElement();
+}
+
+void nts_dom_SVGAnimationElement_endElementAt(NtsDomSVGAnimationElement* self, double offset, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  const auto offset_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->endElementAt(offset_converted);
+}
+
+double nts_dom_SVGAnimationElement_getCurrentTime(NtsDomSVGAnimationElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return static_cast<double>(receiver->getCurrentTime());
+}
+
+double nts_dom_SVGAnimationElement_getSimpleDuration(NtsDomSVGAnimationElement* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return static_cast<double>(receiver->getSimpleDuration(exception_state));
+}
+
+double nts_dom_SVGAnimationElement_getStartTime(NtsDomSVGAnimationElement* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimationElement>(self);
+  return static_cast<double>(receiver->getStartTime(exception_state));
+}
+
+NtsDomSVGComponentTransferFunctionElement* nts_dom_as_SVGComponentTransferFunctionElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGComponentTransferFunctionElement>(nts_dom_is(node, NTS_DOM_SVGComponentTransferFunctionElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGComponentTransferFunctionElement_get_type(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->type());
+}
+
+NtsDomSVGAnimatedNumberList* nts_dom_SVGComponentTransferFunctionElement_get_tableValues(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumberList>(receiver->tableValues());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGComponentTransferFunctionElement_get_slope(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->slope());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGComponentTransferFunctionElement_get_intercept(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->intercept());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGComponentTransferFunctionElement_get_amplitude(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->amplitude());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGComponentTransferFunctionElement_get_exponent(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->exponent());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGComponentTransferFunctionElement_get_offset(NtsDomSVGComponentTransferFunctionElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGComponentTransferFunctionElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->offset());
+}
+
+NtsDomSVGAElement* nts_dom_as_SVGAElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGAElement>(nts_dom_is(node, NTS_DOM_SVGAElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGAElement_get_target(NtsDomSVGAElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->svgTarget());
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_download(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kDownloadAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_download(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kDownloadAttr, NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_ping(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kPingAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_ping(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kPingAttr, NtsText(context, value, /*scalar_values=*/true));
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_rel(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kRelAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_rel(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kRelAttr, NtsText(context, value));
+}
+
+NtsDomDOMTokenList* nts_dom_SVGAElement_get_relList(NtsDomSVGAElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return HandleOf<NtsDomDOMTokenList>(receiver->relList());
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_hreflang(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kHreflangAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_hreflang(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kHreflangAttr, NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_type(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kTypeAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_type(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kTypeAttr, NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGAElement_get_referrerPolicy(NtsDomSVGAElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kReferrerpolicyAttr)), false);
+}
+
+void nts_dom_SVGAElement_set_referrerPolicy(NtsDomSVGAElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->setAttribute(svg_names::kReferrerpolicyAttr, NtsText(context, value));
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGAElement_get_href(NtsDomSVGAElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomElement* nts_dom_SVGAElement_get_interestForElement(NtsDomSVGAElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  return HandleOf<NtsDomElement>(receiver->GetElementAttribute(svg_names::kInterestforAttr));
+}
+
+void nts_dom_SVGAElement_set_interestForElement(NtsDomSVGAElement* self, NtsDomElement* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGAElement>(self);
+  receiver->SetElementAttribute(svg_names::kInterestforAttr, ObjectOf<blink::Element>(value));
+}
+
+double nts_dom_SVGAngle_get_unitType(NtsDomSVGAngle* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  return static_cast<double>(receiver->unitType());
+}
+
+double nts_dom_SVGAngle_get_value(NtsDomSVGAngle* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  return static_cast<double>(receiver->value());
+}
+
+void nts_dom_SVGAngle_set_value(NtsDomSVGAngle* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setValue(value_converted, exception_state);
+}
+
+double nts_dom_SVGAngle_get_valueInSpecifiedUnits(NtsDomSVGAngle* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  return static_cast<double>(receiver->valueInSpecifiedUnits());
+}
+
+void nts_dom_SVGAngle_set_valueInSpecifiedUnits(NtsDomSVGAngle* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setValueInSpecifiedUnits(value_converted, exception_state);
+}
+
+const NtsStringView* nts_dom_SVGAngle_get_valueAsString(NtsDomSVGAngle* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  return context.Lend(nts_dom::AsString(receiver->valueAsString()), false);
+}
+
+void nts_dom_SVGAngle_set_valueAsString(NtsDomSVGAngle* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  receiver->setValueAsString(NtsText(context, value), exception_state);
+}
+
+void nts_dom_SVGAngle_convertToSpecifiedUnits(NtsDomSVGAngle* self, double unitType, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  const auto unitType_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), unitType), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->convertToSpecifiedUnits(unitType_converted, exception_state);
+}
+
+void nts_dom_SVGAngle_newValueSpecifiedUnits(NtsDomSVGAngle* self, double unitType, double valueInSpecifiedUnits, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAngleTearOff>(self);
+  const auto unitType_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), unitType), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto valueInSpecifiedUnits_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), valueInSpecifiedUnits), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->newValueSpecifiedUnits(unitType_converted, valueInSpecifiedUnits_converted, exception_state);
+}
+
+NtsDomSVGAngle* nts_dom_SVGAnimatedAngle_get_baseVal(NtsDomSVGAnimatedAngle* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedAngle>(self);
+  return HandleOf<NtsDomSVGAngle>(receiver->baseVal());
+}
+
+NtsDomSVGAngle* nts_dom_SVGAnimatedAngle_get_animVal(NtsDomSVGAnimatedAngle* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedAngle>(self);
+  return HandleOf<NtsDomSVGAngle>(receiver->animVal());
+}
+
+bool nts_dom_SVGAnimatedBoolean_get_baseVal(NtsDomSVGAnimatedBoolean* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedBoolean>(self);
+  return static_cast<bool>(receiver->baseVal());
+}
+
+void nts_dom_SVGAnimatedBoolean_set_baseVal(NtsDomSVGAnimatedBoolean* self, bool value, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimatedBoolean>(self);
+  receiver->setBaseVal(value, exception_state);
+}
+
+bool nts_dom_SVGAnimatedBoolean_get_animVal(NtsDomSVGAnimatedBoolean* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedBoolean>(self);
+  return static_cast<bool>(receiver->animVal());
+}
+
+double nts_dom_SVGAnimatedEnumeration_get_baseVal(NtsDomSVGAnimatedEnumeration* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedEnumerationBase>(self);
+  return static_cast<double>(receiver->baseVal());
+}
+
+void nts_dom_SVGAnimatedEnumeration_set_baseVal(NtsDomSVGAnimatedEnumeration* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimatedEnumerationBase>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setBaseVal(value_converted, exception_state);
+}
+
+double nts_dom_SVGAnimatedEnumeration_get_animVal(NtsDomSVGAnimatedEnumeration* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedEnumerationBase>(self);
+  return static_cast<double>(receiver->animVal());
+}
+
+double nts_dom_SVGAnimatedInteger_get_baseVal(NtsDomSVGAnimatedInteger* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedInteger>(self);
+  return static_cast<double>(receiver->baseVal());
+}
+
+void nts_dom_SVGAnimatedInteger_set_baseVal(NtsDomSVGAnimatedInteger* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimatedInteger>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setBaseVal(value_converted, exception_state);
+}
+
+double nts_dom_SVGAnimatedInteger_get_animVal(NtsDomSVGAnimatedInteger* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedInteger>(self);
+  return static_cast<double>(receiver->animVal());
+}
+
+NtsDomSVGLength* nts_dom_SVGAnimatedLength_get_baseVal(NtsDomSVGAnimatedLength* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedLength>(self);
+  return HandleOf<NtsDomSVGLength>(receiver->baseVal());
+}
+
+NtsDomSVGLength* nts_dom_SVGAnimatedLength_get_animVal(NtsDomSVGAnimatedLength* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedLength>(self);
+  return HandleOf<NtsDomSVGLength>(receiver->animVal());
+}
+
+NtsDomSVGLengthList* nts_dom_SVGAnimatedLengthList_get_baseVal(NtsDomSVGAnimatedLengthList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedLengthList>(self);
+  return HandleOf<NtsDomSVGLengthList>(receiver->baseVal());
+}
+
+NtsDomSVGLengthList* nts_dom_SVGAnimatedLengthList_get_animVal(NtsDomSVGAnimatedLengthList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedLengthList>(self);
+  return HandleOf<NtsDomSVGLengthList>(receiver->animVal());
+}
+
+double nts_dom_SVGAnimatedNumber_get_baseVal(NtsDomSVGAnimatedNumber* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedNumber>(self);
+  return static_cast<double>(receiver->baseVal());
+}
+
+void nts_dom_SVGAnimatedNumber_set_baseVal(NtsDomSVGAnimatedNumber* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimatedNumber>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setBaseVal(value_converted, exception_state);
+}
+
+double nts_dom_SVGAnimatedNumber_get_animVal(NtsDomSVGAnimatedNumber* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedNumber>(self);
+  return static_cast<double>(receiver->animVal());
+}
+
+NtsDomSVGNumberList* nts_dom_SVGAnimatedNumberList_get_baseVal(NtsDomSVGAnimatedNumberList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedNumberList>(self);
+  return HandleOf<NtsDomSVGNumberList>(receiver->baseVal());
+}
+
+NtsDomSVGNumberList* nts_dom_SVGAnimatedNumberList_get_animVal(NtsDomSVGAnimatedNumberList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedNumberList>(self);
+  return HandleOf<NtsDomSVGNumberList>(receiver->animVal());
+}
+
+NtsDomSVGPreserveAspectRatio* nts_dom_SVGAnimatedPreserveAspectRatio_get_baseVal(NtsDomSVGAnimatedPreserveAspectRatio* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedPreserveAspectRatio>(self);
+  return HandleOf<NtsDomSVGPreserveAspectRatio>(receiver->baseVal());
+}
+
+NtsDomSVGPreserveAspectRatio* nts_dom_SVGAnimatedPreserveAspectRatio_get_animVal(NtsDomSVGAnimatedPreserveAspectRatio* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedPreserveAspectRatio>(self);
+  return HandleOf<NtsDomSVGPreserveAspectRatio>(receiver->animVal());
+}
+
+const NtsStringView* nts_dom_SVGAnimatedString_get_baseVal(NtsDomSVGAnimatedString* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimatedString>(self);
+  return context.Lend(nts_dom::AsString(receiver->baseVal()), false);
+}
+
+void nts_dom_SVGAnimatedString_set_baseVal(NtsDomSVGAnimatedString* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGAnimatedString>(self);
+  receiver->setBaseVal(blink::MakeGarbageCollected<blink::V8UnionStringOrTrustedScriptURL>(NtsText(context, value).Text()), exception_state);
+}
+
+const NtsStringView* nts_dom_SVGAnimatedString_get_animVal(NtsDomSVGAnimatedString* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGAnimatedString>(self);
+  return context.Lend(nts_dom::AsString(receiver->animVal()), false);
+}
+
+NtsDomSVGTransformList* nts_dom_SVGAnimatedTransformList_get_baseVal(NtsDomSVGAnimatedTransformList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedTransformList>(self);
+  return HandleOf<NtsDomSVGTransformList>(receiver->baseVal());
+}
+
+NtsDomSVGTransformList* nts_dom_SVGAnimatedTransformList_get_animVal(NtsDomSVGAnimatedTransformList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGAnimatedTransformList>(self);
+  return HandleOf<NtsDomSVGTransformList>(receiver->animVal());
+}
+
+NtsDomSVGAnimateElement* nts_dom_as_SVGAnimateElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGAnimateElement>(nts_dom_is(node, NTS_DOM_SVGAnimateElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimateMotionElement* nts_dom_as_SVGAnimateMotionElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGAnimateMotionElement>(nts_dom_is(node, NTS_DOM_SVGAnimateMotionElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimateTransformElement* nts_dom_as_SVGAnimateTransformElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGAnimateTransformElement>(nts_dom_is(node, NTS_DOM_SVGAnimateTransformElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGCircleElement* nts_dom_as_SVGCircleElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGCircleElement>(nts_dom_is(node, NTS_DOM_SVGCircleElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGCircleElement_get_cx(NtsDomSVGCircleElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGCircleElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGCircleElement_get_cy(NtsDomSVGCircleElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGCircleElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cy());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGCircleElement_get_r(NtsDomSVGCircleElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGCircleElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->r());
+}
+
+NtsDomSVGClipPathElement* nts_dom_as_SVGClipPathElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGClipPathElement>(nts_dom_is(node, NTS_DOM_SVGClipPathElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGClipPathElement_get_clipPathUnits(NtsDomSVGClipPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGClipPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->clipPathUnits());
+}
+
+NtsDomSVGAnimatedTransformList* nts_dom_SVGClipPathElement_get_transform(NtsDomSVGClipPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGClipPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedTransformList>(receiver->transform());
+}
+
+NtsDomSVGDefsElement* nts_dom_as_SVGDefsElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGDefsElement>(nts_dom_is(node, NTS_DOM_SVGDefsElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGDescElement* nts_dom_as_SVGDescElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGDescElement>(nts_dom_is(node, NTS_DOM_SVGDescElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGEllipseElement* nts_dom_as_SVGEllipseElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGEllipseElement>(nts_dom_is(node, NTS_DOM_SVGEllipseElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGEllipseElement_get_cx(NtsDomSVGEllipseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGEllipseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGEllipseElement_get_cy(NtsDomSVGEllipseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGEllipseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cy());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGEllipseElement_get_rx(NtsDomSVGEllipseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGEllipseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->rx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGEllipseElement_get_ry(NtsDomSVGEllipseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGEllipseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->ry());
+}
+
+NtsDomSVGFEBlendElement* nts_dom_as_SVGFEBlendElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEBlendElement>(nts_dom_is(node, NTS_DOM_SVGFEBlendElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEBlendElement_get_in1(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEBlendElement_get_in2(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in2());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEBlendElement_get_mode(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->mode());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEBlendElement_get_x(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEBlendElement_get_y(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEBlendElement_get_width(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEBlendElement_get_height(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEBlendElement_get_result(NtsDomSVGFEBlendElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEBlendElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEColorMatrixElement* nts_dom_as_SVGFEColorMatrixElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEColorMatrixElement>(nts_dom_is(node, NTS_DOM_SVGFEColorMatrixElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEColorMatrixElement_get_in1(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEColorMatrixElement_get_type(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->type());
+}
+
+NtsDomSVGAnimatedNumberList* nts_dom_SVGFEColorMatrixElement_get_values(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumberList>(receiver->values());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEColorMatrixElement_get_x(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEColorMatrixElement_get_y(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEColorMatrixElement_get_width(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEColorMatrixElement_get_height(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEColorMatrixElement_get_result(NtsDomSVGFEColorMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEColorMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEComponentTransferElement* nts_dom_as_SVGFEComponentTransferElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEComponentTransferElement>(nts_dom_is(node, NTS_DOM_SVGFEComponentTransferElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEComponentTransferElement_get_in1(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEComponentTransferElement_get_x(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEComponentTransferElement_get_y(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEComponentTransferElement_get_width(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEComponentTransferElement_get_height(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEComponentTransferElement_get_result(NtsDomSVGFEComponentTransferElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEComponentTransferElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFECompositeElement* nts_dom_as_SVGFECompositeElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFECompositeElement>(nts_dom_is(node, NTS_DOM_SVGFECompositeElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFECompositeElement_get_in2(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in2());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFECompositeElement_get_in1(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFECompositeElement_get_operator(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->svgOperator());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFECompositeElement_get_k1(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->k1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFECompositeElement_get_k2(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->k2());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFECompositeElement_get_k3(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->k3());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFECompositeElement_get_k4(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->k4());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFECompositeElement_get_x(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFECompositeElement_get_y(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFECompositeElement_get_width(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFECompositeElement_get_height(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFECompositeElement_get_result(NtsDomSVGFECompositeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFECompositeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEConvolveMatrixElement* nts_dom_as_SVGFEConvolveMatrixElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEConvolveMatrixElement>(nts_dom_is(node, NTS_DOM_SVGFEConvolveMatrixElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEConvolveMatrixElement_get_in1(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedInteger* nts_dom_SVGFEConvolveMatrixElement_get_orderX(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedInteger>(receiver->orderX());
+}
+
+NtsDomSVGAnimatedInteger* nts_dom_SVGFEConvolveMatrixElement_get_orderY(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedInteger>(receiver->orderY());
+}
+
+NtsDomSVGAnimatedNumberList* nts_dom_SVGFEConvolveMatrixElement_get_kernelMatrix(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumberList>(receiver->kernelMatrix());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEConvolveMatrixElement_get_divisor(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->divisor());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEConvolveMatrixElement_get_bias(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->bias());
+}
+
+NtsDomSVGAnimatedInteger* nts_dom_SVGFEConvolveMatrixElement_get_targetX(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedInteger>(receiver->targetX());
+}
+
+NtsDomSVGAnimatedInteger* nts_dom_SVGFEConvolveMatrixElement_get_targetY(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedInteger>(receiver->targetY());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEConvolveMatrixElement_get_edgeMode(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->edgeMode());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEConvolveMatrixElement_get_kernelUnitLengthX(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEConvolveMatrixElement_get_kernelUnitLengthY(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthY());
+}
+
+NtsDomSVGAnimatedBoolean* nts_dom_SVGFEConvolveMatrixElement_get_preserveAlpha(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedBoolean>(receiver->preserveAlpha());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEConvolveMatrixElement_get_x(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEConvolveMatrixElement_get_y(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEConvolveMatrixElement_get_width(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEConvolveMatrixElement_get_height(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEConvolveMatrixElement_get_result(NtsDomSVGFEConvolveMatrixElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEConvolveMatrixElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEDiffuseLightingElement* nts_dom_as_SVGFEDiffuseLightingElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEDiffuseLightingElement>(nts_dom_is(node, NTS_DOM_SVGFEDiffuseLightingElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDiffuseLightingElement_get_in1(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDiffuseLightingElement_get_surfaceScale(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->surfaceScale());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDiffuseLightingElement_get_diffuseConstant(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->diffuseConstant());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDiffuseLightingElement_get_kernelUnitLengthX(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDiffuseLightingElement_get_kernelUnitLengthY(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthY());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDiffuseLightingElement_get_x(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDiffuseLightingElement_get_y(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDiffuseLightingElement_get_width(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDiffuseLightingElement_get_height(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDiffuseLightingElement_get_result(NtsDomSVGFEDiffuseLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDiffuseLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEDisplacementMapElement* nts_dom_as_SVGFEDisplacementMapElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEDisplacementMapElement>(nts_dom_is(node, NTS_DOM_SVGFEDisplacementMapElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDisplacementMapElement_get_in1(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDisplacementMapElement_get_in2(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in2());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDisplacementMapElement_get_scale(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->scale());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEDisplacementMapElement_get_xChannelSelector(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->xChannelSelector());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEDisplacementMapElement_get_yChannelSelector(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->yChannelSelector());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDisplacementMapElement_get_x(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDisplacementMapElement_get_y(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDisplacementMapElement_get_width(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDisplacementMapElement_get_height(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDisplacementMapElement_get_result(NtsDomSVGFEDisplacementMapElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDisplacementMapElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEDistantLightElement* nts_dom_as_SVGFEDistantLightElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEDistantLightElement>(nts_dom_is(node, NTS_DOM_SVGFEDistantLightElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDistantLightElement_get_azimuth(NtsDomSVGFEDistantLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDistantLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->azimuth());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDistantLightElement_get_elevation(NtsDomSVGFEDistantLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDistantLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->elevation());
+}
+
+NtsDomSVGFEDropShadowElement* nts_dom_as_SVGFEDropShadowElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEDropShadowElement>(nts_dom_is(node, NTS_DOM_SVGFEDropShadowElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDropShadowElement_get_in1(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDropShadowElement_get_dx(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->dx());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDropShadowElement_get_dy(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->dy());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDropShadowElement_get_stdDeviationX(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->stdDeviationX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEDropShadowElement_get_stdDeviationY(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->stdDeviationY());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDropShadowElement_get_x(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDropShadowElement_get_y(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDropShadowElement_get_width(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEDropShadowElement_get_height(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEDropShadowElement_get_result(NtsDomSVGFEDropShadowElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+void nts_dom_SVGFEDropShadowElement_setStdDeviation(NtsDomSVGFEDropShadowElement* self, double stdDeviationX, double stdDeviationY, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGFEDropShadowElement>(self);
+  const auto stdDeviationX_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), stdDeviationX), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto stdDeviationY_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), stdDeviationY), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setStdDeviation(stdDeviationX_converted, stdDeviationY_converted);
+}
+
+NtsDomSVGFEFloodElement* nts_dom_as_SVGFEFloodElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEFloodElement>(nts_dom_is(node, NTS_DOM_SVGFEFloodElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEFloodElement_get_x(NtsDomSVGFEFloodElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEFloodElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEFloodElement_get_y(NtsDomSVGFEFloodElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEFloodElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEFloodElement_get_width(NtsDomSVGFEFloodElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEFloodElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEFloodElement_get_height(NtsDomSVGFEFloodElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEFloodElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEFloodElement_get_result(NtsDomSVGFEFloodElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEFloodElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEFuncAElement* nts_dom_as_SVGFEFuncAElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEFuncAElement>(nts_dom_is(node, NTS_DOM_SVGFEFuncAElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGFEFuncBElement* nts_dom_as_SVGFEFuncBElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEFuncBElement>(nts_dom_is(node, NTS_DOM_SVGFEFuncBElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGFEFuncGElement* nts_dom_as_SVGFEFuncGElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEFuncGElement>(nts_dom_is(node, NTS_DOM_SVGFEFuncGElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGFEFuncRElement* nts_dom_as_SVGFEFuncRElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEFuncRElement>(nts_dom_is(node, NTS_DOM_SVGFEFuncRElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGFEGaussianBlurElement* nts_dom_as_SVGFEGaussianBlurElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEGaussianBlurElement>(nts_dom_is(node, NTS_DOM_SVGFEGaussianBlurElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEGaussianBlurElement_get_in1(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEGaussianBlurElement_get_stdDeviationX(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->stdDeviationX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEGaussianBlurElement_get_stdDeviationY(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->stdDeviationY());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEGaussianBlurElement_get_x(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEGaussianBlurElement_get_y(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEGaussianBlurElement_get_width(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEGaussianBlurElement_get_height(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEGaussianBlurElement_get_result(NtsDomSVGFEGaussianBlurElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+void nts_dom_SVGFEGaussianBlurElement_setStdDeviation(NtsDomSVGFEGaussianBlurElement* self, double stdDeviationX, double stdDeviationY, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGFEGaussianBlurElement>(self);
+  const auto stdDeviationX_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), stdDeviationX), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto stdDeviationY_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), stdDeviationY), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setStdDeviation(stdDeviationX_converted, stdDeviationY_converted);
+}
+
+NtsDomSVGFEImageElement* nts_dom_as_SVGFEImageElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEImageElement>(nts_dom_is(node, NTS_DOM_SVGFEImageElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGFEImageElement_get_preserveAspectRatio(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEImageElement_get_x(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEImageElement_get_y(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEImageElement_get_width(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEImageElement_get_height(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEImageElement_get_result(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEImageElement_get_href(NtsDomSVGFEImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGFEMergeElement* nts_dom_as_SVGFEMergeElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEMergeElement>(nts_dom_is(node, NTS_DOM_SVGFEMergeElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMergeElement_get_x(NtsDomSVGFEMergeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMergeElement_get_y(NtsDomSVGFEMergeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMergeElement_get_width(NtsDomSVGFEMergeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMergeElement_get_height(NtsDomSVGFEMergeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEMergeElement_get_result(NtsDomSVGFEMergeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEMergeNodeElement* nts_dom_as_SVGFEMergeNodeElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEMergeNodeElement>(nts_dom_is(node, NTS_DOM_SVGFEMergeNodeElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEMergeNodeElement_get_in1(NtsDomSVGFEMergeNodeElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMergeNodeElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGFEMorphologyElement* nts_dom_as_SVGFEMorphologyElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEMorphologyElement>(nts_dom_is(node, NTS_DOM_SVGFEMorphologyElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEMorphologyElement_get_in1(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFEMorphologyElement_get_operator(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->svgOperator());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEMorphologyElement_get_radiusX(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->radiusX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEMorphologyElement_get_radiusY(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->radiusY());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMorphologyElement_get_x(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMorphologyElement_get_y(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMorphologyElement_get_width(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEMorphologyElement_get_height(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEMorphologyElement_get_result(NtsDomSVGFEMorphologyElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEMorphologyElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEOffsetElement* nts_dom_as_SVGFEOffsetElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEOffsetElement>(nts_dom_is(node, NTS_DOM_SVGFEOffsetElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEOffsetElement_get_in1(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEOffsetElement_get_dx(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->dx());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEOffsetElement_get_dy(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->dy());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEOffsetElement_get_x(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEOffsetElement_get_y(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEOffsetElement_get_width(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFEOffsetElement_get_height(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFEOffsetElement_get_result(NtsDomSVGFEOffsetElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEOffsetElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFEPointLightElement* nts_dom_as_SVGFEPointLightElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFEPointLightElement>(nts_dom_is(node, NTS_DOM_SVGFEPointLightElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEPointLightElement_get_x(NtsDomSVGFEPointLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEPointLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->x());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEPointLightElement_get_y(NtsDomSVGFEPointLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEPointLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->y());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFEPointLightElement_get_z(NtsDomSVGFEPointLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFEPointLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->z());
+}
+
+NtsDomSVGFESpecularLightingElement* nts_dom_as_SVGFESpecularLightingElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFESpecularLightingElement>(nts_dom_is(node, NTS_DOM_SVGFESpecularLightingElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFESpecularLightingElement_get_in1(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpecularLightingElement_get_surfaceScale(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->surfaceScale());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpecularLightingElement_get_specularConstant(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->specularConstant());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpecularLightingElement_get_specularExponent(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->specularExponent());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpecularLightingElement_get_kernelUnitLengthX(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpecularLightingElement_get_kernelUnitLengthY(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->kernelUnitLengthY());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFESpecularLightingElement_get_x(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFESpecularLightingElement_get_y(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFESpecularLightingElement_get_width(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFESpecularLightingElement_get_height(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFESpecularLightingElement_get_result(NtsDomSVGFESpecularLightingElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpecularLightingElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFESpotLightElement* nts_dom_as_SVGFESpotLightElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFESpotLightElement>(nts_dom_is(node, NTS_DOM_SVGFESpotLightElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_x(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->x());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_y(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->y());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_z(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->z());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_pointsAtX(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->pointsAtX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_pointsAtY(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->pointsAtY());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_pointsAtZ(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->pointsAtZ());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_specularExponent(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->specularExponent());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFESpotLightElement_get_limitingConeAngle(NtsDomSVGFESpotLightElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFESpotLightElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->limitingConeAngle());
+}
+
+NtsDomSVGFETileElement* nts_dom_as_SVGFETileElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFETileElement>(nts_dom_is(node, NTS_DOM_SVGFETileElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFETileElement_get_in1(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->in1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETileElement_get_x(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETileElement_get_y(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETileElement_get_width(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETileElement_get_height(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFETileElement_get_result(NtsDomSVGFETileElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETileElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFETurbulenceElement* nts_dom_as_SVGFETurbulenceElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFETurbulenceElement>(nts_dom_is(node, NTS_DOM_SVGFETurbulenceElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFETurbulenceElement_get_baseFrequencyX(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->baseFrequencyX());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFETurbulenceElement_get_baseFrequencyY(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->baseFrequencyY());
+}
+
+NtsDomSVGAnimatedInteger* nts_dom_SVGFETurbulenceElement_get_numOctaves(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedInteger>(receiver->numOctaves());
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGFETurbulenceElement_get_seed(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->seed());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFETurbulenceElement_get_stitchTiles(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->stitchTiles());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFETurbulenceElement_get_type(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->type());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETurbulenceElement_get_x(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETurbulenceElement_get_y(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETurbulenceElement_get_width(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFETurbulenceElement_get_height(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFETurbulenceElement_get_result(NtsDomSVGFETurbulenceElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFETurbulenceElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->result());
+}
+
+NtsDomSVGFilterElement* nts_dom_as_SVGFilterElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGFilterElement>(nts_dom_is(node, NTS_DOM_SVGFilterElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFilterElement_get_filterUnits(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->filterUnits());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGFilterElement_get_primitiveUnits(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->primitiveUnits());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFilterElement_get_x(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFilterElement_get_y(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFilterElement_get_width(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGFilterElement_get_height(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGFilterElement_get_href(NtsDomSVGFilterElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGFilterElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGForeignObjectElement* nts_dom_as_SVGForeignObjectElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGForeignObjectElement>(nts_dom_is(node, NTS_DOM_SVGForeignObjectElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGForeignObjectElement_get_x(NtsDomSVGForeignObjectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGForeignObjectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGForeignObjectElement_get_y(NtsDomSVGForeignObjectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGForeignObjectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGForeignObjectElement_get_width(NtsDomSVGForeignObjectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGForeignObjectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGForeignObjectElement_get_height(NtsDomSVGForeignObjectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGForeignObjectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGGElement* nts_dom_as_SVGGElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGGElement>(nts_dom_is(node, NTS_DOM_SVGGElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGImageElement* nts_dom_as_SVGImageElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGImageElement>(nts_dom_is(node, NTS_DOM_SVGImageElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGImageElement_get_x(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGImageElement_get_y(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGImageElement_get_width(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGImageElement_get_height(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGImageElement_get_preserveAspectRatio(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+const NtsStringView* nts_dom_SVGImageElement_get_decoding(NtsDomSVGImageElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kDecodingAttr)), false);
+}
+
+void nts_dom_SVGImageElement_set_decoding(NtsDomSVGImageElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  receiver->setAttribute(svg_names::kDecodingAttr, NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGImageElement_get_crossOrigin(NtsDomSVGImageElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kCrossoriginAttr)), true);
+}
+
+void nts_dom_SVGImageElement_set_crossOrigin(NtsDomSVGImageElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::CEReactionsScope reactions(context.v8_isolate);
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  receiver->setAttribute(svg_names::kCrossoriginAttr, NtsText(context, value));
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGImageElement_get_href(NtsDomSVGImageElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+struct NtsPromise* nts_dom_SVGImageElement_decode(NtsDomSVGImageElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::SVGImageElement>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->decode(script_state, exception_state));
+}
+
+double nts_dom_SVGLength_get_unitType(NtsDomSVGLength* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  return static_cast<double>(receiver->unitType());
+}
+
+double nts_dom_SVGLength_get_value(NtsDomSVGLength* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  return static_cast<double>(receiver->value(exception_state));
+}
+
+void nts_dom_SVGLength_set_value(NtsDomSVGLength* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setValue(value_converted, exception_state);
+}
+
+double nts_dom_SVGLength_get_valueInSpecifiedUnits(NtsDomSVGLength* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  return static_cast<double>(receiver->valueInSpecifiedUnits());
+}
+
+void nts_dom_SVGLength_set_valueInSpecifiedUnits(NtsDomSVGLength* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setValueInSpecifiedUnits(value_converted, exception_state);
+}
+
+const NtsStringView* nts_dom_SVGLength_get_valueAsString(NtsDomSVGLength* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  return context.Lend(nts_dom::AsString(receiver->valueAsString()), false);
+}
+
+void nts_dom_SVGLength_set_valueAsString(NtsDomSVGLength* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  receiver->setValueAsString(NtsText(context, value), exception_state);
+}
+
+void nts_dom_SVGLength_convertToSpecifiedUnits(NtsDomSVGLength* self, double unitType, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  const auto unitType_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), unitType), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->convertToSpecifiedUnits(unitType_converted, exception_state);
+}
+
+void nts_dom_SVGLength_newValueSpecifiedUnits(NtsDomSVGLength* self, double unitType, double valueInSpecifiedUnits, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthTearOff>(self);
+  const auto unitType_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), unitType), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto valueInSpecifiedUnits_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), valueInSpecifiedUnits), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->newValueSpecifiedUnits(unitType_converted, valueInSpecifiedUnits_converted, exception_state);
+}
+
+double nts_dom_SVGLengthList_get_length(NtsDomSVGLengthList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+double nts_dom_SVGLengthList_get_numberOfItems(NtsDomSVGLengthList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_appendItem(NtsDomSVGLengthList* self, NtsDomSVGLength* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  return HandleOf<NtsDomSVGLength>(receiver->appendItem(ObjectOf<blink::SVGLengthTearOff>(newItem), exception_state));
+}
+
+void nts_dom_SVGLengthList_clear(NtsDomSVGLengthList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  receiver->clear(exception_state);
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_getItem(NtsDomSVGLengthList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGLength>(receiver->getItem(index_converted, exception_state));
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_initialize(NtsDomSVGLengthList* self, NtsDomSVGLength* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  return HandleOf<NtsDomSVGLength>(receiver->initialize(ObjectOf<blink::SVGLengthTearOff>(newItem), exception_state));
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_insertItemBefore(NtsDomSVGLengthList* self, NtsDomSVGLength* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGLength>(receiver->insertItemBefore(ObjectOf<blink::SVGLengthTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_removeItem(NtsDomSVGLengthList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGLength>(receiver->removeItem(index_converted, exception_state));
+}
+
+NtsDomSVGLength* nts_dom_SVGLengthList_replaceItem(NtsDomSVGLengthList* self, NtsDomSVGLength* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGLengthListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGLength>(receiver->replaceItem(ObjectOf<blink::SVGLengthTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGLinearGradientElement* nts_dom_as_SVGLinearGradientElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGLinearGradientElement>(nts_dom_is(node, NTS_DOM_SVGLinearGradientElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLinearGradientElement_get_x1(NtsDomSVGLinearGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLinearGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLinearGradientElement_get_y1(NtsDomSVGLinearGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLinearGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLinearGradientElement_get_x2(NtsDomSVGLinearGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLinearGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x2());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLinearGradientElement_get_y2(NtsDomSVGLinearGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLinearGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y2());
+}
+
+NtsDomSVGLineElement* nts_dom_as_SVGLineElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGLineElement>(nts_dom_is(node, NTS_DOM_SVGLineElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLineElement_get_x1(NtsDomSVGLineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLineElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLineElement_get_y1(NtsDomSVGLineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLineElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y1());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLineElement_get_x2(NtsDomSVGLineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLineElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x2());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGLineElement_get_y2(NtsDomSVGLineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGLineElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y2());
+}
+
+NtsDomSVGMarkerElement* nts_dom_as_SVGMarkerElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGMarkerElement>(nts_dom_is(node, NTS_DOM_SVGMarkerElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMarkerElement_get_refX(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->refX());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMarkerElement_get_refY(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->refY());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGMarkerElement_get_markerUnits(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->markerUnits());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMarkerElement_get_markerWidth(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->markerWidth());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMarkerElement_get_markerHeight(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->markerHeight());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGMarkerElement_get_orientType(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->orientType());
+}
+
+NtsDomSVGAnimatedAngle* nts_dom_SVGMarkerElement_get_orientAngle(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedAngle>(receiver->orientAngle());
+}
+
+NtsDomSVGAnimatedRect* nts_dom_SVGMarkerElement_get_viewBox(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedRect>(receiver->viewBox());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGMarkerElement_get_preserveAspectRatio(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+void nts_dom_SVGMarkerElement_setOrientToAngle(NtsDomSVGMarkerElement* self, NtsDomSVGAngle* angle) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  receiver->setOrientToAngle(ObjectOf<blink::SVGAngleTearOff>(angle));
+}
+
+void nts_dom_SVGMarkerElement_setOrientToAuto(NtsDomSVGMarkerElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMarkerElement>(self);
+  receiver->setOrientToAuto();
+}
+
+NtsDomSVGMaskElement* nts_dom_as_SVGMaskElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGMaskElement>(nts_dom_is(node, NTS_DOM_SVGMaskElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGMaskElement_get_maskUnits(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->maskUnits());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGMaskElement_get_maskContentUnits(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->maskContentUnits());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMaskElement_get_x(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMaskElement_get_y(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMaskElement_get_width(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGMaskElement_get_height(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGStringList* nts_dom_SVGMaskElement_get_requiredExtensions(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->requiredExtensions());
+}
+
+NtsDomSVGStringList* nts_dom_SVGMaskElement_get_systemLanguage(NtsDomSVGMaskElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMaskElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->systemLanguage());
+}
+
+NtsDomSVGMetadataElement* nts_dom_as_SVGMetadataElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGMetadataElement>(nts_dom_is(node, NTS_DOM_SVGMetadataElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGMPathElement* nts_dom_as_SVGMPathElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGMPathElement>(nts_dom_is(node, NTS_DOM_SVGMPathElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGMPathElement_get_href(NtsDomSVGMPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGMPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+double nts_dom_SVGNumber_get_value(NtsDomSVGNumber* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGNumberTearOff>(self);
+  return static_cast<double>(receiver->value());
+}
+
+void nts_dom_SVGNumber_set_value(NtsDomSVGNumber* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setValue(value_converted, exception_state);
+}
+
+double nts_dom_SVGNumberList_get_length(NtsDomSVGNumberList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+double nts_dom_SVGNumberList_get_numberOfItems(NtsDomSVGNumberList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_appendItem(NtsDomSVGNumberList* self, NtsDomSVGNumber* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  return HandleOf<NtsDomSVGNumber>(receiver->appendItem(ObjectOf<blink::SVGNumberTearOff>(newItem), exception_state));
+}
+
+void nts_dom_SVGNumberList_clear(NtsDomSVGNumberList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  receiver->clear(exception_state);
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_getItem(NtsDomSVGNumberList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGNumber>(receiver->getItem(index_converted, exception_state));
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_initialize(NtsDomSVGNumberList* self, NtsDomSVGNumber* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  return HandleOf<NtsDomSVGNumber>(receiver->initialize(ObjectOf<blink::SVGNumberTearOff>(newItem), exception_state));
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_insertItemBefore(NtsDomSVGNumberList* self, NtsDomSVGNumber* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGNumber>(receiver->insertItemBefore(ObjectOf<blink::SVGNumberTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_removeItem(NtsDomSVGNumberList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGNumber>(receiver->removeItem(index_converted, exception_state));
+}
+
+NtsDomSVGNumber* nts_dom_SVGNumberList_replaceItem(NtsDomSVGNumberList* self, NtsDomSVGNumber* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGNumberListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGNumber>(receiver->replaceItem(ObjectOf<blink::SVGNumberTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGPathElement* nts_dom_as_SVGPathElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGPathElement>(nts_dom_is(node, NTS_DOM_SVGPathElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGPatternElement* nts_dom_as_SVGPatternElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGPatternElement>(nts_dom_is(node, NTS_DOM_SVGPatternElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGPatternElement_get_patternUnits(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->patternUnits());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGPatternElement_get_patternContentUnits(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->patternContentUnits());
+}
+
+NtsDomSVGAnimatedTransformList* nts_dom_SVGPatternElement_get_patternTransform(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedTransformList>(receiver->patternTransform());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGPatternElement_get_x(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGPatternElement_get_y(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGPatternElement_get_width(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGPatternElement_get_height(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedRect* nts_dom_SVGPatternElement_get_viewBox(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedRect>(receiver->viewBox());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGPatternElement_get_preserveAspectRatio(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGPatternElement_get_href(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGStringList* nts_dom_SVGPatternElement_get_requiredExtensions(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->requiredExtensions());
+}
+
+NtsDomSVGStringList* nts_dom_SVGPatternElement_get_systemLanguage(NtsDomSVGPatternElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPatternElement>(self);
+  return HandleOf<NtsDomSVGStringList>(receiver->systemLanguage());
+}
+
+double nts_dom_SVGPointList_get_length(NtsDomSVGPointList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPointListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+double nts_dom_SVGPointList_get_numberOfItems(NtsDomSVGPointList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPointListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+void nts_dom_SVGPointList_clear(NtsDomSVGPointList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGPointListTearOff>(self);
+  receiver->clear(exception_state);
+}
+
+NtsDomSVGPolygonElement* nts_dom_as_SVGPolygonElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGPolygonElement>(nts_dom_is(node, NTS_DOM_SVGPolygonElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGPointList* nts_dom_SVGPolygonElement_get_points(NtsDomSVGPolygonElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPolygonElement>(self);
+  return HandleOf<NtsDomSVGPointList>(receiver->pointsFromJavascript());
+}
+
+NtsDomSVGPointList* nts_dom_SVGPolygonElement_get_animatedPoints(NtsDomSVGPolygonElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPolygonElement>(self);
+  return HandleOf<NtsDomSVGPointList>(receiver->animatedPoints());
+}
+
+NtsDomSVGPolylineElement* nts_dom_as_SVGPolylineElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGPolylineElement>(nts_dom_is(node, NTS_DOM_SVGPolylineElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGPointList* nts_dom_SVGPolylineElement_get_points(NtsDomSVGPolylineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPolylineElement>(self);
+  return HandleOf<NtsDomSVGPointList>(receiver->pointsFromJavascript());
+}
+
+NtsDomSVGPointList* nts_dom_SVGPolylineElement_get_animatedPoints(NtsDomSVGPolylineElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPolylineElement>(self);
+  return HandleOf<NtsDomSVGPointList>(receiver->animatedPoints());
+}
+
+double nts_dom_SVGPreserveAspectRatio_get_align(NtsDomSVGPreserveAspectRatio* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPreserveAspectRatioTearOff>(self);
+  return static_cast<double>(receiver->align());
+}
+
+void nts_dom_SVGPreserveAspectRatio_set_align(NtsDomSVGPreserveAspectRatio* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGPreserveAspectRatioTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setAlign(value_converted, exception_state);
+}
+
+double nts_dom_SVGPreserveAspectRatio_get_meetOrSlice(NtsDomSVGPreserveAspectRatio* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGPreserveAspectRatioTearOff>(self);
+  return static_cast<double>(receiver->meetOrSlice());
+}
+
+void nts_dom_SVGPreserveAspectRatio_set_meetOrSlice(NtsDomSVGPreserveAspectRatio* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGPreserveAspectRatioTearOff>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setMeetOrSlice(value_converted, exception_state);
+}
+
+NtsDomSVGRadialGradientElement* nts_dom_as_SVGRadialGradientElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGRadialGradientElement>(nts_dom_is(node, NTS_DOM_SVGRadialGradientElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_cx(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_cy(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->cy());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_r(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->r());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_fx(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->fx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_fy(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->fy());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRadialGradientElement_get_fr(NtsDomSVGRadialGradientElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRadialGradientElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->fr());
+}
+
+NtsDomSVGRectElement* nts_dom_as_SVGRectElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGRectElement>(nts_dom_is(node, NTS_DOM_SVGRectElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_x(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_y(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_width(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_height(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_rx(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->rx());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGRectElement_get_ry(NtsDomSVGRectElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGRectElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->ry());
+}
+
+NtsDomSVGScriptElement* nts_dom_as_SVGScriptElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGScriptElement>(nts_dom_is(node, NTS_DOM_SVGScriptElement) ? WrappableOf(node) : nullptr);
+}
+
+const NtsStringView* nts_dom_SVGScriptElement_get_type(NtsDomSVGScriptElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGScriptElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->FastGetAttribute(svg_names::kTypeAttr)), false);
+}
+
+void nts_dom_SVGScriptElement_set_type(NtsDomSVGScriptElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGScriptElement>(self);
+  receiver->setAttribute(svg_names::kTypeAttr, NtsText(context, value));
+}
+
+bool nts_dom_SVGScriptElement_get_async(NtsDomSVGScriptElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGScriptElement>(self);
+  return static_cast<bool>(receiver->FastHasAttribute(svg_names::kAsyncAttr));
+}
+
+void nts_dom_SVGScriptElement_set_async(NtsDomSVGScriptElement* self, bool value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGScriptElement>(self);
+  receiver->SetBooleanAttribute(svg_names::kAsyncAttr, value);
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGScriptElement_get_href(NtsDomSVGScriptElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGScriptElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGSetElement* nts_dom_as_SVGSetElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGSetElement>(nts_dom_is(node, NTS_DOM_SVGSetElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGStopElement* nts_dom_as_SVGStopElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGStopElement>(nts_dom_is(node, NTS_DOM_SVGStopElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedNumber* nts_dom_SVGStopElement_get_offset(NtsDomSVGStopElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStopElement>(self);
+  return HandleOf<NtsDomSVGAnimatedNumber>(receiver->offset());
+}
+
+double nts_dom_SVGStringList_get_length(NtsDomSVGStringList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+double nts_dom_SVGStringList_get_numberOfItems(NtsDomSVGStringList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+const NtsStringView* nts_dom_SVGStringList_appendItem(NtsDomSVGStringList* self, const NtsBorrowedString* newItem, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  return context.Lend(nts_dom::AsString(receiver->appendItem(NtsText(context, newItem), exception_state)), false);
+}
+
+void nts_dom_SVGStringList_clear(NtsDomSVGStringList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  receiver->clear(exception_state);
+}
+
+const NtsStringView* nts_dom_SVGStringList_getItem(NtsDomSVGStringList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->getItem(index_converted, exception_state)), false);
+}
+
+const NtsStringView* nts_dom_SVGStringList_initialize(NtsDomSVGStringList* self, const NtsBorrowedString* newItem, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  return context.Lend(nts_dom::AsString(receiver->initialize(NtsText(context, newItem), exception_state)), false);
+}
+
+const NtsStringView* nts_dom_SVGStringList_insertItemBefore(NtsDomSVGStringList* self, const NtsBorrowedString* item, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->insertItemBefore(NtsText(context, item), index_converted, exception_state)), false);
+}
+
+const NtsStringView* nts_dom_SVGStringList_removeItem(NtsDomSVGStringList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->removeItem(index_converted, exception_state)), false);
+}
+
+const NtsStringView* nts_dom_SVGStringList_replaceItem(NtsDomSVGStringList* self, const NtsBorrowedString* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGStringListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return context.Lend(nts_dom::AsString(receiver->replaceItem(NtsText(context, newItem), index_converted, exception_state)), false);
+}
+
+NtsDomSVGStyleElement* nts_dom_as_SVGStyleElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGStyleElement>(nts_dom_is(node, NTS_DOM_SVGStyleElement) ? WrappableOf(node) : nullptr);
+}
+
+const NtsStringView* nts_dom_SVGStyleElement_get_type(NtsDomSVGStyleElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->type()), false);
+}
+
+void nts_dom_SVGStyleElement_set_type(NtsDomSVGStyleElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  receiver->setType(NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGStyleElement_get_media(NtsDomSVGStyleElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->media()), false);
+}
+
+void nts_dom_SVGStyleElement_set_media(NtsDomSVGStyleElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  receiver->setMedia(NtsText(context, value));
+}
+
+const NtsStringView* nts_dom_SVGStyleElement_get_title(NtsDomSVGStyleElement* self) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  return context.Lend(nts_dom::AsString(receiver->title()), false);
+}
+
+void nts_dom_SVGStyleElement_set_title(NtsDomSVGStyleElement* self, const NtsBorrowedString* value) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  receiver->setTitle(NtsText(context, value));
+}
+
+NtsDomStyleSheet* nts_dom_SVGStyleElement_get_sheet(NtsDomSVGStyleElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  return HandleOf<NtsDomStyleSheet>(receiver->sheet());
+}
+
+bool nts_dom_SVGStyleElement_get_disabled(NtsDomSVGStyleElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  return static_cast<bool>(receiver->disabled());
+}
+
+void nts_dom_SVGStyleElement_set_disabled(NtsDomSVGStyleElement* self, bool value) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGStyleElement>(self);
+  receiver->setDisabled(value);
+}
+
+NtsDomSVGSVGElement* nts_dom_as_SVGSVGElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGSVGElement>(nts_dom_is(node, NTS_DOM_SVGSVGElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGSVGElement_get_x(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGSVGElement_get_y(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGSVGElement_get_width(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGSVGElement_get_height(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+double nts_dom_SVGSVGElement_get_currentScale(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return static_cast<double>(receiver->currentScale());
+}
+
+void nts_dom_SVGSVGElement_set_currentScale(NtsDomSVGSVGElement* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setCurrentScale(value_converted);
+}
+
+NtsDomSVGAnimatedRect* nts_dom_SVGSVGElement_get_viewBox(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedRect>(receiver->viewBox());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGSVGElement_get_preserveAspectRatio(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+double nts_dom_SVGSVGElement_get_zoomAndPan(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return static_cast<double>(receiver->zoomAndPan());
+}
+
+void nts_dom_SVGSVGElement_set_zoomAndPan(NtsDomSVGSVGElement* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setZoomAndPan(value_converted, exception_state);
+}
+
+bool nts_dom_SVGSVGElement_animationsPaused(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return static_cast<bool>(receiver->animationsPaused());
+}
+
+NtsDomSVGAngle* nts_dom_SVGSVGElement_createSVGAngle(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGAngle>(receiver->createSVGAngle());
+}
+
+NtsDomSVGLength* nts_dom_SVGSVGElement_createSVGLength(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGLength>(receiver->createSVGLength());
+}
+
+NtsDomSVGNumber* nts_dom_SVGSVGElement_createSVGNumber(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGNumber>(receiver->createSVGNumber());
+}
+
+NtsDomSVGTransform* nts_dom_SVGSVGElement_createSVGTransform(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomSVGTransform>(receiver->createSVGTransform());
+}
+
+void nts_dom_SVGSVGElement_deselectAll(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  receiver->deselectAll();
+}
+
+void nts_dom_SVGSVGElement_forceRedraw(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  receiver->forceRedraw();
+}
+
+double nts_dom_SVGSVGElement_getCurrentTime(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return static_cast<double>(receiver->getCurrentTime());
+}
+
+NtsDomElement* nts_dom_SVGSVGElement_getElementById(NtsDomSVGSVGElement* self, const NtsBorrowedString* elementId) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  return HandleOf<NtsDomElement>(receiver->getElementById(NtsText(context, elementId)));
+}
+
+void nts_dom_SVGSVGElement_pauseAnimations(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  receiver->pauseAnimations();
+}
+
+void nts_dom_SVGSVGElement_setCurrentTime(NtsDomSVGSVGElement* self, double seconds, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  const auto seconds_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), seconds), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setCurrentTime(seconds_converted);
+}
+
+double nts_dom_SVGSVGElement_suspendRedraw(NtsDomSVGSVGElement* self, double maxWaitMilliseconds) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto maxWaitMilliseconds_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), maxWaitMilliseconds), conversion);
+  return static_cast<double>(receiver->suspendRedraw(maxWaitMilliseconds_converted));
+}
+
+void nts_dom_SVGSVGElement_unpauseAnimations(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  receiver->unpauseAnimations();
+}
+
+void nts_dom_SVGSVGElement_unsuspendRedraw(NtsDomSVGSVGElement* self, double suspendHandleId) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  const auto suspendHandleId_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), suspendHandleId), conversion);
+  receiver->unsuspendRedraw(suspendHandleId_converted);
+}
+
+void nts_dom_SVGSVGElement_unsuspendRedrawAll(NtsDomSVGSVGElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSVGElement>(self);
+  receiver->unsuspendRedrawAll();
+}
+
+NtsDomSVGSwitchElement* nts_dom_as_SVGSwitchElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGSwitchElement>(nts_dom_is(node, NTS_DOM_SVGSwitchElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGSymbolElement* nts_dom_as_SVGSymbolElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGSymbolElement>(nts_dom_is(node, NTS_DOM_SVGSymbolElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedRect* nts_dom_SVGSymbolElement_get_viewBox(NtsDomSVGSymbolElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSymbolElement>(self);
+  return HandleOf<NtsDomSVGAnimatedRect>(receiver->viewBox());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGSymbolElement_get_preserveAspectRatio(NtsDomSVGSymbolElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGSymbolElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+NtsDomSVGTextElement* nts_dom_as_SVGTextElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTextElement>(nts_dom_is(node, NTS_DOM_SVGTextElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGTextPathElement* nts_dom_as_SVGTextPathElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTextPathElement>(nts_dom_is(node, NTS_DOM_SVGTextPathElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGTextPathElement_get_startOffset(NtsDomSVGTextPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->startOffset());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGTextPathElement_get_method(NtsDomSVGTextPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->method());
+}
+
+NtsDomSVGAnimatedEnumeration* nts_dom_SVGTextPathElement_get_spacing(NtsDomSVGTextPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedEnumeration>(receiver->spacing());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGTextPathElement_get_href(NtsDomSVGTextPathElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTextPathElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGTitleElement* nts_dom_as_SVGTitleElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTitleElement>(nts_dom_is(node, NTS_DOM_SVGTitleElement) ? WrappableOf(node) : nullptr);
+}
+
+double nts_dom_SVGTransform_get_type(NtsDomSVGTransform* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  return static_cast<double>(receiver->transformType());
+}
+
+double nts_dom_SVGTransform_get_angle(NtsDomSVGTransform* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  return static_cast<double>(receiver->angle());
+}
+
+void nts_dom_SVGTransform_setRotate(NtsDomSVGTransform* self, double angle, double cx, double cy, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  const auto angle_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), angle), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto cx_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), cx), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto cy_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), cy), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setRotate(angle_converted, cx_converted, cy_converted, exception_state);
+}
+
+void nts_dom_SVGTransform_setScale(NtsDomSVGTransform* self, double sx, double sy, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  const auto sx_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sx), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto sy_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sy), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setScale(sx_converted, sy_converted, exception_state);
+}
+
+void nts_dom_SVGTransform_setSkewX(NtsDomSVGTransform* self, double angle, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  const auto angle_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), angle), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setSkewX(angle_converted, exception_state);
+}
+
+void nts_dom_SVGTransform_setSkewY(NtsDomSVGTransform* self, double angle, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  const auto angle_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), angle), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setSkewY(angle_converted, exception_state);
+}
+
+void nts_dom_SVGTransform_setTranslate(NtsDomSVGTransform* self, double tx, double ty, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformTearOff>(self);
+  const auto tx_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), tx), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  const auto ty_converted = blink::NativeValueTraits<blink::IDLFloat>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), ty), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setTranslate(tx_converted, ty_converted, exception_state);
+}
+
+double nts_dom_SVGTransformList_get_length(NtsDomSVGTransformList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+double nts_dom_SVGTransformList_get_numberOfItems(NtsDomSVGTransformList* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  return static_cast<double>(receiver->length());
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_appendItem(NtsDomSVGTransformList* self, NtsDomSVGTransform* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  return HandleOf<NtsDomSVGTransform>(receiver->appendItem(ObjectOf<blink::SVGTransformTearOff>(newItem), exception_state));
+}
+
+void nts_dom_SVGTransformList_clear(NtsDomSVGTransformList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  receiver->clear(exception_state);
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_consolidate(NtsDomSVGTransformList* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  return HandleOf<NtsDomSVGTransform>(receiver->consolidate(exception_state));
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_getItem(NtsDomSVGTransformList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGTransform>(receiver->getItem(index_converted, exception_state));
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_initialize(NtsDomSVGTransformList* self, NtsDomSVGTransform* newItem, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  return HandleOf<NtsDomSVGTransform>(receiver->initialize(ObjectOf<blink::SVGTransformTearOff>(newItem), exception_state));
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_insertItemBefore(NtsDomSVGTransformList* self, NtsDomSVGTransform* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGTransform>(receiver->insertItemBefore(ObjectOf<blink::SVGTransformTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_removeItem(NtsDomSVGTransformList* self, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGTransform>(receiver->removeItem(index_converted, exception_state));
+}
+
+NtsDomSVGTransform* nts_dom_SVGTransformList_replaceItem(NtsDomSVGTransformList* self, NtsDomSVGTransform* newItem, double index, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGTransformListTearOff>(self);
+  const auto index_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), index), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomSVGTransform>(receiver->replaceItem(ObjectOf<blink::SVGTransformTearOff>(newItem), index_converted, exception_state));
+}
+
+NtsDomSVGTSpanElement* nts_dom_as_SVGTSpanElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGTSpanElement>(nts_dom_is(node, NTS_DOM_SVGTSpanElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGUseElement* nts_dom_as_SVGUseElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGUseElement>(nts_dom_is(node, NTS_DOM_SVGUseElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGUseElement_get_x(NtsDomSVGUseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGUseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->x());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGUseElement_get_y(NtsDomSVGUseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGUseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->y());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGUseElement_get_width(NtsDomSVGUseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGUseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->width());
+}
+
+NtsDomSVGAnimatedLength* nts_dom_SVGUseElement_get_height(NtsDomSVGUseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGUseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedLength>(receiver->height());
+}
+
+NtsDomSVGAnimatedString* nts_dom_SVGUseElement_get_href(NtsDomSVGUseElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGUseElement>(self);
+  return HandleOf<NtsDomSVGAnimatedString>(receiver->href());
+}
+
+NtsDomSVGViewElement* nts_dom_as_SVGViewElement(NtsDomNode* node) {
+  nts_dom::AssertEntered();
+  return HandleOf<NtsDomSVGViewElement>(nts_dom_is(node, NTS_DOM_SVGViewElement) ? WrappableOf(node) : nullptr);
+}
+
+NtsDomSVGAnimatedRect* nts_dom_SVGViewElement_get_viewBox(NtsDomSVGViewElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGViewElement>(self);
+  return HandleOf<NtsDomSVGAnimatedRect>(receiver->viewBox());
+}
+
+NtsDomSVGAnimatedPreserveAspectRatio* nts_dom_SVGViewElement_get_preserveAspectRatio(NtsDomSVGViewElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGViewElement>(self);
+  return HandleOf<NtsDomSVGAnimatedPreserveAspectRatio>(receiver->preserveAspectRatio());
+}
+
+double nts_dom_SVGViewElement_get_zoomAndPan(NtsDomSVGViewElement* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::SVGViewElement>(self);
+  return static_cast<double>(receiver->zoomAndPan());
+}
+
+void nts_dom_SVGViewElement_set_zoomAndPan(NtsDomSVGViewElement* self, double value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::SVGViewElement>(self);
+  const auto value_converted = blink::NativeValueTraits<blink::IDLUnsignedShort>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setZoomAndPan(value_converted, exception_state);
 }
 
 void nts_dom_ChildNode_after_sss(NtsDomChildNode* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {

@@ -1,22 +1,25 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 2523,
-    "skipped": 212,
-    "absent: constant": 63,
+    "bound": 3129,
+    "skipped": 246,
+    "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 20,
-    "absent: other": 8
+    "absent: other": 29
   },
   "skippedBy": {
-    "result type": 65,
+    "result type": 69,
     "defined in": 60,
     "parameter type": 16,
-    "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 12,
+    "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
+    "interface SVGPoint": 11,
+    "interface SVGRect": 9,
+    "interface SVGMatrix": 7,
     "interface CustomElementRegistry": 4,
+    "interface StylePropertyMap": 3,
     "interface ReadableStream": 3,
     "interface ViewTransition": 2,
-    "interface StylePropertyMap": 2,
     "[RuntimeEnabled=OrientationEvent] per-platform": 2,
     "variadic any...": 2,
     "[RuntimeEnabled=ExtendedTextMetrics] overridable": 2,
@@ -32,7 +35,6 @@
     "interface XPathResult": 1,
     "interface FontFaceSet": 1,
     "[RuntimeEnabled=TextFragmentIdentifiers] overridable": 1,
-    "interface SVGSVGElement": 1,
     "[RuntimeEnabled=AccessKeyLabel] experimental": 1,
     "interface ElementInternals": 1,
     "[RuntimeEnabled=MediaCapture] per-platform": 1,
@@ -47,7 +49,6 @@
     "interface PerformanceNavigation": 1,
     "interface PerformanceTiming": 1,
     "interface DOMStringList": 1,
-    "interface DOMMatrix": 1,
     "interface Geolocation": 1,
     "[RuntimeEnabled=FedCm] overridable": 1,
     "[RuntimeEnabled=NavigatorContentUtils] per-platform": 1,
@@ -504,6 +505,7 @@
         "referrer",
         "releaseEvents",
         "replaceChildren",
+        "rootElement",
         "scripts",
         "scrollingElement",
         "styleSheets",
@@ -534,7 +536,6 @@
         "ontouchstart": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
         "pictureInPictureEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "requestStorageAccess": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "rootElement": "interface SVGSVGElement is not bound",
         "startViewTransition": "interface ViewTransition is not bound"
       },
       "absent": {}
@@ -2416,6 +2417,7 @@
         "fontStretch",
         "fontVariantCaps",
         "getImageData",
+        "getTransform",
         "globalAlpha",
         "globalCompositeOperation",
         "imageSmoothingEnabled",
@@ -2461,7 +2463,6 @@
         "fillStyle": "result type any",
         "getContextAttributes": "result type CanvasRenderingContext2DSettings",
         "getLineDash": "result type sequence<unrestricted double>",
-        "getTransform": "interface DOMMatrix is not bound",
         "setLineDash": "parameter type sequence<unrestricted double>",
         "strokeStyle": "result type any"
       },
@@ -4157,6 +4158,1405 @@
         "oldValue",
         "storageArea",
         "url"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "DOMMatrixReadOnly": {
+      "bound": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "flipX",
+        "flipY",
+        "inverse",
+        "is2D",
+        "isIdentity",
+        "m11",
+        "m12",
+        "m13",
+        "m14",
+        "m21",
+        "m22",
+        "m23",
+        "m24",
+        "m31",
+        "m32",
+        "m33",
+        "m34",
+        "m41",
+        "m42",
+        "m43",
+        "m44",
+        "multiply",
+        "rotate",
+        "rotateAxisAngle",
+        "rotateFromVector",
+        "scale",
+        "scale3d",
+        "scaleNonUniform",
+        "skewX",
+        "skewY",
+        "toString",
+        "transformPoint",
+        "translate"
+      ],
+      "skipped": {
+        "toFloat32Array": "result type Float32Array",
+        "toFloat64Array": "result type Float64Array",
+        "toJSON": "result type object"
+      },
+      "absent": {}
+    },
+    "DOMMatrix": {
+      "bound": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f",
+        "invertSelf",
+        "m11",
+        "m12",
+        "m13",
+        "m14",
+        "m21",
+        "m22",
+        "m23",
+        "m24",
+        "m31",
+        "m32",
+        "m33",
+        "m34",
+        "m41",
+        "m42",
+        "m43",
+        "m44",
+        "multiplySelf",
+        "preMultiplySelf",
+        "rotateAxisAngleSelf",
+        "rotateFromVectorSelf",
+        "rotateSelf",
+        "scale3dSelf",
+        "scaleSelf",
+        "setMatrixValue",
+        "skewXSelf",
+        "skewYSelf",
+        "translateSelf"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGElement": {
+      "bound": [
+        "autofocus",
+        "blur",
+        "className",
+        "dataset",
+        "focus",
+        "nonce",
+        "onabort",
+        "onanimationcancel",
+        "onanimationend",
+        "onanimationiteration",
+        "onanimationstart",
+        "onauxclick",
+        "onbeforeinput",
+        "onbeforematch",
+        "onbeforetoggle",
+        "onblur",
+        "oncancel",
+        "oncanplay",
+        "oncanplaythrough",
+        "onchange",
+        "onclick",
+        "onclose",
+        "oncommand",
+        "oncontextlost",
+        "oncontextmenu",
+        "oncontextrestored",
+        "oncopy",
+        "oncuechange",
+        "oncut",
+        "ondblclick",
+        "ondrag",
+        "ondragend",
+        "ondragenter",
+        "ondragleave",
+        "ondragover",
+        "ondragstart",
+        "ondrop",
+        "ondurationchange",
+        "onemptied",
+        "onended",
+        "onfocus",
+        "onformdata",
+        "ongotpointercapture",
+        "oninput",
+        "oninvalid",
+        "onkeydown",
+        "onkeypress",
+        "onkeyup",
+        "onload",
+        "onloadeddata",
+        "onloadedmetadata",
+        "onloadstart",
+        "onlostpointercapture",
+        "onmousedown",
+        "onmouseenter",
+        "onmouseleave",
+        "onmousemove",
+        "onmouseout",
+        "onmouseover",
+        "onmouseup",
+        "onpaste",
+        "onpause",
+        "onplay",
+        "onplaying",
+        "onpointercancel",
+        "onpointerdown",
+        "onpointerenter",
+        "onpointerleave",
+        "onpointermove",
+        "onpointerout",
+        "onpointerover",
+        "onpointerrawupdate",
+        "onpointerup",
+        "onprogress",
+        "onratechange",
+        "onreset",
+        "onresize",
+        "onscroll",
+        "onscrollend",
+        "onsecuritypolicyviolation",
+        "onseeked",
+        "onseeking",
+        "onselect",
+        "onselectionchange",
+        "onselectstart",
+        "onslotchange",
+        "onstalled",
+        "onsubmit",
+        "onsuspend",
+        "ontimeupdate",
+        "ontoggle",
+        "ontransitioncancel",
+        "ontransitionend",
+        "ontransitionrun",
+        "ontransitionstart",
+        "onvolumechange",
+        "onwaiting",
+        "onwebkitanimationend",
+        "onwebkitanimationiteration",
+        "onwebkitanimationstart",
+        "onwebkittransitionend",
+        "onwheel",
+        "ownerSVGElement",
+        "style",
+        "tabIndex",
+        "viewportElement"
+      ],
+      "skipped": {
+        "attributeStyleMap": "interface StylePropertyMap is not bound",
+        "onerror": "result type OnErrorEventHandler",
+        "ontouchcancel": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchend": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchmove": "[RuntimeEnabled=TouchEventFeatureDetection] overridable",
+        "ontouchstart": "[RuntimeEnabled=TouchEventFeatureDetection] overridable"
+      },
+      "absent": {}
+    },
+    "SVGGraphicsElement": {
+      "bound": [
+        "requiredExtensions",
+        "systemLanguage",
+        "transform"
+      ],
+      "skipped": {
+        "getBBox": "interface SVGRect is not bound",
+        "getCTM": "interface SVGMatrix is not bound",
+        "getScreenCTM": "interface SVGMatrix is not bound"
+      },
+      "absent": {}
+    },
+    "SVGGeometryElement": {
+      "bound": [
+        "getTotalLength",
+        "isPointInFill",
+        "isPointInStroke",
+        "pathLength"
+      ],
+      "skipped": {
+        "getPointAtLength": "interface SVGPoint is not bound"
+      },
+      "absent": {}
+    },
+    "SVGTextContentElement": {
+      "bound": [
+        "getCharNumAtPosition",
+        "getComputedTextLength",
+        "getNumberOfChars",
+        "getRotationOfChar",
+        "getSubStringLength",
+        "lengthAdjust",
+        "selectSubString",
+        "textLength"
+      ],
+      "skipped": {
+        "getEndPositionOfChar": "interface SVGPoint is not bound",
+        "getExtentOfChar": "interface SVGRect is not bound",
+        "getStartPositionOfChar": "interface SVGPoint is not bound"
+      },
+      "absent": {
+        "constant": [
+          "LENGTHADJUST_SPACING",
+          "LENGTHADJUST_SPACINGANDGLYPHS",
+          "LENGTHADJUST_UNKNOWN"
+        ]
+      }
+    },
+    "SVGTextPositioningElement": {
+      "bound": [
+        "dx",
+        "dy",
+        "rotate",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGGradientElement": {
+      "bound": [
+        "gradientTransform",
+        "gradientUnits",
+        "href",
+        "spreadMethod"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_SPREADMETHOD_PAD",
+          "SVG_SPREADMETHOD_REFLECT",
+          "SVG_SPREADMETHOD_REPEAT",
+          "SVG_SPREADMETHOD_UNKNOWN"
+        ]
+      }
+    },
+    "SVGAnimationElement": {
+      "bound": [
+        "beginElement",
+        "beginElementAt",
+        "endElement",
+        "endElementAt",
+        "getCurrentTime",
+        "getSimpleDuration",
+        "getStartTime",
+        "requiredExtensions",
+        "systemLanguage",
+        "targetElement"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGComponentTransferFunctionElement": {
+      "bound": [
+        "amplitude",
+        "exponent",
+        "intercept",
+        "offset",
+        "slope",
+        "tableValues",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_FECOMPONENTTRANSFER_TYPE_DISCRETE",
+          "SVG_FECOMPONENTTRANSFER_TYPE_GAMMA",
+          "SVG_FECOMPONENTTRANSFER_TYPE_IDENTITY",
+          "SVG_FECOMPONENTTRANSFER_TYPE_LINEAR",
+          "SVG_FECOMPONENTTRANSFER_TYPE_TABLE",
+          "SVG_FECOMPONENTTRANSFER_TYPE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGAElement": {
+      "bound": [
+        "download",
+        "href",
+        "hreflang",
+        "ping",
+        "referrerPolicy",
+        "rel",
+        "relList",
+        "target",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAngle": {
+      "bound": [
+        "convertToSpecifiedUnits",
+        "newValueSpecifiedUnits",
+        "unitType",
+        "value",
+        "valueAsString",
+        "valueInSpecifiedUnits"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_ANGLETYPE_DEG",
+          "SVG_ANGLETYPE_GRAD",
+          "SVG_ANGLETYPE_RAD",
+          "SVG_ANGLETYPE_UNKNOWN",
+          "SVG_ANGLETYPE_UNSPECIFIED"
+        ]
+      }
+    },
+    "SVGAnimatedAngle": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedBoolean": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedEnumeration": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedInteger": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedLength": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedLengthList": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedNumber": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedNumberList": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedPreserveAspectRatio": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedRect": {
+      "bound": [],
+      "skipped": {
+        "animVal": "interface SVGRect is not bound",
+        "baseVal": "interface SVGRect is not bound"
+      },
+      "absent": {}
+    },
+    "SVGAnimatedString": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimatedTransformList": {
+      "bound": [
+        "animVal",
+        "baseVal"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimateElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimateMotionElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGAnimateTransformElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGCircleElement": {
+      "bound": [
+        "cx",
+        "cy",
+        "r"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGClipPathElement": {
+      "bound": [
+        "clipPathUnits",
+        "transform"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGDefsElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGDescElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGEllipseElement": {
+      "bound": [
+        "cx",
+        "cy",
+        "rx",
+        "ry"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEBlendElement": {
+      "bound": [
+        "height",
+        "in1",
+        "in2",
+        "mode",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_FEBLEND_MODE_COLOR",
+          "SVG_FEBLEND_MODE_COLOR_BURN",
+          "SVG_FEBLEND_MODE_COLOR_DODGE",
+          "SVG_FEBLEND_MODE_DARKEN",
+          "SVG_FEBLEND_MODE_DIFFERENCE",
+          "SVG_FEBLEND_MODE_EXCLUSION",
+          "SVG_FEBLEND_MODE_HARD_LIGHT",
+          "SVG_FEBLEND_MODE_HUE",
+          "SVG_FEBLEND_MODE_LIGHTEN",
+          "SVG_FEBLEND_MODE_LUMINOSITY",
+          "SVG_FEBLEND_MODE_MULTIPLY",
+          "SVG_FEBLEND_MODE_NORMAL",
+          "SVG_FEBLEND_MODE_OVERLAY",
+          "SVG_FEBLEND_MODE_SATURATION",
+          "SVG_FEBLEND_MODE_SCREEN",
+          "SVG_FEBLEND_MODE_SOFT_LIGHT",
+          "SVG_FEBLEND_MODE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGFEColorMatrixElement": {
+      "bound": [
+        "height",
+        "in1",
+        "result",
+        "type",
+        "values",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_FECOLORMATRIX_TYPE_HUEROTATE",
+          "SVG_FECOLORMATRIX_TYPE_LUMINANCETOALPHA",
+          "SVG_FECOLORMATRIX_TYPE_MATRIX",
+          "SVG_FECOLORMATRIX_TYPE_SATURATE",
+          "SVG_FECOLORMATRIX_TYPE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGFEComponentTransferElement": {
+      "bound": [
+        "height",
+        "in1",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFECompositeElement": {
+      "bound": [
+        "height",
+        "in1",
+        "in2",
+        "k1",
+        "k2",
+        "k3",
+        "k4",
+        "operator",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_FECOMPOSITE_OPERATOR_ARITHMETIC",
+          "SVG_FECOMPOSITE_OPERATOR_ATOP",
+          "SVG_FECOMPOSITE_OPERATOR_IN",
+          "SVG_FECOMPOSITE_OPERATOR_OUT",
+          "SVG_FECOMPOSITE_OPERATOR_OVER",
+          "SVG_FECOMPOSITE_OPERATOR_UNKNOWN",
+          "SVG_FECOMPOSITE_OPERATOR_XOR"
+        ]
+      }
+    },
+    "SVGFEConvolveMatrixElement": {
+      "bound": [
+        "bias",
+        "divisor",
+        "edgeMode",
+        "height",
+        "in1",
+        "kernelMatrix",
+        "kernelUnitLengthX",
+        "kernelUnitLengthY",
+        "orderX",
+        "orderY",
+        "preserveAlpha",
+        "result",
+        "targetX",
+        "targetY",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_EDGEMODE_DUPLICATE",
+          "SVG_EDGEMODE_NONE",
+          "SVG_EDGEMODE_UNKNOWN",
+          "SVG_EDGEMODE_WRAP"
+        ]
+      }
+    },
+    "SVGFEDiffuseLightingElement": {
+      "bound": [
+        "diffuseConstant",
+        "height",
+        "in1",
+        "kernelUnitLengthX",
+        "kernelUnitLengthY",
+        "result",
+        "surfaceScale",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEDisplacementMapElement": {
+      "bound": [
+        "height",
+        "in1",
+        "in2",
+        "result",
+        "scale",
+        "width",
+        "x",
+        "xChannelSelector",
+        "y",
+        "yChannelSelector"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_CHANNEL_A",
+          "SVG_CHANNEL_B",
+          "SVG_CHANNEL_G",
+          "SVG_CHANNEL_R",
+          "SVG_CHANNEL_UNKNOWN"
+        ]
+      }
+    },
+    "SVGFEDistantLightElement": {
+      "bound": [
+        "azimuth",
+        "elevation"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEDropShadowElement": {
+      "bound": [
+        "dx",
+        "dy",
+        "height",
+        "in1",
+        "result",
+        "setStdDeviation",
+        "stdDeviationX",
+        "stdDeviationY",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEFloodElement": {
+      "bound": [
+        "height",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEFuncAElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEFuncBElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEFuncGElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEFuncRElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEGaussianBlurElement": {
+      "bound": [
+        "height",
+        "in1",
+        "result",
+        "setStdDeviation",
+        "stdDeviationX",
+        "stdDeviationY",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEImageElement": {
+      "bound": [
+        "height",
+        "href",
+        "preserveAspectRatio",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEMergeElement": {
+      "bound": [
+        "height",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEMergeNodeElement": {
+      "bound": [
+        "in1"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEMorphologyElement": {
+      "bound": [
+        "height",
+        "in1",
+        "operator",
+        "radiusX",
+        "radiusY",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_MORPHOLOGY_OPERATOR_DILATE",
+          "SVG_MORPHOLOGY_OPERATOR_ERODE",
+          "SVG_MORPHOLOGY_OPERATOR_UNKNOWN"
+        ]
+      }
+    },
+    "SVGFEOffsetElement": {
+      "bound": [
+        "dx",
+        "dy",
+        "height",
+        "in1",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFEPointLightElement": {
+      "bound": [
+        "x",
+        "y",
+        "z"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFESpecularLightingElement": {
+      "bound": [
+        "height",
+        "in1",
+        "kernelUnitLengthX",
+        "kernelUnitLengthY",
+        "result",
+        "specularConstant",
+        "specularExponent",
+        "surfaceScale",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFESpotLightElement": {
+      "bound": [
+        "limitingConeAngle",
+        "pointsAtX",
+        "pointsAtY",
+        "pointsAtZ",
+        "specularExponent",
+        "x",
+        "y",
+        "z"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFETileElement": {
+      "bound": [
+        "height",
+        "in1",
+        "result",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGFETurbulenceElement": {
+      "bound": [
+        "baseFrequencyX",
+        "baseFrequencyY",
+        "height",
+        "numOctaves",
+        "result",
+        "seed",
+        "stitchTiles",
+        "type",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_STITCHTYPE_NOSTITCH",
+          "SVG_STITCHTYPE_STITCH",
+          "SVG_STITCHTYPE_UNKNOWN",
+          "SVG_TURBULENCE_TYPE_FRACTALNOISE",
+          "SVG_TURBULENCE_TYPE_TURBULENCE",
+          "SVG_TURBULENCE_TYPE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGFilterElement": {
+      "bound": [
+        "filterUnits",
+        "height",
+        "href",
+        "primitiveUnits",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGForeignObjectElement": {
+      "bound": [
+        "height",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGGElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGImageElement": {
+      "bound": [
+        "crossOrigin",
+        "height",
+        "href",
+        "preserveAspectRatio",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGLength": {
+      "bound": [
+        "convertToSpecifiedUnits",
+        "newValueSpecifiedUnits",
+        "unitType",
+        "value",
+        "valueAsString",
+        "valueInSpecifiedUnits"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_LENGTHTYPE_CM",
+          "SVG_LENGTHTYPE_EMS",
+          "SVG_LENGTHTYPE_EXS",
+          "SVG_LENGTHTYPE_IN",
+          "SVG_LENGTHTYPE_MM",
+          "SVG_LENGTHTYPE_NUMBER",
+          "SVG_LENGTHTYPE_PC",
+          "SVG_LENGTHTYPE_PERCENTAGE",
+          "SVG_LENGTHTYPE_PT",
+          "SVG_LENGTHTYPE_PX",
+          "SVG_LENGTHTYPE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGLengthList": {
+      "bound": [
+        "appendItem",
+        "clear",
+        "getItem",
+        "initialize",
+        "insertItemBefore",
+        "length",
+        "numberOfItems",
+        "removeItem",
+        "replaceItem"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGLinearGradientElement": {
+      "bound": [
+        "x1",
+        "x2",
+        "y1",
+        "y2"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGLineElement": {
+      "bound": [
+        "x1",
+        "x2",
+        "y1",
+        "y2"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGMarkerElement": {
+      "bound": [
+        "markerHeight",
+        "markerUnits",
+        "markerWidth",
+        "orientAngle",
+        "orientType",
+        "preserveAspectRatio",
+        "refX",
+        "refY",
+        "setOrientToAngle",
+        "setOrientToAuto",
+        "viewBox"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_MARKERUNITS_STROKEWIDTH",
+          "SVG_MARKERUNITS_UNKNOWN",
+          "SVG_MARKERUNITS_USERSPACEONUSE",
+          "SVG_MARKER_ORIENT_ANGLE",
+          "SVG_MARKER_ORIENT_AUTO",
+          "SVG_MARKER_ORIENT_AUTO_START_REVERSE",
+          "SVG_MARKER_ORIENT_UNKNOWN"
+        ]
+      }
+    },
+    "SVGMaskElement": {
+      "bound": [
+        "height",
+        "maskContentUnits",
+        "maskUnits",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGMetadataElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGMPathElement": {
+      "bound": [
+        "href"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGNumber": {
+      "bound": [
+        "value"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGNumberList": {
+      "bound": [
+        "appendItem",
+        "clear",
+        "getItem",
+        "initialize",
+        "insertItemBefore",
+        "length",
+        "numberOfItems",
+        "removeItem",
+        "replaceItem"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGPathElement": {
+      "bound": [
+        "getTotalLength",
+        "pathLength"
+      ],
+      "skipped": {},
+      "absent": {
+        "other": [
+          "getPointAtLength"
+        ]
+      }
+    },
+    "SVGPatternElement": {
+      "bound": [
+        "height",
+        "href",
+        "patternContentUnits",
+        "patternTransform",
+        "patternUnits",
+        "preserveAspectRatio",
+        "viewBox",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGPointList": {
+      "bound": [
+        "clear",
+        "length",
+        "numberOfItems"
+      ],
+      "skipped": {
+        "appendItem": "interface SVGPoint is not bound",
+        "getItem": "interface SVGPoint is not bound",
+        "initialize": "interface SVGPoint is not bound",
+        "insertItemBefore": "interface SVGPoint is not bound",
+        "removeItem": "interface SVGPoint is not bound",
+        "replaceItem": "interface SVGPoint is not bound"
+      },
+      "absent": {}
+    },
+    "SVGPolygonElement": {
+      "bound": [
+        "animatedPoints",
+        "points"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGPolylineElement": {
+      "bound": [
+        "animatedPoints",
+        "points"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGPreserveAspectRatio": {
+      "bound": [
+        "align",
+        "meetOrSlice"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_MEETORSLICE_MEET",
+          "SVG_MEETORSLICE_SLICE",
+          "SVG_MEETORSLICE_UNKNOWN",
+          "SVG_PRESERVEASPECTRATIO_NONE",
+          "SVG_PRESERVEASPECTRATIO_UNKNOWN",
+          "SVG_PRESERVEASPECTRATIO_XMAXYMAX",
+          "SVG_PRESERVEASPECTRATIO_XMAXYMID",
+          "SVG_PRESERVEASPECTRATIO_XMAXYMIN",
+          "SVG_PRESERVEASPECTRATIO_XMIDYMAX",
+          "SVG_PRESERVEASPECTRATIO_XMIDYMID",
+          "SVG_PRESERVEASPECTRATIO_XMIDYMIN",
+          "SVG_PRESERVEASPECTRATIO_XMINYMAX",
+          "SVG_PRESERVEASPECTRATIO_XMINYMID",
+          "SVG_PRESERVEASPECTRATIO_XMINYMIN"
+        ]
+      }
+    },
+    "SVGRadialGradientElement": {
+      "bound": [
+        "cx",
+        "cy",
+        "fr",
+        "fx",
+        "fy",
+        "r"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGRectElement": {
+      "bound": [
+        "height",
+        "rx",
+        "ry",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGScriptElement": {
+      "bound": [
+        "href",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGSetElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGStopElement": {
+      "bound": [
+        "offset"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGStringList": {
+      "bound": [
+        "appendItem",
+        "clear",
+        "getItem",
+        "initialize",
+        "insertItemBefore",
+        "length",
+        "numberOfItems",
+        "removeItem",
+        "replaceItem"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGStyleElement": {
+      "bound": [
+        "disabled",
+        "media",
+        "sheet",
+        "title",
+        "type"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGSVGElement": {
+      "bound": [
+        "animationsPaused",
+        "createSVGAngle",
+        "createSVGLength",
+        "createSVGNumber",
+        "createSVGTransform",
+        "currentScale",
+        "deselectAll",
+        "forceRedraw",
+        "getCurrentTime",
+        "getElementById",
+        "height",
+        "pauseAnimations",
+        "preserveAspectRatio",
+        "setCurrentTime",
+        "suspendRedraw",
+        "unpauseAnimations",
+        "unsuspendRedraw",
+        "unsuspendRedrawAll",
+        "viewBox",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {
+        "checkEnclosure": "interface SVGRect is not bound",
+        "checkIntersection": "interface SVGRect is not bound",
+        "createSVGMatrix": "interface SVGMatrix is not bound",
+        "createSVGPoint": "interface SVGPoint is not bound",
+        "createSVGRect": "interface SVGRect is not bound",
+        "createSVGTransformFromMatrix": "interface SVGMatrix is not bound",
+        "currentTranslate": "interface SVGPoint is not bound",
+        "getEnclosureList": "interface SVGRect is not bound",
+        "getIntersectionList": "interface SVGRect is not bound"
+      },
+      "absent": {
+        "other": [
+          "onafterprint",
+          "onbeforeprint",
+          "onbeforeunload",
+          "ongamepadconnected",
+          "ongamepaddisconnected",
+          "onhashchange",
+          "onlanguagechange",
+          "onmessage",
+          "onmessageerror",
+          "onoffline",
+          "ononline",
+          "onpagehide",
+          "onpagereveal",
+          "onpageshow",
+          "onpageswap",
+          "onpopstate",
+          "onrejectionhandled",
+          "onstorage",
+          "onunhandledrejection",
+          "onunload"
+        ]
+      }
+    },
+    "SVGSwitchElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGSymbolElement": {
+      "bound": [
+        "preserveAspectRatio",
+        "viewBox"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGTextElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGTextPathElement": {
+      "bound": [
+        "href",
+        "method",
+        "spacing",
+        "startOffset"
+      ],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "TEXTPATH_METHODTYPE_ALIGN",
+          "TEXTPATH_METHODTYPE_STRETCH",
+          "TEXTPATH_METHODTYPE_UNKNOWN",
+          "TEXTPATH_SPACINGTYPE_AUTO",
+          "TEXTPATH_SPACINGTYPE_EXACT",
+          "TEXTPATH_SPACINGTYPE_UNKNOWN"
+        ]
+      }
+    },
+    "SVGTitleElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGTransform": {
+      "bound": [
+        "angle",
+        "setRotate",
+        "setScale",
+        "setSkewX",
+        "setSkewY",
+        "setTranslate",
+        "type"
+      ],
+      "skipped": {
+        "matrix": "interface SVGMatrix is not bound",
+        "setMatrix": "interface SVGMatrix is not bound"
+      },
+      "absent": {
+        "constant": [
+          "SVG_TRANSFORM_MATRIX",
+          "SVG_TRANSFORM_ROTATE",
+          "SVG_TRANSFORM_SCALE",
+          "SVG_TRANSFORM_SKEWX",
+          "SVG_TRANSFORM_SKEWY",
+          "SVG_TRANSFORM_TRANSLATE",
+          "SVG_TRANSFORM_UNKNOWN"
+        ]
+      }
+    },
+    "SVGTransformList": {
+      "bound": [
+        "appendItem",
+        "clear",
+        "consolidate",
+        "getItem",
+        "initialize",
+        "insertItemBefore",
+        "length",
+        "numberOfItems",
+        "removeItem",
+        "replaceItem"
+      ],
+      "skipped": {
+        "createSVGTransformFromMatrix": "interface SVGMatrix is not bound"
+      },
+      "absent": {}
+    },
+    "SVGTSpanElement": {
+      "bound": [],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGUnitTypes": {
+      "bound": [],
+      "skipped": {},
+      "absent": {
+        "constant": [
+          "SVG_UNIT_TYPE_OBJECTBOUNDINGBOX",
+          "SVG_UNIT_TYPE_UNKNOWN",
+          "SVG_UNIT_TYPE_USERSPACEONUSE"
+        ]
+      }
+    },
+    "SVGUseElement": {
+      "bound": [
+        "height",
+        "href",
+        "width",
+        "x",
+        "y"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "SVGViewElement": {
+      "bound": [
+        "preserveAspectRatio",
+        "viewBox"
       ],
       "skipped": {},
       "absent": {}
