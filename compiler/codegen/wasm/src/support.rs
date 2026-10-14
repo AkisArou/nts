@@ -35,6 +35,25 @@ mod tests {
     };
     use std::collections::BTreeSet;
 
+    /// The core's holes analysis asks which helpers write every slot or set a
+    /// length (`hir::fills_every_slot`, `hir::sets_length`); this backend's
+    /// own table must answer the same of every array helper it binds.
+    #[test]
+    fn array_helpers_agree_with_the_core_about_fills_and_truncation() {
+        for &(name, _) in catalog::ROWS {
+            let core = (
+                nts_core::hir::fills_every_slot(name),
+                nts_core::hir::sets_length(name),
+            );
+            match array_methods::external(name) {
+                Some(method) => {
+                    assert_eq!((method.initializes(), method.truncates()), core, "{name}");
+                }
+                None => assert_eq!(core, (false, false), "{name}: not an array method here"),
+            }
+        }
+    }
+
     fn binding(name: &str) -> Option<Support> {
         if host::external(name).is_some() {
             Some(Support::HostImport)

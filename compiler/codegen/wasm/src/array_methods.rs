@@ -74,6 +74,8 @@ impl Method {
     pub(crate) fn boxes_number(self) -> bool {
         matches!(self, Self::Pop(Family::Value) | Self::Shift(Family::Value))
     }
+    /// Writes every slot: the core's `fills_every_slot`, kept equal by test.
+    #[cfg(test)]
     pub(crate) fn initializes(self) -> bool {
         matches!(self, Self::Fill(_))
     }

@@ -1679,8 +1679,10 @@ the compiler's supported input contract produce the harness's named decline,
 not a validator/runtime trap. Sparse growth and holes must follow the prepared
 array contract; decline shapes whose storage cannot express them.
 In particular, HIR's zero fill of a typed `new Array(n)` is not an undefined
-element representation. Wasm checks initialization before admitting observations
-(`array_init.rs`), as a forward must-analysis over the control-flow graph: a
+element representation. Wasm checks initialization before admitting observations:
+core's `hir::holes` names every op that may observe a hole, and `array_init.rs`
+refuses the first by name. The analysis is a forward must-analysis over the
+control-flow graph: a
 constant slot is ready at a point when a store wrote it on every path from the
 allocation to there. An element read needs its slot, complete initialization
 permits aliases/escape, and length-only use needs no such proof. So an array

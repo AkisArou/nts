@@ -38,6 +38,7 @@ pub mod fold;
 pub mod generics;
 pub mod globals;
 pub mod guards;
+pub mod holes;
 pub mod instantiate;
 pub mod interface_access;
 pub mod interface_fields;
@@ -4097,6 +4098,31 @@ fn changes_array_length(name: &str) -> bool {
     ]
     .iter()
     .any(|family| name.starts_with(family))
+}
+
+/// Whether a runtime helper writes every slot of the array it is handed: a
+/// whole `fill`, which [`holes`] counts as completing the array. An exact
+/// list, kept equal to the Wasm backend's own by its test.
+#[must_use]
+pub fn fills_every_slot(name: &str) -> bool {
+    matches!(
+        name,
+        "nts_array_fill" | "nts_array_fill_bool" | "nts_array_fill_ref"
+    )
+}
+
+/// Whether a runtime helper sets the array it is handed to the length its
+/// second argument names: to a constant 0 no slot is left to observe
+/// ([`holes`]). An exact list, as [`fills_every_slot`].
+#[must_use]
+pub fn sets_length(name: &str) -> bool {
+    matches!(
+        name,
+        "nts_array_set_length"
+            | "nts_array_set_length_ref"
+            | "nts_array_set_length_value"
+            | "nts_array_keep_first"
+    )
 }
 
 /// Whether a runtime helper leaves a borrowed field of a parameter intact.
