@@ -767,7 +767,9 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
     out.push_str(
         "export class WasmInputDecline extends TypeError {\n  constructor(name, why, context = 'input to') { super(`NTS5001: wasm ${context} ${name}: ${why}`); this.code = 'NTS5001'; this.reason = why; }\n}\n\
          function decline(name, why) { throw new WasmInputDecline(name, why); }\n\
-         function declineResult(name, why) { throw new WasmInputDecline(name, why, 'result from'); }\n",
+         function declineResult(name, why) { throw new WasmInputDecline(name, why, 'result from'); }\n\
+         /** The module needs something this engine does not provide. */\n\
+         export class WasmEngineMissing extends Error {\n  constructor(what) { super(`NTS5001: wasm needs ${what}, which this engine does not provide`); this.code = 'NTS5001'; this.missing = what; }\n}\n",
     );
     if manifest
         .exports
@@ -777,6 +779,7 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
         out.push_str(PROMISES);
     }
     let options = "{ builtins: ['js-string'], importedStringConstants: \"'\" }";
+    out.push_str(&before_compiling(manifest));
     let _ = writeln!(
         out,
         "{};",
@@ -789,6 +792,7 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
             ),
         }
     );
+    out.push_str(AFTER_COMPILING);
     out.push_str("const imports = {\n");
     for (module, values) in &imports {
         let _ = writeln!(out, "  {}: {{ {} }},", quote(module), values.join(", "));
@@ -826,6 +830,30 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
         instance: out,
     })
 }
+
+/// The capability the module needs that a JS engine may lack, checked before
+/// compiling: an engine without `JSTag` has no way to throw a JS value from
+/// wasm. Each is named (`WasmEngineMissing`) rather than left to fail in the
+/// engine's own words (F6).
+fn before_compiling(manifest: &Manifest) -> String {
+    let throws = manifest
+        .imports
+        .iter()
+        .any(|import| import.module == "js" && matches!(import.ty, ImportType::Tag));
+    if throws {
+        "if (WebAssembly.JSTag === undefined) throw new WasmEngineMissing('WebAssembly.JSTag');\n"
+            .to_owned()
+    } else {
+        String::new()
+    }
+}
+
+/// The capabilities checked once compiled: an engine that ignored either
+/// builtin option left those imports unresolved, and would fail on them at
+/// instantiation.
+const AFTER_COMPILING: &str = "const unresolved = new Set(WebAssembly.Module.imports(module).map((entry) => entry.module));\n\
+     if (unresolved.has('wasm:js-string')) throw new WasmEngineMissing(\"the JS string builtins ('wasm:js-string')\");\n\
+     if (unresolved.has(\"'\")) throw new WasmEngineMissing('imported string constants');\n";
 
 /// A captured global the timer pair uses, declared before `create`.
 fn captures_line(local: &str, source: &str) -> String {

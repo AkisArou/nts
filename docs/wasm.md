@@ -112,7 +112,7 @@ them only as quoted export names, and every local it declares is the glue's.
 - **Capabilities.** The capability check is the compile itself. An engine
   that ignores the builtin options fails to instantiate, loudly
   (`wasm:js-string` unresolved); the glue never substitutes JS for a builtin.
-  The failure is the engine's, not yet a named NTS error (follow-up F6).
+  The glue names the capability first (`WasmEngineMissing`; F6, closed).
 
 ### Exceptions
 
@@ -998,13 +998,17 @@ also why the failure's text was missing.
 - **F4.** String and boolean literal parameter types are not guarded:
   `aOrB(s: "a" | "b")` given `"c"` traps with an unnamed `unreachable` where
   node returns `undefined`.
-- **F6.** A missing JSTag or ignored `importedStringConstants` fails closed,
-  but with the engine's error rather than a named NTS error.
 - **F7.** A lone surrogate cannot travel as an imported string constant
   (import names are UTF-8). The frontend corrupts them upstream today; plan a
   char-code fallback for when it preserves them.
 - **F8, remaining tests.** Class-keyed StaticClosure and Descriptor, poisoned
   helpers by fault injection through a real body, and validate_global.
+- **Closed since:** a missing capability is named (F6). Before
+  instantiating, the glue throws `WasmEngineMissing` (NTS5001, `missing`
+  naming it) for an engine without `WebAssembly.JSTag` where the module
+  throws, or one that ignored a compile option and left `wasm:js-string` or
+  `'` imports unresolved. `an_engine_without_a_needed_capability_is_named`
+  simulates each in node (`tooling/wasm/check-engine.ts`).
 - **Closed in 1b:** the live accessors (F5b), the entry check keyed on
   `nts_raise` (F3b), the tautological assertion (F10, dropped), and the test
   debt: the import-type table (F2, a glue unit test), the accessor captures

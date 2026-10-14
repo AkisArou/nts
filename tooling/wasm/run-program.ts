@@ -17,7 +17,9 @@
 // - `nts: wasm trap: <message>` for a trap, which is a compiler or runtime
 //   defect and never the program's own doing.
 // A module that does not load is not a run at all: `nts: wasm did not load`,
-// status 2.
+// status 2. That includes an engine without a capability the module needs
+// (the glue's `WasmEngineMissing`: JSTag, the JS string builtins, imported
+// string constants).
 //
 // The module cannot end the process itself. Checkers and any JS host import
 // it too, and a library that exited on a throw would end its importer; ending
@@ -84,8 +86,9 @@ async function main(): Promise<void> {
   try {
     await import(pathToFileURL(path.resolve(artifact, "program.mjs")).href);
   } catch (stopped) {
-    const missing = (stopped as { code?: unknown } | null)?.code === "ERR_MODULE_NOT_FOUND";
-    if (stopped instanceof WebAssembly.CompileError || stopped instanceof WebAssembly.LinkError || missing) {
+    const found = stopped as { code?: unknown; missing?: unknown } | null;
+    const absent = found?.code === "ERR_MODULE_NOT_FOUND" || typeof found?.missing === "string";
+    if (stopped instanceof WebAssembly.CompileError || stopped instanceof WebAssembly.LinkError || absent) {
       process.stderr.write(`nts: wasm did not load: ${stopped.message}\n`);
       process.exit(2);
     }

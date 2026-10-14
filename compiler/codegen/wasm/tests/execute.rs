@@ -565,6 +565,53 @@ fn a_whole_program_ends_as_the_c_runtime_ends_one() {
     }
 }
 
+/// An engine without a capability the module needs is named before the
+/// module is instantiated (`WasmEngineMissing`), never left to fail at an
+/// import in the engine's own words (F6). The fixture throws an object and
+/// builds a string, so it needs all three.
+#[test]
+fn an_engine_without_a_needed_capability_is_named() {
+    let root = common::repository();
+    let fixture = root.join("tooling/wasm/fixtures/whole-program/throws-an-object");
+    let emitted = emit_project(&fixture);
+    let artifact = common::write_artifact(
+        "engine-capabilities",
+        &emitted,
+        nts_codegen_wasm::Host::Node,
+    );
+    let builtins = "the JS string builtins ('wasm:js-string')";
+    for (engine, missing, ran) in [
+        ("full", None, true),
+        ("no-tag", Some("WebAssembly.JSTag"), false),
+        ("no-builtins", Some(builtins), false),
+        ("no-constants", Some("imported string constants"), false),
+    ] {
+        let result = std::process::Command::new("node")
+            .arg(root.join("tooling/wasm/check-engine.ts"))
+            .arg(&artifact)
+            .arg(engine)
+            .output()
+            .expect("Node installed");
+        assert!(
+            result.status.success(),
+            "{engine}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        // The report is the last line: the program writes before it throws.
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        let report: serde_json::Value =
+            serde_json::from_str(stdout.lines().last().unwrap_or_default()).unwrap();
+        assert_eq!(
+            report,
+            serde_json::json!({ "missing": missing, "ran": ran }),
+            "{engine}"
+        );
+    }
+    if common::retained().is_none() {
+        std::fs::remove_dir_all(artifact).unwrap();
+    }
+}
+
 /// Presence: a subclass's own bits after its base's, cleared and written
 /// again through the base, `"k" in v` over an open value of either of two
 /// families or of none, and the high bits.

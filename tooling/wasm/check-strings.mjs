@@ -55,10 +55,10 @@ let ignoredOptionsRefused = false;
 try {
   WebAssembly.compile = input => compile(input);
   WebAssembly.compileStreaming = input => compileStreaming(input);
-  const ignoring = await import(`${pathToFileURL(path.join(artifact, 'program.instance.mjs')).href}?ignored-options`);
-  assert.throws(() => ignoring.instantiate(), error => {
-    // V8 reports the missing builtin module as a TypeError naming it.
-    ignoredOptionsRefused = (error instanceof WebAssembly.LinkError || error instanceof TypeError) && String(error).includes('wasm:js-string');
+  // The glue names the missing builtins before it instantiates anything
+  // (F6), rather than leave the engine to fail on the import in its words.
+  await assert.rejects(import(`${pathToFileURL(path.join(artifact, 'program.instance.mjs')).href}?ignored-options`), error => {
+    ignoredOptionsRefused = error?.code === 'NTS5001' && error.missing === "the JS string builtins ('wasm:js-string')";
     return ignoredOptionsRefused;
   }); cases++;
 } finally { Object.assign(WebAssembly, { compile, compileStreaming }); }
