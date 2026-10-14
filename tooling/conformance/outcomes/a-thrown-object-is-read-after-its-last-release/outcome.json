@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "AddressSanitizer: heap-use-after-free",
+  "node": null,
+  "measured_with": "c674e013e74eb16a",
+  "source": "measured"
+}
