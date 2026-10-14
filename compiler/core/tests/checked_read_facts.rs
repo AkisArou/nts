@@ -22,7 +22,7 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         "{:?}",
         prepared.program.uncompiled
     );
-    let analyses = hir::interprocedural::analyze_program(
+    let facts_by_function = hir::interprocedural::analyze_program(
         &prepared.program,
         hir::reachable::Roots::EveryExport,
     );
@@ -39,7 +39,7 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
             .enumerate()
             .find(|(_, f)| f.name == name)
             .expect(name);
-        let analysis = &analyses[index];
+        let analysis = &facts_by_function[index];
         let reads: Vec<ValueId> = body
             .blocks
             .iter()
