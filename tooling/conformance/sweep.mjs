@@ -350,6 +350,33 @@ function runAddon(module, artifact, mutate = false) {
  * receives, which is the number a reader uses to judge how close a module is.
  * `--prepared` is what a backend sees, and that is the question.
  */
+/** The totals line `nts hir --prepared` ends with, in both of its forms. */
+function loweringTotals(out) {
+  const refused = /(\d+) function\(s\), (\d+) construct\(s\) refused/.exec(out);
+  if (refused !== null) return { lowered: Number(refused[1]), refused: Number(refused[2]) };
+  const clean = /(\d+) function\(s\), nothing refused/.exec(out);
+  if (clean !== null) return { lowered: Number(clean[1]), refused: 0 };
+  return null;
+}
+
+function selfTest() {
+  const withRefusals = loweringTotals("header\n29 function(s), 4 construct(s) refused\n");
+  if (withRefusals?.lowered !== 29 || withRefusals?.refused !== 4) return "the refused form was misread";
+  const clean = loweringTotals("header\n29 function(s), nothing refused\n");
+  if (clean?.lowered !== 29 || clean?.refused !== 0) return "the nothing-refused form was misread";
+  if (loweringTotals("header\nno totals here\n") !== null) return "output with no totals was read as totals";
+  return null;
+}
+const brokenSelfTest = selfTest();
+if (brokenSelfTest) {
+  console.error(`  NOT MEASURED: self-test failed -- ${brokenSelfTest}`);
+  process.exit(2);
+}
+if (argv.includes("--self-test")) {
+  console.log("  self-test: both lowering-total forms read, output with no totals refused");
+  process.exit(0);
+}
+
 function compiles(module) {
   const out = execFileSync(
     compiler,
@@ -361,11 +388,11 @@ function compiles(module) {
       env: { ...process.env, NTS_TSGO: join(ROOT, "target/tsgo") },
     },
   );
-  const match = /(\d+) function\(s\), (\d+) construct\(s\) refused/.exec(out);
-  if (match === null) {
+  const totals = loweringTotals(out);
+  if (totals === null) {
     throw new Error(`could not read lowering totals for ${module}`);
   }
-  return { lowered: Number(match[1]), refused: Number(match[2]), backend: backendRefusals(module) };
+  return { ...totals, backend: backendRefusals(module) };
 }
 
 /**
