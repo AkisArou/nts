@@ -47,3 +47,12 @@ export function restInAssignment(n: number): number {
   [a, ...rest] = xs;
   return a + rest.length;
 }
+
+// An assignment whose value is a read is not a discarded read: the read is the
+// last operation the statement emits, and `v` names it.
+export function assignedRead(index: number): number {
+  const values = [7, 8];
+  let v = 0;
+  if (index > 0) v = values[index | 0]!;
+  return v;
+}

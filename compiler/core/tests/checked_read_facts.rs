@@ -39,6 +39,7 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         "allZero",
         "holeInAssignment",
         "restInAssignment",
+        "assignedRead",
     ] {
         let (index, body) = prepared
             .program
@@ -58,7 +59,10 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         // A hole or a rest in an assignment pattern reads nothing at its
         // position: a read there would be dead, and a dead checked read still
         // stops, so `[,] = []` would abort where JavaScript does nothing.
-        if matches!(name, "holeInAssignment" | "restInAssignment") {
+        if matches!(
+            name,
+            "holeInAssignment" | "restInAssignment" | "assignedRead"
+        ) {
             assert_eq!(
                 reads.len(),
                 1,

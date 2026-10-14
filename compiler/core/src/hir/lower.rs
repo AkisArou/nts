@@ -49643,6 +49643,19 @@ impl<'a> FuncBuilder<'a> {
                 // whose value *is* used stays, and may stop the program out of
                 // range (`hir::may_stop`); this one would only have stopped a
                 // program node runs to the end.
+                // **Only when the statement *is* the read**, asked of the syntax:
+                // `offset = words[i]!` is an assignment whose value is the
+                // read, emitted last, and dropping it left `offset` naming a
+                // value nothing defines -- C that does not compile.
+                let mut node = expression;
+                while matches!(
+                    self.kind_of(node),
+                    Some(syntax::PARENTHESIZED_EXPRESSION | syntax::NON_NULL_EXPRESSION)
+                ) && let Some(inner) = self.children(node).first().copied()
+                {
+                    node = inner;
+                }
+                let only_a_read = self.kind_of(node) == Some(syntax::ELEMENT_ACCESS_EXPRESSION);
                 // The read, or the read converted to the expression's type
                 // (`convert` of a byte to a number), as the last operations.
                 let read = match self.values[value.0 as usize].kind {
@@ -49655,7 +49668,8 @@ impl<'a> FuncBuilder<'a> {
                 } else {
                     &[read, value]
                 };
-                if block.ends_with(tail)
+                if only_a_read
+                    && block.ends_with(tail)
                     && matches!(self.values[read.0 as usize].kind, OpKind::ArrayGet { .. })
                 {
                     block.truncate(block.len() - tail.len());
