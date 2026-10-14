@@ -1627,12 +1627,13 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # **517 of 518, exact, and the one is named.** `an-optional-method-called-
 # optionally` is the parity gap: lowering refuses a method without a body and C
 # cuts it, while Wasm declines allocating the abstract closure that is left
-# (`Corkable#note`), so it emits nothing. Sixteen programs compare only part
+# (`Corkable#note`), so it emits nothing. Thirteen programs compare only part
 # of their cases: a case Wasm refuses by name where node answers -- a read
-# past the end, a parameter outside its declared facts, a `string | undefined`
-# result -- each one the parity list's work, and the ceiling holds them.
+# past the end, a null slot that does not say which absence it holds, a
+# compiled object settling a promise, a `string | undefined` result -- each
+# one the parity list's work, and the ceiling holds them.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 517 "through the Wasm backend" exact 16 "an-optional-method-called-optionally" ); }
+  backend_examples 517 "through the Wasm backend" exact 13 "an-optional-method-called-optionally" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not

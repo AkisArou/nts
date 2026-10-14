@@ -6,7 +6,7 @@ use crate::{
     error::Failure,
     gc,
     ir::Function,
-    module::{Builder, Func, FuncKey},
+    module::{Builder, Func, FuncKey, Global},
     numeric, objects, strings,
     types::{Physical, Slot},
 };
@@ -84,11 +84,16 @@ impl Helper {
         } else {
             element
         };
-        let output = match self {
-            Self::At => element,
-            Self::AtValue => Physical::Reference(RefType::ANYREF),
-            Self::Includes | Self::IncludesStringValue => Physical::Scalar(Slot::I32),
-            Self::IndexOf | Self::LastIndexOf | Self::IndexOfStringValue => {
+        let output = match (self, element) {
+            // The null pointer is a reference element's `undefined`.
+            (Self::At, Physical::Reference(slot)) => Physical::Reference(RefType {
+                nullable: true,
+                ..slot
+            }),
+            (Self::At, element) => element,
+            (Self::AtValue, _) => Physical::Reference(RefType::ANYREF),
+            (Self::Includes | Self::IncludesStringValue, _) => Physical::Scalar(Slot::I32),
+            (Self::IndexOf | Self::LastIndexOf | Self::IndexOfStringValue, _) => {
                 Physical::Scalar(Slot::F64)
             }
         };
@@ -247,22 +252,66 @@ fn indexed(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Fun
         I::F64Lt,
         I::I32And,
     ]);
-    if helper == Helper::AtValue {
-        f.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
-    } else {
+    // Out of range is `undefined`, where the result can hold it, as C's
+    // helpers say it: the erased `undefined` for an open result
+    // (`nts_array_at_value`) and the null pointer for a reference
+    // (`nts_array_at_ref`). A number held as a number cannot: C's NaN there
+    // agrees with node only where a number is compared, and prints wrong, so
+    // `nts_array_at` refuses by name, as a checked read stops.
+    let Some((result, absent)) = absent(helper, shape, m)? else {
         require(&mut f, m)?;
-    }
+        get(&mut f, shape, &[I::LocalGet(4), I::I32TruncSatF64U])?;
+        f.instruction(&I::End);
+        return Ok(f);
+    };
+    f.instruction(&I::If(BlockType::Result(result)));
     get(&mut f, shape, &[I::LocalGet(4), I::I32TruncSatF64U])?;
     if helper == Helper::AtValue {
         let boxed = erased::callee(m, erased::Helper::BoxNumber)?;
-        let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
         f.call(boxed);
-        f.instruction(&I::Else);
-        f.global_get(undefined);
-        f.instruction(&I::End);
     }
-    f.instruction(&I::End);
+    f.instruction(&I::Else);
+    match absent {
+        Absent::Undefined(undefined) => f.global_get(undefined),
+        Absent::Value(value) => f.instruction(&value),
+    }
+    f.instructions(&[I::End, I::End]);
     Ok(f)
+}
+/// `undefined` as an indexed read's result type holds it.
+enum Absent {
+    /// The erased `undefined`, a global.
+    Undefined(Global),
+    /// A reference type's null.
+    Value(I<'static>),
+}
+/// What an indexed read answers out of range, and its type, where the result
+/// can hold `undefined`; `None` where it cannot.
+fn absent(
+    helper: Helper,
+    shape: &gc::Array,
+    m: &mut Builder<'_>,
+) -> Result<Option<(ValType, Absent)>, Failure> {
+    if helper == Helper::AtValue {
+        let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+        return Ok(Some((
+            ValType::Ref(RefType::ANYREF),
+            Absent::Undefined(undefined),
+        )));
+    }
+    Ok(match m.types.value_slot(&shape.element)? {
+        Physical::Reference(slot) => {
+            let slot = RefType {
+                nullable: true,
+                ..slot
+            };
+            Some((
+                ValType::Ref(slot),
+                Absent::Value(I::RefNull(slot.heap_type)),
+            ))
+        }
+        Physical::Scalar(_) => None,
+    })
 }
 fn search(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let element = m.types.value_slot(&shape.element)?.wasm();

@@ -20,6 +20,8 @@ for(const count of [0,1,3]) for(const [suffix,values,methods] of [
     for(const needle of values) for(const [helper,method] of methods) same(wasm[`${helper}${suffix}${count}`](x,y,needle),array[method](needle));
     for(const at of indices) {
       const expected=array.at(at);
+      // Out of range: a number held as a number has no `undefined`, so it is
+      // refused; a string's null cannot cross as a string result.
       if(expected===undefined) decline(()=>wasm[`at${suffix}${count}`](x,y,at)); else same(wasm[`at${suffix}${count}`](x,y,at),expected);
       if(suffix==='Number') {
         same(wasm[`atValuetrue${count}`](x,y,at),expected===undefined?0:2);
@@ -34,7 +36,8 @@ for(const count of [0,1,3]) for(const x of strings) for(const y of strings) {
     for(const [suffix,values] of [['String',strings],['Number',numbers],['Boolean',[true,false]]]) for(const needle of values) for(const [helper,method] of [['nts_array_index_of_str_value','indexOf'],['nts_array_includes_str_value','includes']]) same(wasm[`${helper}${suffix}${count}`](x,y,needle),array[method](needle));
 }
 for(const [helper,method] of [['nts_array_index_of_ref','indexOf'],['nts_array_includes_ref','includes']]) for(const hit of [false,true]) {const a=[],b=[],array=[a,b,a];same(wasm[`identity_${helper}_${hit}`](),array[method](hit?a:[]));}
-for(const at of indices) {const a=[],b=[],array=[a,b,a];if(array.at(at)===undefined) decline(()=>wasm.atIdentity(at));else same(wasm.atIdentity(at),array.at(at)===a);}
+// Out of range is the null pointer, which is not `a`: false, as node says.
+for(const at of indices) {const a=[],b=[],array=[a,b,a];same(wasm.atIdentity(at),array.at(at)===a);}
 for(const [helper,method] of [['nts_array_index_of_str_value','indexOf'],['nts_array_includes_str_value','includes']]) for(const null_ of [false,true]) {
     same(wasm[`absent_${helper}_${null_}_false`](),['a'][method](null_?null:undefined));
     decline(()=>wasm[`absent_${helper}_${null_}_true`]());

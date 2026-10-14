@@ -19,7 +19,8 @@ for(const x of strings) for(const y of strings) {
   for(const z of strings) for(const name of ['includesString','indexString','unknownString']) same(name,x,y,z);
   for(const z of numbers) same('unknownNumber',x,y,z);
   for(const z of [false,true]) same('unknownBoolean',x,y,z);
-  for(const at of indices) { if([x,y,x].at(at)===undefined) {assert.throws(()=>wasm.atString(x,y,at),e=>e instanceof WasmInputDecline);named_declines++;} else same('atString',x,y,at); }
+  // Out of range is the absent string, which the program tests for itself.
+  for(const at of indices) same('atString',x,y,at);
 }
 same('identityHit'); same('identityMiss');
 console.log(JSON.stringify({cases,named_declines}));
