@@ -1096,7 +1096,7 @@ fn transfer_op(
     if matches!(op.ty, super::HirType::BigInt) {
         return Facts::TOP;
     }
-    match &op.kind {
+    let mut result = match &op.kind {
         OpKind::ConstFloat(v) => Facts::constant(*v),
         #[allow(clippy::cast_precision_loss)]
         OpKind::ConstInt(v) => Facts::constant(*v as f64),
@@ -1300,7 +1300,14 @@ fn transfer_op(
         OpKind::Convert(operand) => {
             let incoming = lookup(refinements, values, *operand);
             match held_by(&op.ty) {
-                Some(width) => incoming.narrow(width),
+                Some(width) => {
+                    let mut narrowed = incoming.narrow(width);
+                    // A representation conversion is not JavaScript's ToInt32.
+                    // Preserve a checked read's missing-value qualification;
+                    // its normal-path width cannot prove the index in range.
+                    narrowed.maybe_nan = incoming.maybe_nan;
+                    narrowed
+                }
                 None => incoming,
             }
         }
@@ -1309,7 +1316,15 @@ fn transfer_op(
         // analyzed — neither is a claim this pass can make.
         // DispatchSlot belongs here: its native value is decided after analysis.
         _ => Facts::TOP,
+    };
+    // Storage widths describe only the in-range path. A checked read may
+    // instead produce undefined in JavaScript, which becomes NaN numerically.
+    // Set this after every width clamp, including tuple and narrowed-array
+    // facts, so folding a consumer cannot erase an unproven read's boundary.
+    if matches!(op.kind, OpKind::ArrayGet { checked: true, .. }) {
+        result.maybe_nan = true;
     }
+    result
 }
 
 /// Run one block, then hand its successors what it proved.
@@ -1723,6 +1738,95 @@ mod tests {
             ops,
             terminator,
         }
+    }
+
+    #[test]
+    fn checked_element_facts_survive_storage_width_clamps() {
+        let byte = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        for container in [
+            super::super::ManagedType::View(Box::new(byte.clone())),
+            super::super::ManagedType::Array(Box::new(byte.clone())),
+        ] {
+            for checked in [false, true] {
+                let array_type = HirType::Managed(container.clone());
+                let mut array = op(OpKind::Param(0));
+                array.ty = array_type.clone();
+                let mut read = op(OpKind::ArrayGet {
+                    array: ValueId(0),
+                    index: ValueId(1),
+                    checked,
+                });
+                read.ty = byte.clone();
+                let mut converted = op(OpKind::Convert(ValueId(2)));
+                converted.ty = HirType::Int {
+                    bits: 32,
+                    signed: true,
+                };
+                let mut body = func(
+                    vec![array, op(OpKind::ConstFloat(0.0)), read, converted],
+                    vec![block(
+                        Vec::new(),
+                        (0..4).map(ValueId).collect(),
+                        Terminator::Return(Some(ValueId(3))),
+                    )],
+                    1,
+                );
+                body.params[0].ty = array_type;
+                let facts = analyze(&body);
+                for id in [ValueId(2), ValueId(3)] {
+                    let known = facts.get(id);
+                    assert_eq!((known.lo, known.hi), (0.0, 255.0));
+                    assert!(known.whole);
+                    assert_eq!(known.maybe_nan, checked, "{container:?}, {id:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_proven_integer_read_becomes_finite() {
+        let byte = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        let mut array = op(OpKind::ArrayNew {
+            length: ValueId(0),
+            zeroed: true,
+        });
+        array.ty = HirType::Managed(super::super::ManagedType::Array(Box::new(byte.clone())));
+        let mut read = op(OpKind::ArrayGet {
+            array: ValueId(1),
+            index: ValueId(2),
+            checked: true,
+        });
+        read.ty = byte;
+        let mut body = func(
+            vec![
+                op(OpKind::ConstFloat(1.0)),
+                array,
+                op(OpKind::ConstFloat(0.0)),
+                read,
+            ],
+            vec![block(
+                Vec::new(),
+                (0..4).map(ValueId).collect(),
+                Terminator::Return(Some(ValueId(3))),
+            )],
+            0,
+        );
+        let before = analyze(&body);
+        assert!(before.get(ValueId(3)).maybe_nan);
+        assert_eq!(
+            super::super::bounds::eliminate_checks(&mut body, &before, &FxHashMap::default()),
+            1
+        );
+        let after = analyze(&body).get(ValueId(3));
+        assert!(!after.maybe_nan);
+        assert!(after.integral());
+        assert_eq!((after.lo, after.hi), (0.0, 255.0));
     }
 
     /// `let i = 0; while (i < 10) { i = i + 1 } return i`
