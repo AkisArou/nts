@@ -15,6 +15,9 @@
 
 use crate::{Diagnostic, Location, RewrittenSegment, SourceFile, Span};
 
+#[cfg(test)]
+mod oracle_tests;
+
 /// Where a diagnostic is, as `path:line:column`.
 ///
 /// A refusal without a location is a scavenger hunt: the message says what is
