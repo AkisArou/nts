@@ -186,3 +186,20 @@ export function widthAsIndex(v: number): string {
   if (k === -1) return String(BigInt.asUintN(2 ** 53, 5n));
   return `${BigInt.asIntN(NaN, 5n)}|${BigInt.asUintN(-0.9, 5n)}|${BigInt.asIntN(2 ** 53 - 1, -5n)}|${BigInt.asUintN(2 ** 53 - 1, 5n)}`;
 }
+
+// `**` as square-and-multiply through the checked product: zero exponents,
+// the unit bases at huge exponents, the exact minimum (-2n) ** 127n, and
+// 2n ** 127n, which is past the width (refused, where node answers).
+export function powers(v: number): string {
+  const k = big(v) & 15n;
+  const base = k - 7n;
+  const huge = (1n << 100n) + k;
+  const small = `${base ** 0n}|${0n ** 0n}|${0n ** (k + 1n)}|${1n ** huge}|${(-1n) ** huge}|${(-1n) ** (huge + 1n)}|${base ** 3n}|${base ** (k & 7n)}`;
+  const edges = `${(-2n) ** 127n}|${2n ** 126n}|${(-2n) ** 126n}|${3n ** 80n}|${(-3n) ** 79n}|${(10n + k) ** 20n}`;
+  return `${small}|${edges}`;
+}
+
+export function powerPastTheWidth(v: number): string {
+  const k = big(v) & 1n;
+  return k === 0n ? String(2n ** 127n) : String((-2n) ** 128n);
+}

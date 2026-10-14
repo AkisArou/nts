@@ -535,11 +535,11 @@ fn source_bigints_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 281, "{output}");
+    assert_eq!(output["cases"], 298, "{output}");
     assert_eq!(output["declined"], 43, "{output}");
     assert_eq!(
         output["refused"],
-        serde_json::json!({"a bigint past 128 bits, which this runtime does not hold": 67}),
+        serde_json::json!({"a bigint past 128 bits, which this runtime does not hold": 84}),
         "{output}"
     );
 }
