@@ -374,6 +374,8 @@ pub(crate) struct Plan {
     pub(crate) promise: Option<PromiseTypes>,
     pub(crate) buffers: Option<BufferTypes>,
     pub(crate) symbol: Option<SymbolTypes>,
+    /// `(array (mut eqref))`: the arrays a `String()` join is inside of.
+    pub(crate) joining: Option<u32>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -656,6 +658,7 @@ struct Builder<'a> {
     promise: Option<PromiseNodes>,
     buffers: Option<BufferNodes>,
     symbol: Option<NodeId>,
+    joining: Option<NodeId>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -700,6 +703,7 @@ impl<'a> Builder<'a> {
             promise: None,
             buffers: None,
             symbol: None,
+            joining: None,
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -1009,6 +1013,22 @@ impl<'a> Builder<'a> {
         };
         self.buffers = Some(nodes);
         nodes
+    }
+
+    /// The stack of arrays a `String()` join is inside of, planned with the
+    /// first array: `printed.rs` reads it.
+    fn joining_type(&mut self) -> NodeId {
+        if let Some(id) = self.joining {
+            return id;
+        }
+        let id = self.add(
+            "joining".into(),
+            None,
+            true,
+            Shape::Array(Field::value(PendingSlot::Reference(RefType::EQREF), true)),
+        );
+        self.joining = Some(id);
+        id
     }
 
     /// The symbol type: the object root, then the description, a JS string or
@@ -1748,6 +1768,7 @@ impl<'a> Builder<'a> {
         self.arrays.insert(key, id);
         self.array_elements.insert(id, element.clone());
         self.work.push(Work::Array(element.clone(), id));
+        self.joining_type();
         // An element may be read as an open value (an open array's element,
         // read through whichever storage it has), which boxes a bigint: the
         // box is planned with its array, so no such read finds it missing.
@@ -1772,6 +1793,7 @@ impl<'a> Builder<'a> {
         let element = HirType::Managed(ManagedType::String);
         self.arrays.insert(ArrayKey::Template, id);
         self.array_elements.insert(id, element.clone());
+        self.joining_type();
         self.work.push(Work::Array(element, id));
         id
     }
@@ -2216,6 +2238,7 @@ impl<'a> Builder<'a> {
                 descriptor: promise_descriptor,
                 base: ROOT_FIELDS,
             }),
+            joining: self.joining.map(|node| indices[node.0]),
             symbol: self.symbol.map(|node| SymbolTypes {
                 symbol: indices[node.0],
                 descriptor: symbol_descriptor,

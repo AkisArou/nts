@@ -725,13 +725,28 @@ are read off the value, from what the core decides per layout:
   - `"[object Object]"`;
   - `function NAME() { [native code] }` for a function, and
     `function () { [native code] }` for a bound one.
+- **`String()` of an array, a typed array or a runtime object**, by its
+  storage, tested before the class identities:
+  - an array (a tagged template among them) joins its elements with commas,
+    `null` and `undefined` as empty text and each other element made open and
+    printed as `String()` prints it, so nested arrays and objects recurse
+    (`array.text`, one helper per storage). As C's `nts_joining`, a stack
+    holds the arrays a join is inside of: one met again prints as empty, as
+    node's join does, and nesting past 64 refuses by name. A refusal ends the
+    call inside any join, so it empties the stack;
+  - a typed array joins its elements through the view's `join`;
+  - `[object Map]`, `[object Set]`, `[object Object]` for a `Record`,
+    `[object Promise]`, `[object ArrayBuffer]`, `[object DataView]`.
 - **Refused by name:** an identity whose layouts disagree, or that the core
   refuses, as C stops. Two classes merged into one layout that print
   differently are one such case: the decision is per layout.
 - **Tests:**
   - the function-text fixture (51 cases);
-  - value-text now answers a plain object, and refuses an object literal
-    carrying its own `toString`;
+  - value-text (81 cases) answers a plain object, refuses an object literal
+    carrying its own `toString`, and prints arrays of every element kind,
+    nested and holding `null` and `undefined`, typed arrays and the runtime's
+    objects, by `String()` and in a template; an array inside itself, a cycle
+    of two, one array held twice, 64 deep, and 65 deep refused;
   - rows: a-function-named-where-it-is-written (143 cases, none refused)
     and a-method-used-as-a-value (299).
 

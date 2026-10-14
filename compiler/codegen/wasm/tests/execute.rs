@@ -726,7 +726,7 @@ fn source_value_text_agrees_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 38, "{output}");
+    assert_eq!(output["cases"], 81, "{output}");
 }
 
 /// An owner of another field order whose storage is the same Wasm type as the

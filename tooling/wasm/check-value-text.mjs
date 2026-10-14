@@ -1,6 +1,6 @@
 // The value-text fixture against node: `String(v)` of every erased tag, a
-// boolean's text, a plain object's, and an object whose printing the core
-// refuses, refused by name.
+// boolean's text, a plain object's, an object whose printing the core
+// refuses, refused by name, and arrays', typed arrays' and runtime objects'.
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
@@ -21,4 +21,19 @@ for (let i = 0; i < oracle.kindCount(); i++) same(wasm.kindOf(i), oracle.kindOf(
 same(wasm.anObject(1), oracle.anObject(1), 'anObject');
 assert.throws(() => wasm.anObjectWithItsOwnText(1), e => e instanceof WasmInputDecline && e.message.includes('String() of an object or a function'));
 cases++;
+same(wasm.containerCount(), oracle.containerCount(), 'containerCount');
+for (let i = 0; i < oracle.containerCount(); i++) {
+  same(wasm.containerText(i), oracle.containerText(i), `containerText(${i})`);
+  same(wasm.containerInTemplate(i), oracle.containerInTemplate(i), `containerInTemplate(${i})`);
+}
+for (const n of [0, 1, 2.5]) {
+  same(wasm.selfJoined(n), oracle.selfJoined(n), `selfJoined(${n})`);
+  same(wasm.nestedCycle(n), oracle.nestedCycle(n), `nestedCycle(${n})`);
+  same(wasm.sharedNotCyclic(n), oracle.sharedNotCyclic(n), `sharedNotCyclic(${n})`);
+}
+same(wasm.nestedDeep(64), oracle.nestedDeep(64), 'nestedDeep(64)');
+assert.throws(() => wasm.nestedDeep(65), e => e instanceof WasmInputDecline && e.message.includes('nested more than 64 deep'));
+cases++;
+// The refusal left a join unfinished; the next call starts with none.
+same(wasm.selfJoined(3), oracle.selfJoined(3), 'selfJoined(3) after a refusal');
 console.log(JSON.stringify({ cases }));

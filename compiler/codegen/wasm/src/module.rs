@@ -103,6 +103,8 @@ pub(crate) enum FuncKey {
     /// The length of an open value, read through whichever array storage it
     /// has.
     OpenLength,
+    /// `String()` of an array of the storage whose wrapper this is.
+    ArrayText(u32),
     /// An export taking or answering open values, around its target.
     Boundary(Func),
     /// A JS primitive made an open value.
@@ -129,6 +131,9 @@ pub(crate) enum GlobalKey {
     SymbolRegistry,
     /// A tagged template's cooked strings, by source site.
     Template(u32),
+    /// The arrays a `String()` join is inside of, and how many.
+    Joining,
+    JoiningDepth,
 }
 
 #[derive(Debug)]

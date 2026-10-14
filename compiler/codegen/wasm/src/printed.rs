@@ -8,18 +8,27 @@
 //!   [`crate::function_names`] reads;
 //! - **a bound function's**, `function () { [native code] }`.
 //!
+//! - **an array's** (a tagged template's among them) and **a typed array's**
+//!   elements joined by commas, `null` and `undefined` as empty text and every
+//!   other element as `String()` prints it, as `Array.prototype.toString` and
+//!   `%TypedArray%.prototype.toString` join;
+//! - **a runtime object's** class tag: `[object Map]`, `[object Set]`,
+//!   `[object Object]` for a `Record`, `[object Promise]`,
+//!   `[object ArrayBuffer]`, `[object DataView]`.
+//!
 //! An identity the core refuses, or whose layouts disagree, stops by name.
 use crate::{
-    contract,
+    contract, erased,
     error::Failure,
+    gc,
     ir::Function,
-    module::{Builder, Func, FuncKey, Global},
+    module::{Builder, Func, FuncKey, Global, GlobalKey},
     objects, strings,
     types::Physical,
 };
 use nts_core::hir::{HirType, ManagedType, Printed};
 use std::collections::BTreeMap;
-use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, GlobalType, HeapType, Instruction as I, RefType, ValType};
 
 const UNPRINTED: &str =
     "String() of an object or a function, whose type says nothing here about how it prints";
@@ -120,6 +129,7 @@ fn body(m: &mut Builder<'_>) -> Result<Function, Failure> {
     };
     let types = m.types;
     let mut f = Function::new([ValType::I32]);
+    storage_cases(m, &mut f)?;
     f.instructions(&[
         I::LocalGet(0),
         I::RefTestNonNull(HeapType::Concrete(root.object)),
@@ -174,4 +184,278 @@ fn body(m: &mut Builder<'_>) -> Result<Function, Failure> {
     contract::refuse_in(&mut f, m, 1, UNPRINTED)?;
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// The values whose text their storage decides: arrays, typed arrays and the
+/// runtime's objects, each tested by its type and answered before the class
+/// identities.
+fn storage_cases(m: &mut Builder<'_>, f: &mut Function) -> Result<(), Failure> {
+    let types = m.types;
+    let tested = |f: &mut Function, ty: u32| {
+        f.instructions(&[
+            I::LocalGet(0),
+            I::RefTestNonNull(HeapType::Concrete(ty)),
+            I::If(BlockType::Empty),
+        ]);
+    };
+    for shape in types.arrays.values() {
+        let text = array_text(m, shape.wrapper)?;
+        tested(f, shape.wrapper);
+        f.instructions(&[I::LocalGet(0), I::LocalGet(1)]);
+        f.call(text);
+        f.instructions(&[I::Return, I::End]);
+    }
+    let mut tags = Vec::new();
+    for c in types.collections.values() {
+        let tag = if c.table {
+            "[object Object]"
+        } else if c.value.is_some() {
+            "[object Map]"
+        } else {
+            "[object Set]"
+        };
+        tags.push((c.wrapper, tag));
+    }
+    if let Some(p) = types.promise {
+        tags.push((p.promise, "[object Promise]"));
+    }
+    if let Some(t) = types.buffers {
+        tags.push((t.buffer, "[object ArrayBuffer]"));
+        tags.push((t.dataview, "[object DataView]"));
+        let join = crate::buffer_methods::callee(m, crate::buffer_methods::Helper::Join)?;
+        let comma = m.literal(",");
+        tested(f, t.view);
+        f.instructions(&[
+            I::LocalGet(0),
+            I::RefCastNonNull(HeapType::Concrete(t.view)),
+        ]);
+        f.global_get(comma);
+        f.call(join);
+        f.instructions(&[I::Return, I::End]);
+    }
+    for (ty, tag) in tags {
+        let text = m.literal(tag);
+        tested(f, ty);
+        f.global_get(text);
+        f.instructions(&[I::Return, I::End]);
+    }
+    Ok(())
+}
+
+/// `(array, caller's name) -> text` for arrays of one storage.
+fn array_text(m: &mut Builder<'_>, wrapper: u32) -> Result<Func, Failure> {
+    m.helper(
+        FuncKey::ArrayText(wrapper),
+        format!("array.text<{wrapper}>"),
+        vec![Physical::Reference(RefType::ANYREF), strings::STRING],
+        Some(strings::STRING),
+        move |m| array_text_body(m, wrapper),
+    )
+}
+
+/// Params: value, caller's name. Locals: array, at, count, text, element.
+fn array_text_body(m: &mut Builder<'_>, wrapper: u32) -> Result<Function, Failure> {
+    let types = m.types;
+    let shape = types
+        .arrays
+        .get(&wrapper)
+        .ok_or_else(|| Failure::Invariant(format!("unplanned array text {wrapper}")))?;
+    let text = crate::values::value_text(m)?;
+    let tag = erased::callee(m, erased::Helper::Tag)?;
+    let concat = strings::callee(m, strings::Helper::Concat)?;
+    let empty = m.literal("");
+    let comma = m.literal(",");
+    let (array, at, count, joined, element) = (2, 3, 4, 5, 6);
+    let mut f = Function::new([
+        ValType::Ref(RefType {
+            nullable: true,
+            heap_type: HeapType::Concrete(wrapper),
+        }),
+        ValType::I32,
+        ValType::I32,
+        ValType::Ref(RefType::EXTERNREF),
+        ValType::Ref(RefType::ANYREF),
+    ]);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefCastNonNull(HeapType::Concrete(wrapper)),
+        I::LocalTee(array),
+        I::StructGet {
+            struct_type_index: wrapper,
+            field_index: gc::ARRAY_LENGTH,
+        },
+        I::LocalSet(count),
+    ]);
+    enter_join(m, &mut f, array, at)?;
+    f.global_get(empty);
+    f.instructions(&[
+        I::LocalSet(joined),
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(at),
+        I::LocalGet(count),
+        I::I32GeU,
+        I::BrIf(1),
+        I::LocalGet(at),
+        I::If(BlockType::Empty),
+        I::LocalGet(joined),
+    ]);
+    f.global_get(comma);
+    f.call(concat);
+    // An element `null` or `undefined` adds nothing: a null slot, or an open
+    // value of either tag.
+    f.instructions(&[
+        I::LocalSet(joined),
+        I::End,
+        I::Block(BlockType::Empty),
+        I::LocalGet(array),
+        I::StructGet {
+            struct_type_index: wrapper,
+            field_index: gc::ARRAY_BACKING,
+        },
+        I::LocalGet(at),
+        crate::arrays::get_instruction(shape)?,
+    ]);
+    if matches!(types.value_slot(&shape.element)?, Physical::Reference(_)) {
+        f.instruction(&I::BrOnNull(0));
+    }
+    erased::erase_in(m, &mut f, &shape.element)?;
+    f.instruction(&I::LocalTee(element));
+    f.call(tag);
+    f.instructions(&[I::I32Const(erased::NULL), I::I32Eq, I::LocalGet(element)]);
+    f.call(tag);
+    f.instructions(&[
+        I::I32Const(erased::UNDEFINED),
+        I::I32Eq,
+        I::I32Or,
+        I::BrIf(0),
+        I::LocalGet(joined),
+        I::LocalGet(element),
+        I::LocalGet(1),
+    ]);
+    f.call(text);
+    f.call(concat);
+    f.instructions(&[
+        I::LocalSet(joined),
+        I::End,
+        I::LocalGet(at),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(at),
+        I::Br(0),
+        I::End,
+        I::End,
+    ]);
+    leave_join(m, &mut f)?;
+    f.instructions(&[I::LocalGet(joined), I::End]);
+    Ok(f)
+}
+
+/// How deep one `String()` join nests arrays, as C's `NTS_JOIN_DEPTH`.
+const JOIN_DEPTH: i32 = 64;
+
+/// The arrays a join is inside of, as C's `nts_joining`, and how many: an
+/// array met again inside its own join prints as empty, as node's join does,
+/// rather than recursing until the stack runs out. The stack is made at the
+/// first join.
+pub(crate) fn joining(m: &mut Builder<'_>) -> Result<(Global, Global, u32), Failure> {
+    let ty = m
+        .types
+        .joining
+        .ok_or_else(|| Failure::Invariant("unplanned join stack".into()))?;
+    let stack = m.global(GlobalKey::Joining, |_| {
+        let mut init = crate::ir::Code::default();
+        init.instruction(&I::RefNull(HeapType::Concrete(ty)));
+        Ok((
+            GlobalType {
+                val_type: ValType::Ref(RefType {
+                    nullable: true,
+                    heap_type: HeapType::Concrete(ty),
+                }),
+                mutable: true,
+                shared: false,
+            },
+            init,
+        ))
+    })?;
+    let depth = m.global(GlobalKey::JoiningDepth, |_| {
+        let mut init = crate::ir::Code::default();
+        init.instruction(&I::I32Const(0));
+        Ok((
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            init,
+        ))
+    })?;
+    Ok((stack, depth, ty))
+}
+
+/// On entry to an array's join: an array already being joined answers empty
+/// text at once; one nested past [`JOIN_DEPTH`] refuses by name; any other is
+/// pushed. Locals: `array` the array, `at` free.
+fn enter_join(m: &mut Builder<'_>, f: &mut Function, array: u32, at: u32) -> Result<(), Failure> {
+    let (stack, depth, ty) = joining(m)?;
+    let empty = m.literal("");
+    f.global_get(stack);
+    f.instructions(&[
+        I::RefIsNull,
+        I::If(BlockType::Empty),
+        I::I32Const(JOIN_DEPTH),
+    ]);
+    f.instruction(&I::ArrayNewDefault(ty));
+    f.global_set(stack);
+    f.instructions(&[
+        I::End,
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(at),
+    ]);
+    f.global_get(depth);
+    f.instructions(&[I::I32GeU, I::BrIf(1)]);
+    f.global_get(stack);
+    f.instructions(&[
+        I::LocalGet(at),
+        I::ArrayGet(ty),
+        I::LocalGet(array),
+        I::RefEq,
+        I::If(BlockType::Empty),
+    ]);
+    f.global_get(empty);
+    f.instructions(&[
+        I::Return,
+        I::End,
+        I::LocalGet(at),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(at),
+        I::Br(0),
+        I::End,
+        I::End,
+        I::I32Const(0),
+        I::LocalSet(at),
+    ]);
+    f.global_get(depth);
+    f.instructions(&[I::I32Const(JOIN_DEPTH), I::I32GeU, I::If(BlockType::Empty)]);
+    contract::refuse_in(f, m, 1, "the text of an array nested more than 64 deep")?;
+    f.instruction(&I::End);
+    f.global_get(stack);
+    f.global_get(depth);
+    f.instruction(&I::LocalGet(array));
+    f.instruction(&I::ArraySet(ty));
+    f.global_get(depth);
+    f.instructions(&[I::I32Const(1), I::I32Add]);
+    f.global_set(depth);
+    Ok(())
+}
+
+/// On leaving an array's join: popped.
+fn leave_join(m: &mut Builder<'_>, f: &mut Function) -> Result<(), Failure> {
+    let (_, depth, _) = joining(m)?;
+    f.global_get(depth);
+    f.instructions(&[I::I32Const(1), I::I32Sub]);
+    f.global_set(depth);
+    Ok(())
 }

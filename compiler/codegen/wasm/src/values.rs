@@ -249,7 +249,7 @@ fn inspect(m: &mut Builder<'_>) -> Result<Func, Failure> {
     )
 }
 
-fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
+pub(crate) fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
     m.helper(
         FuncKey::ValueText,
         "value.toString",

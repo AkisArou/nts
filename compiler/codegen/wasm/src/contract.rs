@@ -34,6 +34,13 @@ pub(crate) fn decline(m: &mut Builder<'_>) -> Result<Func, Failure> {
             if m.raising {
                 crate::raising::clear(&mut f, m)?;
             }
+            // A refusal ends the call inside any join it was in, so the next
+            // call starts with none.
+            if m.types.joining.is_some() {
+                let (_, depth, _) = crate::printed::joining(m)?;
+                f.instruction(&I::I32Const(0));
+                f.global_set(depth);
+            }
             f.instructions(&[I::LocalGet(0), I::LocalGet(1)]);
             f.call(report);
             f.instructions(&[I::Unreachable, I::End]);
