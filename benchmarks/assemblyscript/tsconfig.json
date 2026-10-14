@@ -1,0 +1,5 @@
+{
+  "//": "For editors: AssemblyScript's own types (`i32`, `f64`, `bool`, its standard library) for the ports here. `tooling/bench` compiles each with `asc` itself, not through this file, and no nts program includes this directory.",
+  "extends": "assemblyscript/std/assembly.json",
+  "include": ["./**/*.ts"]
+}

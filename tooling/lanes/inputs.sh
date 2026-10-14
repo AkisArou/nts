@@ -111,7 +111,12 @@ node "$(dirname -- "$0")/workspace-links.ts" "$tree" | while IFS="$(printf '\t')
   mkdir -p "$(dirname "$tree/$link")"
   ln -s "$target" "$tree/$link"
 done
-for modules in node_modules runtime/node/node_modules; do
+# `benchmarks/node_modules` holds the AssemblyScript compiler the benchmark
+# table's AssemblyScript column builds with: a relative link into the root's
+# pnpm store, copied for the same reason as below, so it resolves through this
+# tree's own root link. Without it a pinned tree measures that column as
+# "not installed".
+for modules in node_modules runtime/node/node_modules benchmarks/node_modules; do
   [ -d "$root/$modules" ] || continue
   # **Copied rather than linked where a workspace link lives inside it.**
   #

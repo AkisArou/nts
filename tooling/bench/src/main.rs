@@ -110,6 +110,12 @@ enum Generated {
     /// The same module on wasmtime, the reference WASI engine: printed beside
     /// the V8 number to say how much of it is the engine.
     CppWasmtime,
+    /// The case transcribed to `AssemblyScript` (`benchmarks/assemblyscript`),
+    /// compiled by the pinned `asc` and timed by node's harness like the
+    /// `nts (wasm)` column: TypeScript-shaped source compiled ahead of time to
+    /// WebAssembly by the compiler that does only that. Missing where a case
+    /// has no port, which is every case but AWFY's eight.
+    AssemblyScript,
 }
 
 /// What a variant is called and how it is built.
@@ -175,6 +181,13 @@ const VARIANTS: &[Variant] = &[
         label: "C++ (wasmtime)",
         source: "ref.cpp",
         generated: Generated::CppWasmtime,
+    },
+    // The port's source is not in the case directory, which every case's
+    // program includes: `assemblyscript_cell` finds it by the case's name.
+    Variant {
+        label: "AssemblyScript",
+        source: "case.ts",
+        generated: Generated::AssemblyScript,
     },
 ];
 
@@ -498,7 +511,7 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
         "case",
         "C++",
         "nts C",
@@ -508,6 +521,7 @@ fn main() -> Result<()> {
         "nts Wasm",
         "C++ wasm",
         "C++ wtime",
+        "AS",
         "nts f64",
         "node",
         "bun",
@@ -516,9 +530,10 @@ fn main() -> Result<()> {
         "nts/bun",
         "jvm/Java",
         "wasm/node",
-        "wasm/C++w"
+        "wasm/C++w",
+        "wasm/AS"
     );
-    println!("{}", "-".repeat(214));
+    println!("{}", "-".repeat(236));
 
     let mut rows = Vec::new();
     let mut spoiled = Vec::new();
@@ -592,7 +607,10 @@ const WASM_LEGEND: &str = "\n\
     `C++ (wasm)` is the hand-written C++ compiled to a WASI module and run on \
     the same engine, node's V8: `nts (Wasm)/C++ (wasm)` is what this compiler's \
     WebAssembly costs against a C++ programmer's, with the engine held fixed. \
-    The console also prints it on wasmtime, to say how much is the engine.\n";
+    The console also prints it on wasmtime, to say how much is the engine. \
+    `AssemblyScript` is the case transcribed to AssemblyScript \
+    (`benchmarks/assemblyscript`, AWFY's eight only) and compiled by its own \
+    compiler, on V8 too.\n";
 
 fn legend(root: &Utf8Path) -> String {
     let legend = "\n\
@@ -806,11 +824,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // about this compiler's insides rather than about how fast the thing is,
     // and a reader comparing against V8 does not need a column for it.
     table.push_str(if with_bun {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | AssemblyScript | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) | nts (Wasm)/AssemblyScript |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     } else {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | V8 | nts/C++ | nts/V8 | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | AssemblyScript | V8 | nts/C++ | nts/V8 | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) | nts (Wasm)/AssemblyScript |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     });
     for row in rows {
         use std::fmt::Write as _;
@@ -827,7 +845,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         let jvm = jvm_cell(row.jvm, row.jvm_absence);
         let _ = writeln!(
             table,
-            "| {} | {} | {} | **{}** | {jvm} | {} | {} | {} | {} |{bun} {} | {} |{against_bun} {} | {} | {} |",
+            "| {} | {} | {} | **{}** | {jvm} | {} | {} | {} | {} | {} |{bun} {} | {} |{against_bun} {} | {} | {} | {} |",
             row.case,
             row.cpp.map_or_else(|| "--".to_owned(), human),
             row.nts.map_or_else(|| "--".to_owned(), human),
@@ -835,12 +853,17 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             row.java.map_or_else(|| "--".to_owned(), human),
             row.wasm.map_or_else(|| "--".to_owned(), human),
             row.cpp_wasm.map_or_else(|| "--".to_owned(), human),
+            row.assemblyscript.map_or_else(|| "--".to_owned(), human),
             human(row.node),
             row.quotable(row.against(row.cpp), ["nts (C)", "C++"]),
             row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
             row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]),
             row.quotable(row.wasm_against_node(), ["nts (Wasm)", "node"]),
             row.quotable(row.wasm_against_cpp_wasm(), ["nts (Wasm)", "C++ (wasm)"]),
+            row.quotable(
+                row.wasm_against_assemblyscript(),
+                ["nts (Wasm)", "AssemblyScript"],
+            ),
         );
     }
 
@@ -858,6 +881,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             "Java",
             "nts (Wasm)",
             "C++ (wasm)",
+            "AssemblyScript",
         ]
         .iter()
         .any(|label| row.unstable(label))
@@ -949,6 +973,8 @@ struct Row {
     /// runs on; and on wasmtime, printed only.
     cpp_wasm: Option<f64>,
     cpp_wasmtime: Option<f64>,
+    /// The case's `AssemblyScript` port, on V8 too.
+    assemblyscript: Option<f64>,
     /// Columns whose own five passes disagreed, and by how much.
     ///
     /// These were an `eprintln!` and nothing else, so they reached a person
@@ -1037,7 +1063,16 @@ impl Row {
     /// The Wasm lane against the hand-written C++ as WebAssembly on the same
     /// engine: the ceiling a Wasm backend is measured against.
     fn wasm_against_cpp_wasm(&self) -> String {
-        match (self.wasm, self.cpp_wasm) {
+        Self::ratio(self.wasm, self.cpp_wasm)
+    }
+
+    /// The Wasm lane against `AssemblyScript`'s compiler on the same engine.
+    fn wasm_against_assemblyscript(&self) -> String {
+        Self::ratio(self.wasm, self.assemblyscript)
+    }
+
+    fn ratio(ours: Option<f64>, theirs: Option<f64>) -> String {
+        match (ours, theirs) {
             (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
             _ => "--".to_owned(),
         }
@@ -1334,6 +1369,10 @@ fn variants(
                 results.push(cpp_wasm_cell(root, module, variant, name));
                 continue;
             }
+            Generated::AssemblyScript => {
+                results.push(assemblyscript_cell(root, case, out, name));
+                continue;
+            }
             // Its own artifact and runner, like the JVM's.
             Generated::Wasm => {
                 let (measured, absence) = wasm_cell(case, out, name, tsconfig, entry);
@@ -1499,7 +1538,7 @@ fn lane_matches(want: &str, label: &str) -> bool {
     match want {
         "jvm" => label.contains("jvm") || label == "java",
         "llvm" => label.contains("llvm"),
-        "wasm" => label.contains("wasm"),
+        "wasm" => label.contains("wasm") || label == "assemblyscript",
         "c" => label == "nts" || label == "c++",
         "f64" => label.contains("f64"),
         // **No fall-through.** `NTS_BENCH_LANES=native` is not a lane -- the C
@@ -1586,42 +1625,29 @@ fn finish_row(
             None => bail!("a variant that must run did not"),
         }
     };
+    // A column allowed to be missing, for its own reasons.
+    let optional = |at: usize| {
+        results
+            .get(at)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op)
+    };
     let mut row = Row {
         case: shown.to_owned(),
-        cpp: results
-            .get(2)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
+        cpp: optional(2),
         nts: required(0)?,
         unspecialized: required(1)?,
         node: node.ns_per_op,
-        llvm: results
-            .get(3)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
-        jvm: results
-            .get(4)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
+        llvm: optional(3),
+        jvm: optional(4),
         jvm_absence: absences.jvm,
-        java: results
-            .get(5)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
+        java: optional(5),
         bun: bun.map(|result| result.ns_per_op),
-        wasm: results
-            .get(6)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
+        wasm: optional(6),
         wasm_absence: absences.wasm,
-        cpp_wasm: results
-            .get(7)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
-        cpp_wasmtime: results
-            .get(8)
-            .and_then(Option::as_ref)
-            .map(|it| it.ns_per_op),
+        cpp_wasm: optional(7),
+        cpp_wasmtime: optional(8),
+        assemblyscript: optional(9),
         varied: Vec::new(),
     };
     // A row whose own passes disagree has no single number, and printing one of
@@ -1634,6 +1660,7 @@ fn finish_row(
         ("nts (Wasm)", results.get(6)),
         ("C++ (wasm)", results.get(7)),
         ("C++ (wasmtime)", results.get(8)),
+        ("AssemblyScript", results.get(9)),
     ] {
         if let Some(Some(measured)) = measured
             && measured.spread >= SPREAD_WORTH_SAYING
@@ -1651,7 +1678,7 @@ fn finish_row(
     work_agrees(&row)?;
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
         row.nts.map_or_else(|| "--".to_owned(), human),
@@ -1661,6 +1688,7 @@ fn finish_row(
         row.wasm.map_or_else(|| "--".to_owned(), human),
         row.cpp_wasm.map_or_else(|| "--".to_owned(), human),
         row.cpp_wasmtime.map_or_else(|| "--".to_owned(), human),
+        row.assemblyscript.map_or_else(|| "--".to_owned(), human),
         row.unspecialized.map_or_else(|| "--".to_owned(), human),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
@@ -1670,6 +1698,7 @@ fn finish_row(
         row.jvm_against_java(),
         row.wasm_against_node(),
         row.wasm_against_cpp_wasm(),
+        row.wasm_against_assemblyscript(),
     );
     Ok(row)
 }
@@ -2001,6 +2030,83 @@ fn cpp_wasm_cell(
             None
         }
     }
+}
+
+/// The `AssemblyScript` column's cell: the port's measurement, or none, with the
+/// reason said once on the console where there is a port to say it about.
+fn assemblyscript_cell(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Option<Measured> {
+    let port = root.join(format!("benchmarks/assemblyscript/{name}.ts"));
+    if !port.exists() {
+        return None;
+    }
+    match assemblyscript_case(root, case, &port, out, name) {
+        Ok(measured) => Some(measured),
+        Err(error) => {
+            println!(
+                "note: {name:<16} AssemblyScript is `--`: {}",
+                error.to_string().lines().next().unwrap_or("?")
+            );
+            None
+        }
+    }
+}
+
+/// Compile one `AssemblyScript` port with `asc -O3` and its ES-module bindings,
+/// and time its `work` under node's harness: the one line that differs from
+/// the node column's is where the function is imported from.
+fn assemblyscript_case(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    port: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Result<Measured> {
+    let asc = root.join("benchmarks/node_modules/assemblyscript/bin/asc.js");
+    if !asc.exists() {
+        bail!("AssemblyScript is not installed: run `pnpm install`");
+    }
+    let (callee, arguments) = workload(case)?;
+    let seed = arguments
+        .first()
+        .cloned()
+        .with_context(|| format!("{case}/case.ts declares no `export const seed`"))?;
+    let dir = out.join(format!("{name}.as"));
+    std::fs::create_dir_all(&dir)?;
+    let module = dir.join("module.wasm");
+    let output = std::process::Command::new("node")
+        .arg(&asc)
+        .arg(port)
+        .args(["-O3", "--bindings", "esm", "--outFile"])
+        .arg(&module)
+        .output()
+        .context("running asc")?;
+    if !output.status.success() {
+        let said = String::from_utf8_lossy(&output.stderr);
+        bail!(
+            "asc refused the port: {}",
+            said.lines()
+                .find(|line| line.contains("ERROR"))
+                .unwrap_or("no message")
+        );
+    }
+    let common = root.join("benchmarks/common/bench.mjs");
+    let bindings = dir.join("module.js");
+    let harness = dir.join("bench.mjs");
+    // The seed through `process.argv`, for the reason `node_harness` gives.
+    let text = format!(
+        "// Generated for the AssemblyScript column: node's harness, the port's function.\n\
+         import {{ measure }} from \"{common}\";\n\
+         import {{ {callee} }} from \"{bindings}\";\n\n\
+         const seed = Number(process.argv[2] ?? {seed});\n\
+         measure(() => {callee}(seed));\n"
+    );
+    std::fs::write(&harness, &text).with_context(|| format!("writing {harness}"))?;
+    measure(std::process::Command::new("node").arg(&harness))
 }
 
 /// The same program as a WebAssembly module, timed by node's own harness.
@@ -3263,6 +3369,7 @@ mod tests {
             wasm_absence: None,
             cpp_wasm: None,
             cpp_wasmtime: None,
+            assemblyscript: None,
             varied: Vec::new(),
         }
     }

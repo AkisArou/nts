@@ -1,0 +1,9 @@
+{
+  "name": "@nts/benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "assemblyscript": "catalog:"
+  }
+}
