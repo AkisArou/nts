@@ -231,3 +231,32 @@ test("a landing lands the commit it was queued with, though its tree moves on wh
   assert.ok(onMain(s, "a.txt"));
   assert.ok(!onMain(s, "later.txt"));
 });
+
+test("commits that landed as replayed copies are not replayed again", async () => {
+  // The fixture-first workflow: a subject lands on its own, replayed because
+  // main had moved, so main has a copy with another id; then main changes the
+  // subject's file; then the fix lands from the branch that still holds the
+  // original subject. Replaying that original again conflicts with main's
+  // newer file (CompilerHelper's bigint fix, 2026-10-14).
+  const s = scratch();
+  const branch = lane(s, "fix", { "subject.txt": "one\n" });
+  const subject = run(s, branch, ["rev-parse", "HEAD"]);
+  const other = lane(s, "other", { "other.txt": "o\n" });
+  const [ro] = await landTogether(s, [other]);
+  assert.equal(ro.status, 0, ro.out);
+  const [rs] = await landTogether(s, [branch]);
+  assert.equal(rs.status, 0, rs.out);
+  assert.notEqual(run(s, s.root, ["rev-parse", "main"]), subject, "the subject should have landed as a replayed copy");
+  // Main changes the subject's file after it landed.
+  run(s, s.root, ["checkout", "-q", "main"]);
+  writeFileSync(join(s.root, "subject.txt"), "one, revised\n");
+  run(s, s.root, ["commit", "-q", "-am", "revise the subject on main"]);
+  // The fix, on top of the original subject.
+  writeFileSync(join(branch, "fix.txt"), "fix\n");
+  run(s, branch, ["add", "-A"]);
+  run(s, branch, ["commit", "-q", "-m", "the fix"]);
+  const [rf] = await landTogether(s, [branch]);
+  assert.equal(rf.status, 0, rf.out);
+  assert.ok(onMain(s, "fix.txt"));
+  assert.equal(run(s, s.root, ["show", "main:subject.txt"]), "one, revised");
+});

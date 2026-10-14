@@ -153,13 +153,32 @@ function unrun(steps: { log?: string }[], touched: string[]): string[] {
 function replayOnto(root: string, base: string, onto: string, sha: string): string | null {
   if (spawnSync("git", ["merge-base", "--is-ancestor", onto, sha], { cwd: root }).status === 0) return sha;
   const from = git(["merge-base", base, sha], root);
-  const replay = spawnSync(
-    "git",
-    ["replay", "--onto", onto, "--ref", "refs/land/replayed", "--ref-action", "print", `${from}..${sha}`],
-    { cwd: root, encoding: "utf8" },
-  );
-  const update = /^update \S+ ([0-9a-f]{40}) /m.exec(replay.stdout ?? "");
-  return replay.status === 0 && update ? update[1] : null;
+  // **Only the commits whose change is not on main already**, as `git rebase`
+  // skips them. The fixture-first workflow lands a subject on its own, as a
+  // replayed copy when main has moved, and then the fix from the branch that
+  // still holds the original: replaying that original again conflicted with
+  // whatever main had done to its files since (CompilerHelper's bigint fix,
+  // 2026-10-14). `git cherry` marks each commit `-` when `onto` has one with
+  // its patch, `+` when not. A merge in the range is replayed whole, as before.
+  const merges = git(["rev-list", "--merges", `${from}..${sha}`], root);
+  const pending = merges
+    ? [`${from}..${sha}`]
+    : git(["cherry", onto, sha, from], root)
+        .split("\n")
+        .filter((line) => line.startsWith("+ "))
+        .map((line) => `${line.slice(2)}^..${line.slice(2)}`);
+  let tip = onto;
+  for (const range of pending) {
+    const replay = spawnSync(
+      "git",
+      ["replay", "--onto", tip, "--ref", "refs/land/replayed", "--ref-action", "print", range],
+      { cwd: root, encoding: "utf8" },
+    );
+    const update = /^update \S+ ([0-9a-f]{40}) /m.exec(replay.stdout ?? "");
+    if (replay.status !== 0 || !update) return null;
+    tip = update[1];
+  }
+  return tip;
 }
 
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
