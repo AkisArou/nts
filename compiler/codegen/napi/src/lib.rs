@@ -3784,9 +3784,14 @@ fn field_accessors(
         };
         let member = c_member(&field.name);
         // Keep the physical prefix for an ordinary class, and the semantic
-        // suffix for another class sharing its storage. Mangle the full name.
+        // suffix for another class sharing its storage. Mangle its complete
+        // prefixed stem, retaining the existing field-name spelling.
         let stem = instance.strip_prefix("NtsObj_").unwrap_or(instance);
-        let symbol = c_identifier(&format!("nts_napi_get_{stem}_{}", field.name));
+        let symbol = format!(
+            "{}_{}",
+            c_identifier(&format!("nts_napi_get_{stem}")),
+            c_identifier(&field.name)
+        );
         let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
             continue;
         };
