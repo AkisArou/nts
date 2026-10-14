@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "5 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare | checked 19 of 29 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 6 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "434a9c491c7f5e0a",
+  "source": "measured"
+}
