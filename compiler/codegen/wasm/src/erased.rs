@@ -418,6 +418,7 @@ pub(crate) fn erase_in(
             | ManagedType::Map(..)
             | ManagedType::Table(..)
             | ManagedType::Set(_)
+            | ManagedType::Date
             | ManagedType::Promise(_)
             | ManagedType::Buffer
             | ManagedType::View(_)
@@ -443,7 +444,7 @@ pub(crate) fn erase_in(
         HirType::BigInt => {
             code.call(crate::bigints::callee(m, crate::bigints::Helper::Box)?);
         }
-        HirType::Void | HirType::Managed(_) | HirType::NativePointer(_) | HirType::Never => {
+        HirType::Void | HirType::NativePointer(_) | HirType::Never => {
             return Err(
                 format!("erasing {ty:?} is outside the current primitive implementation").into(),
             );
@@ -587,6 +588,7 @@ pub(crate) fn unerase_to(
             | ManagedType::Map(..)
             | ManagedType::Table(..)
             | ManagedType::Set(_)
+            | ManagedType::Date
             | ManagedType::Promise(_)
             | ManagedType::Buffer
             | ManagedType::View(_)

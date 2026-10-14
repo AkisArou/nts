@@ -417,14 +417,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_dataview_set_uint16", Support::WasmHelper),
     ("nts_dataview_set_uint32", Support::WasmHelper),
     ("nts_dataview_set_uint8", Support::WasmHelper),
-    (
-        "nts_date_new",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_date_value",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_date_new", Support::Intrinsic),
+    ("nts_date_value", Support::Intrinsic),
     ("nts_decode_uri", Support::HostImport),
     (
         "nts_delay",

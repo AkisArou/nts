@@ -493,6 +493,25 @@ fn source_symbols_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Dates: `TimeClip` over the pool and `-0`, identity, an erased date's
+/// `typeof`, dates in a growing array, in fields, captured, absent, and as Map
+/// keys by identity.
+#[test]
+fn source_dates_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/dates");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "dates",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 170, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Presence: a subclass's own bits after its base's, cleared and written
 /// again through the base, `"k" in v` over an open value of either of two
 /// families or of none, and the high bits.

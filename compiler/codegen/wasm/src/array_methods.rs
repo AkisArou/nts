@@ -11,7 +11,7 @@ use crate::{
     numeric, objects, strings,
     types::Physical,
 };
-use nts_core::hir::{HirType, ManagedType, OpKind, ValueId};
+use nts_core::hir::{HirType, OpKind, ValueId};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 const U32: HirType = HirType::Int {
@@ -97,12 +97,9 @@ impl Method {
             Family::Number if self.truncates() => element.is_scalar(),
             Family::Number => element == &HirType::NUMBER,
             Family::Boolean => element == &HirType::Bool,
-            Family::Reference => matches!(
-                element,
-                HirType::Managed(
-                    ManagedType::String | ManagedType::Object(_) | ManagedType::Array(_)
-                )
-            ),
+            // Every reference kind is one slot of its own type, which the
+            // helpers move without looking inside.
+            Family::Reference => strings::is_string(element) || objects::is_reference(element),
             Family::Value if self.boxes_number() => element == &HirType::NUMBER,
             Family::Value => element == &HirType::Erased,
         }

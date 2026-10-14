@@ -485,6 +485,7 @@ pub(crate) fn is_reference(ty: &HirType) -> bool {
                 | ManagedType::Map(..)
                 | ManagedType::Table(..)
                 | ManagedType::Set(_)
+                | ManagedType::Date
                 | ManagedType::Promise(_)
                 | ManagedType::Buffer
                 | ManagedType::View(_)

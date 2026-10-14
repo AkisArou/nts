@@ -773,6 +773,71 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         numeric::convert(self, &from, &to)
     }
+    /// A call of a runtime helper, answered by the module that implements it,
+    /// or refused by name with the support catalog's reason.
+    fn external_call(
+        &mut self,
+        result: ValueId,
+        name: &str,
+        args: &[ValueId],
+    ) -> Result<(), Failure> {
+        if let Some(helper) = crate::raising::external(name) {
+            crate::raising::call(self, result, name, helper, args)?;
+        } else if let Some(helper) = crate::strings::external(name) {
+            crate::strings::runtime(self, result, helper, args)?;
+        } else if let Some(service) = crate::host::external(name) {
+            service.call(self, result, args)?;
+        } else if let Some(helper) = crate::erased_ops::external(name) {
+            crate::erased_ops::runtime(self, result, helper, args)?;
+        } else if let Some(method) = crate::array_methods::external(name) {
+            crate::array_methods::call(self, result, name, method, args)?;
+        } else if let Some(method) = crate::array_copy::external(name) {
+            crate::array_copy::call(self, result, name, method, args)?;
+        } else if let Some(method) = crate::array_lookup::external(name) {
+            crate::array_lookup::call(self, result, name, method, args)?;
+        } else if let Some(join) = crate::array_join::external(name) {
+            crate::array_join::call(self, result, name, join, args)?;
+        } else if crate::array_sort::external(name) {
+            crate::array_sort::call(self, result, name, args)?;
+        } else if let Some(helper) = crate::values::external(name) {
+            crate::values::call(self, result, helper, args)?;
+        } else if let Some(op) = crate::collections::external(name) {
+            crate::collections::call(self, result, op, args)?;
+        } else if let Some(op) = crate::promises::external(name) {
+            crate::promises::call(self, result, op, args)?;
+        } else if let Some(op) = crate::timers::external(name) {
+            crate::timers::call(self, result, op, args)?;
+        } else if let Some(op) = crate::buffers::external(name) {
+            crate::buffers::call(self, result, op, args)?;
+        } else if let Some(op) = crate::buffer_methods::external(name) {
+            crate::buffer_methods::call(self, result, op, args)?;
+        } else if let Some(op) = crate::dataviews::external(name) {
+            crate::dataviews::call(self, result, op, args)?;
+        } else if let Some(op) = crate::symbols::external(name) {
+            crate::symbols::call(self, result, op, args)?;
+        } else if let Some(op) = crate::dates::external(name) {
+            crate::dates::call(self, result, op, args)?;
+        } else if let Some(op) = crate::bigints::external(name) {
+            crate::bigints::call(self, result, op, args)?;
+        } else if let Some(op) = crate::conversions::external(name) {
+            crate::conversions::call(self, result, op, args)?;
+        } else if crate::string_split::is_split(name) {
+            crate::string_split::call(self, result, args)?;
+        } else if crate::function_names::is_name(name) {
+            crate::function_names::call(self, result, args)?;
+        } else if let Some(op) = crate::presence::external(name) {
+            crate::presence::call(self, result, op, args)?;
+        } else if let Some(conversion) = crate::numeric::external(name) {
+            crate::numeric::call(self, result, conversion, args)?;
+        } else {
+            return Err(match crate::helper_support(name) {
+                Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),
+                Some(crate::Support::Intrinsic | crate::Support::WasmHelper | crate::Support::HostImport) => Failure::Invariant(format!("cataloged helper `{name}` has no implementation binding")),
+                None => format!("unclassified runtime/external helper `{name}` is outside the implemented Wasm helper surface").into(),
+            });
+        }
+        Ok(())
+    }
     fn call_op(
         &mut self,
         result: ValueId,
@@ -799,61 +864,7 @@ impl<'b, 'p> Body<'b, 'p> {
                     self.transfer(&callee.return_type, &func.value(result).ty)?;
                 }
             }
-            Callee::External(name) => {
-                if let Some(helper) = crate::raising::external(name) {
-                    crate::raising::call(self, result, name, helper, args)?;
-                } else if let Some(helper) = crate::strings::external(name) {
-                    crate::strings::runtime(self, result, helper, args)?;
-                } else if let Some(service) = crate::host::external(name) {
-                    service.call(self, result, args)?;
-                } else if let Some(helper) = crate::erased_ops::external(name) {
-                    crate::erased_ops::runtime(self, result, helper, args)?;
-                } else if let Some(method) = crate::array_methods::external(name) {
-                    crate::array_methods::call(self, result, name, method, args)?;
-                } else if let Some(method) = crate::array_copy::external(name) {
-                    crate::array_copy::call(self, result, name, method, args)?;
-                } else if let Some(method) = crate::array_lookup::external(name) {
-                    crate::array_lookup::call(self, result, name, method, args)?;
-                } else if let Some(join) = crate::array_join::external(name) {
-                    crate::array_join::call(self, result, name, join, args)?;
-                } else if crate::array_sort::external(name) {
-                    crate::array_sort::call(self, result, name, args)?;
-                } else if let Some(helper) = crate::values::external(name) {
-                    crate::values::call(self, result, helper, args)?;
-                } else if let Some(op) = crate::collections::external(name) {
-                    crate::collections::call(self, result, op, args)?;
-                } else if let Some(op) = crate::promises::external(name) {
-                    crate::promises::call(self, result, op, args)?;
-                } else if let Some(op) = crate::timers::external(name) {
-                    crate::timers::call(self, result, op, args)?;
-                } else if let Some(op) = crate::buffers::external(name) {
-                    crate::buffers::call(self, result, op, args)?;
-                } else if let Some(op) = crate::buffer_methods::external(name) {
-                    crate::buffer_methods::call(self, result, op, args)?;
-                } else if let Some(op) = crate::dataviews::external(name) {
-                    crate::dataviews::call(self, result, op, args)?;
-                } else if let Some(op) = crate::symbols::external(name) {
-                    crate::symbols::call(self, result, op, args)?;
-                } else if let Some(op) = crate::bigints::external(name) {
-                    crate::bigints::call(self, result, op, args)?;
-                } else if let Some(op) = crate::conversions::external(name) {
-                    crate::conversions::call(self, result, op, args)?;
-                } else if crate::string_split::is_split(name) {
-                    crate::string_split::call(self, result, args)?;
-                } else if crate::function_names::is_name(name) {
-                    crate::function_names::call(self, result, args)?;
-                } else if let Some(op) = crate::presence::external(name) {
-                    crate::presence::call(self, result, op, args)?;
-                } else if let Some(conversion) = crate::numeric::external(name) {
-                    crate::numeric::call(self, result, conversion, args)?;
-                } else {
-                    return Err(match crate::helper_support(name) {
-                        Some(crate::Support::Decline(reason)) => format!("runtime/external helper `{name}`: {reason}").into(),
-                        Some(crate::Support::Intrinsic | crate::Support::WasmHelper | crate::Support::HostImport) => Failure::Invariant(format!("cataloged helper `{name}` has no implementation binding")),
-                        None => format!("unclassified runtime/external helper `{name}` is outside the implemented Wasm helper surface").into(),
-                    });
-                }
-            }
+            Callee::External(name) => self.external_call(result, name, args)?,
             Callee::Native(function) => return Err(format!("native call {function:?}").into()),
             Callee::Virtual { slot, declared } => {
                 let through_face = args.first().is_some_and(|receiver| {

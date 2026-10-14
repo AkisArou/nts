@@ -400,7 +400,8 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   type of its own (`gc::Collection::table`). collection-tables pins it
   (`whichCollection`), and the census row in-on-an-object-a-native-answers-for
   (110 cases) agrees.
-- **Refused by name:** a key the storage cannot hold, and `Date`.
+- **Refused by name:** a key the storage cannot hold. A date keys by
+  identity, as an object does.
 - **Measured, exploratory, ns per iteration** (tooling/wasm/bench/collections):
   - Map counting (get, then set): 27.5 against node's 13.5;
   - a Set of numbers: 17.8 against 16.5;
@@ -613,7 +614,7 @@ assembly:
   the core's `builtin::element_kind`, read directly; `element_of` is its
   inverse, pinned by a round-trip test.
 
-### Values: class tokens, absent scalars, symbols (3f, 3g)
+### Values: class tokens, absent scalars, symbols, dates (3f, 3g)
 
 - **A class used as a value** is a token: a static closure of a class with no
   closure body, one constant global per class, the same object wherever the
@@ -637,8 +638,24 @@ assembly:
     `Map<string, unknown>` uses, made in an immutable global's initializer.
   - `Symbol.keyFor` is one lookup by description and an identity check.
   - String() of an erased symbol prints `Symbol(description)`.
+- **Dates** (`dates.rs`), as C's `NtsDate`: a time value and nothing else.
+  - A date is an object-root struct holding one immutable double, under an
+    OBJECT-kind descriptor: `typeof` answers "object", `===` is identity,
+    and a date keys a Map by the root's identity hash.
+  - `new Date(ms)` is the specification's `TimeClip` inline: NaN outside
+    ±8.64e15, otherwise truncated toward zero, `-0` made `+0`.
+  - `getTime()` and `valueOf()` read the field. Lowering checks a `d!`
+    receiver before the call, so a null one never arrives (node throws a
+    TypeError there, and every backend declines); the read refuses one by
+    name should that change, where C's helper would answer NaN.
+  - The core refuses the rest: a wall clock (`Date.now()`, `new Date()`),
+    the local calendar, and a date's text. String() of an erased date is
+    refused by name, as C declines it at run time.
+  - Every reference kind is one slot of its own type, so push, pop, shift,
+    unshift, fill and truncation accept an array of any of them (a date, a
+    Map, a symbol...), not only strings, objects and arrays.
 - **Tests:**
-  - class-tokens (85 cases), absent-scalars (51), symbols (85);
+  - class-tokens (85 cases), absent-scalars (51), symbols (85), dates (170);
   - rows: the three class-value rows, four optional-chain rows, and all nine
     symbol rows.
 

@@ -227,6 +227,14 @@ pub(crate) struct SymbolTypes {
     pub(crate) descriptor: u32,
 }
 
+/// A date, as the C runtime's `NtsDate`: an object-root struct holding its
+/// time value, under a descriptor whose kind is `OBJECT`. See `dates.rs`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct DateTypes {
+    pub(crate) date: u32,
+    pub(crate) descriptor: u32,
+}
+
 #[derive(Debug)]
 pub(crate) struct Array {
     pub(crate) ty: HirType,
@@ -269,6 +277,7 @@ pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
         HirType::Managed(
             ManagedType::Object(_)
             | ManagedType::Array(_)
+            | ManagedType::Date
             | ManagedType::Symbol
             | ManagedType::Template,
         ) => Ok(KeyKind::Reference),
@@ -391,6 +400,7 @@ pub(crate) struct Plan {
     pub(crate) promise: Option<PromiseTypes>,
     pub(crate) buffers: Option<BufferTypes>,
     pub(crate) symbol: Option<SymbolTypes>,
+    pub(crate) date: Option<DateTypes>,
     /// `(array (mut eqref))`: the arrays a `String()` join is inside of.
     pub(crate) joining: Option<u32>,
     /// Each owned kind's storage, by element type.
@@ -677,6 +687,7 @@ struct Builder<'a> {
     promise: Option<PromiseNodes>,
     buffers: Option<BufferNodes>,
     symbol: Option<NodeId>,
+    date: Option<NodeId>,
     joining: Option<NodeId>,
     /// The element types whose views own their buffers, and each one's store
     /// and view types once planned.
@@ -726,6 +737,7 @@ impl<'a> Builder<'a> {
             promise: None,
             buffers: None,
             symbol: None,
+            date: None,
             joining: None,
             owned: nts_core::hir::views::owned_view_kinds(program),
             owned_views: FxHashMap::default(),
@@ -1080,6 +1092,22 @@ impl<'a> Builder<'a> {
         id
     }
 
+    /// The date type: the object root, then the time value. Immutable: no
+    /// setter lowers, so a date is its time value from construction on.
+    fn date_type(&mut self) -> NodeId {
+        if let Some(id) = self.date {
+            return id;
+        }
+        let root = self.root();
+        let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
+            unreachable!("the object root is a struct")
+        };
+        fields.push(Field::value(PendingSlot::Scalar(Slot::F64), false));
+        let id = self.add("date".into(), Some(root), true, Shape::Struct(fields));
+        self.date = Some(id);
+        id
+    }
+
     /// An erased bigint's box: the erased tag, then the value, as the number
     /// box holds a double. Its tag is `BIGINT`, so `typeof` answers "bigint".
     fn bigint_box(&mut self) -> NodeId {
@@ -1233,9 +1261,7 @@ impl<'a> Builder<'a> {
             HirType::Managed(ManagedType::Set(key)) => {
                 PendingSlot::Defined(self.collection(key, None, false)?, true)
             }
-            HirType::Managed(ManagedType::Date) => {
-                return Err(format!("collection/date storage outside M1b: {ty:?}"));
-            }
+            HirType::Managed(ManagedType::Date) => PendingSlot::Defined(self.date_type(), true),
             HirType::Managed(ManagedType::Buffer) => {
                 PendingSlot::Defined(self.buffer_types().buffer, true)
             }
@@ -2289,6 +2315,7 @@ impl<'a> Builder<'a> {
             usize::from(self.symbol.is_some()),
             nts_core::hir::tags::SYMBOL,
         )?;
+        let date_descriptor = builtins(&mut objects, usize::from(self.date.is_some()), object)?;
         let owned_views = self.planned_owned_views(&indices);
         Ok(Plan {
             arrays,
@@ -2331,6 +2358,10 @@ impl<'a> Builder<'a> {
             symbol: self.symbol.map(|node| SymbolTypes {
                 symbol: indices[node.0],
                 descriptor: symbol_descriptor,
+            }),
+            date: self.date.map(|node| DateTypes {
+                date: indices[node.0],
+                descriptor: date_descriptor,
             }),
             owned_views,
             buffers: self.buffers.map(|nodes| BufferTypes {
