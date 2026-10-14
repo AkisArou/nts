@@ -3,9 +3,8 @@
 //! **Here rather than in a tool, because every type it reads is here.**
 //! `SourceFile`, its `rewritten_map`, `Location`, `Span` and `Diagnostic` are
 //! all this crate's, and the one thing this needs beyond them is the file's
-//! text. `Span`'s own doc has said since it was written that turning an offset
-//! into a line and a column "means reading the file -- a fine price once per
-//! diagnostic"; this is that sentence, in code, beside it.
+//! text. A [`SourceLocations`] view reads and indexes each file once for a
+//! print batch; spans and diagnostic lines share the same conversion.
 //!
 //! It lived in `tooling/cli` until 2026-09-28, which is a binary, so
 //! `tooling/differential` could not call it -- and `nts check` therefore
@@ -13,86 +12,223 @@
 //! while every other command printed one. A fact about a snapshot's sources
 //! kept in a binary is a fact no other tool can have.
 
-use crate::{Diagnostic, Location, RewrittenSegment, SourceFile, Span};
+use crate::{Diagnostic, Location, RewrittenSegment, SourceFile, SourceId, Span};
+use camino::Utf8Path;
+use std::collections::{HashMap, hash_map::Entry};
 
 #[cfg(test)]
 mod oracle_tests;
+
+/// Source positions for one print batch, with files indexed on their first use.
+///
+/// HIR headers and refusals can name thousands of positions in one file.
+/// Scanning from its beginning for each position is quadratic in file size.
+/// This view shares line starts and UTF-16 conversion indexes across the batch,
+/// including source ids that name the same physical path. Rewrite maps remain
+/// specific to each source record. A fresh view reads files afresh.
+#[derive(Debug)]
+pub struct SourceLocations<'a> {
+    sources: &'a [SourceFile],
+    first_file: u32,
+    files: HashMap<&'a Utf8Path, Option<FileLocations>>,
+    #[cfg(test)]
+    file_reads: usize,
+}
+
+impl<'a> SourceLocations<'a> {
+    #[must_use]
+    pub fn new(sources: &'a [SourceFile]) -> Self {
+        Self {
+            sources,
+            first_file: 0,
+            files: HashMap::new(),
+            #[cfg(test)]
+            file_reads: 0,
+        }
+    }
+
+    fn one_file(sources: &'a [SourceFile], file: SourceId) -> Self {
+        let source = sources
+            .get(file.0 as usize)
+            .map_or(&[][..], std::slice::from_ref);
+        let mut locations = Self::new(source);
+        locations.first_file = file.0;
+        locations
+    }
+
+    fn source(&self, file: SourceId) -> Option<&'a SourceFile> {
+        let index = file.0.checked_sub(self.first_file)? as usize;
+        self.sources.get(index)
+    }
+
+    fn file_locations(&mut self, path: &'a Utf8Path) -> Option<&FileLocations> {
+        match self.files.entry(path) {
+            Entry::Occupied(entry) => entry.into_mut().as_ref(),
+            Entry::Vacant(entry) => {
+                #[cfg(test)]
+                {
+                    self.file_reads += 1;
+                }
+                entry
+                    .insert(
+                        std::fs::read_to_string(path)
+                            .ok()
+                            .map(|text| FileLocations::new(&text)),
+                    )
+                    .as_ref()
+            }
+        }
+    }
+
+    /// A position as `path:line:column`, resolved through its rewrite map.
+    #[must_use]
+    pub fn where_it_is(&mut self, at: &Location) -> String {
+        let Some(source) = self.source(at.file) else {
+            return "<unknown>".to_owned();
+        };
+        let path = &source.display_path;
+        let mut offset = at.span.start;
+        let mut generated = None;
+        // Resolve the source record before using the physical-file index:
+        // two records for one path can have different transforms and maps.
+        if let Some(transform) = &source.rewritten_by {
+            match original_offset(&source.rewritten_map, offset) {
+                Some((original, was_generated)) => {
+                    offset = original;
+                    generated = was_generated.then_some(transform);
+                }
+                None => {
+                    return format!(
+                        "{path} (as {transform} rewrote it; the position is in that text, not the file on disk)"
+                    );
+                }
+            }
+        }
+        let Some(file) = self.file_locations(path) else {
+            return path.to_string();
+        };
+        let (line, column) = file.position(offset);
+        match generated {
+            Some(transform) => format!(
+                "{path}:{line}:{column} (in code {} generated from it)",
+                transform_name(transform)
+            ),
+            None => format!("{path}:{line}:{column}"),
+        }
+    }
+
+    /// Both endpoints of a span, sharing the same source-file index.
+    #[must_use]
+    pub fn where_it_spans(&mut self, at: &Location) -> String {
+        let ends = |offset| Location {
+            file: at.file,
+            span: Span::new(offset, offset),
+        };
+        format!(
+            "{} - {}",
+            self.where_it_is(&ends(at.span.start)),
+            self.where_it_is(&ends(at.span.end))
+        )
+    }
+
+    /// One diagnostic in the format shared by all tools.
+    #[must_use]
+    pub fn diagnostic_line(&mut self, diagnostic: &Diagnostic) -> String {
+        format!(
+            "{}: {} {}",
+            self.where_it_is(&diagnostic.primary),
+            diagnostic.code,
+            diagnostic.message
+        )
+    }
+}
+
+#[derive(Debug)]
+struct FileLocations {
+    bytes: usize,
+    units: usize,
+    line_starts: Vec<usize>,
+    wide: Vec<WideCharacter>,
+}
+
+#[derive(Debug)]
+struct WideCharacter {
+    unit_start: usize,
+    unit_end: usize,
+    byte_end: usize,
+}
+
+impl FileLocations {
+    fn new(text: &str) -> Self {
+        let mut line_starts = vec![0];
+        let mut wide = Vec::new();
+        let mut units = 0;
+        // One pass; ASCII needs no conversion entry. Keep only the indexes,
+        // so the file's text can be dropped as soon as they are built.
+        for (byte, character) in text.char_indices() {
+            let unit_end = units + character.len_utf16();
+            if !character.is_ascii() {
+                wide.push(WideCharacter {
+                    unit_start: units,
+                    unit_end,
+                    byte_end: byte + character.len_utf8(),
+                });
+            }
+            if character == '\n' {
+                line_starts.push(byte + 1);
+            }
+            units = unit_end;
+        }
+        Self {
+            bytes: text.len(),
+            units,
+            line_starts,
+            wide,
+        }
+    }
+
+    fn byte_of_unit(&self, unit: u32) -> usize {
+        let unit = unit as usize;
+        if unit >= self.units {
+            return self.bytes;
+        }
+        let before = self.wide.partition_point(|wide| wide.unit_start < unit);
+        if before == 0 {
+            return unit;
+        }
+        let wide = &self.wide[before - 1];
+        // A surrogate pair's interior has no byte of its own. The old scan
+        // rounded it to the end of the character, as it did the pair's end.
+        if unit <= wide.unit_end {
+            wide.byte_end
+        } else {
+            wide.byte_end + (unit - wide.unit_end)
+        }
+    }
+
+    fn position(&self, unit: u32) -> (usize, usize) {
+        let byte = self.byte_of_unit(unit);
+        let line = self.line_starts.partition_point(|start| *start <= byte);
+        // Columns count UTF-8 bytes, as the scanner did; CR is a byte and LF
+        // begins a new line. The initial zero also covers an empty file.
+        (line, byte - self.line_starts[line - 1] + 1)
+    }
+}
 
 /// Where a diagnostic is, as `path:line:column`.
 ///
 /// A refusal without a location is a scavenger hunt: the message says what is
 /// not supported and the program says nothing about where. Offsets are what the
 /// snapshot carries, in UTF-16 code units, because that is what tsgo's encoded
-/// AST carries; turning one into a line and a column means reading the file,
-/// which is a fine price to pay once per diagnostic. The conversion out of code
-/// units is [`byte_of_unit`] below, and this comment claimed bytes until the day
-/// that function had to be written.
+/// AST carries. This wrapper builds a one-file [`SourceLocations`] view;
+/// printers with many positions share one view across their whole batch.
 ///
 /// **`sources` rather than the snapshot** so that this crate needs no dependency
 /// on the schema: `at.file` indexes that list and nothing else here reads a
 /// snapshot at all. Every caller passes `&snapshot.sources`.
 #[must_use]
 pub fn where_it_is(sources: &[SourceFile], at: &Location) -> String {
-    let Some(source) = sources.get(at.file.0 as usize) else {
-        return "<unknown>".to_owned();
-    };
-    let path = &source.display_path;
-    let mut offset = at.span.start;
-    let mut generated = None;
-    // The position is in text a source transform wrote, which no disk holds.
-    // Its map says where that text came from in the file the user wrote;
-    // without one, a line counted in the file on disk would send the reader
-    // somewhere real and wrong.
-    if let Some(transform) = &source.rewritten_by {
-        match original_offset(&source.rewritten_map, offset) {
-            Some((original, was_generated)) => {
-                offset = original;
-                generated = was_generated.then_some(transform);
-            }
-            None => {
-                return format!(
-                    "{path} (as {transform} rewrote it; the position is in that text, not the file on disk)"
-                );
-            }
-        }
-    }
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return path.to_string();
-    };
-    // **A span counts UTF-16 code units and this counts bytes.** tsgo numbers a
-    // node's position the way a JavaScript string index does, and so does the
-    // React compiler, which is why a span keeps that unit -- `nts-react`'s
-    // `text_outside_ascii_keeps_every_span` fails on anything else. Slicing the
-    // file's bytes with a unit offset is the conversion nobody did: after the
-    // first non-ASCII character every position landed early by the extra bytes
-    // above it. `blockers/a-for-in-over-an-array`'s refused `for (const k in
-    // xs)` is at unit 2197 and byte 2205, and this printed `60:12` -- the wrong
-    // line -- where the four em dashes above it account for exactly eight bytes.
-    //
-    // Found by the Assistant lane once the trivia fix stopped hiding it, and
-    // their caution is the reason it matters more than the count suggests: a
-    // location shifted by N bytes lands on *some* character, usually a token, so
-    // a rule that looks for whitespace sees only a fraction of the population.
-    let offset = byte_of_unit(&text, offset);
-    let upto = &text.as_bytes()[..offset.min(text.len())];
-    // Counted a byte at a time on purpose: this runs once per diagnostic, and
-    // a dependency on a vectorized byte counter for that would be absurd.
-    #[allow(clippy::naive_bytecount)]
-    let line = upto.iter().filter(|byte| **byte == b'\n').count() + 1;
-    let column = upto.len()
-        - upto
-            .iter()
-            .rposition(|byte| *byte == b'\n')
-            .map_or(0, |at| at + 1);
-    match generated {
-        // The transform's name, not its whole identity: the rest is a cache key.
-        Some(transform) => format!(
-            "{path}:{line}:{} (in code {} generated from it)",
-            column + 1,
-            transform_name(transform)
-        ),
-        None => format!("{path}:{line}:{}", column + 1),
-    }
+    SourceLocations::one_file(sources, at.file).where_it_is(at)
 }
 
 /// The extent of a function in the source it was lowered from, as two positions
@@ -107,21 +243,13 @@ pub fn where_it_is(sources: &[SourceFile], at: &Location) -> String {
 /// away. Telling those two apart needs the function's extent, and deriving it
 /// from source is a second brace matcher for a fact the compiler already holds.
 ///
-/// Two calls to [`where_it_is`] rather than a line counter of its own: that
-/// function resolves a position through a source transform's map, and a
+/// Both endpoints use [`SourceLocations::where_it_is`] rather than a line
+/// counter of their own: it resolves a position through a source transform's map, and a
 /// rewritten file's lines are not the lines on disk. A second derivation of that
 /// would be right until someone rewrote a file.
 #[must_use]
 pub fn where_it_spans(sources: &[SourceFile], at: &Location) -> String {
-    let ends = |offset: u32| Location {
-        file: at.file,
-        span: Span::new(offset, offset),
-    };
-    format!(
-        "{} - {}",
-        where_it_is(sources, &ends(at.span.start)),
-        where_it_is(sources, &ends(at.span.end))
-    )
+    SourceLocations::one_file(sources, at.file).where_it_spans(at)
 }
 
 /// One diagnostic as a tool prints it: `path:line:column: NTS1001 <message>`.
@@ -142,28 +270,7 @@ pub fn where_it_spans(sources: &[SourceFile], at: &Location) -> String {
 /// one of them was measured to break when it changed.
 #[must_use]
 pub fn diagnostic_line(sources: &[SourceFile], diagnostic: &Diagnostic) -> String {
-    format!(
-        "{}: {} {}",
-        where_it_is(sources, &diagnostic.primary),
-        diagnostic.code,
-        diagnostic.message
-    )
-}
-
-/// The byte offset of a UTF-16 code-unit offset in `text`.
-///
-/// Walks the characters once, which is what `where_it_is` does for the line count
-/// anyway. An ASCII file needs no walk and the loop finds that out on its first
-/// character, so the common case costs one comparison per byte either way.
-fn byte_of_unit(text: &str, unit: u32) -> usize {
-    let mut units = 0u32;
-    for (at, character) in text.char_indices() {
-        if units >= unit {
-            return at;
-        }
-        units += u32::try_from(character.len_utf16()).unwrap_or(1);
-    }
-    text.len()
+    SourceLocations::one_file(sources, diagnostic.primary.file).diagnostic_line(diagnostic)
 }
 
 /// A source transform's name, from its identity: `react-compiler` from
@@ -304,21 +411,22 @@ mod tests {
     /// character, usually a token, so nothing downstream announces it.
     #[test]
     fn a_unit_offset_past_a_non_ascii_character_is_converted() {
-        assert_eq!(super::byte_of_unit("ascii only", 5), 5);
+        let byte_of_unit = |text: &str, unit| super::FileLocations::new(text).byte_of_unit(unit);
+        assert_eq!(byte_of_unit("ascii only", 5), 5);
         // An em dash is one unit and three bytes.
-        assert_eq!(super::byte_of_unit("a\u{2014}b", 0), 0);
-        assert_eq!(super::byte_of_unit("a\u{2014}b", 1), 1);
+        assert_eq!(byte_of_unit("a\u{2014}b", 0), 0);
+        assert_eq!(byte_of_unit("a\u{2014}b", 1), 1);
         assert_eq!(
-            super::byte_of_unit("a\u{2014}b", 2),
+            byte_of_unit("a\u{2014}b", 2),
             4,
             "the unit after the dash is at byte 4"
         );
         // An astral character is two units and four bytes, and neither half of
         // a surrogate pair has a byte of its own: both answer the byte after
         // the whole character, so no offset this returns is ever inside one.
-        assert_eq!(super::byte_of_unit("a\u{1f600}b", 2), 5);
-        assert_eq!(super::byte_of_unit("a\u{1f600}b", 3), 5);
+        assert_eq!(byte_of_unit("a\u{1f600}b", 2), 5);
+        assert_eq!(byte_of_unit("a\u{1f600}b", 3), 5);
         // Past the end answers the end rather than panicking.
-        assert_eq!(super::byte_of_unit("abc", 99), 3);
+        assert_eq!(byte_of_unit("abc", 99), 3);
     }
 }

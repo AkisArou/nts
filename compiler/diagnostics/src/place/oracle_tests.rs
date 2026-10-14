@@ -1,6 +1,8 @@
 //! Preserve the old scanner's answers while indexing source locations.
 
-use super::{diagnostic_line, original_offset, transform_name, where_it_is, where_it_spans};
+use super::{
+    SourceLocations, diagnostic_line, original_offset, transform_name, where_it_is, where_it_spans,
+};
 use crate::{Diagnostic, Digest, Location, RewrittenSegment, SourceFile, SourceId, Span};
 use camino::Utf8PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -105,24 +107,28 @@ fn old_byte_of_unit(text: &str, unit: u32) -> usize {
 }
 
 fn assert_all_offsets(sources: &[SourceFile], through: u32) {
+    let mut locations = SourceLocations::new(sources);
     for file in 0..sources.len() {
         for start in 0..=through {
             let file = u32::try_from(file).expect("small source fixture");
             let location = at(file, start, start.saturating_add(3));
             let expected = old_where_it_is(sources, &location);
             assert_eq!(where_it_is(sources, &location), expected, "{location:?}");
-            assert_eq!(
-                where_it_spans(sources, &location),
-                format!(
-                    "{} - {}",
-                    expected,
-                    old_where_it_is(sources, &at(file, location.span.end, location.span.end))
-                ),
-                "{location:?}"
+            assert_eq!(locations.where_it_is(&location), expected, "{location:?}");
+            let extent = format!(
+                "{} - {}",
+                expected,
+                old_where_it_is(sources, &at(file, location.span.end, location.span.end))
             );
+            assert_eq!(where_it_spans(sources, &location), extent, "{location:?}");
+            assert_eq!(locations.where_it_spans(&location), extent, "{location:?}");
             let diagnostic = Diagnostic::error("NTS1001", "a location control", location);
             assert_eq!(
                 diagnostic_line(sources, &diagnostic),
+                format!("{expected}: NTS1001 a location control")
+            );
+            assert_eq!(
+                locations.diagnostic_line(&diagnostic),
                 format!("{expected}: NTS1001 a location control")
             );
         }
@@ -207,9 +213,79 @@ fn independent_wrapper_calls_read_a_replaced_file_again() {
         where_it_is(&sources, &location),
         format!("{}:2:3", scratch.0)
     );
+    assert_eq!(
+        SourceLocations::new(&sources).where_it_is(&location),
+        format!("{}:2:3", scratch.0)
+    );
     std::fs::write(&scratch.0, b"no newline now").expect("replace location fixture");
     assert_eq!(
         where_it_is(&sources, &location),
         format!("{}:1:9", scratch.0)
     );
+    assert_eq!(
+        SourceLocations::new(&sources).where_it_is(&location),
+        format!("{}:1:9", scratch.0)
+    );
+}
+
+#[test]
+fn a_batch_builds_one_index_per_used_path_not_per_position_or_source_id() {
+    let scratch = Scratch::new("head\r\n\u{2014}\u{1f600}tail\nlast".as_bytes());
+    let unused = Scratch::new(b"unused control\n");
+    let plain = scratch.source();
+    let mut rewritten = plain.clone();
+    rewritten.rewritten_by = Some("react-compiler@identity".to_owned());
+    rewritten.rewritten_map = vec![segment(0, 7, 64, true)];
+    let sources = [plain, rewritten, unused.source()];
+    let mut locations = SourceLocations::new(&sources);
+    assert_eq!(locations.file_reads, 0, "construction is lazy");
+    let expected: Vec<_> = (0..32)
+        .map(|start| old_where_it_is(&sources, &at(0, start, start)))
+        .collect();
+    for query in 0..5000u32 {
+        let start = query % 32;
+        let location = at(0, start, start + 1);
+        assert_eq!(locations.where_it_is(&location), expected[start as usize]);
+        let _ = locations.where_it_spans(&location);
+        let _ = locations.diagnostic_line(&Diagnostic::error("NTS1001", "control", location));
+        let rewritten_at = at(1, start, start + 1);
+        assert_eq!(
+            locations.where_it_is(&rewritten_at),
+            format!(
+                "{}:2:4 (in code react-compiler generated from it)",
+                scratch.0
+            )
+        );
+    }
+    assert_eq!(
+        locations.file_reads, 1,
+        "all queries share one physical file"
+    );
+    assert_eq!(locations.files.len(), 1, "the unused file was never loaded");
+
+    // A wrapper view preserves the original source id even though its borrowed
+    // slice contains just that file. Other ids cannot accidentally name it.
+    let mut one = SourceLocations::one_file(&sources, SourceId(2));
+    assert_eq!(
+        one.where_it_spans(&at(2, 0, 3)),
+        format!("{}:1:1 - {}:1:4", unused.0, unused.0)
+    );
+    for file in [0, 1, 3, u32::MAX] {
+        assert_eq!(one.where_it_is(&at(file, 0, 1)), "<unknown>");
+    }
+    assert_eq!(one.file_reads, 1);
+}
+
+#[test]
+fn failed_reads_are_cached_for_a_batch_too() {
+    let missing = Scratch::new(b"missing\n");
+    std::fs::remove_file(&missing.0).expect("remove missing-file fixture");
+    let invalid = Scratch::new(&[0xff]);
+    let sources = [missing.source(), invalid.source()];
+    let mut locations = SourceLocations::new(&sources);
+    for _ in 0..100 {
+        assert_eq!(locations.where_it_is(&at(0, 0, 1)), missing.0.as_str());
+        assert_eq!(locations.where_it_is(&at(1, 0, 1)), invalid.0.as_str());
+    }
+    assert_eq!(locations.file_reads, 2, "one read attempt per path");
 }

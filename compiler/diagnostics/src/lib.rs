@@ -13,7 +13,7 @@
 
 pub mod place;
 
-pub use place::{diagnostic_line, where_it_is, where_it_spans};
+pub use place::{SourceLocations, diagnostic_line, where_it_is, where_it_spans};
 
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};

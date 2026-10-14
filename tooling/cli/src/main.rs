@@ -26,6 +26,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
 use nts_core::hir::{self, ArrayFill, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
+use nts_diagnostics::SourceLocations;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
 
@@ -1253,20 +1254,15 @@ fn write_keeps(root: &Utf8Path, names: &[String], path: &Utf8Path) -> Result<()>
 /// suspect, so a consumer that showed diagnostics only on error would hide the
 /// one diagnostic that explains the others.
 fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<()> {
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            eprintln!(
-                "warning: {}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
+            eprintln!("warning: {}", locations.diagnostic_line(diagnostic));
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            eprintln!(
-                "{}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
+            eprintln!("{}", locations.diagnostic_line(diagnostic));
         }
         bail!("the program does not typecheck");
     }
@@ -1647,15 +1643,13 @@ fn dump_strict(tsconfig: &Utf8Path) -> Result<()> {
     let mut lowered = hir::lower::lower(&snapshot);
     lowered.program.targets = configured_abis(tsconfig)?;
     let errors = hir::obligations::check(&lowered.program, &lowered.arrivals.at_signature);
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for error in &errors {
-        println!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, error)
-        );
+        println!("{}", locations.diagnostic_line(error));
         for label in &error.labels {
             println!(
                 "  {}: {}",
-                nts_diagnostics::where_it_is(&snapshot.sources, &label.location),
+                locations.where_it_is(&label.location),
                 label.message
             );
         }
@@ -1702,9 +1696,10 @@ fn dump_obligations(tsconfig: &Utf8Path, tsv: bool) -> Result<()> {
         }
     };
     let (mut proven, mut unproven) = (0usize, 0usize);
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for one in &judged {
         let obligation = &one.obligation;
-        let place = nts_diagnostics::where_it_is(&snapshot.sources, &obligation.location);
+        let place = locations.where_it_is(&obligation.location);
         let c_type = hir::native::Type::Scalar(obligation.kind)
             .c_type()
             .into_owned();
@@ -1894,6 +1889,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     );
 
     if !snapshot.diagnostics.is_empty() {
+        let mut locations = SourceLocations::new(&snapshot.sources);
         println!();
         for diagnostic in &snapshot.diagnostics {
             // `where_it_is`, like every other location this tool prints. This
@@ -1908,7 +1904,7 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
                 "  {:?} {} {} {}",
                 diagnostic.severity,
                 diagnostic.code,
-                nts_diagnostics::where_it_is(&snapshot.sources, &diagnostic.primary),
+                locations.where_it_is(&diagnostic.primary),
                 diagnostic.message,
             );
             for label in &diagnostic.labels {
@@ -1978,16 +1974,14 @@ fn dump_receivers(args: &[String]) -> Result<()> {
     let mut source = frontend_for(&tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, &tsconfig, "nts-build")?;
     let census = nts_core::receivers::classify(&snapshot);
+    let mut locations = SourceLocations::new(&snapshot.sources);
 
     // A partial type graph deflates every number below, silently. NTS0002 is the
     // frontend saying its answer is "a wrong one wearing the clothes of an
     // answer", so it goes above the table and not in a footnote.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!(
-                "warning: {}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
+            println!("warning: {}", locations.diagnostic_line(diagnostic));
         }
     }
 
@@ -1996,7 +1990,7 @@ fn dump_receivers(args: &[String]) -> Result<()> {
     println!();
 
     if per_site {
-        list_receiver_sites(&snapshot, &census);
+        list_receiver_sites(&census, &mut locations);
     }
 
     receivers_table(&snapshot, &census);
@@ -2238,10 +2232,7 @@ fn arm_distribution(census: &nts_core::receivers::Census, sound: u32) {
 
 /// One line per field access. The detail a reader needs to see the proxies' own
 /// mistakes rather than trust their totals.
-fn list_receiver_sites(
-    snapshot: &nts_semantic_schema::SemanticSnapshot,
-    census: &nts_core::receivers::Census,
-) {
+fn list_receiver_sites(census: &nts_core::receivers::Census, locations: &mut SourceLocations<'_>) {
     for site in census.sites.iter().chain(&census.spread_sites) {
         println!(
             "{:<6} {:<13} {:<13} {:<11} {}  {}.{} through {}{}",
@@ -2253,7 +2244,7 @@ fn list_receiver_sites(
                 (false, true) => "structural",
                 (false, false) => "neither",
             },
-            nts_diagnostics::where_it_is(&snapshot.sources, &site.location),
+            locations.where_it_is(&site.location),
             site.owner,
             site.member,
             site.receiver,
@@ -2460,7 +2451,7 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
 }
 
 /// One function per header, one block per label, one operation per line.
-fn print_program(snapshot: &nts_semantic_schema::SemanticSnapshot, program: &hir::Program) {
+fn print_program(program: &hir::Program, locations: &mut SourceLocations<'_>) {
     for func in &program.funcs {
         let params: Vec<String> = func
             .params
@@ -2495,7 +2486,7 @@ fn print_program(snapshot: &nts_semantic_schema::SemanticSnapshot, program: &hir
             func.name,
             params.join(", "),
             render(&func.return_type),
-            nts_diagnostics::where_it_spans(&snapshot.sources, &func.origin.location),
+            locations.where_it_spans(&func.origin.location),
         );
         for (index, block) in func.blocks.iter().enumerate() {
             let params: Vec<String> = block
@@ -2600,6 +2591,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // target and lowering refuses it.
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut locations = SourceLocations::new(&snapshot.sources);
 
     // Warnings are printed whether or not the program typechecks. A partial
     // type graph (NTS0002) makes every refusal below it suspect, so a consumer
@@ -2607,18 +2599,12 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // explains the others.
     for diagnostic in &snapshot.diagnostics {
         if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            println!(
-                "warning: {}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
+            println!("warning: {}", locations.diagnostic_line(diagnostic));
         }
     }
     if snapshot.has_errors() {
         for diagnostic in &snapshot.diagnostics {
-            println!(
-                "{}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
+            println!("{}", locations.diagnostic_line(diagnostic));
         }
         bail!("the program does not typecheck");
     }
@@ -2699,14 +2685,14 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         let lowered = hir::lower::lower(&snapshot);
         (lowered.program, lowered.diagnostics)
     };
-    print_program(&snapshot, &program);
+    print_program(&program, &mut locations);
 
     for diagnostic in &diagnostics {
         // With its location. A refusal without one is a scavenger hunt, and
         // `where_it_is` already existed for the other subcommands.
         println!(
             "  -- {} {} {}",
-            nts_diagnostics::where_it_is(&snapshot.sources, &diagnostic.primary),
+            locations.where_it_is(&diagnostic.primary),
             diagnostic.code,
             diagnostic.message
         );
@@ -8527,11 +8513,9 @@ fn emit_llvm(
     // second is how this command answered an empty module for a program with
     // two refusals in it: `emit-c` reported them and this did not, so the
     // module looked like a backend that had rendered everything asked of it.
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
     for diagnostic in &emitted.diagnostics {
@@ -8591,11 +8575,9 @@ fn emit_jvm(
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, "jvm");
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for diagnostic in &mismatches {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     if !mismatches.is_empty() {
         bail!(
@@ -8605,10 +8587,7 @@ fn emit_jvm(
     }
 
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     // **The package the product declares, as a binary-name prefix.** A config
     // says `com.acme.sdk` because that is how Java spells a package; the class
@@ -8758,6 +8737,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     let tsgo_binary = frontend_binary();
     let mut source = frontend_for(tsconfig, tsgo_binary)?;
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
+    let mut locations = SourceLocations::new(&snapshot.sources);
     report_snapshot_diagnostics(&snapshot)?;
 
     // **Through `emit_options`, like the other two emitters.**
@@ -8802,19 +8782,13 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
@@ -8849,7 +8823,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
 
     let mut wrote = write_c_output(&program, &emitted, out, emission, refused, initializes)?;
     if let Some(platform) = emission.llvm {
-        write_llvm_program(&snapshot, &program, out, platform, &mut wrote)?;
+        write_llvm_program(&mut locations, &program, out, platform, &mut wrote)?;
     }
     wrote.objc = program.objc;
     wrote.winappsdk = bind_winmd::winrt::uses_winappsdk(&program);
@@ -8870,7 +8844,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
 /// absent definition is an undefined symbol at the link, which names neither
 /// the function nor the construct behind it.
 fn write_llvm_program(
-    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    locations: &mut SourceLocations<'_>,
     program: &hir::Program,
     out: &Utf8Path,
     platform: nts_codegen_llvm::Platform,
@@ -8878,10 +8852,7 @@ fn write_llvm_program(
 ) -> Result<()> {
     let rendered = nts_codegen_llvm::emit(program, platform);
     for diagnostic in &rendered.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     if !rendered.diagnostics.is_empty() {
         bail!(

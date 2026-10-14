@@ -7,7 +7,7 @@ use super::{
 use anyhow::{Result, bail};
 use camino::Utf8PathBuf;
 use nts_core::hir;
-use nts_diagnostics::Severity;
+use nts_diagnostics::{Severity, SourceLocations};
 
 pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     let provider =
@@ -49,11 +49,9 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         Ok(prepared) => prepared,
         Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
     };
+    let mut locations = SourceLocations::new(&snapshot.sources);
     for diagnostic in &prepared.diagnostics {
-        eprintln!(
-            "{}",
-            nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-        );
+        eprintln!("{}", locations.diagnostic_line(diagnostic));
     }
     if prepared
         .diagnostics
@@ -66,10 +64,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         Ok(emitted) => emitted,
         Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => {
             for diagnostic in &diagnostics {
-                eprintln!(
-                    "{}",
-                    nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-                );
+                eprintln!("{}", locations.diagnostic_line(diagnostic));
             }
             bail!(
                 "wasm declined {} shape(s); no artifact written",

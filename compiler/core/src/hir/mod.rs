@@ -5003,21 +5003,21 @@ impl Unprepared {
     #[must_use]
     pub fn render(&self, sources: &[nts_diagnostics::SourceFile]) -> String {
         match self {
-            Self::Rejected(errors) => errors
-                .iter()
-                .flat_map(|error| {
-                    std::iter::once(nts_diagnostics::diagnostic_line(sources, error)).chain(
-                        error.labels.iter().map(|label| {
-                            format!(
-                                "  {}: {}",
-                                nts_diagnostics::where_it_is(sources, &label.location),
-                                label.message
-                            )
-                        }),
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n"),
+            Self::Rejected(errors) => {
+                let mut locations = nts_diagnostics::SourceLocations::new(sources);
+                let mut lines = Vec::new();
+                for error in errors {
+                    lines.push(locations.diagnostic_line(error));
+                    for label in &error.labels {
+                        lines.push(format!(
+                            "  {}: {}",
+                            locations.where_it_is(&label.location),
+                            label.message
+                        ));
+                    }
+                }
+                lines.join("\n")
+            }
             Self::Invalid(problems) => problems
                 .iter()
                 .map(|problem| format!("invalid HIR: {problem:?}"))
