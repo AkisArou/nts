@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 29 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold",
   "node": null,
-  "measured_with": "c8a13b25ba0a947d",
+  "measured_with": "106215dcc3f90a2c",
   "source": "measured"
 }
