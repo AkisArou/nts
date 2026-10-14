@@ -552,6 +552,49 @@ export function libDomTranscript(): string {
       "|" + navigator.userActivation.hasBeenActive);
   }
 
+  // A table built row by row, as an app renders a list into one: a body
+  // made, rows inserted at the end and at the front, a cell's and a row's
+  // positions, a caption, a row deleted.
+  {
+    const table = document.createElement("table");
+    const body = table.createTBody();
+    for (const label of ["a", "b"]) {
+      const row = body.insertRow();
+      row.insertCell().textContent = label;
+      row.insertCell().textContent = label.toUpperCase();
+    }
+    body.insertRow(0).insertCell().textContent = "head";
+    const third = body.rows.item(2);
+    const cell = third === null ? null : third.cells.item(1);
+    table.createCaption().textContent = "list";
+    const positions = (cell === null ? "none" : cell.textContent + ":" + cell.cellIndex) + "|" +
+      (third === null ? "none" : third.rowIndex + ":" + third.sectionRowIndex);
+    body.deleteRow(1);
+    const caption = table.caption;
+    log("tableRows", table.rows.length + "|" + table.tBodies.length + "|" + positions + "|" +
+      (caption === null ? "none" : caption.textContent) + "|" + body.rows.length);
+  }
+
+  // A number input's constraints: a value past its maximum, the value as a
+  // number, stepped, a custom message and what checkValidity answers with
+  // it and without it.
+  {
+    const amount = document.createElement("input");
+    amount.type = "number";
+    amount.min = "0";
+    amount.max = "10";
+    amount.step = "0.5";
+    amount.value = "12";
+    const over = amount.validity.rangeOverflow + ":" + amount.checkValidity();
+    amount.valueAsNumber = 2.5;
+    amount.stepUp(2);
+    const stepped = amount.value + ":" + amount.valueAsNumber;
+    amount.setCustomValidity("nope");
+    const custom = amount.validity.customError + ":" + amount.validationMessage + ":" + amount.checkValidity();
+    amount.setCustomValidity("");
+    log("numberValidity", over + "|" + stepped + "|" + custom + "|" + amount.checkValidity() + ":" + amount.validity.valid);
+  }
+
   // Events of the types lib.dom's event maps name, made and read: their own
   // members, a nullable string a dictionary leaves out (null) against one it
   // gives as empty, and a handle member compared by identity.
