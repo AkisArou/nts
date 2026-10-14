@@ -962,6 +962,19 @@ static void nts_each_holder(NtsHeader *object, void (*visit)(NtsHeader *)) {
 static void nts_each_reference(NtsHeader *object, void (*visit)(NtsHeader *),
                                NtsEdges edges) {
   const NtsDescriptor *descriptor = object->descriptor;
+  /* An emptied shell (`nts_destroy`) has given its contents back, so its
+   * slots name objects that may be gone. Nothing reaches one -- its count is
+   * zero and only the candidate buffer names it, which the collector empties
+   * without walking it -- so a collector's walk arriving here is a defect, and
+   * walking on would read freed memory. Stopped by name instead. The owned
+   * walk that released its contents is the one walk it gets. */
+  if (edges == NTS_EDGES_TRACED &&
+      (object->flags & (NTS_DYING | NTS_BUFFERED)) ==
+          (NTS_DYING | NTS_BUFFERED)) {
+    fprintf(stderr, "nts: the cycle collector walked into an emptied object "
+                    "it has yet to free\n");
+    abort();
+  }
   if (edges == NTS_EDGES_TRACED) {
     if (nts_is_holder(object)) {
       nts_holders[object->length]->each_held(object, visit);
@@ -1331,6 +1344,21 @@ static void nts_destroy(NtsHeader *object) {
     nts_env->dying = (NtsHeader *)dead->reserved;
     /* This may link more objects into the list, which the loop picks up. */
     nts_release_contents(dead);
+    if (dead->flags & NTS_BUFFERED) {
+      /* An emptied shell (see `nts_release`): the candidate buffer still
+       * names it, so only its contents go now, and the collector frees its
+       * memory when it empties the buffer (`nts_collect_pass`). Its contents
+       * are the foreign ones too -- the handles in its erased slots, a GTK
+       * button among them, and its foreign fields -- which `nts_free` would
+       * otherwise give back only when the collector frees the shell; each
+       * slot is cleared as it goes, so that free finds nothing left to give
+       * back twice. The count word is a count again, zero; `NTS_DYING` stays,
+       * and with `NTS_BUFFERED` beside it that pair is the shell's mark --
+       * nothing else ever carries both. */
+      nts_release_foreign(dead);
+      dead->reserved = 0;
+      continue;
+    }
     nts_env->reclaimed++;
     nts_free(dead);
   }
@@ -1458,9 +1486,22 @@ void nts_release(NtsHeader *object) {
   object->reserved = 0;
   nts_paint(object, NTS_BLACK);
   if (object->flags & NTS_BUFFERED) {
-    /* The candidate buffer is holding it. Freeing it now would leave the
-     * buffer pointing at memory that is gone; collection frees it instead,
-     * which is where the buffer is emptied. */
+    /* The candidate buffer is holding it, so its memory has to outlive this
+     * call: freeing it now would leave the buffer pointing at memory that is
+     * gone. What it holds does not. Those references die with it, now, as
+     * they would for any other object -- a button in an `unknown[]` is given
+     * back when the array goes, not at some later collection
+     * (`examples/interop/gtk-values` under counting, once an erased array
+     * became a cycle candidate). So its contents are released through the
+     * dying list as usual, which leaves an emptied shell for the collector to
+     * free (`nts_destroy`, `nts_collect_pass`): the synchronous release of
+     * Bacon and Rajan's collector, where only the free waits.
+     *
+     * A holder keeps the old timing. What it holds is its family's to give
+     * back, and the collector does that when it reclaims the holder. */
+    if (!nts_is_holder(object)) {
+      nts_destroy(object);
+    }
     return;
   }
   nts_destroy(object);
@@ -1658,29 +1699,39 @@ static bool nts_collect_pass(void) {
   nts_env->dead_len = 0;
 
   /* Now, with every count settled and the buffer already empty, reclaim what
-   * was found dead at the start. Ordinary release handles the cascade, and
+   * was found dead at the start. Nearly all of it is emptied shells: a
+   * candidate gives its contents back the moment its count reaches zero
+   * (`nts_release`), so only its memory was left, and that is freed here
+   * without walking it -- releasing what it held a second time would take
+   * counts below the truth. Anything else zeroed is destroyed as usual, and
    * nothing here can free memory the walks above still name: a zeroed root's
    * references were never trial-deleted, so every child of one keeps a count
    * it did not get from inside the subgraph and cannot have been painted
-   * white. Garbage held only by one of these is reclaimed a collection later
-   * than it could be, which is the price of never perturbing a count mid-walk.
+   * white.
    *
    * These cannot reach each other -- a zeroed object is one nothing points at
    * -- so no entry in this list is freed twice. */
   for (size_t index = 0; index < nts_env->zeroed_len; index++) {
-    nts_destroy(nts_env->zeroed[index]);
+    NtsHeader *zeroed = nts_env->zeroed[index];
+    if (zeroed->flags & NTS_DYING) {
+      nts_env->reclaimed++;
+      nts_free(zeroed);
+    } else {
+      nts_destroy(zeroed);
+    }
   }
   nts_env->zeroed_len = 0;
   nts_env->collecting = false;
   return freed;
 }
 
-/* **A collection leaves nothing it could collect.** The reclaim at the end of
- * a pass destroys what reached zero while buffered, and that cascade releases
- * children: one taken to zero while it is itself buffered -- a cycle candidate
- * the program let go of earlier -- is left for the next collection, by the
- * design the reclaim pass explains. So one pass could return with garbage
- * still in the buffer, and every caller that asks this question means "now":
+/* **A collection leaves nothing it could collect.** A pass releases objects
+ * after its walks -- severing a holder runs its family's releases, and the
+ * reclaim destroys what was zeroed -- and one taken to zero while it is itself
+ * buffered, a cycle candidate the program let go of earlier, becomes an emptied
+ * shell that the buffer still names, left for the next pass by the design the
+ * reclaim pass explains. So one pass could return with garbage still in the
+ * buffer, and every caller that asks this question means "now":
  * the leak check after a run (a rejection reason with an `unknown` field,
  * passed through `.finally` then `.catch`, was counted held: it was the
  * reason, freed by the next collection), and a host's end-of-document check.

@@ -1,7 +1,8 @@
-ideal 3
+ideal 19
 allocated 17
-because one retain, and two references given back. The chain itself is not on
-because this bill, and that is not an elision -- it is who does the work.
+because one retain, and eighteen references given back: the two heads' `next`
+because edges onto the shared head, and the sixteen `next` edges of the chain
+because below it, each given back as the link holding it dies.
 because
 because The shared head is held twice, and only one birth reference exists to
 because fill two edges, so at least one retain is unavoidable. `right.next` can
@@ -9,21 +10,28 @@ because take the local's reference by moving it, since that is its last use.
 because Then the two heads are dropped, each destroy gives up the `next` it was
 because holding, and the second of those takes the shared head to zero.
 because
-because Zero, on a type that can point to itself, means *buffered* rather than
-because destroyed: the collector frees the seventeen links, and the harness reads
-because its counters before collecting precisely so that the runtime's own work
-because is not charged to the program. So the cascade `traversal` pays seventeen
-because for does not appear here at all.
+because The first of those left the shared head one reference on a type that can
+because point to itself, so it became a cycle candidate, and the second found it
+because buffered at zero. Until 2026-10-14 a candidate at zero waited whole for
+because the collector: the chain's sixteen releases ran in the collection after
+because the harness read its counters, and this said three. A candidate at zero
+because now gives back what it holds at once and leaves only its own memory for
+because the collector (`nts_release`), so those sixteen run inside the call and
+because are on its bill: 3 + 16 = 19. It is the same work at another time. A
+because trace of every release is the same thirty six on both runtimes, in the
+because same order. `naive` rises by the same sixteen (55 to 71 releases), and
+because retains, allocations, the answer and the leak check do not move.
 because
-because Written as twenty one first, counting one release per link. That is the
-because fifth ideal in this suite I have put too high and the first for a new
+because Written as twenty one first, counting one release per link. Then three,
+because the fifth ideal in this suite I had put too high and the first for a new
 because reason: the other four counted objects that never left the frame, and
-because this one counted work the collector does.
+because that one counted work the collector did. It was the collector's only
+because because the release waited, and now it does not.
 because
-because The distance from three is `left` and `right`, which do not escape and
+because The distance above sixteen is `left` and `right`, which do not escape and
 because should not be heap objects at all. That is escape analysis, not counting.
 because
-because And this case still cannot reach zero, which is what it is for. Take
+because And this case still cannot reach sixteen, which is what it is for. Take
 because either count away and the tail is either freed while the second head
 because still points at it -- which the answer would catch -- or never freed at
 because all, which the leak check would.

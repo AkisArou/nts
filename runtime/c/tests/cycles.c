@@ -52,8 +52,8 @@ static Node *make(void) {
  * Every link but the newest is decremented without reaching zero -- the old
  * head loses the list's reference and gains the new head's -- so every one of
  * them is buffered as a cycle candidate. Dropping the list then takes the
- * newest to zero and cascades, and the cascade stops at the first buffered
- * link, which is left for the collector.
+ * newest to zero and cascades; each buffered link it reaches gives its next
+ * link back too, and leaves its own emptied shell for the collector.
  *
  * That is all correct. What was not is what the collector then did with it: it
  * destroyed that link while it was marking the others, and the release took the
@@ -123,8 +123,35 @@ static void a_dying_root_does_not_free_what_a_live_one_holds(void) {
   check(nts_live_count() == baseline, "and both are reclaimed once it lets go");
 }
 
+/* A candidate whose count reaches zero gives back what it holds at once, and
+ * only its own memory waits for the collector.
+ *
+ * It used to wait whole: the buffer names a candidate, so freeing it at zero
+ * would leave the buffer pointing at nothing, and the runtime left all of it
+ * -- contents included -- for the next collection. Correct for memory, and
+ * wrong for anything that watches a release: a GTK button in an `unknown[]`
+ * outlived the array (`examples/interop/gtk-values` under counting), once an
+ * array of erased values became a candidate at all. */
+static void a_candidate_at_zero_gives_back_its_contents_at_once(void) {
+  size_t baseline = nts_live_count();
+  Node *holder = make();
+  holder->a = (NtsHeader *)make(); /* the field owns the child's one count */
+  nts_retain((NtsHeader *)holder);
+  nts_release((NtsHeader *)holder); /* one left: buffered as a candidate */
+  check(nts_cycle_candidates() > 0 && nts_live_count() == baseline + 2,
+        "a candidate and what it holds are both live while it is held");
+
+  nts_release((NtsHeader *)holder); /* zero, while the buffer names it */
+  check(nts_live_count() == baseline + 1,
+        "at zero, what it held is freed at once and only its shell remains");
+
+  nts_collect_cycles();
+  check(nts_live_count() == baseline, "and the collector frees the shell");
+}
+
 int main(void) {
   a_chain_built_head_first_is_reclaimed_whole();
   a_dying_root_does_not_free_what_a_live_one_holds();
+  a_candidate_at_zero_gives_back_its_contents_at_once();
   return failures != 0;
 }
