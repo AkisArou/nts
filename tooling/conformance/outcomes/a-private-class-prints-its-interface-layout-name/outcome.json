@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Earlier: private failure",
+  "node": "exit 1; nts: uncaught PrivateFailure: private failure",
+  "measured_with": "07fc657a6ffa4ebb",
+  "source": "measured"
+}
