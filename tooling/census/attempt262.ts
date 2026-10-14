@@ -374,10 +374,22 @@ export const BACKENDS = {
     ],
     capsItself: true,
   },
+  // `emit-wasm --host node` writes `program.mjs` and its module, or nothing:
+  // any refusal exits 1 with its NTS lines on stderr, which the emit arm reads
+  // as for C. Importing `program.mjs` runs the module (the Wasm lane, measured
+  // on four shapes). Node's heap is capped by its own flag, never `ulimit -v`,
+  // which a Wasm GC engine's reservations exceed.
   wasm: {
-    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--main"],
-    prepare: () => ({ bucket: "infrastructure-error", why: "no Wasm run adapter yet" }),
-    run: () => ["false", []],
+    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--host", "node"],
+    prepare: () => ({ objects: undefined }),
+    run: (out, tools) => [
+      "node",
+      [
+        ...(tools.memoryCapKb ? [`--max-old-space-size=${Math.floor(Number(tools.memoryCapKb) / 2048)}`] : []),
+        join(out, "program.mjs"),
+      ],
+    ],
+    capsItself: true,
   },
 };
 
@@ -536,6 +548,17 @@ export function attempt(dir, body, tools, origin?) {
     // TypeScript throw (both exit 1; stderr tells them apart).
     const host = /^Exception in thread "[^"]*" ([\w.$]+)/m.exec(String(error.stderr ?? ""));
     if (host) return { bucket: "crash", why: "host exception", first: host[1] };
+    // A Wasm run-time refusal, `NTS5001: wasm operation in f: <reason>`: read
+    // as C's `nts: refused at run time: <reason>` is, so the two backends'
+    // rows are one shape.
+    const declined = /NTS5001: wasm (?:operation in|input to|result from|throw from) [^:]*: (.*)/.exec(String(error.stderr ?? ""));
+    if (declined) {
+      return {
+        bucket: "crash",
+        why: error.signal ?? `exit ${error.status}`,
+        first: `nts: refused at run time: ${declined[1]}`.trim().replace(/\d+/g, "N").slice(0, 200),
+      };
+    }
     const said = String(error.stderr ?? "").split("\n").find((text) => text.startsWith("nts: "));
     return {
       bucket: "crash",
