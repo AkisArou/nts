@@ -612,6 +612,25 @@ fn an_engine_without_a_needed_capability_is_named() {
     }
 }
 
+/// An abstract class's optional methods, which a subclass leaves out: the
+/// class allocates, its absent method's entry refusing by name if a call ever
+/// reached it, and `?.()` skips it, as node does.
+#[test]
+fn source_optional_methods_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/optional-methods");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "optional-methods",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 34, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Presence: a subclass's own bits after its base's, cleared and written
 /// again through the base, `"k" in v` over an open value of either of two
 /// families or of none, and the high bits.

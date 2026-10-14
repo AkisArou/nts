@@ -55,6 +55,8 @@ pub(crate) enum FuncKey {
     ArrayLookup(u32, crate::array_lookup::Helper),
     Thunk(crate::callables::Face, u32, u32),
     UnfilledUniform(u32),
+    /// A slot whose method has no body, by its signature and the method.
+    AbstractEntry(u32, String),
     Raising(crate::raising::Helper),
     DeclineInput,
     ValueText,

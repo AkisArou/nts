@@ -127,7 +127,9 @@ fn thunk(
         .find(|f| &f.name == target)
         .ok_or_else(|| Failure::Invariant(format!("unresolved closure body `{target}`")))?;
     if func.abstract_declaration {
-        return Err(format!("abstract closure `{target}` cannot be allocated").into());
+        return Err(Failure::Invariant(format!(
+            "abstract method `{target}` reached a thunk; `abstract_entry` answers it"
+        )));
     }
     let Some(receiver) = func.params.first() else {
         return Err(Failure::Invariant(format!(
@@ -205,6 +207,9 @@ fn thunk_func(m: &mut Builder<'_>, face: Face, class: ClassId, slot: u32) -> Res
     {
         return unfilled(m, resolved);
     }
+    if let Some(target) = abstract_target(m.program, layout, slot) {
+        return abstract_entry(m, resolved, target);
+    }
     let thunk = thunk(m.program, types, layout, storage, resolved, face)?;
     m.helper_typed(
         FuncKey::Thunk(face, thunk.physical, thunk.slot),
@@ -246,6 +251,52 @@ fn unfilled(m: &mut Builder<'_>, entry: &ResolvedEntry) -> Result<Func, Failure>
             let decline = crate::contract::decline(m)?;
             let name = m.literal("a function value");
             let why = m.literal("called through a signature it has no entry for");
+            let mut f = Function::default();
+            f.global_get(name);
+            f.global_get(why);
+            f.call(decline);
+            f.instructions(&[I::Unreachable, I::End]);
+            Ok(f)
+        },
+    )
+}
+
+/// The method filling `slot` of `layout`, where it is a declaration with no
+/// body.
+fn abstract_target<'p>(
+    program: &'p Program,
+    layout: &'p nts_core::hir::Layout,
+    slot: u32,
+) -> Option<&'p str> {
+    let target = layout.methods.get(slot as usize)?.as_ref()?;
+    program
+        .funcs
+        .iter()
+        .find(|f| &f.name == target)
+        .filter(|f| f.abstract_declaration)
+        .map(|f| f.name.as_str())
+}
+
+/// An entry for a slot whose method has no body: an optional method such as
+/// `note?(by: number): void` that no class on this chain defines, which
+/// lowering keeps as a declaration. No call reaches it, since lowering tests
+/// the receiver's class before calling one (`c.note?.(by)` is an
+/// `instanceof` against the classes that define it). So the class allocates,
+/// and a call that ever did arrive refuses by name, as C's cut method does,
+/// rather than the allocation declining.
+fn abstract_entry(
+    m: &mut Builder<'_>,
+    entry: &ResolvedEntry,
+    target: &str,
+) -> Result<Func, Failure> {
+    m.helper_typed(
+        FuncKey::AbstractEntry(entry.signature, target.to_owned()),
+        format!("abstract.entry<{target}>"),
+        entry.signature,
+        |m| {
+            let decline = crate::contract::decline(m)?;
+            let name = m.literal(target);
+            let why = m.literal("a method with no body, called");
             let mut f = Function::default();
             f.global_get(name);
             f.global_get(why);

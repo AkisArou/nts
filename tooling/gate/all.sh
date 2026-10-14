@@ -1624,16 +1624,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # every function is still compiled, so a body Wasm declines fails its program
 # as a C decline does (`tests/wasm/check-compiles-every-body`).
 #
-# **517 of 518, exact, and the one is named.** `an-optional-method-called-
-# optionally` is the parity gap: lowering refuses a method without a body and C
-# cuts it, while Wasm declines allocating the abstract closure that is left
-# (`Corkable#note`), so it emits nothing. Thirteen programs compare only part
-# of their cases: a case Wasm refuses by name where node answers -- a read
-# past the end, a null slot that does not say which absence it holds, a
-# compiled object settling a promise, a `string | undefined` result -- each
-# one the parity list's work, and the ceiling holds them.
+# **518 of 518, exact.** Fourteen programs compare only part of their cases:
+# a case Wasm refuses by name where node answers -- a read past the end, a
+# null slot that does not say which absence it holds, a compiled object
+# settling a promise, a `string | undefined` result, a null receiver core
+# says cannot be absent -- each one the parity list's work, and the ceiling
+# holds them.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 517 "through the Wasm backend" exact 13 "an-optional-method-called-optionally" ); }
+  backend_examples 518 "through the Wasm backend" exact 14 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
