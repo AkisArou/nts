@@ -101,6 +101,10 @@ fn declaration(
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one snapshot discriminates sibling order, constructors, and nested lists"
+)]
 fn implementation_answers_keep_sibling_order_and_native_controls() {
     let mut snapshot = SemanticSnapshot::default();
     let members = scope(&mut snapshot);
@@ -162,7 +166,37 @@ fn implementation_answers_keep_sibling_order_and_native_controls() {
         Some(unnamed),
     );
     snapshot.nodes[later.0 as usize].text = Some("pick".to_owned());
-    let probe = FuncBuilder::probe(&snapshot);
+    let nested = node(&mut snapshot, NodeKind::List, Some(members));
+    let nested_signature = declaration(
+        &mut snapshot,
+        nested,
+        syntax::FUNCTION_DECLARATION,
+        Some("nested"),
+        false,
+    );
+    let nested_body = declaration(
+        &mut snapshot,
+        members,
+        syntax::FUNCTION_DECLARATION,
+        Some("nested"),
+        true,
+    );
+    let hidden_signature = declaration(
+        &mut snapshot,
+        members,
+        syntax::FUNCTION_DECLARATION,
+        Some("hidden"),
+        false,
+    );
+    declaration(
+        &mut snapshot,
+        nested,
+        syntax::FUNCTION_DECLARATION,
+        Some("hidden"),
+        true,
+    );
+    let indexed = super::LoweringSnapshot::new(&snapshot);
+    let probe = FuncBuilder::probe(&indexed);
     for (given, expected) in [
         (signature, first),
         (first, first),
@@ -172,6 +206,9 @@ fn implementation_answers_keep_sibling_order_and_native_controls() {
         (ctor_body, ctor_body),
         (outside, outside),
         (unnamed, unnamed),
+        (nested_signature, nested_body),
+        // Syntactic parents skip every List, but children flatten only one.
+        (hidden_signature, hidden_signature),
     ] {
         assert_eq!(probe.implementation_of(given), expected, "{given:?}");
     }
@@ -197,7 +234,8 @@ fn every_native_sibling_without_a_body_is_its_own_implementation() {
                 )
             })
             .collect();
-        let probe = FuncBuilder::probe(&snapshot);
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = FuncBuilder::probe(&indexed);
         for given in declarations {
             assert_eq!(
                 probe.implementation_of(given),
@@ -209,7 +247,7 @@ fn every_native_sibling_without_a_body_is_its_own_implementation() {
     }
 }
 
-/// Run explicitly with NTS_IMPLEMENTATION_PROJECTS naming the three measured
+/// Run explicitly with `NTS_IMPLEMENTATION_PROJECTS` naming the three measured
 /// native-sibling tsconfigs and a Gtk-4.0 tsconfig listing the generated files.
 /// It deliberately fails if the requested inputs or the Gtk surface are absent.
 #[test]
@@ -232,7 +270,8 @@ fn measured_native_and_gtk_declarations_match_the_old_scan() {
             .sources
             .iter()
             .any(|source| source.display_path.as_str().contains("/gi-gtk/index.d.ts"));
-        let probe = FuncBuilder::probe(&snapshot);
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = FuncBuilder::probe(&indexed);
         let mut declarations = 0;
         for (at, node) in snapshot.nodes.iter().enumerate() {
             if !matches!(

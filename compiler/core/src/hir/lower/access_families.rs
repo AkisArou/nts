@@ -1223,6 +1223,7 @@ mod tests {
         let snapshot = TsgoApi::for_compilation(tsgo)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
+        let snapshot = super::super::LoweringSnapshot::new(&snapshot);
         let hierarchy = super::super::collect_hierarchy(
             &snapshot,
             &FxHashMap::default(),

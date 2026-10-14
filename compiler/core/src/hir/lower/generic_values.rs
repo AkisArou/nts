@@ -4,6 +4,7 @@
 //! the singleton's layout or certify values arriving at its uniform root.
 //! The open source kernel must actually compile before a wrapper can name it.
 
+use super::LoweringSnapshot;
 use super::{
     Absent, BinOp, BlockId, Callee, ClosureInfo, ClosureSource, Diagnostic, Facts, Func,
     FuncBuilder, HirType, ManagedType, NodeId, OpKind, Origin, Param, ParamShape, RAISING_SUFFIX,
@@ -17,7 +18,7 @@ use nts_semantic_schema::LiteralValue;
 
 /// Receiving annotations offer contexts; they never re-type the stored field.
 pub(super) fn register(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     closures: &[ClosureInfo],
     found: &mut GenericFunctions,
 ) {

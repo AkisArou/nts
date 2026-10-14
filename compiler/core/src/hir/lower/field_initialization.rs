@@ -319,6 +319,7 @@ mod tests {
         let snapshot = TsgoApi::for_compilation(tsgo)
             .snapshot(&config)
             .unwrap_or_else(|error| panic!("snapshot failed: {error:?}"));
+        let snapshot = super::super::LoweringSnapshot::new(&snapshot);
         let probe = FuncBuilder::probe(&snapshot);
         let ready = Ready::collect(&probe);
         for (class, expected) in [

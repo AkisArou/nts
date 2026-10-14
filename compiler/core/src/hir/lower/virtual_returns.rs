@@ -50,7 +50,7 @@ use rustc_hash::FxHashMap;
 use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, TypeKind};
 
 use super::interfaces::{AbiType, abi_type};
-use super::{Hierarchy, without_the_raising_suffix};
+use super::{Hierarchy, LoweringSnapshot, without_the_raising_suffix};
 use crate::hir::{
     Absent, Block, Callee, Func, HirType, Op, OpKind, Param, Program, Terminator, ValueId,
 };
@@ -65,7 +65,11 @@ const ERASED_SUFFIX: &str = "@erased";
 /// one of two indexes built once: function by name (`index`, kept current as
 /// bridges are added) and, per slot, each entry with the layouts holding it
 /// (`slot_tables`).
-pub(super) fn bridge(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy, program: &mut Program) {
+pub(super) fn bridge(
+    snapshot: &LoweringSnapshot<'_>,
+    hierarchy: &Hierarchy,
+    program: &mut Program,
+) {
     let mut index: FxHashMap<String, usize> = program
         .funcs
         .iter()
@@ -430,7 +434,7 @@ fn intern_projection(
 /// Class slots and direct calls retain their own signatures; an inherited body
 /// is resolved by the table, so a subclass override receives its own adapter.
 fn adapt_interfaces(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     hierarchy: &Hierarchy,
     program: &mut Program,
     index: &mut FxHashMap<String, usize>,

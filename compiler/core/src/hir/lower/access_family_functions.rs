@@ -1,8 +1,9 @@
 //! Real functions and table rows for the source field-family plan.
 
+use super::LoweringSnapshot;
 use super::{
     Absent, Callee, Func, FuncBuilder, Hierarchy, HirType, ManagedType, Naming, OpKind, Origin,
-    Param, ParamShape, Program, SemanticSnapshot, Terminator, ValueId,
+    Param, ParamShape, Program, Terminator, ValueId,
     access_families::{Family, Reader, Supply},
 };
 use crate::hir::{
@@ -12,7 +13,7 @@ use crate::hir::{
 };
 
 struct Context<'a> {
-    snapshot: &'a SemanticSnapshot,
+    snapshot: &'a LoweringSnapshot<'a>,
     hierarchy: &'a Hierarchy,
     naming: &'a Naming,
     by_name: rustc_hash::FxHashMap<String, usize>,
@@ -37,7 +38,7 @@ struct BodyKey {
 }
 
 pub(super) fn declare(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     hierarchy: &Hierarchy,
     naming: &Naming,
     program: &mut Program,
@@ -456,7 +457,7 @@ pub(super) fn placeholder(
 }
 
 fn body_key(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     family: &Family,
     supply: &Supply,
     writes: bool,
@@ -490,7 +491,7 @@ fn body_key(
     }
 }
 
-fn origin(snapshot: &SemanticSnapshot, family: &Family) -> Origin {
+fn origin(snapshot: &LoweringSnapshot<'_>, family: &Family) -> Origin {
     let source = super::interfaces::property(snapshot, family.face, &family.member)
         .and_then(|property| property.declaration)
         .and_then(|at| snapshot.nodes.get(at.0 as usize))
@@ -531,7 +532,7 @@ fn parameters(
     params
 }
 
-fn shell(snapshot: &SemanticSnapshot, family: &Family, name: String, writes: bool) -> Func {
+fn shell(snapshot: &LoweringSnapshot<'_>, family: &Family, name: String, writes: bool) -> Func {
     let origin = origin(snapshot, family);
     let params = parameters(family, family.face, writes, &origin);
     let mut builder = FuncBuilder::probe(snapshot);

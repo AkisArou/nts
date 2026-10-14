@@ -20,6 +20,7 @@ use super::{
     HirType, Layout, ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, UnOp,
     ValueId,
 };
+use implementations::LoweringSnapshot;
 
 /// Closures crossing the type they were written at, recorded where that is known.
 ///
@@ -917,7 +918,7 @@ impl Hierarchy {
 /// Keyed by the declaration rather than by its symbol, because the lowering
 /// walks nodes.
 fn generic_classes(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
 ) -> rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>> {
     let by_symbol = super::generics::instantiations(snapshot);
     let probe = FuncBuilder::probe(snapshot);
@@ -1281,7 +1282,7 @@ struct Supply {
 /// refusal it has today. And a class is never one: a literal typed as a class
 /// is structural, and forcing the class's method would break `new`.
 fn collect_stored_members(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     probe: &mut FuncBuilder,
     closures: &[ClosureInfo],
     hierarchy: &mut Hierarchy,
@@ -2252,7 +2253,7 @@ fn template_instances(
 }
 
 fn collect_hierarchy(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     qualified: &rustc_hash::FxHashMap<NodeId, String>,
@@ -2470,7 +2471,7 @@ fn collect_hierarchy(
 ///
 /// Sorted, so one compiler on one input numbers them one way.
 fn raising_member_slots(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     hierarchy: &mut Hierarchy,
     naming: &mut Naming,
 ) {
@@ -4840,7 +4841,7 @@ fn nested_closures(
 const NESTED_CLOSURE_ROUNDS: usize = 8;
 
 fn collect_closures(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     readers: &initialization::PrivateReaders,
 ) -> Vec<ClosureInfo> {
     let probe = FuncBuilder::probe(snapshot);
@@ -5285,7 +5286,7 @@ struct Naming {
 /// warns about is two *derivations* of a fact, and that is precisely what the
 /// bug above was.
 fn qualified_names(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
 ) -> (
     rustc_hash::FxHashMap<NodeId, String>,
     rustc_hash::FxHashSet<NodeId>,
@@ -7903,7 +7904,7 @@ fn written_field_orders(
 }
 
 fn naming(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     closures: &[ClosureInfo],
     readers: &initialization::PrivateReaders,
     hierarchy: &Hierarchy,
@@ -8410,7 +8411,7 @@ fn is_scalar(ty: &HirType) -> bool {
 }
 
 fn module_scope_probe<'a>(
-    snapshot: &'a SemanticSnapshot,
+    snapshot: &'a LoweringSnapshot<'a>,
     foreign: &'a super::runtime::ForeignTable,
     hierarchy: &Hierarchy,
     initialization: &std::rc::Rc<initialization::Analysis>,
@@ -8424,7 +8425,7 @@ fn module_scope_probe<'a>(
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn collect_module_scope(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     hierarchy: &Hierarchy,
@@ -9713,7 +9714,7 @@ fn collect_static_fields(
 /// Extracted from `lower_with` rather than inlined: the emission loop reads as
 /// a list of reasons a declaration produces no copy, and each reason answering
 /// in one line is what makes the list legible.
-fn ambiguous_name(snapshot: &SemanticSnapshot, id: NodeId) -> Diagnostic {
+fn ambiguous_name(snapshot: &LoweringSnapshot<'_>, id: NodeId) -> Diagnostic {
     let name = FuncBuilder::probe(snapshot)
         .declared_name(id)
         .unwrap_or_else(|| "?".to_owned());
@@ -9756,7 +9757,7 @@ fn ambiguous_name(snapshot: &SemanticSnapshot, id: NodeId) -> Diagnostic {
 /// Reading `naming.qualified` directly would be a second derivation of the very
 /// name this exists to get right.
 fn an_uninstantiated_generic(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     foreign: &super::runtime::ForeignTable,
     lowered: &mut Lowered,
@@ -9837,7 +9838,7 @@ fn report_unaccounted(
 /// key has to be the name a caller writes. Neither site has a copy, so the builder
 /// is a default one made to ask that question and dropped.
 fn note_a_refused_function(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     foreign: &super::runtime::ForeignTable,
     lowered: &mut Lowered,
@@ -9857,7 +9858,7 @@ fn note_a_refused_function(
 }
 
 fn uninstantiated(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     generics: &super::generics::GenericFunctions,
     id: NodeId,
 ) -> Option<Diagnostic> {
@@ -10077,7 +10078,7 @@ struct StructuralPlanner<'a, 's> {
     erased_copies: rustc_hash::FxHashMap<NodeId, rustc_hash::FxHashSet<String>>,
 }
 
-fn structural_instantiations(snapshot: &SemanticSnapshot, hierarchy: &Hierarchy) -> Structural {
+fn structural_instantiations(snapshot: &LoweringSnapshot<'_>, hierarchy: &Hierarchy) -> Structural {
     let mut probe = FuncBuilder::probe(snapshot);
     probe.hierarchy = hierarchy.clone();
 
@@ -10622,7 +10623,7 @@ fn closure_variants(
 /// of what `declared_name` found in it, because a constructor has no
 /// `IDENTIFIER` child to find.
 fn qualified_name(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     id: NodeId,
     declared: Option<&str>,
 ) -> Option<String> {
@@ -10747,7 +10748,7 @@ fn note_member(
 }
 
 fn note_uncompiled(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     program: &mut super::Program,
     id: NodeId,
     emitted: Option<&str>,
@@ -10989,7 +10990,7 @@ fn is_generic_function(snapshot: &SemanticSnapshot, id: NodeId) -> bool {
 
 /// The methods and constructors a class declares.
 fn members_of(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     id: NodeId,
 ) -> Vec<NodeId> {
@@ -11075,7 +11076,7 @@ fn members_of(
 /// members" is one fact, and the driver's job is dispatch rather than knowing
 /// it.
 fn lower_members_of(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     id: NodeId,
     generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
@@ -11100,7 +11101,7 @@ fn lower_members_of(
 ///
 /// A probe built for one line, lifted out so the driver loop reads as the
 /// dispatch it is.
-fn refusal_by_name(snapshot: &SemanticSnapshot, id: NodeId, what: &str) -> Diagnostic {
+fn refusal_by_name(snapshot: &LoweringSnapshot<'_>, id: NodeId, what: &str) -> Diagnostic {
     FuncBuilder::probe(snapshot).unsupported(id, what)
 }
 
@@ -11115,7 +11116,7 @@ fn member_name_of(snapshot: &SemanticSnapshot, member: NodeId) -> Option<String>
 }
 
 fn lower_object_literal_members(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     literal: NodeId,
     shared: &Shared,
@@ -11291,7 +11292,7 @@ fn objc_selector(name: &str, count: usize) -> String {
 /// state object the runtime keeps in the instance's `nts_state` ivar
 /// (`nts_objc_state`).
 fn register_objc_class(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     class: NodeId,
     methods: Vec<super::ForeignMethod>,
     state: Option<String>,
@@ -11381,7 +11382,7 @@ fn member_copy(
 /// needs no dispatch slot of its own.
 #[allow(clippy::too_many_arguments)]
 fn raising_method(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
     lowered: &mut Lowered,
@@ -11449,7 +11450,7 @@ fn raising_method(
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn lower_class(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
     generic: &rustc_hash::FxHashMap<NodeId, Vec<super::generics::Instantiation>>,
@@ -11643,7 +11644,7 @@ fn lower_class(
 /// and the maker of the object holding its fields (`{Class}#state`), which
 /// the support file's `instance_init` calls and `finalize` releases.
 fn register_gobject_class(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     class: NodeId,
     parent: String,
     (methods, properties): (Vec<super::ForeignMethod>, Vec<super::ForeignProperty>),
@@ -11835,7 +11836,7 @@ fn gobject_interfaces(snapshot: &SemanticSnapshot, class: NodeId) -> Vec<String>
 
 /// The class the program wrote that `class` extends (`class Wide extends
 /// Panel`): `None` over a binding's class, or none.
-fn program_superclass(snapshot: &SemanticSnapshot, class: NodeId) -> Option<NodeId> {
+fn program_superclass(snapshot: &LoweringSnapshot<'_>, class: NodeId) -> Option<NodeId> {
     let probe = FuncBuilder::probe(snapshot);
     let base = probe
         .children(class)
@@ -11863,7 +11864,7 @@ fn template_handlers(xml: &str) -> Vec<String> {
 }
 
 /// A class's own `static` field `name`: `None` when it has none.
-fn static_field(snapshot: &SemanticSnapshot, class: NodeId, name: &str) -> Option<NodeId> {
+fn static_field(snapshot: &LoweringSnapshot<'_>, class: NodeId, name: &str) -> Option<NodeId> {
     let probe = FuncBuilder::probe(snapshot);
     probe.children(class).into_iter().find(|&member| {
         probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
@@ -11888,7 +11889,7 @@ enum StaticValue {
 }
 
 /// What a class's own `static` field `name` holds: `None` when it has none.
-fn static_value(snapshot: &SemanticSnapshot, class: NodeId, name: &str) -> Option<StaticValue> {
+fn static_value(snapshot: &LoweringSnapshot<'_>, class: NodeId, name: &str) -> Option<StaticValue> {
     let member = static_field(snapshot, class, name)?;
     if let Some(TypeKind::Literal(LiteralValue::String(text))) = snapshot
         .node_types
@@ -11915,7 +11916,7 @@ fn static_value(snapshot: &SemanticSnapshot, class: NodeId, name: &str) -> Optio
 /// its name as the child's id. Its text is the literal, or -- a value known
 /// only at run time, GJS's `Template: workbench.template` -- what the class's
 /// reader answers (`template_reader`). `None` for a class with no template.
-fn gobject_template(snapshot: &SemanticSnapshot, class: NodeId) -> Option<super::Template> {
+fn gobject_template(snapshot: &LoweringSnapshot<'_>, class: NodeId) -> Option<super::Template> {
     let text = match static_value(snapshot, class, "template")? {
         StaticValue::Literal(text) => super::TemplateText::Literal(text),
         StaticValue::Computed => {
@@ -11952,7 +11953,7 @@ fn known_handlers(template: &super::Template) -> Option<Vec<String>> {
 /// it is refused, and reported, so the class is not registered with a
 /// template it cannot read. `true` for every other class.
 fn template_reader(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
     shared: &Shared,
@@ -12098,7 +12099,7 @@ fn fields_index(snapshot: &SemanticSnapshot, class: NodeId, property: &str) -> u
 /// backend's registration hands `get_property` and `set_property`. Empty for a
 /// class with none; a refusal is reported, and the class registers without.
 fn gobject_properties(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
     shared: &Shared,
@@ -12167,7 +12168,7 @@ fn gobject_properties(
 /// A field no protocol asks for is the program's alone, as Swift's
 /// non-`@objc` one is.
 fn objc_field_properties(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
     shared: &Shared,
@@ -12332,7 +12333,7 @@ fn signals_of_type(
 /// (`VfuncSlot`), which is lowered here and kept beside it -- or refuses the
 /// member where the wrapper cannot be made.
 fn with_vfunc_slot(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
     (lowered_member, slot): (LoweredMember, Option<VfuncSlot>),
@@ -12354,7 +12355,7 @@ fn with_vfunc_slot(
 type LoweredMember = Result<(Func, Option<super::ForeignMethod>), Diagnostic>;
 
 fn keep_foreign_member(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     member: NodeId,
     lowered_member: LoweredMember,
     methods: &mut Vec<super::ForeignMethod>,
@@ -12381,7 +12382,7 @@ fn keep_foreign_member(
 /// extending a handle, a subclass of such a subclass among them, is refused
 /// by name rather than lowered as its parent. Whether it refused.
 fn refuses_an_unregistered_handle(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     class: NodeId,
     lowered: &mut Lowered,
 ) -> bool {
@@ -12420,7 +12421,7 @@ fn via_callee(callee: Callee, queried: bool) -> Callee {
 /// recorded as the runtime will compose it (`Program::foreign_classes`): its
 /// overrides, by interface and slot, and the factory of the class it extends.
 fn register_com_class(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     class: NodeId,
     mut composition: super::native::Composable,
     methods: Vec<super::ForeignMethod>,
@@ -12469,7 +12470,7 @@ fn register_com_class(
 /// fields, the function making the object that holds them; `None` for one
 /// without fields, or whose function is refused (and reported).
 fn objc_state_function(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
     shared: &Shared,
@@ -12576,7 +12577,7 @@ fn copies_of(
 /// declaration. That is the difference between a refusal and a type confusion,
 /// and it was luck rather than design.
 fn class_copies(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     generics: &super::generics::GenericFunctions,
 ) -> Vec<ClassCopy> {
     let mut found: Vec<ClassCopy> = Vec::new();
@@ -12745,7 +12746,7 @@ impl Shared {
     /// copy was in `funcs`, and `reachable::prune` dropped it because the *layout* it
     /// was supposed to be in belonged to the other hierarchy.
     fn whole_program(
-        snapshot: &SemanticSnapshot,
+        snapshot: &LoweringSnapshot<'_>,
         module: &ModuleScope,
         hierarchy: &Hierarchy,
         closures: &[ClosureInfo],
@@ -12803,7 +12804,7 @@ impl Shared {
     /// A builder for one copy, wired to the program-wide naming.
     fn builder<'a>(
         &self,
-        snapshot: &'a SemanticSnapshot,
+        snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
         copy: Copy,
     ) -> FuncBuilder<'a> {
@@ -12919,7 +12920,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
 /// Instance property initializers are skipped for the opposite reason: they
 /// run at construction, and treating them as evaluation would refuse programs
 /// that are fine.
-fn dead_zone_reads(snapshot: &SemanticSnapshot, order: &[usize]) -> Vec<Diagnostic> {
+fn dead_zone_reads(snapshot: &LoweringSnapshot<'_>, order: &[usize]) -> Vec<Diagnostic> {
     let probe = FuncBuilder::probe(snapshot);
 
     let mut position = vec![usize::MAX; snapshot.modules.len()];
@@ -13062,7 +13063,7 @@ type ModuleStatements = (
 /// written to pin the order against node, and it has been green throughout.
 #[must_use]
 fn module_statements(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     lazy: &[bool],
     initialization: &initialization::Analysis,
 ) -> ModuleStatements {
@@ -13225,7 +13226,7 @@ const FAILED: i128 = 3;
 /// and no `import()` names. Lazy is what an `import()` target reaches through
 /// static imports and the eager set does not. A module in neither (a component
 /// with nothing outside it) stays as it was: evaluated at startup.
-fn module_roles(snapshot: &SemanticSnapshot) -> ModuleRoles {
+fn module_roles(snapshot: &LoweringSnapshot<'_>) -> ModuleRoles {
     let probe = FuncBuilder::probe(snapshot);
     let count = snapshot.modules.len();
     let mut namespace: Vec<Option<TypeId>> = vec![None; count];
@@ -13434,7 +13435,7 @@ fn module_of_namespace(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<usize>
 /// The two globals of every lazy module, appended to the module scope: see
 /// [`LazyModule`]. At collection time, because every builder reads the scope and
 /// a global has to exist before a function names it.
-fn add_lazy_modules(snapshot: &SemanticSnapshot, module: &mut ModuleScope) {
+fn add_lazy_modules(snapshot: &LoweringSnapshot<'_>, module: &mut ModuleScope) {
     let probe = FuncBuilder::probe(snapshot);
     module.roles = module_roles(snapshot);
     module.evaluated = vec![None; snapshot.modules.len()];
@@ -13565,7 +13566,7 @@ fn evaluation_order(snapshot: &SemanticSnapshot, lazy: &[bool]) -> (Vec<usize>, 
 /// answer the first was built to find, and this runs before any function is
 /// lowered so that the answer reaches them.
 fn mark_refused_initializers(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     module: &mut ModuleScope,
     hierarchy: &Hierarchy,
     closures: &[ClosureInfo],
@@ -13604,7 +13605,7 @@ fn mark_refused_initializers(
 /// printed, the program was produced, and the harness called it agreed on
 /// every case because every case had stopped.
 fn refused_initializers(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
 ) -> rustc_hash::FxHashSet<u32> {
@@ -13645,7 +13646,7 @@ fn refused_initializers(
 }
 
 fn lower_module_initializer(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
@@ -13750,7 +13751,7 @@ fn lower_module_initializer(
 /// ([`Conversion`]), one per name. One that does not lower is uncompiled, and
 /// `bridges::check` refuses each bridge that would call it.
 fn lower_conversions(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
@@ -13789,7 +13790,7 @@ pub(crate) const REJECT_ERROR: &str = "nts_promise_reject_error";
 /// member it binds, so every program typed against that surface defines it,
 /// and no other program does.
 fn lower_reject_error(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
     wanted: &mut std::collections::BTreeSet<usize>,
@@ -13851,7 +13852,7 @@ fn declared_promise_function(snapshot: &SemanticSnapshot) -> Option<NodeId> {
 /// eager modules' statements for `module#init` and of each lazy module's for its
 /// `#evaluate`: one filter, so the two cannot keep different statements.
 fn drop_the_unlowerable(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     statements: &mut Vec<NodeId>,
     refused: &rustc_hash::FxHashSet<u32>,
@@ -14017,7 +14018,7 @@ fn drop_the_unlowerable(
 /// -- because the emitted name was taken from the binding rather than from what
 /// it was bound to, and one of the two happened to match.
 fn initializer_function(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     declaration: NodeId,
 ) -> Option<(NodeId, String)> {
     let probe = FuncBuilder::probe(snapshot);
@@ -14127,7 +14128,7 @@ fn initializer_function(
 /// is also the stronger claim: a symbol declared by a module's root node *is*
 /// that module, whatever any flag says.
 fn module_namespace_of(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     naming: &Naming,
     scope: &ModuleScope,
     record: &SymbolRecord,
@@ -14274,7 +14275,7 @@ fn shorthand_target(
 }
 
 fn namespace_of(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     naming: &Naming,
     declaration: NodeId,
 ) -> Option<Vec<(String, String)>> {
@@ -14491,7 +14492,7 @@ fn record_unpublished(
 /// of the union is something the crossing cannot build**, and a union with no
 /// members at all is `unknown`, which is why that case answers `false` here
 /// rather than being special-cased.
-fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
+fn opaque_signature(snapshot: &LoweringSnapshot<'_>, declaration: NodeId) -> bool {
     let probe = FuncBuilder::probe(snapshot);
     let carried = |member: TypeId| -> bool {
         matches!(
@@ -14559,7 +14560,7 @@ fn opaque_signature(snapshot: &SemanticSnapshot, declaration: NodeId) -> bool {
 /// Scalars only. A union of two scalars plus `undefined` is not one of these and
 /// is left alone, because the check has one type to name in its message and
 /// naming the wrong one is worse than the generic text this replaces.
-fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u32, HirType)> {
+fn optional_scalars(snapshot: &LoweringSnapshot<'_>, declaration: NodeId) -> Vec<(u32, HirType)> {
     let probe = FuncBuilder::probe(snapshot);
     // **The declaration with a body, which for an overloaded function is not
     // the first one.**
@@ -14647,7 +14648,7 @@ fn optional_scalars(snapshot: &SemanticSnapshot, declaration: NodeId) -> Vec<(u3
 }
 
 fn public_api(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     naming: &Naming,
     module: &ModuleScope,
     entry_files: &[String],
@@ -14922,7 +14923,7 @@ fn record_unstorable_exports(
 
 fn publish_surface(
     lowered: &mut Lowered,
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     naming: &Naming,
     module: &ModuleScope,
     entry: &[String],
@@ -14992,7 +14993,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// to take two of its four fields, see `wire_naming`, which `Shared::builder`
 /// calls.
 fn lower_wanted_closures(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
     closures: &[ClosureInfo],
@@ -15155,7 +15156,7 @@ fn lower_wanted_closures(
 /// types from the ordinary body is the mistake `Copy`'s own description exists to
 /// prevent, one field over.
 fn closure_aliases(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     closures: &[ClosureInfo],
     index: usize,
 ) -> std::collections::BTreeMap<u32, HirType> {
@@ -15195,7 +15196,7 @@ fn closure_aliases(
 /// table naming nothing at a site that compiled. Measured at **0 reachable entries**
 /// across all 29 runtime corpora, which is `refuses_to_cross`' standing exactly.
 fn raising_closure(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
     closures: &[ClosureInfo],
@@ -15308,7 +15309,7 @@ fn raising_closure(
 /// instance method and two classes of one name must not name one. `qualified_names`
 /// reads only the snapshot, so it can come first.
 fn hierarchy_and_naming(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     readers: &initialization::PrivateReaders,
@@ -15326,7 +15327,7 @@ fn hierarchy_and_naming(
 }
 
 fn field_aliases(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     hierarchy: &Hierarchy,
@@ -15406,7 +15407,8 @@ pub fn lower_with_access(
     // the snapshot first, so every pass below meets them as the checker's
     // own. See `instantiate`. A clone only where there is something to add.
     let materialised = super::instantiate::materialise(snapshot);
-    let snapshot = materialised.as_ref().unwrap_or(snapshot);
+    let indexed = LoweringSnapshot::new(materialised.as_ref().unwrap_or(snapshot));
+    let snapshot = &indexed;
     let mut lowered = Lowered::default();
     // Closures first, because a module-scope `const f = () => ...` is typed by
     // the *closure* the arrow becomes rather than by its function type, and the
@@ -15706,7 +15708,7 @@ pub fn lower_with_access(
 /// Complete the tables after declarations: fill raising slots, then adapt
 /// interface entries and make class-chain results agree.
 fn finish_dispatch_tables(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     hierarchy: &Hierarchy,
     program: &mut Program,
 ) {
@@ -15747,7 +15749,7 @@ fn finish_dispatch_tables(
 /// not depend on a hash: `uncompiled` is printed, and a diagnostic whose order
 /// varies between runs is the same class of defect as a digest that does.
 fn attribute_nested_to_their_refused_outer(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     foreign: &super::runtime::ForeignTable,
     lowered: &mut Lowered,
@@ -20577,7 +20579,7 @@ struct VfuncSlot {
 }
 
 struct FuncBuilder<'a> {
-    snapshot: &'a SemanticSnapshot,
+    snapshot: &'a LoweringSnapshot<'a>,
     /// Bound foreign members, keyed by `(source, span end)` of the declaration.
     /// Empty for a probe builder; see [`FuncBuilder::probe`].
     foreign: &'a super::runtime::ForeignTable,
@@ -21049,14 +21051,14 @@ impl<'a> FuncBuilder<'a> {
     /// Seventeen of the nineteen construction sites are this, and most were
     /// already called `probe`. They cannot reach a foreign call, so they get no
     /// binding table rather than an argument threaded through them.
-    fn probe(snapshot: &'a SemanticSnapshot) -> Self {
+    fn probe(snapshot: &'a LoweringSnapshot<'a>) -> Self {
         Self::new(
             snapshot,
             NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default),
         )
     }
 
-    fn new(snapshot: &'a SemanticSnapshot, foreign: &'a super::runtime::ForeignTable) -> Self {
+    fn new(snapshot: &'a LoweringSnapshot<'a>, foreign: &'a super::runtime::ForeignTable) -> Self {
         Self {
             snapshot,
             foreign,
@@ -21147,7 +21149,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// The same, knowing what the module and its classes declare.
     fn within(
-        snapshot: &'a SemanticSnapshot,
+        snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
@@ -21165,7 +21167,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// The same, lowering one instantiation of a generic class.
     fn instantiating(
-        snapshot: &'a SemanticSnapshot,
+        snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
@@ -33652,10 +33654,14 @@ impl<'a> FuncBuilder<'a> {
     /// the wrong one: `pick(a: number)` beside `pick(a: number, b?: number)`
     /// gives a call of two arguments to a function of three.
     ///
-    /// The walk is over the declaration's siblings by name, which is the same
+    /// The relation is over the declaration's siblings by name, which is the same
     /// relation `is_an_overload` reads. A declaration that already has a body
     /// is its own implementation and returns unchanged, so this is the identity
     /// for every call that is not to an overload.
+    ///
+    /// Indexed once after materialisation: native declarations have no body,
+    /// so scanning their entire namespace at every wrapper/parameter query
+    /// made lowering quadratic in the number of sibling declarations.
     ///
     /// **And the sibling relation is the one that matters, which is why this is now
     /// the only spelling.** There was a second `implementation_of` beside it,
@@ -33670,49 +33676,7 @@ impl<'a> FuncBuilder<'a> {
     /// One relation, so "this node is skipped as a signature" and "this node is the
     /// implementation" cannot disagree.
     fn implementation_of(&self, callee: NodeId) -> NodeId {
-        let has_body = |node: NodeId| {
-            self.children(node)
-                .into_iter()
-                .any(|child| self.kind_of(child) == Some(syntax::BLOCK))
-        };
-        if has_body(callee) {
-            return callee;
-        }
-        // **A constructor is named by its keyword, and this is the third copy
-        // of that fact.** `qualified_name` documents it -- "`declared_name`
-        // returns the text of the first `IDENTIFIER` child, and a constructor
-        // has none" -- and [`Self::member_key`] had the identical hole. Without
-        // the arm below, `named` answers `None` for a constructor signature,
-        // the destructuring on the next line fails, and this hands back the
-        // *signature* as though it were the implementation.
-        //
-        // What that cost: `declared_parameters` follows to the implementation
-        // only when `implementation_of(callee) != callee`, so the arity a call
-        // is padded to came from the overload signature the checker matched.
-        // `new C()` against `constructor(); constructor(a?: number) { ... }`
-        // then passed one argument to a function declared with two, and the
-        // verifier reported `CallArgumentCount { callee: "C#constructor",
-        // expected: 2, found: 1 }` -- invalid HIR, so `emit-c` wrote nothing.
-        let named = |node: NodeId| {
-            if self.kind_of(node) == Some(syntax::CONSTRUCTOR) {
-                return Some(CONSTRUCTOR_KEY.to_owned());
-            }
-            self.children(node)
-                .into_iter()
-                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-                .and_then(|child| self.node(child).text.clone())
-        };
-        let (Some(parent), Some(name)) = (self.syntactic_parent(callee), named(callee)) else {
-            return callee;
-        };
-        self.children(parent)
-            .into_iter()
-            .find(|sibling| {
-                *sibling != callee
-                    && has_body(*sibling)
-                    && named(*sibling).as_deref() == Some(name.as_str())
-            })
-            .unwrap_or(callee)
+        self.snapshot.implementation_of(callee)
     }
 
     /// Whether each parameter of the function a call reaches is optional and
@@ -82077,6 +82041,7 @@ mod tests {
         snapshot
             .type_arguments
             .insert(TypeId(3), vec![TypeId(8), TypeId(7)]);
+        let snapshot = super::LoweringSnapshot::new(&snapshot);
         let mut probe = super::FuncBuilder::probe(&snapshot);
         let member = |owner| Field {
             name: "#value".to_owned(),
@@ -82124,6 +82089,7 @@ mod tests {
         let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs/accessor-schema-supplier/tsconfig.json");
         let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let snapshot = super::LoweringSnapshot::new(&snapshot);
         let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
         let readers =
             super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
@@ -82184,6 +82150,7 @@ mod tests {
             .canonicalize_utf8()
             .unwrap();
         let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        let snapshot = super::LoweringSnapshot::new(&snapshot);
         let foreign = super::NO_FOREIGN.get_or_init(rustc_hash::FxHashMap::default);
         let readers =
             super::initialization::PrivateReaders::new(&super::FuncBuilder::probe(&snapshot));
@@ -82454,6 +82421,7 @@ mod tests {
             base: None,
         });
         let snapshot = nts_semantic_schema::SemanticSnapshot::default();
+        let snapshot = super::LoweringSnapshot::new(&snapshot);
         super::declare_interface_methods(
             &hierarchy,
             &mut super::FuncBuilder::probe(&snapshot),
@@ -82685,6 +82653,7 @@ mod bigint;
 mod field_initialization;
 mod function_names;
 mod gobject;
+mod implementations;
 mod initialization;
 mod interfaces;
 mod literal_methods;

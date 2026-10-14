@@ -6,6 +6,7 @@
 //! and unresolved calls keep the ordinary erased entry. Forwarding edges
 //! settle by removing candidates whose consumers are not closed.
 
+use super::LoweringSnapshot;
 use super::{FuncBuilder, HirType, NodeId, SymbolId, TypeKind, syntax};
 use crate::erasure::{self, Verdict};
 use nts_semantic_schema::walk;
@@ -556,7 +557,7 @@ pub(super) fn inline_method(probe: &FuncBuilder<'_>, call: NodeId) -> bool {
 /// declaration. Reuse the existing try/call proof in each copy's context, then
 /// remove upstream copies when a selected callee cannot carry exceptions.
 pub(super) fn raising_copies(
-    snapshot: &super::SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     hierarchy: &super::Hierarchy,
     naming: &super::Naming,
     structural: &mut super::Structural,

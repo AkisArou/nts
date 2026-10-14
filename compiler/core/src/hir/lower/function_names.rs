@@ -30,6 +30,7 @@
 
 use std::collections::BTreeMap;
 
+use super::LoweringSnapshot;
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::{LiteralValue, NodeId, SemanticSnapshot, TypeId, TypeKind, syntax};
 use rustc_hash::FxHashMap;
@@ -255,7 +256,11 @@ fn literal(probe: &FuncBuilder, node: NodeId) -> Option<String> {
 
 /// Decide [`Program::function_names`]: every closure class, and every class
 /// used as a value.
-pub(super) fn decide(snapshot: &SemanticSnapshot, closures: &[ClosureInfo], program: &mut Program) {
+pub(super) fn decide(
+    snapshot: &LoweringSnapshot<'_>,
+    closures: &[ClosureInfo],
+    program: &mut Program,
+) {
     let probe = FuncBuilder::probe(snapshot);
     let tokens = class_token_indices(snapshot);
     let mut names = BTreeMap::new();

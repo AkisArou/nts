@@ -3,9 +3,9 @@ use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
 
 use super::super::{
-    Absent, BinOp, Callee, ClosureEntry, Copy, Func, FuncBuilder, HirType, Lowered, ManagedType,
-    NodeId, OpKind, Param, ParamShape, SemanticSnapshot, Shared, Terminator, TypeId, ValueId,
-    interfaces,
+    Absent, BinOp, Callee, ClosureEntry, Copy, Func, FuncBuilder, HirType, Lowered,
+    LoweringSnapshot, ManagedType, NodeId, OpKind, Param, ParamShape, SemanticSnapshot, Shared,
+    Terminator, TypeId, ValueId, interfaces,
 };
 use super::{TableTarget, target};
 
@@ -24,7 +24,7 @@ struct Key {
 /// New layouts demanded by a contract join the worklist. Logical rows retain
 /// their targets; equivalent field bodies share the meet of their input facts.
 pub(in crate::hir::lower) fn declare(
-    snapshot: &SemanticSnapshot,
+    snapshot: &LoweringSnapshot<'_>,
     foreign: &crate::hir::runtime::ForeignTable,
     shared: &Shared,
     lowered: &mut Lowered,
