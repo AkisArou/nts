@@ -1,5 +1,5 @@
 {
-  "bound": 7082,
+  "bound": 7088,
   "skipped": [
     {
       "interface": "AddEventListenerOptions",
@@ -2277,11 +2277,6 @@
       "why": "parameter type optional any"
     },
     {
-      "interface": "AbortSignal",
-      "member": "any/1",
-      "why": "parameter type sequence<AbortSignal>"
-    },
-    {
       "interface": "URL",
       "member": "createObjectURL/1",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
@@ -3914,7 +3909,7 @@
     {
       "interface": "Clipboard",
       "member": "write/1",
-      "why": "parameter type sequence<ClipboardItem>"
+      "why": "interface ClipboardItem is not bound"
     },
     {
       "interface": "HTMLAreaElement",

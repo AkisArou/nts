@@ -188,6 +188,7 @@ class Param:
         self.converter = converter  # the dictionary conversion its prelude calls
         self.defaults = []  # `name=value` an @ntsDefault gives a parameter left out
         self.arm = None  # the interface a union-of-interfaces argument is bound as
+        self.lent = False  # an array lent for the call (@ntsNoEscape)
 
 
 class Result:
@@ -618,6 +619,22 @@ class Generator:
             expr = self.node(interface, name)
             return Param(name, f"{self.handle_tag(interface.identifier)}* {name}",
                          f"{name}: {interface.identifier}{or_null}", expr, False)
+        # `AbortSignal.any(signals)`: a sequence of objects is the program's
+        # array lent for the call (c:types `Counted<CHandles<T>>`), its
+        # element block C's array of handles beside its count, and Blink's
+        # vector is made from it (nts_dom::ObjectsOf) as V8's conversion makes
+        # it from the array -- no element is copied but the pointer.
+        if (unwrapped.is_sequence or unwrapped.is_frozen_array) and not nullable:
+            element = unwrapped.element_type
+            if element.unwrap(typedef=True).is_interface and not element.does_include_nullable_type:
+                interface = self.bound_interface(element)
+                param = Param(name, f"{self.handle_tag(interface.identifier)}** {name}, size_t {name}_count",
+                              f"{name}: Counted<CHandles<{interface.identifier}>, c_size_t>",
+                              f"{name}_objects", False,
+                              prelude=(f"auto {name}_objects = nts_dom::ObjectsOf<blink::"
+                                       f"{blink_class_name(interface)}>({name}, {name}_count);"))
+                param.lent = True
+                return param
         if unwrapped.is_union:
             members = members_of(unwrapped)
             strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]
@@ -699,6 +716,14 @@ class Generator:
             return None
         members = [t.unwrap(typedef=True) for t in unwrapped.flattened_member_types]
         strings = [t for t in members if t.keyword_typename in STRINGS]
+        interfaces = sorted({t.type_definition_object.identifier for t in members if t.is_interface} & self.bound)
+        if len(strings) == 1 and interfaces and all(t.is_interface or t in strings for t in members):
+            # A string beside bound interfaces -- RequestInfo's `(Request or
+            # USVString)`: each interface is an arm, and the string is the
+            # argument's own conversion (parameter, the None arm), so its
+            # function keeps the name it had while the string was all that
+            # bound (several_arities).
+            return interfaces + [None]
         if not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean" for t in members):
             # A union one of whose members is a string, the rest containers
             # no arm carries -- URLSearchParams' `(sequence<sequence<USVString>>
@@ -709,7 +734,7 @@ class Generator:
             containers = [t for t in members if t.is_sequence or t.is_record or t.is_frozen_array]
             if len(strings) != 1 or len(strings) + len(containers) != len(members):
                 return None
-        arms = sorted({t.type_definition_object.identifier for t in members if t.is_interface} & self.bound)
+        arms = list(interfaces)
         arms += sorted(t.type_definition_object.identifier for t in members if t.is_dictionary)
         arms += ["boolean"] if any(t.keyword_typename == "boolean" for t in members) else []
         arms += ["string"] if strings and not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean"
@@ -1318,6 +1343,7 @@ class Generator:
         defaults = [default for param in function.params for default in param.defaults]
         if defaults:
             notes.append("@ntsDefault " + " ".join(defaults))
+        notes += [f"@ntsNoEscape {param.name}" for param in function.params if param.lent]
         return notes + (list(THROWS) if function.throws else [])
 
     def method_line(self, interface, name, function):
@@ -1985,7 +2011,7 @@ class Generator:
             # conversion that fails is the exception, and Blink is not called.
             reports = function.throws or promise
             exceptions = "exception_state" if reports else "conversion"
-            if not reports:
+            if not reports and any("{exceptions}" in prelude for prelude in preludes):
                 lines.append("  blink::DummyExceptionStateForTesting conversion;")
             # Each in turn, as the binding converts them: the first that fails
             # is the exception, and the arguments after it are not converted.
@@ -2163,6 +2189,7 @@ class Generator:
 #ifndef NTS_CHROMIUM_DOM_IDL_H_
 #define NTS_CHROMIUM_DOM_IDL_H_
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "nts_string_view.h"
@@ -2276,8 +2303,8 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, Closure, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
-  import type {{ AsNumber, BigInt64, BigUint64, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 }} from "@nts/scalars";
+  import type {{ ByValue, CBool, CHandles, Closure, Counted, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
+  import type {{ AsNumber, BigInt64, BigUint64, c_size_t, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 }} from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
 {chr(10).join(self.enum_types())}

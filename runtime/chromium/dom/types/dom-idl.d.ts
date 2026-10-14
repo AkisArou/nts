@@ -2,8 +2,8 @@
 // Do not edit; regenerate.
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {
-  import type { ByValue, CBool, Closure, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct } from "c:types";
-  import type { AsNumber, BigInt64, BigUint64, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 } from "@nts/scalars";
+  import type { ByValue, CBool, CHandles, Closure, Counted, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct } from "c:types";
+  import type { AsNumber, BigInt64, BigUint64, c_size_t, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 } from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
   export type AnimationPlayState = "idle" | "pending" | "running" | "paused" | "finished";
@@ -24398,9 +24398,17 @@ declare module "nts:dom" {
      */
     confirm(this: Window): boolean;
     /**
+     * @ntsSymbol nts_dom_Window_fetch_2_Request
+     */
+    fetch(this: Window, input: Request, init: ByValue<RequestInit> | Fields<RequestInit>): Promise<Response>;
+    /**
      * @ntsSymbol nts_dom_Window_fetch_2
      */
     fetch(this: Window, input: StringView, init: ByValue<RequestInit> | Fields<RequestInit>): Promise<Response>;
+    /**
+     * @ntsSymbol nts_dom_Window_fetch_1_Request
+     */
+    fetch(this: Window, input: Request): Promise<Response>;
     /**
      * @ntsSymbol nts_dom_Window_fetch_1
      */
@@ -25251,6 +25259,11 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_AbortSignal_abort_0
    */
   export function AbortSignal_abort(): AbortSignal;
+  /**
+   * @ntsSymbol nts_dom_AbortSignal_any
+   * @ntsNoEscape signals
+   */
+  export function AbortSignal_any(signals: Counted<CHandles<AbortSignal>, c_size_t>): AbortSignal;
   /**
    * @ntsSymbol nts_dom_AbortSignal_timeout
    * @ntsThrows error nts_dom_exception_take_message
@@ -26754,6 +26767,10 @@ declare module "nts:dom" {
   }
   export type Path2DMethods = Path2DOwnMethods;
   export type Path2D = HostClass<"NtsDomPath2D", null, "nts_dom_retain", "nts_dom_release"> & Path2DMethods;
+  /**
+   * @ntsSymbol nts_dom_new_Path2D_1_Path2D
+   */
+  export function newPath2D(path: Path2D): Path2D;
   /**
    * @ntsSymbol nts_dom_new_Path2D_1
    */
@@ -32571,11 +32588,23 @@ declare module "nts:dom" {
   export type RequestMethods = RequestOwnMethods;
   export type Request = HostClass<"NtsDomRequest", null, "nts_dom_retain", "nts_dom_release"> & RequestMethods;
   /**
+   * @ntsSymbol nts_dom_new_Request_2_Request
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newRequest(input: Request, init: ByValue<RequestInit> | Fields<RequestInit>, error?: Ptr<DOMException | null>): Request;
+  /**
    * @ntsSymbol nts_dom_new_Request_2
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
   export function newRequest(input: StringView, init: ByValue<RequestInit> | Fields<RequestInit>, error?: Ptr<DOMException | null>): Request;
+  /**
+   * @ntsSymbol nts_dom_new_Request_1_Request
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newRequest(input: Request, error?: Ptr<DOMException | null>): Request;
   /**
    * @ntsSymbol nts_dom_new_Request_1
    * @ntsThrows error nts_dom_exception_take_message

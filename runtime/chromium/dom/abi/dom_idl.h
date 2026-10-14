@@ -3,6 +3,7 @@ Do not edit; regenerate. */
 #ifndef NTS_CHROMIUM_DOM_IDL_H_
 #define NTS_CHROMIUM_DOM_IDL_H_
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "nts_string_view.h"
@@ -5380,7 +5381,9 @@ void nts_dom_Window_clearTimeout_0(NtsDomWindow* self);
 void nts_dom_Window_close(NtsDomWindow* self);
 bool nts_dom_Window_confirm_1(NtsDomWindow* self, const NtsBorrowedString* message);
 bool nts_dom_Window_confirm_0(NtsDomWindow* self);
+struct NtsPromise* nts_dom_Window_fetch_2_Request(NtsDomWindow* self, NtsDomRequest* input, NtsDomRequestInit init);
 struct NtsPromise* nts_dom_Window_fetch_2(NtsDomWindow* self, const NtsBorrowedString* input, NtsDomRequestInit init);
+struct NtsPromise* nts_dom_Window_fetch_1_Request(NtsDomWindow* self, NtsDomRequest* input);
 struct NtsPromise* nts_dom_Window_fetch_1(NtsDomWindow* self, const NtsBorrowedString* input);
 bool nts_dom_Window_find_7(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames, bool showDialog);
 bool nts_dom_Window_find_6(NtsDomWindow* self, const NtsBorrowedString* string, bool caseSensitive, bool backwards, bool wrap, bool wholeWord, bool searchInFrames);
@@ -5528,6 +5531,7 @@ void nts_dom_AbortSignal_set_onabort_boolean(NtsDomAbortSignal* self, bool (*han
 void nts_dom_AbortSignal_set_onabort_null(NtsDomAbortSignal* self);
 void nts_dom_AbortSignal_throwIfAborted(NtsDomAbortSignal* self);
 NtsDomAbortSignal* nts_dom_AbortSignal_abort_0();
+NtsDomAbortSignal* nts_dom_AbortSignal_any(NtsDomAbortSignal** signals, size_t signals_count);
 NtsDomAbortSignal* nts_dom_AbortSignal_timeout(double milliseconds, NtsDomException** error);
 NtsDomURL* nts_dom_new_URL_2(const NtsBorrowedString* url, const NtsBorrowedString* base, NtsDomException** error);
 NtsDomURL* nts_dom_new_URL_1(const NtsBorrowedString* url, NtsDomException** error);
@@ -5758,6 +5762,7 @@ void nts_dom_CanvasRenderingContext2D_strokeText_3(NtsDomCanvasRenderingContext2
 void nts_dom_CanvasRenderingContext2D_transform(NtsDomCanvasRenderingContext2D* self, double a, double b, double c, double d, double e, double f);
 void nts_dom_CanvasRenderingContext2D_translate(NtsDomCanvasRenderingContext2D* self, double x, double y);
 void nts_dom_CanvasGradient_addColorStop(NtsDomCanvasGradient* self, double offset, const NtsBorrowedString* color, NtsDomException** error);
+NtsDomPath2D* nts_dom_new_Path2D_1_Path2D(NtsDomPath2D* path);
 NtsDomPath2D* nts_dom_new_Path2D_1(const NtsBorrowedString* path);
 NtsDomPath2D* nts_dom_new_Path2D_0();
 void nts_dom_Path2D_addPath_2_DOMMatrixReadOnly(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomDOMMatrixReadOnly* transform, NtsDomException** error);
@@ -6636,7 +6641,9 @@ struct NtsPromise* nts_dom_Response_text(NtsDomResponse* self);
 NtsDomResponse* nts_dom_Response_error();
 NtsDomResponse* nts_dom_Response_redirect_2(const NtsBorrowedString* url, double status, NtsDomException** error);
 NtsDomResponse* nts_dom_Response_redirect_1(const NtsBorrowedString* url, NtsDomException** error);
+NtsDomRequest* nts_dom_new_Request_2_Request(NtsDomRequest* input, NtsDomRequestInit init, NtsDomException** error);
 NtsDomRequest* nts_dom_new_Request_2(const NtsBorrowedString* input, NtsDomRequestInit init, NtsDomException** error);
+NtsDomRequest* nts_dom_new_Request_1_Request(NtsDomRequest* input, NtsDomException** error);
 NtsDomRequest* nts_dom_new_Request_1(const NtsBorrowedString* input, NtsDomException** error);
 const NtsStringView* nts_dom_Request_get_method(NtsDomRequest* self);
 const NtsStringView* nts_dom_Request_get_url(NtsDomRequest* self);

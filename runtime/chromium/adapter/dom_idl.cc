@@ -6872,7 +6872,6 @@ NtsDomNode* nts_dom_Node_getRootNode_1(NtsDomNode* self, NtsDomGetRootNodeOption
 NtsDomNode* nts_dom_Node_getRootNode_1_Event(NtsDomNode* self, NtsDomEvent* options) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Node>(self);
-  blink::DummyExceptionStateForTesting conversion;
   auto* options_object = ObjectOf<blink::Event>(options); auto* options_converted = blink::GetRootNodeOptions::Create(context.v8_isolate.get()); options_converted->setComposed(options_object->composed());
   return HandleOf<NtsDomNode>(receiver->getRootNode(options_converted));
 }
@@ -21499,7 +21498,6 @@ NtsDomEvent* nts_dom_new_Event_2(const NtsBorrowedString* type, NtsDomEventInit 
 
 NtsDomEvent* nts_dom_new_Event_2_Event(const NtsBorrowedString* type, NtsDomEvent* eventInitDict) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_object = ObjectOf<blink::Event>(eventInitDict); auto* eventInitDict_converted = blink::EventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed());
   return HandleOf<NtsDomEvent>(Event::Create(NtsText(context, type), eventInitDict_converted));
 }
@@ -30069,21 +30067,18 @@ NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1(NtsDomDOMRectInit othe
 
 NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
 }
 
 NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
 }
 
 NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
 }
@@ -30180,21 +30175,18 @@ NtsDomDOMRect* nts_dom_DOMRect_fromRect_1(NtsDomDOMRectInit other) {
 
 NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
 }
 
 NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
 }
 
 NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
 }
@@ -37115,6 +37107,17 @@ bool nts_dom_Window_confirm_0(NtsDomWindow* self) {
   return static_cast<bool>(receiver->confirm(script_state, blink::AtomicString("")));
 }
 
+struct NtsPromise* nts_dom_Window_fetch_2_Request(NtsDomWindow* self, NtsDomRequest* input, NtsDomRequestInit init) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  auto* init_converted = NtsDomToRequestInit(context, init, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return nts_dom::Rejected(context, exception_state);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, GlobalFetch::fetch(script_state, *receiver, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(ObjectOf<blink::Request>(input)), init_converted, exception_state));
+}
+
 struct NtsPromise* nts_dom_Window_fetch_2(NtsDomWindow* self, const NtsBorrowedString* input, NtsDomRequestInit init) {
   NtsDomContext& context = nts_dom::Current();
   nts_dom::Rejections exception_state;
@@ -37124,6 +37127,15 @@ struct NtsPromise* nts_dom_Window_fetch_2(NtsDomWindow* self, const NtsBorrowedS
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return nts_dom::Answer(context, context.MainWorld(), exception_state, GlobalFetch::fetch(script_state, *receiver, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), init_converted, exception_state));
+}
+
+struct NtsPromise* nts_dom_Window_fetch_1_Request(NtsDomWindow* self, NtsDomRequest* input) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, GlobalFetch::fetch(script_state, *receiver, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(ObjectOf<blink::Request>(input)), blink::RequestInit::Create(context.v8_isolate.get()), exception_state));
 }
 
 struct NtsPromise* nts_dom_Window_fetch_1(NtsDomWindow* self, const NtsBorrowedString* input) {
@@ -38255,6 +38267,14 @@ NtsDomAbortSignal* nts_dom_AbortSignal_abort_0() {
   return HandleOf<NtsDomAbortSignal>(AbortSignal::abort(script_state));
 }
 
+NtsDomAbortSignal* nts_dom_AbortSignal_any(NtsDomAbortSignal** signals, size_t signals_count) {
+  NtsDomContext& context = nts_dom::Current();
+  auto signals_objects = nts_dom::ObjectsOf<blink::AbortSignal>(signals, signals_count);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomAbortSignal>(AbortSignal::any(script_state, std::move(signals_objects)));
+}
+
 NtsDomAbortSignal* nts_dom_AbortSignal_timeout(double milliseconds, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -38960,7 +38980,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_textAlign(NtsDomCanvasRendering
 void nts_dom_CanvasRenderingContext2D_set_textAlign(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasTextAlign>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasTextAlign"); return; }
   receiver->setTextAlign(*value_value);
 }
@@ -38974,7 +38993,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_textBaseline(NtsDomCanvasRender
 void nts_dom_CanvasRenderingContext2D_set_textBaseline(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasTextBaseline>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasTextBaseline"); return; }
   receiver->setTextBaseline(*value_value);
 }
@@ -38988,7 +39006,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_direction(NtsDomCanvasRendering
 void nts_dom_CanvasRenderingContext2D_set_direction(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasDirection>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasDirection"); return; }
   receiver->setDirection(*value_value);
 }
@@ -39002,7 +39019,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_fontKerning(NtsDomCanvasRenderi
 void nts_dom_CanvasRenderingContext2D_set_fontKerning(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasFontKerning>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasFontKerning"); return; }
   receiver->setFontKerning(*value_value);
 }
@@ -39016,7 +39032,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_fontStretch(NtsDomCanvasRenderi
 void nts_dom_CanvasRenderingContext2D_set_fontStretch(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasFontStretch>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasFontStretch"); return; }
   receiver->setFontStretch(*value_value);
 }
@@ -39030,7 +39045,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_fontVariantCaps(NtsDomCanvasRen
 void nts_dom_CanvasRenderingContext2D_set_fontVariantCaps(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasFontVariantCaps>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasFontVariantCaps"); return; }
   receiver->setFontVariantCaps(*value_value);
 }
@@ -39056,7 +39070,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_textRendering(NtsDomCanvasRende
 void nts_dom_CanvasRenderingContext2D_set_textRendering(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CanvasTextRendering>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CanvasTextRendering"); return; }
   receiver->setTextRendering(*value_value);
 }
@@ -39126,7 +39139,6 @@ const char* nts_dom_CanvasRenderingContext2D_get_imageSmoothingQuality(NtsDomCan
 void nts_dom_CanvasRenderingContext2D_set_imageSmoothingQuality(NtsDomCanvasRenderingContext2D* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8ImageSmoothingQuality>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "ImageSmoothingQuality"); return; }
   receiver->setImageSmoothingQuality(*value_value);
 }
@@ -39839,6 +39851,13 @@ void nts_dom_CanvasGradient_addColorStop(NtsDomCanvasGradient* self, double offs
   const auto offset_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), offset), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->addColorStop(offset_converted, NtsText(context, color), exception_state);
+}
+
+NtsDomPath2D* nts_dom_new_Path2D_1_Path2D(NtsDomPath2D* path) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPath2D>(Path2D::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionPath2DOrString>(ObjectOf<blink::Path2D>(path))));
 }
 
 NtsDomPath2D* nts_dom_new_Path2D_1(const NtsBorrowedString* path) {
@@ -41473,7 +41492,6 @@ NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1(NtsDomDOMPointInit 
 
 NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::DOMPointReadOnly>(other); auto* other_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); other_converted->setW(other_object->w()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y()); other_converted->setZ(other_object->z());
   return HandleOf<NtsDomDOMPointReadOnly>(DOMPointReadOnly::fromPoint(other_converted));
 }
@@ -41570,7 +41588,6 @@ NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_1(NtsDomDOMPointInit other) {
 
 NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::DOMPointReadOnly>(other); auto* other_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); other_converted->setW(other_object->w()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y()); other_converted->setZ(other_object->z());
   return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(other_converted));
 }
@@ -41616,7 +41633,6 @@ NtsDomDOMQuad* nts_dom_new_DOMQuad_1(NtsDomDOMPointInit p1) {
 
 NtsDomDOMQuad* nts_dom_new_DOMQuad_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* p1) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* p1_object = ObjectOf<blink::DOMPointReadOnly>(p1); auto* p1_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); p1_converted->setW(p1_object->w()); p1_converted->setX(p1_object->x()); p1_converted->setY(p1_object->y()); p1_converted->setZ(p1_object->z());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::Create(p1_converted, blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get())));
 }
@@ -41670,21 +41686,18 @@ NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1(NtsDomDOMRectInit other) {
 
 NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
 }
 
 NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
 }
 
 NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
 }
@@ -42845,7 +42858,6 @@ NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEvent
 
 NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEvent(const NtsBorrowedString* type, NtsDomPageTransitionEvent* eventInitDict) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_object = ObjectOf<blink::PageTransitionEvent>(eventInitDict); auto* eventInitDict_converted = blink::PageTransitionEventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed()); eventInitDict_converted->setPersisted(eventInitDict_object->persisted());
   return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), eventInitDict_converted));
 }
@@ -42881,7 +42893,6 @@ NtsDomProgressEvent* nts_dom_new_ProgressEvent_2(const NtsBorrowedString* type, 
 
 NtsDomProgressEvent* nts_dom_new_ProgressEvent_2_ProgressEvent(const NtsBorrowedString* type, NtsDomProgressEvent* eventInitDict) {
   NtsDomContext& context = nts_dom::Current();
-  blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_object = ObjectOf<blink::ProgressEvent>(eventInitDict); auto* eventInitDict_converted = blink::ProgressEventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed()); eventInitDict_converted->setLengthComputable(eventInitDict_object->lengthComputable()); eventInitDict_converted->setLoaded(eventInitDict_object->loaded()); eventInitDict_converted->setTotal(eventInitDict_object->total());
   return HandleOf<NtsDomProgressEvent>(ProgressEvent::Create(NtsText(context, type), eventInitDict_converted));
 }
@@ -45473,7 +45484,6 @@ const char* nts_dom_KeyframeEffect_get_composite(NtsDomKeyframeEffect* self) {
 void nts_dom_KeyframeEffect_set_composite(NtsDomKeyframeEffect* self, const char* value) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::KeyframeEffect>(self);
-  blink::DummyExceptionStateForTesting conversion;
   const auto value_value = nts_dom::EnumFrom<blink::V8CompositeOperation>(value); if (!value_value) { nts_dom::WarnInvalidEnum(context, value, "CompositeOperation"); return; }
   receiver->setComposite(*value_value);
 }
@@ -45695,6 +45705,16 @@ NtsDomResponse* nts_dom_Response_redirect_1(const NtsBorrowedString* url, NtsDom
   return HandleOf<NtsDomResponse>(Response::redirect(script_state, NtsText(context, url, /*scalar_values=*/true), 302, exception_state));
 }
 
+NtsDomRequest* nts_dom_new_Request_2_Request(NtsDomRequest* input, NtsDomRequestInit init, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* init_converted = NtsDomToRequestInit(context, init, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomRequest>(Request::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(ObjectOf<blink::Request>(input)), init_converted, exception_state));
+}
+
 NtsDomRequest* nts_dom_new_Request_2(const NtsBorrowedString* input, NtsDomRequestInit init, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -45703,6 +45723,14 @@ NtsDomRequest* nts_dom_new_Request_2(const NtsBorrowedString* input, NtsDomReque
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return HandleOf<NtsDomRequest>(Request::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(NtsText(context, input, /*scalar_values=*/true).Text()), init_converted, exception_state));
+}
+
+NtsDomRequest* nts_dom_new_Request_1_Request(NtsDomRequest* input, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomRequest>(Request::Create(script_state, blink::MakeGarbageCollected<blink::V8UnionRequestOrUSVString>(ObjectOf<blink::Request>(input)), blink::RequestInit::Create(context.v8_isolate.get()), exception_state));
 }
 
 NtsDomRequest* nts_dom_new_Request_1(const NtsBorrowedString* input, NtsDomException** error) {
@@ -50000,7 +50028,6 @@ NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_1(NtsDomDOMMatrixReadOn
 NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_1_DOMPointReadOnly(NtsDomDOMMatrixReadOnly* self, NtsDomDOMPointReadOnly* point) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
-  blink::DummyExceptionStateForTesting conversion;
   auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return HandleOf<NtsDomDOMPoint>(receiver->transformPoint(point_converted));
 }
@@ -54175,7 +54202,6 @@ bool nts_dom_SVGGeometryElement_isPointInFill_1(NtsDomSVGGeometryElement* self, 
 bool nts_dom_SVGGeometryElement_isPointInFill_1_DOMPointReadOnly(NtsDomSVGGeometryElement* self, NtsDomDOMPointReadOnly* point) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
-  blink::DummyExceptionStateForTesting conversion;
   auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return static_cast<bool>(receiver->isPointInFill(point_converted));
 }
@@ -54197,7 +54223,6 @@ bool nts_dom_SVGGeometryElement_isPointInStroke_1(NtsDomSVGGeometryElement* self
 bool nts_dom_SVGGeometryElement_isPointInStroke_1_DOMPointReadOnly(NtsDomSVGGeometryElement* self, NtsDomDOMPointReadOnly* point) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
-  blink::DummyExceptionStateForTesting conversion;
   auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return static_cast<bool>(receiver->isPointInStroke(point_converted));
 }
@@ -54236,7 +54261,6 @@ double nts_dom_SVGTextContentElement_getCharNumAtPosition_1(NtsDomSVGTextContent
 double nts_dom_SVGTextContentElement_getCharNumAtPosition_1_DOMPointReadOnly(NtsDomSVGTextContentElement* self, NtsDomDOMPointReadOnly* point) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
-  blink::DummyExceptionStateForTesting conversion;
   auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return static_cast<double>(receiver->getCharNumAtPosition(point_converted));
 }

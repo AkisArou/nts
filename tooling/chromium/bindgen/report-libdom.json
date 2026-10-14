@@ -11,8 +11,8 @@
   "skippedBy": {
     "result type": 70,
     "defined in": 60,
-    "parameter type": 16,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
+    "parameter type": 15,
     "interface SVGPoint": 11,
     "interface SVGRect": 9,
     "interface SVGMatrix": 7,
@@ -55,6 +55,7 @@
     "interface XMLDocument": 1,
     "[RuntimeEnabled=CSSAnimationIterationComposite] experimental": 1,
     "interface SubtleCrypto": 1,
+    "interface ClipboardItem": 1,
     "interface MessagePort": 1
   },
   "literals": {
@@ -3678,7 +3679,7 @@
       ],
       "skipped": {
         "read": "result type Promise<sequence<ClipboardItem>>",
-        "write": "parameter type sequence<ClipboardItem>"
+        "write": "interface ClipboardItem is not bound"
       },
       "absent": {}
     },

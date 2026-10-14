@@ -81,19 +81,19 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-14, 289 interfaces, 6971 functions):
-  - lib.dom.d.ts declares 3604 members on the bound interfaces.
-  - 3129 are bound, the CSS properties among them. Blink serves those
+  2026-10-14, 293 interfaces, 7088 functions):
+  - lib.dom.d.ts declares 3621 members on the bound interfaces.
+  - 3140 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 246 are in Blink's IDL but skipped, and `report.json` says why. The
-    largest groups: 69 result types (`any`, frozen arrays, promises,
-    sequences, `object`), 64 naming an interface not bound, 60 defined in
+  - 244 are in Blink's IDL but skipped, and `report.json` says why. The
+    largest groups: 70 result types (`any`, frozen arrays, promises,
+    sequences, `object`), 62 naming an interface not bound, 60 defined in
     Blink's modules component on an interface the allowlist does not take
-    from there, 16 parameter types, and 16 touch-event members Blink
-    enables per platform.
+    from there, 16 touch-event members Blink enables per platform, and 15
+    parameter types.
   - The rest are not attributes or operations of that interface in Blink's
-    IDL: 176 constants, 20 iterable members, 4 stringifiers and 29 others
+    IDL: 176 constants, 24 iterable members, 4 stringifiers and 33 others
     (the window event handlers lib.dom gives `SVGSVGElement`, and the like).
 - **Where lib.dom's type is not what Blink answers, the member stays out.**
   lib.dom types `getBBox()` as a `DOMRect`, `createSVGPoint()` and
@@ -231,6 +231,8 @@ generated, and checked against page script by the differential vectors.
 | `requestIdleCallback(f, { timeout: 500 })` | `requestIdleCallback(f, 500)`; `f(deadline)` gets the IdleDeadline (`timeRemaining()`, `didTimeout`) | an options argument |
 | `new Image(w, h)`, `new Audio(src)`, `new Option(text, value)` (a [LegacyFactoryFunction]) | `newImage(w, h)`, named for the factory, calling `CreateForJSConstructor` as V8's binding does | `new` of the factory, once the delegation names the function for the `new` expression's callee (blockers/lib-dom-new-of-a-legacy-factory-function) |
 | `queueMicrotask(f)` | `queueMicrotask(f)`: `f` runs once as a microtask in Blink's queue, the one the program's promise jobs (the host owns the checkpoints) and page script's share, so their order is page script's | a global function |
+| `AbortSignal.any([a, b])` (a `sequence<T>` argument of objects) | `AbortSignal_any(signals: Counted<CHandles<AbortSignal>, c_size_t>)`: the program's array lent for the call (`@ntsNoEscape`), its element block C's array of handles beside its count, made into Blink's vector as V8's conversion makes it (nts_dom::ObjectsOf) | an array argument. A list of strings waits on a lent array of views (compiler request 17), one of numbers on the compiler lending a `number[]`'s doubles (blockers/lib-dom-a-number-array-for-a-typed-array-parameter), and Blob's parts on overload choice by element (blockers/lib-dom-an-array-overload-chosen-by-its-elements) |
+| `fetch(request)`, `new Request(request, init)`, `new Path2D(path)` (an interface beside a string: `(Request or USVString)`) | one overload per bound interface, its symbol naming the arm (`fetch_2_Request`), beside the string's, which keeps the name it had while the string was all that bound (`fetch_2`) | the argument's static type |
 | `ctx.drawImage(image, x, y)` (a union of interfaces: `CanvasImageSource`) | one overload per bound member, `drawImage(image: HTMLCanvasElement, ...)`, `HTMLImageElement`, `HTMLVideoElement`; the C symbol names the arm (`drawImage_3_HTMLCanvasElement`) | the argument's static type |
 | `canvas.getContext("2d")` | the same, typed `CanvasRenderingContext2D \| null` for the literal `"2d"` (hand-written) | the literal id |
 | `ctx.fillStyle = gradient` (Blink types it `any`) | `_set_fillStyle_gradient(g)`; `ctx.fillStyle = "red"` is the property, its string arm | the value's static type |

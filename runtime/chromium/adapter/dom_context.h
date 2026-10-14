@@ -24,6 +24,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/numerics/safe_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -115,6 +116,22 @@ template <class T> T *ObjectOf(const void *handle) {
 }
 inline blink::Node *NodeOf(const void *handle) {
   return ObjectOf<blink::Node>(handle);
+}
+// A sequence of objects, from the array the program lends for the call
+// (c:types `Counted<CHandles<T>>`): each element the object its handle names,
+// in a vector of Blink's own, as V8's conversion makes one from an array. The
+// compiler lends no hole, and the program's types admit no null.
+template <class T, class Handle>
+blink::HeapVector<blink::Member<T>> ObjectsOf(Handle *const *handles,
+                                              size_t count) {
+  CHECK(handles || count == 0);
+  blink::HeapVector<blink::Member<T>> objects;
+  objects.ReserveInitialCapacity(base::checked_cast<blink::wtf_size_t>(count));
+  for (Handle *handle : UNSAFE_BUFFERS(base::span(handles, count))) {
+    CHECK(handle);
+    objects.push_back(ObjectOf<T>(handle));
+  }
+  return objects;
 }
 template <class Handle> Handle *HandleOf(blink::ScriptWrappable *object) {
   return reinterpret_cast<Handle *>(object);

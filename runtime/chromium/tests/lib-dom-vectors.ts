@@ -709,6 +709,29 @@ export function libDomTranscript(): string {
     log("formdata", seen.text + "|" + entries.has("b"));
   }
 
+  // A list of objects, and a union's object arm: a signal that follows two
+  // (`AbortSignal.any` takes the program's array, lent for the call), a
+  // request made from a request, with and without a change, and a path
+  // made from a path.
+  {
+    const first = new AbortController();
+    const second = new AbortController();
+    const either = AbortSignal.any([first.signal, second.signal]);
+    const none = AbortSignal.any([]);
+    const before = either.aborted;
+    second.abort();
+    const base = new Request("https://example.com/a", { method: "POST" });
+    const copy = new Request(base);
+    const changed = new Request(base, { method: "PUT" });
+    const square = new Path2D();
+    square.rect(0, 0, 10, 10);
+    const path = new Path2D(square);
+    const context = document.createElement("canvas").getContext("2d");
+    const inside = context === null ? "none" : context.isPointInPath(path, 5, 5) + "," + context.isPointInPath(path, 15, 5);
+    log("listArguments", before + "," + either.aborted + "," + none.aborted + "|" + copy.method + ":" + copy.url + "|" +
+      changed.method + ":" + changed.url + "|" + inside);
+  }
+
   root.remove();
   return lines.join("\n");
 }

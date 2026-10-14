@@ -44,14 +44,13 @@ export function createBoard(document: Document): void {
   const dialogFound = document.getElementById("edit");
   if (!(boardFound instanceof HTMLElement) || !(addFound instanceof HTMLFormElement)) return;
   if (!(templateFound instanceof HTMLTemplateElement) || !(dialogFound instanceof HTMLDialogElement)) return;
-  const prototypeFound = templateFound.content.firstElementChild;
   const entryFound = addFound.querySelector("input");
   const editFound = dialogFound.querySelector("input");
-  if (!(prototypeFound instanceof HTMLLIElement) || entryFound === null || editFound === null) return;
+  if (entryFound === null || editFound === null) return;
   // Narrowed once, for the closures below.
   const board: HTMLElement = boardFound;
   const add: HTMLFormElement = addFound;
-  const prototype: HTMLLIElement = prototypeFound;
+  const template: HTMLTemplateElement = templateFound;
   const entry: HTMLInputElement = entryFound;
   const dialog: HTMLDialogElement = dialogFound;
   const edit: HTMLInputElement = editFound;
@@ -74,9 +73,8 @@ export function createBoard(document: Document): void {
       let shown = 0;
       for (const card of cards) {
         if (card.lane !== lane) continue;
-        // The template's card, cloned (`importNode(content, true)`:
-        // workarounds.md, 28).
-        const item = prototype.cloneNode(true);
+        // The template's card, imported into the document.
+        const item = document.importNode(template.content, true).firstElementChild;
         if (!(item instanceof HTMLLIElement)) continue;
         item.dataset.id = String(card.id);
         const title = item.querySelector(".title");
