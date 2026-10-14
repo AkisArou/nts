@@ -336,8 +336,8 @@ fn fieldless_closures_match_the_scan_with_and_without_a_real_cycle() {
             );
             assert_eq!(
                 answer.array(&object(1)),
-                count == 0 && self_reference,
-                "only a base with actual closures is a signature"
+                self_reference,
+                "a signature can reach a cycle through a concrete empty closure view"
             );
             if self_reference {
                 assert!(answer.cyclic[count as usize + 1]);
@@ -357,7 +357,7 @@ fn assert_linear(self_reference: bool) {
     for count in [64, 128, 256] {
         let program = closures(count, self_reference);
         reset_work();
-        program.cycles();
+        let _ = program.cycles();
         let steps = work();
         assert!(steps > 0, "the construction counter must run");
         assert!(
