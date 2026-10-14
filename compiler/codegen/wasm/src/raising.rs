@@ -24,13 +24,15 @@ use crate::{
     types::Physical,
 };
 use nts_core::hir::{HirType, ValueId};
-use wasm_encoder::{BlockType, GlobalType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, GlobalType, HeapType, Instruction as I, RefType, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
     Raise,
     Take,
     Uncaught,
+    /// `(thrown value) -> its class's name, or null`.
+    ClassName,
 }
 impl Helper {
     const fn name(self) -> &'static str {
@@ -38,6 +40,7 @@ impl Helper {
             Self::Raise => "raise.record",
             Self::Take => "raise.take",
             Self::Uncaught => "raise.uncaught",
+            Self::ClassName => "raise.className",
         }
     }
     fn signature(self) -> (Vec<Physical>, Option<Physical>) {
@@ -45,7 +48,8 @@ impl Helper {
         match self {
             Self::Raise => (vec![erased], None),
             Self::Take => (vec![], Some(erased)),
-            Self::Uncaught => (vec![erased, strings::STRING], None),
+            Self::Uncaught => (vec![erased, strings::STRING, strings::STRING], None),
+            Self::ClassName => (vec![erased], Some(strings::STRING)),
         }
     }
 }
@@ -106,11 +110,14 @@ pub(crate) fn clear(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure
 }
 
 fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    if helper == Helper::ClassName {
+        return class_name(m);
+    }
     let flag = state(m, Slot::Flag)?;
     let payload = state(m, Slot::Payload)?;
     let mut f = match helper {
         Helper::Take => Function::new([ValType::Ref(RefType::ANYREF)]),
-        Helper::Uncaught | Helper::Raise => Function::default(),
+        Helper::Uncaught | Helper::Raise | Helper::ClassName => Function::default(),
     };
     match helper {
         Helper::Raise => {
@@ -126,6 +133,7 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
             f.instruction(&I::LocalGet(0));
         }
         Helper::Uncaught => uncaught(&mut f, m)?,
+        Helper::ClassName => unreachable!("answered above"),
     }
     f.instruction(&I::End);
     Ok(f)
@@ -133,17 +141,132 @@ fn body(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
 
 /// Throw an erased payload to the host as the JS value it denotes.
 ///
-/// Parameters: 0 payload, 1 the throwing function's name. A compiled object
-/// or function has no identity-preserving JS form yet, so it keeps its named
-/// refusal instead of becoming an opaque value or a manufactured Error.
+/// Parameters: 0 payload, 1 the throwing function's name, 2 the payload's
+/// message where the core read one (`nts_uncaught`'s detail), or null. A
+/// compiled object or function has no identity-preserving JS form yet, so it
+/// keeps its named refusal instead of becoming an opaque value or a
+/// manufactured Error; the refusal carries its class's name and the message,
+/// for a host ending the program to report as C's runtime does.
 fn uncaught(f: &mut Function, m: &mut Builder<'_>) -> Result<(), Failure> {
     let host = crate::boundary::host_value(m, crate::boundary::Purpose::Thrown)?;
     let js = m.js_tag();
     clear(f, m)?;
-    f.instructions(&[I::LocalGet(0), I::LocalGet(1)]);
+    f.instructions(&[I::LocalGet(0), I::LocalGet(1), I::LocalGet(2)]);
     f.call(host);
     f.throw(js);
     Ok(())
+}
+
+/// The most elements one `array.new_fixed` may take, in V8.
+const FIXED_ARRAY_LIMIT: usize = 10_000;
+
+/// What an uncaught object reports itself as: its descriptor's semantic
+/// identity's name, as C's runtime reads `descriptor->name`. Null for a value
+/// that is not an object root's descendant, and for an identity that serves
+/// several runtime types.
+///
+/// Params: value. Locals: its identity.
+fn class_name(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let mut f = Function::new([ValType::I32]);
+    let (Some(root), Some(names)) = (m.types.root, m.types.names) else {
+        f.instructions(&[I::RefNull(HeapType::EXTERN), I::End]);
+        return Ok(f);
+    };
+    let table = names_global(m, names)?;
+    let object = HeapType::Concrete(root.object);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefTestNonNull(object),
+        I::If(BlockType::Result(ValType::EXTERNREF)),
+        I::LocalGet(0),
+        I::RefCastNonNull(object),
+        // The root's descriptor, then the descriptor's semantic identity.
+        I::StructGet {
+            struct_type_index: root.object,
+            field_index: 0,
+        },
+        I::StructGet {
+            struct_type_index: root.descriptor,
+            field_index: 0,
+        },
+        I::LocalTee(1),
+    ]);
+    f.global_get(table);
+    f.instructions(&[
+        I::ArrayLen,
+        I::I32LtU,
+        I::If(BlockType::Result(ValType::EXTERNREF)),
+    ]);
+    f.global_get(table);
+    f.instructions(&[
+        I::LocalGet(1),
+        I::ArrayGet(names),
+        I::Else,
+        I::RefNull(HeapType::EXTERN),
+        I::End,
+        I::Else,
+        I::RefNull(HeapType::EXTERN),
+        I::End,
+        I::End,
+    ]);
+    Ok(f)
+}
+
+/// Every semantic identity's name, by identity: one immutable array, built
+/// once as a constant from imported string constants.
+fn names_global(m: &mut Builder<'_>, ty: u32) -> Result<Global, Failure> {
+    m.global(GlobalKey::IdentityNames, |m| {
+        let plan = m.types;
+        let names = identity_names(&plan.objects.descriptors);
+        let size = u32::try_from(names.len())
+            .ok()
+            .filter(|_| names.len() <= FIXED_ARRAY_LIMIT)
+            .ok_or_else(|| {
+                Failure::from(format!(
+                    "{} class identities to name, past the {FIXED_ARRAY_LIMIT} one array constant holds",
+                    names.len()
+                ))
+            })?;
+        let mut code = ir::Code::default();
+        for name in &names {
+            match name {
+                Some(text) => {
+                    let literal = m.literal(text);
+                    code.global_get(literal);
+                }
+                None => code.instruction(&I::RefNull(HeapType::EXTERN)),
+            }
+        }
+        code.instruction(&I::ArrayNewFixed {
+            array_type_index: ty,
+            array_size: size,
+        });
+        Ok((crate::module::constant_type(ty), code))
+    })
+}
+
+/// Each identity's name, where every descriptor of it gives the same one.
+fn identity_names(descriptors: &[crate::object_plan::Descriptor]) -> Vec<Option<String>> {
+    let count = descriptors
+        .iter()
+        .map(|d| d.identity as usize + 1)
+        .max()
+        .unwrap_or(0);
+    // Outer `None`: no descriptor of this identity seen yet.
+    let mut names: Vec<Option<Option<&str>>> = vec![None; count];
+    for descriptor in descriptors {
+        let this = descriptor.name.as_deref();
+        let slot = &mut names[descriptor.identity as usize];
+        *slot = match *slot {
+            None => Some(this),
+            Some(seen) if seen == this => Some(seen),
+            Some(_) => Some(None),
+        };
+    }
+    names
+        .into_iter()
+        .map(|name| name.flatten().map(str::to_owned))
+        .collect()
 }
 
 /// The check before a host entry returns: a raise still pending is thrown
@@ -157,6 +280,8 @@ pub(crate) fn leave(b: &mut Body<'_, '_>) -> Result<(), Failure> {
     b.instruction(&I::If(BlockType::Empty));
     b.call(take);
     strings::constant(b, &b.func.name.clone());
+    // A raise left pending has no message read for it.
+    b.instruction(&I::RefNull(HeapType::EXTERN));
     b.call(uncaught);
     b.instructions(&[I::Unreachable, I::End]);
     Ok(())
@@ -249,8 +374,12 @@ pub(crate) fn call(
             b.call(f);
         }
         Source::Uncaught => {
-            b.load(args[0])?;
+            let &[payload, detail] = args else {
+                return Err(Failure::Invariant("nts_uncaught arity".into()));
+            };
+            b.load(payload)?;
             strings::constant(b, &b.func.name.clone());
+            b.load(detail)?;
             let f = callee(b.m, Helper::Uncaught)?;
             b.call(f);
             b.instruction(&I::Unreachable);

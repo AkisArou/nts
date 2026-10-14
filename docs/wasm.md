@@ -126,7 +126,23 @@ them only as quoted export names, and every local it declares is the glue's.
   - i31 values and strings externalize directly;
   - a boxed number crosses one cold host call;
   - booleans and `undefined` are imported constants;
-  - a compiled object keeps the approved named refusal.
+  - a compiled object keeps the approved named refusal, which carries what
+    C's runtime would print for it (`decline.uncaught`): its class's name,
+    by its descriptor's semantic identity (`raise.className`, a table built
+    only where a body raises), and the message the core read for it
+    (`nts_uncaught`'s detail; none for an unhandled rejection, as in C). An
+    identity that serves several runtime types (every array and
+    collection, the three buffer types) has no name, and reads `[object]`.
+- **A whole program** runs as test262 runs one through
+  `tooling/wasm/run-program.ts <artifact>`, which imports `program.mjs` and
+  ends the process as C's runtime does: status 0 once every job and timer has
+  run, or status 1 after `nts: uncaught <Class>: <message>` (a primitive as
+  C's `%g` prints it) or `nts: refused at run time: <reason>`. A trap reads
+  `nts: wasm trap:`, and a module that does not load is status 2. The module
+  does not end the process itself: checkers and every JS host import it too.
+  `a_whole_program_ends_as_the_c_runtime_ends_one` pins five programs whose
+  output the C backend's matches line for line. A refusal is worded by each
+  backend, and C's aborts (134).
 - **No pending raise survives an exit to the host.** An uncaught throw and the
   single input-refusal helper clear the state. In a module that uses the
   raising helpers, every host entry's return also tests the flag and throws a

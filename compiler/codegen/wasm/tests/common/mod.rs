@@ -21,15 +21,19 @@ pub(crate) fn run(
     run_with_node_flags(label, emitted, script, args, &[])
 }
 
-pub(crate) fn run_with_node_flags(
+/// Where a test keeps its artifacts, when `NTS_WASM_TEST_ARTIFACTS` names one.
+pub(crate) fn retained() -> Option<PathBuf> {
+    std::env::var_os("NTS_WASM_TEST_ARTIFACTS").map(PathBuf::from)
+}
+
+/// An emitted module and its glue for `host`, written where a test runs it:
+/// under `NTS_WASM_TEST_ARTIFACTS`, kept, or in a fresh temporary directory.
+pub(crate) fn write_artifact(
     label: &str,
     emitted: &nts_codegen_wasm::Emitted,
-    script: &str,
-    args: &[&Path],
-    flags: &[&str],
-) -> serde_json::Value {
-    let retained = std::env::var_os("NTS_WASM_TEST_ARTIFACTS").map(PathBuf::from);
-    let artifact = retained.as_ref().map_or_else(
+    host: nts_codegen_wasm::Host,
+) -> PathBuf {
+    let artifact = retained().map_or_else(
         || std::env::temp_dir().join(format!("nts-wasm-{label}-{}", std::process::id())),
         |root| root.join(label),
     );
@@ -40,13 +44,6 @@ pub(crate) fn run_with_node_flags(
         serde_json::to_vec_pretty(&emitted.manifest).unwrap(),
     )
     .unwrap();
-    // NTS_WASM_BROWSER runs every check in headless Chromium, on browser glue.
-    let browser = std::env::var_os("NTS_WASM_BROWSER").is_some();
-    let host = if browser {
-        nts_codegen_wasm::Host::Browser
-    } else {
-        nts_codegen_wasm::Host::Node
-    };
     let glue = nts_codegen_wasm::glue(&emitted.manifest, host).unwrap();
     std::fs::write(artifact.join(nts_codegen_wasm::PROGRAM_FILE), glue.program).unwrap();
     std::fs::write(
@@ -54,6 +51,25 @@ pub(crate) fn run_with_node_flags(
         glue.instance,
     )
     .unwrap();
+    artifact
+}
+
+pub(crate) fn run_with_node_flags(
+    label: &str,
+    emitted: &nts_codegen_wasm::Emitted,
+    script: &str,
+    args: &[&Path],
+    flags: &[&str],
+) -> serde_json::Value {
+    let retained = retained();
+    // NTS_WASM_BROWSER runs every check in headless Chromium, on browser glue.
+    let browser = std::env::var_os("NTS_WASM_BROWSER").is_some();
+    let host = if browser {
+        nts_codegen_wasm::Host::Browser
+    } else {
+        nts_codegen_wasm::Host::Node
+    };
+    let artifact = write_artifact(label, emitted, host);
     let mut command = Command::new("node");
     if browser {
         // The runner strips TypeScript types itself, so node flags do not apply.

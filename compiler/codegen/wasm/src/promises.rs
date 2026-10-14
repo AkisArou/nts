@@ -1360,6 +1360,8 @@ fn run_queue(
         f.instruction(&I::If(BlockType::Empty));
         f.call(take);
         f.global_get(name);
+        // A pending raise has no message read for it.
+        f.instruction(&I::RefNull(HeapType::EXTERN));
         f.call(uncaught);
         f.instructions(&[I::Unreachable, I::End]);
     }
@@ -1414,6 +1416,9 @@ fn report_unhandled(f: &mut Function, m: &mut Builder<'_>, p: PromiseTypes) -> R
         field(p, p.value()),
     ]);
     f.global_get(name);
+    // No message, as C's runtime has none here: it cannot find `message` by
+    // name on a rejection's reason.
+    f.instruction(&I::RefNull(HeapType::EXTERN));
     f.call(uncaught);
     f.instructions(&[
         I::Unreachable,
@@ -1859,6 +1864,8 @@ pub(crate) fn run_task_in_checkpoint(
         f.instruction(&I::If(BlockType::Empty));
         f.call(take);
         f.global_get(name);
+        // A pending raise has no message read for it.
+        f.instruction(&I::RefNull(HeapType::EXTERN));
         f.call(uncaught);
         f.instructions(&[I::Unreachable, I::End]);
     }

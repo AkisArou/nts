@@ -130,6 +130,8 @@ pub(crate) enum GlobalKey {
     Timer(crate::timers::State),
     /// `Symbol.for`'s registry.
     SymbolRegistry,
+    /// Each semantic identity's name, for an uncaught throw to report.
+    IdentityNames,
     /// A tagged template's cooked strings, by source site.
     Template(u32),
     /// The arrays a `String()` join is inside of, and how many.

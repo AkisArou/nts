@@ -383,9 +383,11 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             function(&[STRING, STRING], None),
             "(name, reason) => { throw new WasmInputDecline(name, reason, 'operation in'); }".into(),
         ),
+        // The refusal carries what the object reports itself as, for a host
+        // ending the program to say as C's runtime does (run-program.ts).
         "uncaughtDecline" => (
-            function(&[STRING], None),
-            "name => { throw new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); }".into(),
+            function(&[STRING, STRING, STRING], None),
+            "(name, className, message) => { const decline = new WasmInputDecline(name, 'uncaught compiled object or function needs an identity bridge', 'throw from'); decline.uncaught = { name: className, message }; throw decline; }".into(),
         ),
         "toNumber" => (function(&[F64], Some(STRING)), "value => value".into()),
         // An open value's kind and number, as `boundary` reads them.
@@ -763,7 +765,7 @@ pub fn glue(manifest: &Manifest, host: Host) -> Result<Glue, String> {
         let _ = writeln!(out, "const {local} = {source};");
     }
     out.push_str(
-        "export class WasmInputDecline extends TypeError {\n  constructor(name, why, context = 'input to') { super(`NTS5001: wasm ${context} ${name}: ${why}`); this.code = 'NTS5001'; }\n}\n\
+        "export class WasmInputDecline extends TypeError {\n  constructor(name, why, context = 'input to') { super(`NTS5001: wasm ${context} ${name}: ${why}`); this.code = 'NTS5001'; this.reason = why; }\n}\n\
          function decline(name, why) { throw new WasmInputDecline(name, why); }\n\
          function declineResult(name, why) { throw new WasmInputDecline(name, why, 'result from'); }\n",
     );

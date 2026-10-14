@@ -165,21 +165,26 @@ fn from_host(m: &mut Builder<'_>) -> Result<Func, Failure> {
 
 /// `(open value, caller's name) -> JS value`: the JS value an open primitive
 /// denotes. Any other kind has no JS form here yet and refuses by name, in
-/// the words of `purpose`.
+/// the words of `purpose`. A thrown value also takes its message, or null,
+/// which the refusal carries with the value's class name.
 pub(crate) fn host_value(m: &mut Builder<'_>, purpose: Purpose) -> Result<Func, Failure> {
+    let mut params = vec![Physical::Reference(RefType::ANYREF), strings::STRING];
+    if purpose == Purpose::Thrown {
+        params.push(strings::STRING);
+    }
     m.helper(
         FuncKey::HostValue(purpose),
         match purpose {
             Purpose::Thrown => "value.thrownToHost",
             Purpose::Result => "value.toHost",
         },
-        vec![Physical::Reference(RefType::ANYREF), strings::STRING],
+        params,
         Some(strings::STRING),
         move |m| host_value_body(m, purpose),
     )
 }
 
-/// Params: value, name. Locals: its tag.
+/// Params: value, name, and a thrown value's message. Locals: its tag.
 fn host_value_body(m: &mut Builder<'_>, purpose: Purpose) -> Result<Function, Failure> {
     let tag = erased::callee(m, erased::Helper::Tag)?;
     let number = erased::callee(m, erased::Helper::Number)?;
@@ -192,15 +197,16 @@ fn host_value_body(m: &mut Builder<'_>, purpose: Purpose) -> Result<Function, Fa
         Some(strings::STRING),
         false,
     );
-    let decline_name = match purpose {
-        Purpose::Thrown => "uncaughtDecline",
-        Purpose::Result => "resultDecline",
+    let (decline_name, decline_params, tag_local) = match purpose {
+        // The caller's name, the class's name and the message.
+        Purpose::Thrown => ("uncaughtDecline", vec![strings::STRING; 3], 3),
+        Purpose::Result => ("resultDecline", vec![strings::STRING], 2),
     };
     let decline = m.import(
         FuncKey::Host(decline_name),
         "nts:host/v1",
         decline_name,
-        vec![strings::STRING],
+        decline_params,
         None,
         false,
     );
@@ -210,10 +216,10 @@ fn host_value_body(m: &mut Builder<'_>, purpose: Purpose) -> Result<Function, Fa
     let mut f = Function::new([ValType::I32]);
     f.instruction(&I::LocalGet(0));
     f.call(tag);
-    f.instruction(&I::LocalSet(2));
+    f.instruction(&I::LocalSet(tag_local));
     let case = |f: &mut Function, kind: i32| {
         f.instructions(&[
-            I::LocalGet(2),
+            I::LocalGet(tag_local),
             I::I32Const(kind),
             I::I32Eq,
             I::If(BlockType::Empty),
@@ -251,6 +257,12 @@ fn host_value_body(m: &mut Builder<'_>, purpose: Purpose) -> Result<Function, Fa
     case(&mut f, erased::NULL);
     f.instructions(&[I::RefNull(HeapType::EXTERN), I::Return, I::End]);
     f.instruction(&I::LocalGet(1));
+    if purpose == Purpose::Thrown {
+        let class_name = crate::raising::callee(m, crate::raising::Helper::ClassName)?;
+        f.instruction(&I::LocalGet(0));
+        f.call(class_name);
+        f.instruction(&I::LocalGet(2));
+    }
     f.call(decline);
     f.instructions(&[I::Unreachable, I::End]);
     Ok(f)

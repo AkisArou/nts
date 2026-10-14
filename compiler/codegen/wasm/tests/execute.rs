@@ -512,6 +512,59 @@ fn source_dates_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A whole program, run as test262 runs one (`tooling/wasm/run-program.ts`),
+/// ends as the C runtime ends it: these lines on stdout and stderr and this
+/// status are what the C backend's program prints for each fixture, so one
+/// classifier reads both. A refusal says so in this backend's own words.
+#[test]
+fn a_whole_program_ends_as_the_c_runtime_ends_one() {
+    let refused = "nts: refused at run time: an index past the end, whose undefined this element type cannot hold\n";
+    let cases = [
+        ("completes", 0, "initializer\njob 1\ntimer\n", "on stderr\n"),
+        (
+            "throws-an-object",
+            1,
+            "before\n",
+            "nts: uncaught Test262Error: Expected 3 but got 2\n",
+        ),
+        ("throws-a-number", 1, "before\n", "nts: uncaught 1e+06\n"),
+        (
+            "throws-in-a-job",
+            1,
+            "initializer\n",
+            "nts: uncaught Test262Error\n",
+        ),
+        ("refuses", 1, "before\n", refused),
+    ];
+    let root = common::repository();
+    for (name, status, stdout, stderr) in cases {
+        let fixture = root.join("tooling/wasm/fixtures/whole-program").join(name);
+        let emitted = emit_project(&fixture);
+        let artifact = common::write_artifact(
+            &format!("whole-program-{name}"),
+            &emitted,
+            nts_codegen_wasm::Host::Node,
+        );
+        let result = std::process::Command::new("node")
+            .arg(root.join("tooling/wasm/run-program.ts"))
+            .arg(&artifact)
+            .output()
+            .expect("Node installed");
+        assert_eq!(
+            (
+                result.status.code(),
+                String::from_utf8_lossy(&result.stdout).as_ref(),
+                String::from_utf8_lossy(&result.stderr).as_ref(),
+            ),
+            (Some(status), stdout, stderr),
+            "{name}"
+        );
+        if common::retained().is_none() {
+            std::fs::remove_dir_all(artifact).unwrap();
+        }
+    }
+}
+
 /// Presence: a subclass's own bits after its base's, cleared and written
 /// again through the base, `"k" in v` over an open value of either of two
 /// families or of none, and the high bits.

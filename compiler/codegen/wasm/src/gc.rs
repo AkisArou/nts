@@ -358,13 +358,23 @@ enum Kind {
     Func,
 }
 
+/// The first descriptor of each runtime type that is not a class.
+struct BuiltinDescriptors {
+    promise: u32,
+    buffer: u32,
+    symbol: u32,
+    date: u32,
+}
+
 /// `count` descriptors for a runtime type that is not a class, under one new
-/// identity no class has, of `kind` to `typeof` (an object, or a symbol). The
-/// first one's index.
+/// identity no class has, of `kind` to `typeof` (an object, or a symbol), and
+/// named `name` where the identity serves one runtime type. The first one's
+/// index.
 fn builtins(
     objects: &mut crate::object_plan::Plan,
     count: usize,
     kind: u32,
+    name: Option<&str>,
 ) -> Result<u32, String> {
     let first = u32::try_from(objects.descriptors.len()).map_err(|_| "too many descriptors")?;
     if count > 0 {
@@ -381,6 +391,7 @@ fn builtins(
                 kind,
                 ancestry: Vec::new(),
                 class: None,
+                name: name.map(str::to_owned),
             });
         }
     }
@@ -401,6 +412,10 @@ pub(crate) struct Plan {
     pub(crate) buffers: Option<BufferTypes>,
     pub(crate) symbol: Option<SymbolTypes>,
     pub(crate) date: Option<DateTypes>,
+    /// `(array externref)`: each semantic identity's name, or null, for an
+    /// uncaught throw to report (`raising::class_name`). Planned where a
+    /// body raises.
+    pub(crate) names: Option<u32>,
     /// `(array (mut eqref))`: the arrays a `String()` join is inside of.
     pub(crate) joining: Option<u32>,
     /// Each owned kind's storage, by element type.
@@ -484,11 +499,13 @@ impl Plan {
                 .map_err(crate::EmitError::InvalidWasm)?;
             builder.symbol_type();
         }
-        // A raise carries an erased payload.
+        // A raise carries an erased payload, and an uncaught one reports its
+        // class by name.
         if resources.raising {
             builder
                 .request(&HirType::Erased)
                 .map_err(crate::EmitError::InvalidWasm)?;
+            builder.names_type();
         }
         for (ty, use_) in &resources.referenced_objects {
             builder
@@ -688,6 +705,7 @@ struct Builder<'a> {
     buffers: Option<BufferNodes>,
     symbol: Option<NodeId>,
     date: Option<NodeId>,
+    names: Option<NodeId>,
     joining: Option<NodeId>,
     /// The element types whose views own their buffers, and each one's store
     /// and view types once planned.
@@ -738,6 +756,7 @@ impl<'a> Builder<'a> {
             buffers: None,
             symbol: None,
             date: None,
+            names: None,
             joining: None,
             owned: nts_core::hir::views::owned_view_kinds(program),
             owned_views: FxHashMap::default(),
@@ -1105,6 +1124,24 @@ impl<'a> Builder<'a> {
         fields.push(Field::value(PendingSlot::Scalar(Slot::F64), false));
         let id = self.add("date".into(), Some(root), true, Shape::Struct(fields));
         self.date = Some(id);
+        id
+    }
+
+    /// The names of the semantic identities, by identity.
+    fn names_type(&mut self) -> NodeId {
+        if let Some(id) = self.names {
+            return id;
+        }
+        let id = self.add(
+            "identity names".into(),
+            None,
+            true,
+            Shape::Array(Field::value(
+                PendingSlot::Reference(RefType::EXTERNREF),
+                false,
+            )),
+        );
+        self.names = Some(id);
         id
     }
 
@@ -2095,6 +2132,7 @@ impl<'a> Builder<'a> {
                 ))),
                 ancestry: Vec::new(),
                 class: None,
+                name: None,
             });
         }
         let collections = self.collection_metadata(indices, identity, &mut objects)?;
@@ -2166,6 +2204,7 @@ impl<'a> Builder<'a> {
                 kind: nts_core::hir::tags::OBJECT,
                 ancestry: Vec::new(),
                 class: None,
+                name: None,
             });
             collections.insert(
                 indices[id.0],
@@ -2302,20 +2341,12 @@ impl<'a> Builder<'a> {
         let supers = self.supers(&ordered, &indices);
         let groups = self.encode(&ordered, &indices);
         let (mut objects, arrays, collections) = self.metadata(&indices)?;
-        let object = nts_core::hir::tags::OBJECT;
-        let promise_descriptor =
-            builtins(&mut objects, usize::from(self.promise.is_some()), object)?;
-        let buffer_descriptor = builtins(
-            &mut objects,
-            3 * usize::from(self.buffers.is_some()),
-            object,
-        )?;
-        let symbol_descriptor = builtins(
-            &mut objects,
-            usize::from(self.symbol.is_some()),
-            nts_core::hir::tags::SYMBOL,
-        )?;
-        let date_descriptor = builtins(&mut objects, usize::from(self.date.is_some()), object)?;
+        let BuiltinDescriptors {
+            promise: promise_descriptor,
+            buffer: buffer_descriptor,
+            symbol: symbol_descriptor,
+            date: date_descriptor,
+        } = self.builtin_descriptors(&mut objects)?;
         let owned_views = self.planned_owned_views(&indices);
         Ok(Plan {
             arrays,
@@ -2359,6 +2390,7 @@ impl<'a> Builder<'a> {
                 symbol: indices[node.0],
                 descriptor: symbol_descriptor,
             }),
+            names: self.names.map(|node| indices[node.0]),
             date: self.date.map(|node| DateTypes {
                 date: indices[node.0],
                 descriptor: date_descriptor,
@@ -2382,6 +2414,41 @@ impl<'a> Builder<'a> {
             groups,
             supers,
             count,
+        })
+    }
+    /// The descriptors of the runtime types that are not classes, after every
+    /// class's, each under an identity of its own.
+    fn builtin_descriptors(
+        &self,
+        objects: &mut crate::object_plan::Plan,
+    ) -> Result<BuiltinDescriptors, String> {
+        let object = nts_core::hir::tags::OBJECT;
+        Ok(BuiltinDescriptors {
+            promise: builtins(
+                objects,
+                usize::from(self.promise.is_some()),
+                object,
+                Some("Promise"),
+            )?,
+            // One identity for the buffer, its views and DataView, so no name.
+            buffer: builtins(
+                objects,
+                3 * usize::from(self.buffers.is_some()),
+                object,
+                None,
+            )?,
+            symbol: builtins(
+                objects,
+                usize::from(self.symbol.is_some()),
+                nts_core::hir::tags::SYMBOL,
+                Some("Symbol"),
+            )?,
+            date: builtins(
+                objects,
+                usize::from(self.date.is_some()),
+                object,
+                Some("Date"),
+            )?,
         })
     }
     /// The type section's rec groups, each type with its declared supertype.

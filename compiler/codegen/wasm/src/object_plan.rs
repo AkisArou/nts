@@ -37,6 +37,10 @@ pub(crate) struct Descriptor {
     /// The lowest class type this descriptor serves, which supplies its
     /// dispatch entries; none for an array descriptor.
     pub(crate) class: Option<ClassId>,
+    /// What an uncaught throw of an object it describes reports itself as,
+    /// as C's descriptor names it; none where one identity serves several
+    /// runtime types (every array and collection, the three buffer types).
+    pub(crate) name: Option<String>,
 }
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
@@ -117,6 +121,7 @@ impl Plan {
                     kind,
                     ancestry,
                     class: Some(ty),
+                    name: Some(name(program, at, key)),
                 });
                 descriptors.insert((at, key), (index, kind));
                 index
@@ -227,6 +232,20 @@ impl Plan {
         Ok(())
     }
 }
+/// A descriptor's name, by C's rule: a layout several classes share names
+/// each class's descriptor after its class, and any other is its layout's.
+fn name(program: &Program, at: usize, key: Identity) -> String {
+    let layout = &program.layouts[at];
+    match key {
+        Identity::Class(symbol) => program
+            .distinct_identities(layout)
+            .into_iter()
+            .find(|class| class.symbol == symbol)
+            .map_or_else(|| layout.name.clone(), |class| class.name.clone()),
+        Identity::Record(_) => layout.name.clone(),
+    }
+}
+
 fn ancestry(
     program: &Program,
     mut at: usize,
