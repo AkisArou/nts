@@ -100,6 +100,16 @@ enum Generated {
     /// Allowed to be missing, as the LLVM column is: a case the Wasm backend
     /// declines, at emit or at run time, is a blank cell with its reason.
     Wasm,
+    /// The hand-written C++ compiled to a WASI module (`wasm32-wasip1`) and run
+    /// on node's V8 (`tooling/wasm/run-wasi.ts`): what a C++ programmer's
+    /// program costs as WebAssembly on the engine `nts (wasm)` runs on, so
+    /// `nts (Wasm)/C++ (wasm)` is a ratio about the code with the engine held
+    /// fixed. Missing where the case has no `ref.cpp`, where no WASI sysroot is
+    /// installed, or where the reference does not build for WASI (exceptions).
+    CppWasm,
+    /// The same module on wasmtime, the reference WASI engine: printed beside
+    /// the V8 number to say how much of it is the engine.
+    CppWasmtime,
 }
 
 /// What a variant is called and how it is built.
@@ -155,6 +165,16 @@ const VARIANTS: &[Variant] = &[
         label: "nts (wasm)",
         source: "case.ts",
         generated: Generated::Wasm,
+    },
+    Variant {
+        label: "C++ (wasm)",
+        source: "ref.cpp",
+        generated: Generated::CppWasm,
+    },
+    Variant {
+        label: "C++ (wasmtime)",
+        source: "ref.cpp",
+        generated: Generated::CppWasmtime,
     },
 ];
 
@@ -478,7 +498,7 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
         "case",
         "C++",
         "nts C",
@@ -486,6 +506,8 @@ fn main() -> Result<()> {
         "nts JVM",
         "Java",
         "nts Wasm",
+        "C++ wasm",
+        "C++ wtime",
         "nts f64",
         "node",
         "bun",
@@ -493,9 +515,10 @@ fn main() -> Result<()> {
         "nts/node",
         "nts/bun",
         "jvm/Java",
-        "wasm/node"
+        "wasm/node",
+        "wasm/C++w"
     );
-    println!("{}", "-".repeat(180));
+    println!("{}", "-".repeat(214));
 
     let mut rows = Vec::new();
     let mut spoiled = Vec::new();
@@ -565,7 +588,11 @@ const WASM_LEGEND: &str = "\n\
     the `.ts`: `nts (Wasm)/V8` holds the engine fixed and compares what this \
     compiler emitted for V8 with what V8's JIT made of the same source. A `--` \
     there is a program the Wasm backend declines, and the table under the main \
-    one says why.\n";
+    one says why.\n\n\
+    `C++ (wasm)` is the hand-written C++ compiled to a WASI module and run on \
+    the same engine, node's V8: `nts (Wasm)/C++ (wasm)` is what this compiler's \
+    WebAssembly costs against a C++ programmer's, with the engine held fixed. \
+    The console also prints it on wasmtime, to say how much is the engine.\n";
 
 fn legend(root: &Utf8Path) -> String {
     let legend = "\n\
@@ -779,11 +806,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // about this compiler's insides rather than about how fast the thing is,
     // and a reader comparing against V8 does not need a column for it.
     table.push_str(if with_bun {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     } else {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | V8 | nts/C++ | nts/V8 | nts (JVM)/Java | nts (Wasm)/V8 |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | V8 | nts/C++ | nts/V8 | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     });
     for row in rows {
         use std::fmt::Write as _;
@@ -800,18 +827,20 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         let jvm = jvm_cell(row.jvm, row.jvm_absence);
         let _ = writeln!(
             table,
-            "| {} | {} | {} | **{}** | {jvm} | {} | {} | {} |{bun} {} | {} |{against_bun} {} | {} |",
+            "| {} | {} | {} | **{}** | {jvm} | {} | {} | {} | {} |{bun} {} | {} |{against_bun} {} | {} | {} |",
             row.case,
             row.cpp.map_or_else(|| "--".to_owned(), human),
             row.nts.map_or_else(|| "--".to_owned(), human),
             row.llvm.map_or_else(|| "--".to_owned(), human),
             row.java.map_or_else(|| "--".to_owned(), human),
             row.wasm.map_or_else(|| "--".to_owned(), human),
+            row.cpp_wasm.map_or_else(|| "--".to_owned(), human),
             human(row.node),
             row.quotable(row.against(row.cpp), ["nts (C)", "C++"]),
             row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
             row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]),
             row.quotable(row.wasm_against_node(), ["nts (Wasm)", "node"]),
+            row.quotable(row.wasm_against_cpp_wasm(), ["nts (Wasm)", "C++ (wasm)"]),
         );
     }
 
@@ -821,9 +850,17 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // The dagger is only worth printing where one was, and a legend line that
     // explains a mark nothing carries reads as a warning about the whole table.
     let daggered = rows.iter().any(|row| {
-        ["nts (C)", "C++", "node", "nts (JVM)", "Java", "nts (Wasm)"]
-            .iter()
-            .any(|label| row.unstable(label))
+        [
+            "nts (C)",
+            "C++",
+            "node",
+            "nts (JVM)",
+            "Java",
+            "nts (Wasm)",
+            "C++ (wasm)",
+        ]
+        .iter()
+        .any(|label| row.unstable(label))
     });
     let path = root.join("README.md");
     let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
@@ -908,6 +945,10 @@ struct Row {
     wasm: Option<f64>,
     /// Why [`Self::wasm`] is empty, where it is, in the backend's own words.
     wasm_absence: Option<String>,
+    /// The hand-written C++ as a WASI module on V8, the engine [`Self::wasm`]
+    /// runs on; and on wasmtime, printed only.
+    cpp_wasm: Option<f64>,
+    cpp_wasmtime: Option<f64>,
     /// Columns whose own five passes disagreed, and by how much.
     ///
     /// These were an `eprintln!` and nothing else, so they reached a person
@@ -990,6 +1031,15 @@ impl Row {
         match self.wasm {
             Some(ours) => format!("{ours_over:.2}x", ours_over = ours / self.node),
             None => "--".to_owned(),
+        }
+    }
+
+    /// The Wasm lane against the hand-written C++ as WebAssembly on the same
+    /// engine: the ceiling a Wasm backend is measured against.
+    fn wasm_against_cpp_wasm(&self) -> String {
+        match (self.wasm, self.cpp_wasm) {
+            (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
+            _ => "--".to_owned(),
         }
     }
 }
@@ -1196,6 +1246,8 @@ fn variants(
     let mut jvm_absence: Option<JvmAbsence> = None;
     // Why the Wasm column is empty, where it is, in the backend's own words.
     let mut wasm_absence: Option<String> = None;
+    // The C++ reference as a WASI module, built once for both engines.
+    let mut cpp_module: Option<Result<Utf8PathBuf, String>> = None;
     let driver = native_driver(case, out, name, emission.initializes)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
@@ -1273,34 +1325,13 @@ fn variants(
                 continue;
             }
             Generated::JavaReference => {
-                // **`.ok().flatten()` used to be the whole of this line**, and
-                // it made two different facts print the same character. A case
-                // with no `ref.java` has no Java column and should say `--`. A
-                // case *with* one that will not build has no Java column
-                // either -- and that is a broken instrument, not a missing
-                // reference.
-                //
-                // A fresh worktree does not carry `third_party/are-we-fast-yet`,
-                // which the eight `awfy-*` references construct their classes
-                // from, so a sweep taken in one reports `--` for all eight and
-                // reads exactly like the nine `json-*` cases that genuinely
-                // have no reference. It cost a whole sweep before I looked.
-                //
-                // So the reason is printed. Rule 6, in the harness that the
-                // rule is about: a dash that means "not measured" has to say
-                // so.
-                match java_reference(root, case, out, name) {
-                    Ok(measured) => results.push(measured),
-                    Err(error) => {
-                        println!(
-                            "note: {:<16} has a ref.java that could not be measured, so its \
-                             Java column is `--` for a reason that is not \"no reference\": {}",
-                            name,
-                            error.to_string().lines().next().unwrap_or("?"),
-                        );
-                        results.push(None);
-                    }
-                }
+                results.push(java_cell(root, case, out, name));
+                continue;
+            }
+            // The hand-written C++ as a WASI module, on V8 and on wasmtime.
+            Generated::CppWasm | Generated::CppWasmtime => {
+                let module = cpp_module.get_or_insert_with(|| cpp_wasm(root, case, out, name));
+                results.push(cpp_wasm_cell(root, module, variant, name));
                 continue;
             }
             // Its own artifact and runner, like the JVM's.
@@ -1583,6 +1614,14 @@ fn finish_row(
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
         wasm_absence: absences.wasm,
+        cpp_wasm: results
+            .get(7)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
+        cpp_wasmtime: results
+            .get(8)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
         varied: Vec::new(),
     };
     // A row whose own passes disagree has no single number, and printing one of
@@ -1593,6 +1632,8 @@ fn finish_row(
         ("Java", results.get(5)),
         ("nts (C)", results.get(1)),
         ("nts (Wasm)", results.get(6)),
+        ("C++ (wasm)", results.get(7)),
+        ("C++ (wasmtime)", results.get(8)),
     ] {
         if let Some(Some(measured)) = measured
             && measured.spread >= SPREAD_WORTH_SAYING
@@ -1610,7 +1651,7 @@ fn finish_row(
     work_agrees(&row)?;
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
         row.nts.map_or_else(|| "--".to_owned(), human),
@@ -1618,6 +1659,8 @@ fn finish_row(
         jvm_cell(row.jvm, row.jvm_absence),
         row.java.map_or_else(|| "--".to_owned(), human),
         row.wasm.map_or_else(|| "--".to_owned(), human),
+        row.cpp_wasm.map_or_else(|| "--".to_owned(), human),
+        row.cpp_wasmtime.map_or_else(|| "--".to_owned(), human),
         row.unspecialized.map_or_else(|| "--".to_owned(), human),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
@@ -1626,6 +1669,7 @@ fn finish_row(
         row.against(row.bun),
         row.jvm_against_java(),
         row.wasm_against_node(),
+        row.wasm_against_cpp_wasm(),
     );
     Ok(row)
 }
@@ -1835,6 +1879,126 @@ fn wasm_cell(
             let reason = error.to_string().lines().next().unwrap_or("?").to_owned();
             println!("note: {name:<16} nts (wasm) is `--`: {reason}");
             (None, Some(reason))
+        }
+    }
+}
+
+/// The Java column's cell: the hand-written Java's measurement, or none.
+///
+/// **`.ok().flatten()` used to be the whole of this**, and it made two
+/// different facts print the same character. A case with no `ref.java` has no
+/// Java column and should say `--`. A case *with* one that will not build has
+/// no Java column either -- and that is a broken instrument, not a missing
+/// reference.
+///
+/// A fresh worktree does not carry `third_party/are-we-fast-yet`, which the
+/// eight `awfy-*` references construct their classes from, so a sweep taken in
+/// one reports `--` for all eight and reads exactly like the nine `json-*`
+/// cases that genuinely have no reference. It cost a whole sweep before I
+/// looked.
+///
+/// So the reason is printed. Rule 6, in the harness that the rule is about: a
+/// dash that means "not measured" has to say so.
+fn java_cell(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path, name: &str) -> Option<Measured> {
+    match java_reference(root, case, out, name) {
+        Ok(measured) => measured,
+        Err(error) => {
+            println!(
+                "note: {:<16} has a ref.java that could not be measured, so its \
+                 Java column is `--` for a reason that is not \"no reference\": {}",
+                name,
+                error.to_string().lines().next().unwrap_or("?"),
+            );
+            None
+        }
+    }
+}
+
+/// The C++ reference and the shared harness compiled to a WASI module, with the
+/// native column's flags and `-fno-exceptions` (WASI has no unwinder here). An
+/// error is the cell's reason.
+fn cpp_wasm(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Result<Utf8PathBuf, String> {
+    let sysroot =
+        std::env::var("WASI_SYSROOT").unwrap_or_else(|_| "/usr/share/wasi-sysroot".to_owned());
+    if !Utf8Path::new(&sysroot).is_dir() {
+        return Err(format!("no WASI sysroot at {sysroot} (set WASI_SYSROOT)"));
+    }
+    let module = out.join(format!("{name}.cpp.wasm"));
+    let mut command = std::process::Command::new("clang++");
+    command
+        .arg("--target=wasm32-wasip1")
+        .arg(format!("--sysroot={sysroot}"))
+        .args([
+            "-O2",
+            "-flto",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-std=c++20",
+            "-fno-exceptions",
+        ])
+        .arg("-I")
+        .arg(root.join("benchmarks/common"));
+    let awfy = root.join("third_party/are-we-fast-yet/benchmarks/C++/src");
+    if awfy.is_dir() {
+        command.arg("-isystem").arg(awfy);
+    }
+    let output = command
+        .arg(case.join("ref.cpp"))
+        .arg(root.join("benchmarks/common/main.cpp"))
+        .arg("-o")
+        .arg(&module)
+        .output()
+        .map_err(|error| format!("running clang++: {error}"))?;
+    if !output.status.success() {
+        let said = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "does not build for WASI: {}",
+            said.lines()
+                .find(|line| line.contains("error"))
+                .unwrap_or("no message")
+        ));
+    }
+    Ok(module)
+}
+
+/// One engine's measurement of the C++ WASI module, or none with its reason
+/// said once on the console.
+fn cpp_wasm_cell(
+    root: &Utf8Path,
+    module: &Result<Utf8PathBuf, String>,
+    variant: &Variant,
+    name: &str,
+) -> Option<Measured> {
+    let measured = module.as_ref().map_err(String::clone).and_then(|module| {
+        let mut command = if variant.generated == Generated::CppWasmtime {
+            let mut command = std::process::Command::new("wasmtime");
+            command.arg("run").arg(module);
+            command
+        } else {
+            let mut command = std::process::Command::new("node");
+            command
+                .arg("--no-warnings")
+                .arg(root.join("tooling/wasm/run-wasi.ts"))
+                .arg(module);
+            command
+        };
+        measure(&mut command).map_err(|error| error.to_string())
+    });
+    match measured {
+        Ok(measured) => Some(measured),
+        Err(reason) => {
+            println!(
+                "note: {name:<16} {} is `--`: {}",
+                variant.label,
+                reason.lines().next().unwrap_or("?")
+            );
+            None
         }
     }
 }
@@ -3097,6 +3261,8 @@ mod tests {
             bun: None,
             wasm: None,
             wasm_absence: None,
+            cpp_wasm: None,
+            cpp_wasmtime: None,
             varied: Vec::new(),
         }
     }
