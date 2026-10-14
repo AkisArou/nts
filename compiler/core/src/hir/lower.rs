@@ -82020,6 +82020,9 @@ fn is_override_name(name: &str) -> bool {
 }
 
 #[cfg(test)]
+mod implementation_tests;
+
+#[cfg(test)]
 mod tests {
     use super::super::{Field, Layout, Program};
     use super::TypeId;
