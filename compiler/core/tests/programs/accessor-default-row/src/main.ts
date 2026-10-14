@@ -1,7 +1,9 @@
-// `S3` reaches `F3` from its own method, by a route the supplier bound does not
-// follow, and is laid out as a prefix of `F3`. `T3` orders the fields
-// otherwise, so reads through `F3` dispatch. `S3` and `D3` get no row: the
-// selector's default reads `F3`'s own position, which is theirs.
+// `S3` reaches `F3` from its own method -- `registry.push(this)`, which the
+// supplier bound follows through the class's polymorphic `this` -- and, its
+// fields being exactly `F3`'s, shares `F3`'s layout. `D3` extends it, so it is
+// a prefix of `F3`. `T3` orders the fields otherwise, so reads through `F3`
+// dispatch. The selector's default reads `F3`'s own position, which is also
+// where `S3` and `D3` keep `a`.
 interface F3 { a: number; b: number }
 class T3 { b = 3; a = 4 }
 const registry: F3[] = [];

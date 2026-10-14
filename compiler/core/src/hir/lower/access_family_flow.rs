@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{FuncBuilder, NodeId, TypeId, TypeKind, interfaces, syntax};
+use super::{FuncBuilder, Hierarchy, NodeId, TypeId, TypeKind, interfaces, syntax};
 
 /// The owners that reach each source type, for every type: asking about one is
 /// a lookup, so no caller has to know in advance which types it will ask about
@@ -36,6 +36,7 @@ pub(super) struct Bound {
 impl Bound {
     pub(super) fn collect(
         probe: &FuncBuilder<'_>,
+        hierarchy: &Hierarchy,
         owners: &[TypeId],
         literals: &std::collections::BTreeMap<TypeId, Vec<NodeId>>,
     ) -> Self {
@@ -45,6 +46,44 @@ impl Bound {
         let actual: FxHashSet<_> = owners.iter().copied().collect();
         for owner in owners {
             graph.seed(*owner);
+        }
+        // `this` in a method is a value of the method's class and of every
+        // class inheriting the method. TypeScript types it as the class's
+        // polymorphic `this`: a type parameter constrained to the class and
+        // carrying the class's own symbol -- which is how it is told from any
+        // other parameter bounded by the class. No `new` reaches it, so
+        // `registry.push(this)` supplied nothing to the registry's face. Each
+        // owner flows into the `this` of its class and of each class above it.
+        let mut this_of: FxHashMap<TypeId, Vec<TypeId>> = FxHashMap::default();
+        let types = &probe.snapshot.types;
+        for (at, ty) in types.iter().enumerate() {
+            if let TypeKind::TypeParameter {
+                constraint: Some(class),
+                ..
+            } = &ty.kind
+                && ty.symbol.is_some()
+                && types
+                    .get(class.0 as usize)
+                    .is_some_and(|bound| bound.symbol == ty.symbol)
+                && let Ok(at) = u32::try_from(at)
+            {
+                this_of.entry(*class).or_default().push(TypeId(at));
+            }
+        }
+        for owner in owners {
+            let mut class = Some(*owner);
+            // The base chain is short; the bound only guards a malformed one.
+            for _ in 0..64 {
+                let Some(here) = class else { break };
+                for this in this_of.get(&here).into_iter().flatten() {
+                    graph.connect(*owner, *this);
+                }
+                // The hierarchy being built, not the probe's: the probe was
+                // made before any base was recorded, so a subclass reached
+                // only its own `this` and never the one its inherited method
+                // pushes.
+                class = hierarchy.base.get(&here).copied();
+            }
         }
         let literal_owner: FxHashMap<_, _> = literals
             .iter()

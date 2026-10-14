@@ -480,7 +480,8 @@ impl Families {
         let owners = Owners::collect(probe, hierarchy, &literals);
         // Asked of an interface whose field is read, of a union's arm, and of
         // whatever storage a backend gives a face: every type is answered.
-        let flow = super::access_family_flow::Bound::collect(probe, &owners.all, &literals);
+        let flow =
+            super::access_family_flow::Bound::collect(probe, hierarchy, &owners.all, &literals);
         if used.is_empty() {
             return Self {
                 flow,

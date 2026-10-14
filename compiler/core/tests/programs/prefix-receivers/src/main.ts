@@ -24,7 +24,27 @@ interface Box<T> { value: T; tag: string }
 class NumberBox { value = 1; tag = "n"; extra = 2; }
 function unbox(box: Box<number>): number { return box.value; }
 
+// Reaching a face only as `this`: a method registers its own receiver, which
+// TypeScript types as the class's polymorphic `this`, not as the class. A
+// subclass inheriting the method reaches it the same way. `Outside` differs in
+// one thing, being pushed from outside, and was always listed. Each has a
+// field past the face's, as `Prefix` does, so no layout coincides with it --
+// and `Outside`'s is named apart from `SelfRegistering`'s, since two classes
+// of one shape share a layout and a face lists one owner per layout.
+interface Registered { a: number; b: number }
+class OtherOrder { b = 3; a = 4; }
+const registry: Registered[] = [];
+class SelfRegistering { a = 1; b = 2; tag = "self"; reg(): void { registry.push(this); } }
+class SubRegistering extends SelfRegistering { c = 5; }
+class Outside { a = 6; b = 7; label = "outside"; }
+function readRegistered(registered: Registered): number { return registered.a; }
+
 export function main(n: number): string {
   const unrelated = new Unrelated();
-  return read(new Prefix()) + read(new Derived()) + read(new Shifted()) + unrelated.b + unbox(new NumberBox()) + n;
+  readRegistered(new OtherOrder());
+  new SelfRegistering().reg();
+  new SubRegistering().reg();
+  registry.push(new Outside());
+  const last = readRegistered(registry[registry.length - 1]);
+  return read(new Prefix()) + read(new Derived()) + read(new Shifted()) + unrelated.b + unbox(new NumberBox()) + last + n;
 }

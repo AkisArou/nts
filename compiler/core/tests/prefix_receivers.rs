@@ -63,6 +63,15 @@ fn a_face_lists_the_owners_that_reach_it_as_a_prefix() {
         names
     };
     assert_eq!(names_of(layout("Face").types[0]), ["Derived", "Prefix"]);
+    // A receiver that reaches its face only as `this`, directly and through an
+    // inherited method, beside one pushed from outside.
+    let registered = names_of(layout("Registered").types[0]);
+    for owner in ["SelfRegistering", "SubRegistering", "Outside"] {
+        assert!(
+            registered.contains(&owner),
+            "{owner} reaches `Registered`: {registered:?}"
+        );
+    }
     // And the other half: `Shifted` reaches `Face` and is not a prefix.
     let other: Vec<&str> = program
         .interface_access
