@@ -1,6 +1,11 @@
 {
-  "bound": 6990,
+  "bound": 7044,
   "skipped": [
+    {
+      "interface": "AddEventListenerOptions",
+      "member": "signal",
+      "why": "dictionary member of type optional AbortSignal"
+    },
     {
       "interface": "EventTarget",
       "member": "addEventListener/3",
@@ -1542,6 +1547,26 @@
       "why": "dictionary member whose default 1 is not zero"
     },
     {
+      "interface": "PointerEventInit",
+      "member": "altitudeAngle",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "azimuthAngle",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "tiltX",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
+    },
+    {
+      "interface": "PointerEventInit",
+      "member": "tiltY",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
+    },
+    {
       "interface": "WheelEventInit",
       "member": "sourceCapabilities",
       "why": "dictionary member of type optional InputDeviceCapabilities?"
@@ -1975,6 +2000,11 @@
       "interface": "RequestInit",
       "member": "headers",
       "why": "dictionary member of type optional HeadersInit"
+    },
+    {
+      "interface": "RequestInit",
+      "member": "keepalive",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 11 members given or not, more than overloads spell (4)"
     },
     {
       "interface": "Window",
@@ -2423,6 +2453,11 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
+      "member": "setTransform/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
+    },
+    {
+      "interface": "CanvasRenderingContext2D",
       "member": "strokeTextCluster/3",
       "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
@@ -2460,6 +2495,11 @@
       "interface": "CanvasGradient",
       "member": "set premultipliedAlpha",
       "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
+    },
+    {
+      "interface": "Path2D",
+      "member": "addPath/2",
+      "why": "dictionary DOMMatrix2DInit has 12 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "Path2D",
@@ -3025,6 +3065,11 @@
       "interface": "CSSStyleRule",
       "member": "get styleMap",
       "why": "interface StylePropertyMap is not bound"
+    },
+    {
+      "interface": "DOMPointReadOnly",
+      "member": "matrixTransform/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "DOMPointReadOnly",
@@ -3722,6 +3767,16 @@
       "why": "dictionary member of type optional (double or CSSNumericValue)"
     },
     {
+      "interface": "OptionalEffectTiming",
+      "member": "iterationStart",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 5 members given or not, more than overloads spell (4)"
+    },
+    {
+      "interface": "OptionalEffectTiming",
+      "member": "iterations",
+      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 5 members given or not, more than overloads spell (4)"
+    },
+    {
       "interface": "KeyframeEffect",
       "member": "constructor/3",
       "why": "parameter type object?"
@@ -3875,6 +3930,11 @@
       "interface": "Clipboard",
       "member": "write/1",
       "why": "parameter type sequence<ClipboardItem>"
+    },
+    {
+      "interface": "CanvasPattern",
+      "member": "setTransform/1",
+      "why": "dictionary DOMMatrix2DInit has 12 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "HTMLAreaElement",
@@ -4333,6 +4393,11 @@
     },
     {
       "interface": "DOMMatrixReadOnly",
+      "member": "multiply/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
+    },
+    {
+      "interface": "DOMMatrixReadOnly",
       "member": "toFloat32Array/0",
       "why": "result type Float32Array"
     },
@@ -4357,6 +4422,21 @@
       "why": "parameter type Float64Array"
     },
     {
+      "interface": "DOMMatrixReadOnly",
+      "member": "fromMatrix/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
+    },
+    {
+      "interface": "DOMMatrix",
+      "member": "multiplySelf/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
+    },
+    {
+      "interface": "DOMMatrix",
+      "member": "preMultiplySelf/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
+    },
+    {
       "interface": "DOMMatrix",
       "member": "fromFloat32Array/1",
       "why": "parameter type Float32Array"
@@ -4365,6 +4445,11 @@
       "interface": "DOMMatrix",
       "member": "fromFloat64Array/1",
       "why": "parameter type Float64Array"
+    },
+    {
+      "interface": "DOMMatrix",
+      "member": "fromMatrix/1",
+      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "SVGElement",

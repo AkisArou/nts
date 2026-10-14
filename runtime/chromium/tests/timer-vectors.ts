@@ -105,7 +105,7 @@ function observeMutations(): void {
     log("delivered" + records.length + ":" + kinds);
     self.disconnect();
   });
-  observer.observe(target, { childList: true, attributes: true });
+  observer.observe(target, { childList: true, subtree: true });
   target.setAttribute("data-x", "1");
   target.appendChild(document().createElement("i"));
 }

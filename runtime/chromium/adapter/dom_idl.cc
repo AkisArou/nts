@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abstract_range.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_add_event_listener_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_animation.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_animation_effect.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_animation_event.h"
@@ -178,6 +179,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_behavior.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_image.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_internals.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_ending_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_error_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_error_event_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event.h"
@@ -1057,7 +1059,6 @@ blink::ShadowRootInit* NtsDomToShadowRootInit(NtsDomContext& context, const NtsD
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::ShadowRootInit::Create(isolate);
   if (from.clonable) to->setClonable(true);
-  if (from.delegatesFocus) to->setDelegatesFocus(true);
   if (!from.mode) { exception_state.ThrowTypeError("Required member is undefined."); return nullptr; }
   if (from.mode) {
     const blink::String text = NtsText(context, from.mode).Text();
@@ -1179,8 +1180,6 @@ blink::ScrollToOptions* NtsDomToScrollToOptions(NtsDomContext& context, const Nt
     }
     to->setBehavior(*value);
   }
-  if (from.left != 0) to->setLeft(from.left);
-  if (from.top != 0) to->setTop(from.top);
   return to;
 }
 blink::ScrollIntoViewOptions* NtsDomToScrollIntoViewOptions(NtsDomContext& context, const NtsDomScrollIntoViewOptions& from, blink::ExceptionState& exception_state) {
@@ -1239,14 +1238,7 @@ blink::ImportNodeOptions* NtsDomToImportNodeOptions(NtsDomContext& context, cons
 blink::FocusOptions* NtsDomToFocusOptions(NtsDomContext& context, const NtsDomFocusOptions& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::FocusOptions::Create(isolate);
-  if (from.focusVisible) to->setFocusVisible(true);
   if (from.preventScroll) to->setPreventScroll(true);
-  return to;
-}
-blink::TogglePopoverOptions* NtsDomToTogglePopoverOptions(NtsDomContext& context, const NtsDomTogglePopoverOptions& from, blink::ExceptionState& exception_state) {
-  v8::Isolate* isolate = context.v8_isolate.get();
-  auto* to = blink::TogglePopoverOptions::Create(isolate);
-  if (from.force) to->setForce(true);
   return to;
 }
 blink::EventInit* NtsDomToEventInit(NtsDomContext& context, const NtsDomEventInit& from, blink::ExceptionState& exception_state) {
@@ -5648,16 +5640,12 @@ blink::PointerEventInit* NtsDomToPointerEventInit(NtsDomContext& context, const 
   if (from.relatedTarget) to->setRelatedTarget(ObjectOf<blink::EventTarget>(from.relatedTarget));
   if (from.screenX != 0) to->setScreenX(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenX), conversion));
   if (from.screenY != 0) to->setScreenY(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.screenY), conversion));
-  if (from.altitudeAngle != 0) to->setAltitudeAngle(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.altitudeAngle), conversion));
-  if (from.azimuthAngle != 0) to->setAzimuthAngle(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.azimuthAngle), conversion));
   if (from.isPrimary) to->setIsPrimary(true);
   if (from.persistentDeviceId != 0) to->setPersistentDeviceId(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.persistentDeviceId), conversion));
   if (from.pointerId != 0) to->setPointerId(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.pointerId), conversion));
   if (from.pointerType) to->setPointerType(NtsText(context, from.pointerType));
   if (from.pressure != 0) to->setPressure(blink::NativeValueTraits<blink::IDLFloat>::NativeValue(isolate, v8::Number::New(isolate, from.pressure), conversion));
   if (from.tangentialPressure != 0) to->setTangentialPressure(blink::NativeValueTraits<blink::IDLFloat>::NativeValue(isolate, v8::Number::New(isolate, from.tangentialPressure), conversion));
-  if (from.tiltX != 0) to->setTiltX(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.tiltX), conversion));
-  if (from.tiltY != 0) to->setTiltY(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.tiltY), conversion));
   if (from.twist != 0) to->setTwist(blink::NativeValueTraits<blink::IDLLong>::NativeValue(isolate, v8::Number::New(isolate, from.twist), conversion));
   return to;
 }
@@ -5738,7 +5726,6 @@ blink::RequestInit* NtsDomToRequestInit(NtsDomContext& context, const NtsDomRequ
     to->setDuplex(*value);
   }
   if (from.integrity) to->setIntegrity(NtsText(context, from.integrity));
-  if (from.keepalive) to->setKeepalive(true);
   if (from.method) {
     const blink::String text = nts_dom::ByteText(context, from.method, exception_state);
     if (exception_state.HadException()) return nullptr;
@@ -5784,13 +5771,6 @@ blink::RequestInit* NtsDomToRequestInit(NtsDomContext& context, const NtsDomRequ
   if (from.signal) to->setSignal(ObjectOf<blink::AbortSignal>(from.signal));
   return to;
 }
-blink::PerformanceMarkOptions* NtsDomToPerformanceMarkOptions(NtsDomContext& context, const NtsDomPerformanceMarkOptions& from, blink::ExceptionState& exception_state) {
-  v8::Isolate* isolate = context.v8_isolate.get();
-  auto* to = blink::PerformanceMarkOptions::Create(isolate);
-  blink::DummyExceptionStateForTesting conversion;
-  if (from.startTime != 0) to->setStartTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.startTime), conversion));
-  return to;
-}
 blink::MediaQueryListEventInit* NtsDomToMediaQueryListEventInit(NtsDomContext& context, const NtsDomMediaQueryListEventInit& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::MediaQueryListEventInit::Create(isolate);
@@ -5804,10 +5784,6 @@ blink::MediaQueryListEventInit* NtsDomToMediaQueryListEventInit(NtsDomContext& c
 blink::MutationObserverInit* NtsDomToMutationObserverInit(NtsDomContext& context, const NtsDomMutationObserverInit& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::MutationObserverInit::Create(isolate);
-  if (from.attributeOldValue) to->setAttributeOldValue(true);
-  if (from.attributes) to->setAttributes(true);
-  if (from.characterData) to->setCharacterData(true);
-  if (from.characterDataOldValue) to->setCharacterDataOldValue(true);
   if (from.childList) to->setChildList(true);
   if (from.subtree) to->setSubtree(true);
   return to;
@@ -5847,49 +5823,6 @@ blink::ImageDataSettings* NtsDomToImageDataSettings(NtsDomContext& context, cons
     }
     to->setPixelFormat(*value);
   }
-  return to;
-}
-blink::DOMMatrixInit* NtsDomToDOMMatrixInit(NtsDomContext& context, const NtsDomDOMMatrixInit& from, blink::ExceptionState& exception_state) {
-  v8::Isolate* isolate = context.v8_isolate.get();
-  auto* to = blink::DOMMatrixInit::Create(isolate);
-  if (from.a != 0) to->setA(from.a);
-  if (from.b != 0) to->setB(from.b);
-  if (from.c != 0) to->setC(from.c);
-  if (from.d != 0) to->setD(from.d);
-  if (from.e != 0) to->setE(from.e);
-  if (from.f != 0) to->setF(from.f);
-  if (from.m11 != 0) to->setM11(from.m11);
-  if (from.m12 != 0) to->setM12(from.m12);
-  if (from.m21 != 0) to->setM21(from.m21);
-  if (from.m22 != 0) to->setM22(from.m22);
-  if (from.m41 != 0) to->setM41(from.m41);
-  if (from.m42 != 0) to->setM42(from.m42);
-  if (from.is2D) to->setIs2D(true);
-  if (from.m13 != 0) to->setM13(from.m13);
-  if (from.m14 != 0) to->setM14(from.m14);
-  if (from.m23 != 0) to->setM23(from.m23);
-  if (from.m24 != 0) to->setM24(from.m24);
-  if (from.m31 != 0) to->setM31(from.m31);
-  if (from.m32 != 0) to->setM32(from.m32);
-  if (from.m34 != 0) to->setM34(from.m34);
-  if (from.m43 != 0) to->setM43(from.m43);
-  return to;
-}
-blink::DOMMatrix2DInit* NtsDomToDOMMatrix2DInit(NtsDomContext& context, const NtsDomDOMMatrix2DInit& from, blink::ExceptionState& exception_state) {
-  v8::Isolate* isolate = context.v8_isolate.get();
-  auto* to = blink::DOMMatrix2DInit::Create(isolate);
-  if (from.a != 0) to->setA(from.a);
-  if (from.b != 0) to->setB(from.b);
-  if (from.c != 0) to->setC(from.c);
-  if (from.d != 0) to->setD(from.d);
-  if (from.e != 0) to->setE(from.e);
-  if (from.f != 0) to->setF(from.f);
-  if (from.m11 != 0) to->setM11(from.m11);
-  if (from.m12 != 0) to->setM12(from.m12);
-  if (from.m21 != 0) to->setM21(from.m21);
-  if (from.m22 != 0) to->setM22(from.m22);
-  if (from.m41 != 0) to->setM41(from.m41);
-  if (from.m42 != 0) to->setM42(from.m42);
   return to;
 }
 blink::AssignedNodesOptions* NtsDomToAssignedNodesOptions(NtsDomContext& context, const NtsDomAssignedNodesOptions& from, blink::ExceptionState& exception_state) {
@@ -6030,7 +5963,6 @@ blink::PageTransitionEventInit* NtsDomToPageTransitionEventInit(NtsDomContext& c
   if (from.bubbles) to->setBubbles(true);
   if (from.cancelable) to->setCancelable(true);
   if (from.composed) to->setComposed(true);
-  if (from.persisted) to->setPersisted(true);
   return to;
 }
 blink::ProgressEventInit* NtsDomToProgressEventInit(NtsDomContext& context, const NtsDomProgressEventInit& from, blink::ExceptionState& exception_state) {
@@ -6061,7 +5993,6 @@ blink::ErrorEventInit* NtsDomToErrorEventInit(NtsDomContext& context, const NtsD
 blink::OptionalEffectTiming* NtsDomToOptionalEffectTiming(NtsDomContext& context, const NtsDomOptionalEffectTiming& from, blink::ExceptionState& exception_state) {
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::OptionalEffectTiming::Create(isolate);
-  blink::DummyExceptionStateForTesting conversion;
   if (from.direction) {
     const blink::String text = NtsText(context, from.direction).Text();
     const auto value = blink::V8PlaybackDirection::Create(text);
@@ -6081,8 +6012,6 @@ blink::OptionalEffectTiming* NtsDomToOptionalEffectTiming(NtsDomContext& context
     }
     to->setFill(*value);
   }
-  if (from.iterationStart != 0) to->setIterationStart(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.iterationStart), conversion));
-  if (from.iterations != 0) to->setIterations(from.iterations);
   return to;
 }
 blink::DocumentTimelineOptions* NtsDomToDocumentTimelineOptions(NtsDomContext& context, const NtsDomDocumentTimelineOptions& from, blink::ExceptionState& exception_state) {
@@ -8384,6 +8313,33 @@ NtsDomShadowRoot* nts_dom_Element_attachShadow(NtsDomElement* self, NtsDomShadow
   return HandleOf<NtsDomShadowRoot>(receiver->attachShadow(shadowRootInitDict_converted, exception_state));
 }
 
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus_slotAssignment(NtsDomElement* self, bool shadowRootInitDict_delegatesFocus, const NtsBorrowedString* shadowRootInitDict_mode, const NtsBorrowedString* shadowRootInitDict_slotAssignment, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomShadowRootInit shadowRootInitDict_fields = {}; shadowRootInitDict_fields.clonable = shadowRootInitDict_clonable; shadowRootInitDict_fields.mode = shadowRootInitDict_mode; shadowRootInitDict_fields.serializable = shadowRootInitDict_serializable; shadowRootInitDict_fields.slotAssignment = shadowRootInitDict_slotAssignment; auto* shadowRootInitDict_converted = NtsDomToShadowRootInit(context, shadowRootInitDict_fields, exception_state); if (shadowRootInitDict_converted) { shadowRootInitDict_converted->setDelegatesFocus(shadowRootInitDict_delegatesFocus); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomShadowRoot>(receiver->attachShadow(shadowRootInitDict_converted, exception_state));
+}
+
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus(NtsDomElement* self, bool shadowRootInitDict_delegatesFocus, const NtsBorrowedString* shadowRootInitDict_mode, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomShadowRootInit shadowRootInitDict_fields = {}; shadowRootInitDict_fields.clonable = shadowRootInitDict_clonable; shadowRootInitDict_fields.mode = shadowRootInitDict_mode; shadowRootInitDict_fields.serializable = shadowRootInitDict_serializable; auto* shadowRootInitDict_converted = NtsDomToShadowRootInit(context, shadowRootInitDict_fields, exception_state); if (shadowRootInitDict_converted) { shadowRootInitDict_converted->setDelegatesFocus(shadowRootInitDict_delegatesFocus); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomShadowRoot>(receiver->attachShadow(shadowRootInitDict_converted, exception_state));
+}
+
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_slotAssignment(NtsDomElement* self, const NtsBorrowedString* shadowRootInitDict_mode, const NtsBorrowedString* shadowRootInitDict_slotAssignment, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomShadowRootInit shadowRootInitDict_fields = {}; shadowRootInitDict_fields.clonable = shadowRootInitDict_clonable; shadowRootInitDict_fields.mode = shadowRootInitDict_mode; shadowRootInitDict_fields.serializable = shadowRootInitDict_serializable; shadowRootInitDict_fields.slotAssignment = shadowRootInitDict_slotAssignment; auto* shadowRootInitDict_converted = NtsDomToShadowRootInit(context, shadowRootInitDict_fields, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomShadowRoot>(receiver->attachShadow(shadowRootInitDict_converted, exception_state));
+}
+
 void nts_dom_Element_before_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -9327,6 +9283,83 @@ void nts_dom_Element_scroll_1(NtsDomElement* self, NtsDomScrollToOptions options
   receiver->scrollTo(script_state, options_converted);
 }
 
+void nts_dom_Element_scroll_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scroll_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
 void nts_dom_Element_scroll_0(NtsDomElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Element>(self);
@@ -9348,6 +9381,83 @@ void nts_dom_Element_scrollBy_1(NtsDomElement* self, NtsDomScrollToOptions optio
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Element>(self);
   auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollBy_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
@@ -9414,6 +9524,83 @@ void nts_dom_Element_scrollTo_1(NtsDomElement* self, NtsDomScrollToOptions optio
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Element>(self);
   auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Element_scrollTo_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
@@ -19881,6 +20068,14 @@ void nts_dom_HTMLElement_focus_1(NtsDomHTMLElement* self, NtsDomFocusOptions opt
   receiver->focusForBindings(options_converted);
 }
 
+void nts_dom_HTMLElement_focus_1_FocusOptions_focusVisible(NtsDomHTMLElement* self, bool options_focusVisible, bool options_preventScroll) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::HTMLElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  NtsDomFocusOptions options_fields = {}; options_fields.preventScroll = options_preventScroll; auto* options_converted = NtsDomToFocusOptions(context, options_fields, conversion); if (options_converted) { options_converted->setFocusVisible(options_focusVisible); }
+  receiver->focusForBindings(options_converted);
+}
+
 void nts_dom_HTMLElement_focus_0(NtsDomHTMLElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
@@ -19919,11 +20114,11 @@ struct NtsPromise* nts_dom_HTMLElement_showUnboundedElement(NtsDomHTMLElement* s
   return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->showUnboundedElement(script_state));
 }
 
-bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions(NtsDomHTMLElement* self, NtsDomTogglePopoverOptions options, NtsDomException** error) {
+bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions_force(NtsDomHTMLElement* self, bool options_force, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::HTMLElement>(self);
-  auto* options_converted = NtsDomToTogglePopoverOptions(context, options, exception_state);
+  auto* options_converted = blink::TogglePopoverOptions::Create(context.v8_isolate.get()); if (options_converted) { options_converted->setForce(options_force); }
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return static_cast<bool>(receiver->togglePopover(blink::MakeGarbageCollected<blink::V8UnionBooleanOrTogglePopoverOptions>(options_converted), exception_state));
 }
@@ -37004,6 +37199,83 @@ void nts_dom_Window_scroll_1(NtsDomWindow* self, NtsDomScrollToOptions options, 
   receiver->scrollTo(script_state, options_converted);
 }
 
+void nts_dom_Window_scroll_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scroll_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
 void nts_dom_Window_scroll_0(NtsDomWindow* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
@@ -37031,6 +37303,83 @@ void nts_dom_Window_scrollBy_1(NtsDomWindow* self, NtsDomScrollToOptions options
   receiver->scrollBy(script_state, options_converted);
 }
 
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollBy_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollBy(script_state, options_converted);
+}
+
 void nts_dom_Window_scrollBy_0(NtsDomWindow* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
@@ -37052,6 +37401,83 @@ void nts_dom_Window_scrollTo_1(NtsDomWindow* self, NtsDomScrollToOptions options
   Throws exception_state(error);
   auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
   auto* options_converted = NtsDomToScrollToOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setLeft(options_left); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {};  auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state); if (options_converted) { options_converted->setTop(options_top); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->scrollTo(script_state, options_converted);
+}
+
+void nts_dom_Window_scrollTo_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = blink::To<blink::LocalDOMWindow>(ObjectOf<blink::DOMWindow>(self));
+  NtsDomScrollToOptions options_fields = {}; options_fields.behavior = options_behavior; auto* options_converted = NtsDomToScrollToOptions(context, options_fields, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
@@ -37193,11 +37619,11 @@ NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByType(NtsDomPerfo
   return nts_dom::SequenceHandle<NtsDomPerformanceEntrySequence>(nts_dom::Sequence(receiver->getEntriesByType(NtsText(context, entryType))));
 }
 
-NtsDomPerformanceMark* nts_dom_Performance_mark_2(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error) {
+NtsDomPerformanceMark* nts_dom_Performance_mark_2_PerformanceMarkOptions_startTime(NtsDomPerformance* self, const NtsBorrowedString* markName, double markOptions_startTime, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Performance>(self);
-  auto* markOptions_converted = NtsDomToPerformanceMarkOptions(context, markOptions, exception_state);
+  auto* markOptions_converted = blink::PerformanceMarkOptions::Create(context.v8_isolate.get()); if (markOptions_converted) { markOptions_converted->setStartTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), markOptions_startTime), exception_state)); }
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
@@ -37976,6 +38402,141 @@ void nts_dom_MutationObserver_observe_2(NtsDomMutationObserver* self, NtsDomNode
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::MutationObserver>(self);
   auto* options_converted = NtsDomToMutationObserverInit(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setAttributes(options_attributes); options_converted->setCharacterData(options_characterData); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setAttributes(options_attributes); options_converted->setCharacterData(options_characterData); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setAttributes(options_attributes); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setCharacterData(options_characterData); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributes(options_attributes); options_converted->setCharacterData(options_characterData); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setAttributes(options_attributes); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setCharacterData(options_characterData); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributes(options_attributes); options_converted->setCharacterData(options_characterData); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributes(options_attributes); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setCharacterData(options_characterData); options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributeOldValue(options_attributeOldValue); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setAttributes(options_attributes); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setCharacterData(options_characterData); }
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
+}
+
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::MutationObserver>(self);
+  NtsDomMutationObserverInit options_fields = {}; options_fields.childList = options_childList; options_fields.subtree = options_subtree; auto* options_converted = NtsDomToMutationObserverInit(context, options_fields, exception_state); if (options_converted) { options_converted->setCharacterDataOldValue(options_characterDataOldValue); }
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->observe(ObjectOf<blink::Node>(target), options_converted, exception_state);
 }
@@ -39075,15 +39636,6 @@ void nts_dom_CanvasRenderingContext2D_setTransform_6(NtsDomCanvasRenderingContex
   receiver->setTransform(a, b, c, d, e, f);
 }
 
-void nts_dom_CanvasRenderingContext2D_setTransform_1(NtsDomCanvasRenderingContext2D* self, NtsDomDOMMatrixInit transform, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
-  auto* transform_converted = NtsDomToDOMMatrixInit(context, transform, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
-  receiver->setTransform(transform_converted, exception_state);
-}
-
 void nts_dom_CanvasRenderingContext2D_setTransform_0(NtsDomCanvasRenderingContext2D* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -39154,15 +39706,6 @@ NtsDomPath2D* nts_dom_new_Path2D_0() {
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return HandleOf<NtsDomPath2D>(Path2D::Create(script_state));
-}
-
-void nts_dom_Path2D_addPath_2(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomDOMMatrix2DInit transform, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::Path2D>(self);
-  auto* transform_converted = NtsDomToDOMMatrix2DInit(context, transform, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
-  receiver->addPath(ObjectOf<blink::Path2D>(path), transform_converted, exception_state);
 }
 
 void nts_dom_Path2D_addPath_1(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomException** error) {
@@ -40749,15 +41292,6 @@ double nts_dom_DOMPointReadOnly_get_w(NtsDomDOMPointReadOnly* self) {
   return static_cast<double>(receiver->w());
 }
 
-NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_1(NtsDomDOMPointReadOnly* self, NtsDomDOMMatrixInit matrix, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::DOMPointReadOnly>(self);
-  auto* matrix_converted = NtsDomToDOMMatrixInit(context, matrix, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMPoint>(receiver->matrixTransform(matrix_converted, exception_state));
-}
-
 NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_0(NtsDomDOMPointReadOnly* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -42092,6 +42626,13 @@ NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2(const NtsBorrowedSt
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_converted = NtsDomToPageTransitionEventInit(context, eventInitDict, conversion);
+  return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), eventInitDict_converted));
+}
+
+NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEventInit_persisted(const NtsBorrowedString* type, bool eventInitDict_persisted, bool eventInitDict_bubbles, bool eventInitDict_cancelable, bool eventInitDict_composed) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  NtsDomPageTransitionEventInit eventInitDict_fields = {}; eventInitDict_fields.bubbles = eventInitDict_bubbles; eventInitDict_fields.cancelable = eventInitDict_cancelable; eventInitDict_fields.composed = eventInitDict_composed; auto* eventInitDict_converted = NtsDomToPageTransitionEventInit(context, eventInitDict_fields, conversion); if (eventInitDict_converted) { eventInitDict_converted->setPersisted(eventInitDict_persisted); }
   return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), eventInitDict_converted));
 }
 
@@ -44350,10 +44891,10 @@ NtsDomPerformanceMark* nts_dom_as_PerformanceMark(NtsDomPerformanceEntry* object
   return HandleOf<NtsDomPerformanceMark>(nts_dom_is(object, NTS_DOM_PerformanceMark) ? WrappableOf(object) : nullptr);
 }
 
-NtsDomPerformanceMark* nts_dom_new_PerformanceMark_2(const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error) {
+NtsDomPerformanceMark* nts_dom_new_PerformanceMark_2_PerformanceMarkOptions_startTime(const NtsBorrowedString* markName, double markOptions_startTime, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
-  auto* markOptions_converted = NtsDomToPerformanceMarkOptions(context, markOptions, exception_state);
+  auto* markOptions_converted = blink::PerformanceMarkOptions::Create(context.v8_isolate.get()); if (markOptions_converted) { markOptions_converted->setStartTime(blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), markOptions_startTime), exception_state)); }
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
@@ -45219,15 +45760,6 @@ struct NtsPromise* nts_dom_Clipboard_writeText(NtsDomClipboard* self, const NtsB
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->writeText(script_state, NtsText(context, data), exception_state));
-}
-
-void nts_dom_CanvasPattern_setTransform_1(NtsDomCanvasPattern* self, NtsDomDOMMatrix2DInit transform, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::CanvasPattern>(self);
-  auto* transform_converted = NtsDomToDOMMatrix2DInit(context, transform, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
-  receiver->setTransform(transform_converted, exception_state);
 }
 
 void nts_dom_CanvasPattern_setTransform_0(NtsDomCanvasPattern* self, NtsDomException** error) {
@@ -49025,15 +49557,6 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_inverse(NtsDomDOMMatrixReadOnly* self
   return HandleOf<NtsDomDOMMatrix>(receiver->inverse());
 }
 
-NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_1(NtsDomDOMMatrixReadOnly* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
-  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMMatrix>(receiver->multiply(other_converted, exception_state));
-}
-
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_0(NtsDomDOMMatrixReadOnly* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -49263,14 +49786,6 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* 
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->translate(0, 0, 0));
-}
-
-NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromMatrix(other_converted, exception_state));
 }
 
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_0(NtsDomException** error) {
@@ -49573,29 +50088,11 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_invertSelf(NtsDomDOMMatrix* self) {
   return HandleOf<NtsDomDOMMatrix>(receiver->invertSelf());
 }
 
-NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
-  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(other_converted, exception_state));
-}
-
 NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::DOMMatrix>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
-}
-
-NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
-  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMMatrix>(receiver->preMultiplySelf(other_converted, exception_state));
 }
 
 NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
@@ -49802,14 +50299,6 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMMatrix>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(0, 0, 0));
-}
-
-NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {
-  NtsDomContext& context = nts_dom::Current();
-  Throws exception_state(error);
-  auto* other_converted = NtsDomToDOMMatrixInit(context, other, exception_state);
-  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
-  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromMatrix(other_converted, exception_state));
 }
 
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_0(NtsDomException** error) {
@@ -53324,6 +53813,14 @@ void nts_dom_SVGElement_focus_1(NtsDomSVGElement* self, NtsDomFocusOptions optio
   auto* receiver = ObjectOf<blink::SVGElement>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* options_converted = NtsDomToFocusOptions(context, options, conversion);
+  receiver->focusForBindings(options_converted);
+}
+
+void nts_dom_SVGElement_focus_1_FocusOptions_focusVisible(NtsDomSVGElement* self, bool options_focusVisible, bool options_preventScroll) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  NtsDomFocusOptions options_fields = {}; options_fields.preventScroll = options_preventScroll; auto* options_converted = NtsDomToFocusOptions(context, options_fields, conversion); if (options_converted) { options_converted->setFocusVisible(options_focusVisible); }
   receiver->focusForBindings(options_converted);
 }
 

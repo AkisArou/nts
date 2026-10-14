@@ -37,6 +37,7 @@ declare module "nts:dom" {
   export type SlotAssignmentMode = "manual" | "named";
   export type SupportedType = "text/html" | "text/xml" | "application/xml" | "application/xhtml+xml" | "image/svg+xml";
   export type VisibilityState = "hidden" | "visible";
+  export type AddEventListenerOptions = Struct<{ capture: CBool<Uint8>; once: CBool<Uint8> }, "NtsDomAddEventListenerOptions">;
   export type AnimationEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; animation: Animation | null; animationName: StringView; elapsedTime: Float64; pseudoElement: StringView }, "NtsDomAnimationEventInit">;
   export type AssignedNodesOptions = Struct<{ flatten: CBool<Uint8> }, "NtsDomAssignedNodesOptions">;
   export type BoxQuadOptions = Struct<{ box: StringView }, "NtsDomBoxQuadOptions">;
@@ -46,16 +47,15 @@ declare module "nts:dom" {
   export type CompositionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; data: StringView }, "NtsDomCompositionEventInit">;
   export type ConvertCoordinateOptions = Struct<{ fromBox: StringView; toBox: StringView }, "NtsDomConvertCoordinateOptions">;
   export type CustomEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomCustomEventInit">;
-  export type DOMMatrix2DInit = Struct<{ a: Float64; b: Float64; c: Float64; d: Float64; e: Float64; f: Float64; m11: Float64; m12: Float64; m21: Float64; m22: Float64; m41: Float64; m42: Float64 }, "NtsDomDOMMatrix2DInit">;
-  export type DOMMatrixInit = Struct<{ a: Float64; b: Float64; c: Float64; d: Float64; e: Float64; f: Float64; m11: Float64; m12: Float64; m21: Float64; m22: Float64; m41: Float64; m42: Float64; is2D: CBool<Uint8>; m13: Float64; m14: Float64; m23: Float64; m24: Float64; m31: Float64; m32: Float64; m34: Float64; m43: Float64 }, "NtsDomDOMMatrixInit">;
   export type DOMPointInit = Struct<{ x: Float64; y: Float64; z: Float64 }, "NtsDomDOMPointInit">;
   export type DOMRectInit = Struct<{ height: Float64; width: Float64; x: Float64; y: Float64 }, "NtsDomDOMRectInit">;
   export type DocumentTimelineOptions = Struct<{ originTime: Float64 }, "NtsDomDocumentTimelineOptions">;
   export type DragEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; dataTransfer: DataTransfer | null }, "NtsDomDragEventInit">;
   export type ErrorEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; colno: Float64; filename: StringView; lineno: Float64; message: StringView }, "NtsDomErrorEventInit">;
   export type EventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomEventInit">;
+  export type FilePropertyBag = Struct<{ endings: StringView; type: StringView }, "NtsDomFilePropertyBag">;
   export type FocusEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; relatedTarget: EventTarget | null }, "NtsDomFocusEventInit">;
-  export type FocusOptions = Struct<{ focusVisible: CBool<Uint8>; preventScroll: CBool<Uint8> }, "NtsDomFocusOptions">;
+  export type FocusOptions = Struct<{ preventScroll: CBool<Uint8> }, "NtsDomFocusOptions">;
   export type FullscreenOptions = Struct<{ navigationUI: StringView }, "NtsDomFullscreenOptions">;
   export type GetAnimationsOptions = Struct<{ subtree: CBool<Uint8> }, "NtsDomGetAnimationsOptions">;
   export type GetHTMLOptions = Struct<{ serializableShadowRoots: CBool<Uint8> }, "NtsDomGetHTMLOptions">;
@@ -68,25 +68,23 @@ declare module "nts:dom" {
   export type MediaQueryListEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; matches: CBool<Uint8>; media: StringView }, "NtsDomMediaQueryListEventInit">;
   export type MessageEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; lastEventId: StringView; origin: StringView; source: EventTarget | null; userActivation: UserActivation | null }, "NtsDomMessageEventInit">;
   export type MouseEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64 }, "NtsDomMouseEventInit">;
-  export type MutationObserverInit = Struct<{ attributeOldValue: CBool<Uint8>; attributes: CBool<Uint8>; characterData: CBool<Uint8>; characterDataOldValue: CBool<Uint8>; childList: CBool<Uint8>; subtree: CBool<Uint8> }, "NtsDomMutationObserverInit">;
-  export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: Float64; iterations: Float64 }, "NtsDomOptionalEffectTiming">;
-  export type PageTransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; persisted: CBool<Uint8> }, "NtsDomPageTransitionEventInit">;
-  export type PerformanceMarkOptions = Struct<{ startTime: Float64 }, "NtsDomPerformanceMarkOptions">;
-  export type PointerEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; altitudeAngle: Float64; azimuthAngle: Float64; isPrimary: CBool<Uint8>; persistentDeviceId: Float64; pointerId: Float64; pointerType: StringView; pressure: Float64; tangentialPressure: Float64; tiltX: Float64; tiltY: Float64; twist: Float64 }, "NtsDomPointerEventInit">;
+  export type MutationObserverInit = Struct<{ childList: CBool<Uint8>; subtree: CBool<Uint8> }, "NtsDomMutationObserverInit">;
+  export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView }, "NtsDomOptionalEffectTiming">;
+  export type PageTransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomPageTransitionEventInit">;
+  export type PointerEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; isPrimary: CBool<Uint8>; persistentDeviceId: Float64; pointerId: Float64; pointerType: StringView; pressure: Float64; tangentialPressure: Float64; twist: Float64 }, "NtsDomPointerEventInit">;
   export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<Uint8> }, "NtsDomPointerLockOptions">;
   export type PopStateEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; hasUAVisualTransition: CBool<Uint8> }, "NtsDomPopStateEventInit">;
   export type ProgressEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; lengthComputable: CBool<Uint8>; loaded: Float64; total: Float64 }, "NtsDomProgressEventInit">;
-  export type RequestInit = Struct<{ cache: StringView; credentials: StringView; duplex: StringView; integrity: StringView; keepalive: CBool<Uint8>; method: StringView; mode: StringView; priority: StringView; redirect: StringView; referrer: StringView; referrerPolicy: StringView; signal: AbortSignal | null }, "NtsDomRequestInit">;
+  export type RequestInit = Struct<{ cache: StringView; credentials: StringView; duplex: StringView; integrity: StringView; method: StringView; mode: StringView; priority: StringView; redirect: StringView; referrer: StringView; referrerPolicy: StringView; signal: AbortSignal | null }, "NtsDomRequestInit">;
   export type ResizeObserverOptions = Struct<{ box: StringView }, "NtsDomResizeObserverOptions">;
   export type ScrollIntoViewOptions = Struct<{ behavior: StringView; block: StringView; container: StringView; inline: StringView }, "NtsDomScrollIntoViewOptions">;
-  export type ScrollToOptions = Struct<{ behavior: StringView; left: Float64; top: Float64 }, "NtsDomScrollToOptions">;
+  export type ScrollToOptions = Struct<{ behavior: StringView }, "NtsDomScrollToOptions">;
   export type SecurityPolicyViolationEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; blockedURI: StringView; columnNumber: Float64; disposition: StringView; documentURI: StringView; effectiveDirective: StringView; lineNumber: Float64; originalPolicy: StringView; referrer: StringView; sample: StringView; sourceFile: StringView; statusCode: Float64; violatedDirective: StringView }, "NtsDomSecurityPolicyViolationEventInit">;
   export type SetHTMLUnsafeOptions = Struct<{ runScripts: CBool<Uint8> }, "NtsDomSetHTMLUnsafeOptions">;
-  export type ShadowRootInit = Struct<{ clonable: CBool<Uint8>; delegatesFocus: CBool<Uint8>; mode: StringView; serializable: CBool<Uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
+  export type ShadowRootInit = Struct<{ clonable: CBool<Uint8>; mode: StringView; serializable: CBool<Uint8>; slotAssignment: StringView }, "NtsDomShadowRootInit">;
   export type StorageEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; key: StringView; newValue: StringView; oldValue: StringView; storageArea: Storage | null; url: StringView }, "NtsDomStorageEventInit">;
   export type SubmitEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; submitter: HTMLElement | null }, "NtsDomSubmitEventInit">;
   export type ToggleEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; newState: StringView; oldState: StringView; source: Element | null }, "NtsDomToggleEventInit">;
-  export type TogglePopoverOptions = Struct<{ force: CBool<Uint8> }, "NtsDomTogglePopoverOptions">;
   export type TouchEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8> }, "NtsDomTouchEventInit">;
   export type TransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; animation: Animation | null; elapsedTime: Float64; propertyName: StringView; pseudoElement: StringView }, "NtsDomTransitionEventInit">;
   export type UIEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null }, "NtsDomUIEventInit">;
@@ -1627,6 +1625,27 @@ declare module "nts:dom" {
      */
     attachShadow(this: Element, shadowRootInitDict: ByValue<ShadowRootInit> | Fields<ShadowRootInit>, error?: Ptr<DOMException | null>): ShadowRoot;
     /**
+     * @ntsSymbol nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus_slotAssignment
+     * @ntsDefault clonable=0 serializable=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    attachShadow(this: Element, delegatesFocus: boolean, mode: StringView, slotAssignment: StringView, clonable?: boolean, serializable?: boolean, error?: Ptr<DOMException | null>): ShadowRoot;
+    /**
+     * @ntsSymbol nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus
+     * @ntsDefault clonable=0 serializable=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    attachShadow(this: Element, delegatesFocus: boolean, mode: StringView, clonable?: boolean, serializable?: boolean, error?: Ptr<DOMException | null>): ShadowRoot;
+    /**
+     * @ntsSymbol nts_dom_Element_attachShadow_ShadowRootInit_slotAssignment
+     * @ntsDefault clonable=0 serializable=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    attachShadow(this: Element, mode: StringView, slotAssignment: StringView, clonable?: boolean, serializable?: boolean, error?: Ptr<DOMException | null>): ShadowRoot;
+    /**
      * @ntsSymbol nts_dom_Element_before_sss
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -2251,6 +2270,48 @@ declare module "nts:dom" {
      */
     scroll(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scroll_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Element, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Element_scroll_0
      */
     scroll(this: Element): void;
@@ -2264,6 +2325,48 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     scrollBy(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollBy_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Element, behavior: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_scrollBy_0
      */
@@ -2300,6 +2403,48 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     scrollTo(this: Element, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Element_scrollTo_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Element, behavior: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Element_scrollTo_0
      */
@@ -8750,6 +8895,11 @@ declare module "nts:dom" {
      */
     focus(this: HTMLElement, options: ByValue<FocusOptions> | Fields<FocusOptions>): void;
     /**
+     * @ntsSymbol nts_dom_HTMLElement_focus_1_FocusOptions_focusVisible
+     * @ntsDefault preventScroll=0
+     */
+    focus(this: HTMLElement, focusVisible: boolean, preventScroll?: boolean): void;
+    /**
      * @ntsSymbol nts_dom_HTMLElement_focus_0
      */
     focus(this: HTMLElement): void;
@@ -8774,11 +8924,11 @@ declare module "nts:dom" {
      */
     showUnboundedElement(this: HTMLElement): Promise<void>;
     /**
-     * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions
+     * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions_force
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    togglePopover(this: HTMLElement, options: ByValue<TogglePopoverOptions> | Fields<TogglePopoverOptions>, error?: Ptr<DOMException | null>): boolean;
+    togglePopover(this: HTMLElement, force: boolean, error?: Ptr<DOMException | null>): boolean;
     /**
      * @ntsSymbol nts_dom_HTMLElement_togglePopover_1_boolean
      * @ntsThrows error nts_dom_exception_take_message
@@ -24298,6 +24448,48 @@ declare module "nts:dom" {
      */
     scroll(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scroll_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scroll(this: Window, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Window_scroll_0
      */
     scroll(this: Window): void;
@@ -24312,6 +24504,48 @@ declare module "nts:dom" {
      */
     scrollBy(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
     /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollBy_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollBy(this: Window, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_Window_scrollBy_0
      */
     scrollBy(this: Window): void;
@@ -24325,6 +24559,48 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     scrollTo(this: Window, options: ByValue<ScrollToOptions> | Fields<ScrollToOptions>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_left_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, left: Float64, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_left_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, left: Float64, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_left_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, left: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_top_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, top: Float64, behavior: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_left
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, left: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_top
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, top: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_Window_scrollTo_1_ScrollToOptions_behavior
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    scrollTo(this: Window, behavior: StringView, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Window_scrollTo_0
      */
@@ -24418,11 +24694,11 @@ declare module "nts:dom" {
      */
     getEntriesByType(this: Performance, entryType: StringView): PerformanceEntrySequence;
     /**
-     * @ntsSymbol nts_dom_Performance_mark_2
+     * @ntsSymbol nts_dom_Performance_mark_2_PerformanceMarkOptions_startTime
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
-    mark(this: Performance, markName: StringView, markOptions: ByValue<PerformanceMarkOptions> | Fields<PerformanceMarkOptions>, error?: Ptr<DOMException | null>): PerformanceMark;
+    mark(this: Performance, markName: StringView, startTime: Float64, error?: Ptr<DOMException | null>): PerformanceMark;
     /**
      * @ntsSymbol nts_dom_Performance_mark_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -25164,6 +25440,111 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     observe(this: MutationObserver, target: Node, options: ByValue<MutationObserverInit> | Fields<MutationObserverInit>, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, attributes: boolean, characterData: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, attributes: boolean, characterData: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, attributes: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, characterData: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributes: boolean, characterData: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, attributes: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, characterData: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributes: boolean, characterData: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributes: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, characterData: boolean, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributeOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, attributes: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, characterData: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_MutationObserver_observe_2_MutationObserverInit_characterDataOldValue
+     * @ntsDefault childList=0 subtree=0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    observe(this: MutationObserver, target: Node, characterDataOldValue: boolean, childList?: boolean, subtree?: boolean, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_MutationObserver_observe_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -26159,12 +26540,6 @@ declare module "nts:dom" {
      */
     setTransform(this: CanvasRenderingContext2D, a: Float64, b: Float64, c: Float64, d: Float64, e: Float64, f: Float64): void;
     /**
-     * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    setTransform(this: CanvasRenderingContext2D, transform: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): void;
-    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -26212,12 +26587,6 @@ declare module "nts:dom" {
   export type CanvasGradientMethods = CanvasGradientOwnMethods;
   export type CanvasGradient = HostClass<"NtsDomCanvasGradient", null, "nts_dom_retain", "nts_dom_release"> & CanvasGradientMethods;
   export interface Path2DOwnMethods {
-    /**
-     * @ntsSymbol nts_dom_Path2D_addPath_2
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    addPath(this: Path2D, path: Path2D, transform: ByValue<DOMMatrix2DInit> | Fields<DOMMatrix2DInit>, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_addPath_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -27784,12 +28153,6 @@ declare module "nts:dom" {
      */
     readonly w: Float64;
     /**
-     * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    matrixTransform(this: DOMPointReadOnly, matrix: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMPoint;
-    /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -29195,6 +29558,11 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_PageTransitionEvent_2
    */
   export function newPageTransitionEvent(type: StringView, eventInitDict: ByValue<PageTransitionEventInit> | Fields<PageTransitionEventInit>): PageTransitionEvent;
+  /**
+   * @ntsSymbol nts_dom_new_PageTransitionEvent_2_PageTransitionEventInit_persisted
+   * @ntsDefault bubbles=0 cancelable=0 composed=0
+   */
+  export function newPageTransitionEvent(type: StringView, persisted: boolean, bubbles?: boolean, cancelable?: boolean, composed?: boolean): PageTransitionEvent;
   /**
    * @ntsSymbol nts_dom_new_PageTransitionEvent_1
    */
@@ -31382,11 +31750,11 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_PerformanceMark */
   export function asPerformanceMark(object: PerformanceEntry): PerformanceMark | null;
   /**
-   * @ntsSymbol nts_dom_new_PerformanceMark_2
+   * @ntsSymbol nts_dom_new_PerformanceMark_2_PerformanceMarkOptions_startTime
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
    */
-  export function newPerformanceMark(markName: StringView, markOptions: ByValue<PerformanceMarkOptions> | Fields<PerformanceMarkOptions>, error?: Ptr<DOMException | null>): PerformanceMark;
+  export function newPerformanceMark(markName: StringView, startTime: Float64, error?: Ptr<DOMException | null>): PerformanceMark;
   /**
    * @ntsSymbol nts_dom_new_PerformanceMark_1
    * @ntsThrows error nts_dom_exception_take_message
@@ -32163,12 +32531,6 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_Clipboard */
   export function asClipboard(target: EventTarget): Clipboard | null;
   export interface CanvasPatternOwnMethods {
-    /**
-     * @ntsSymbol nts_dom_CanvasPattern_setTransform_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    setTransform(this: CanvasPattern, transform: ByValue<DOMMatrix2DInit> | Fields<DOMMatrix2DInit>, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasPattern_setTransform_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -35432,12 +35794,6 @@ declare module "nts:dom" {
      */
     inverse(this: DOMMatrixReadOnly): DOMMatrix;
     /**
-     * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    multiply(this: DOMMatrixReadOnly, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
-    /**
      * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -35600,12 +35956,6 @@ declare module "nts:dom" {
   }
   export type DOMMatrixReadOnlyMethods = DOMMatrixReadOnlyOwnMethods;
   export type DOMMatrixReadOnly = HostClass<"NtsDomDOMMatrixReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMMatrixReadOnlyMethods;
-  /**
-   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_1
-   * @ntsThrows error nts_dom_exception_take_message
-   * @ntsNoEscape error
-   */
-  export function DOMMatrixReadOnly_fromMatrix(other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
   /**
    * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_0
    * @ntsThrows error nts_dom_exception_take_message
@@ -35916,23 +36266,11 @@ declare module "nts:dom" {
      */
     invertSelf(this: DOMMatrix): DOMMatrix;
     /**
-     * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    multiplySelf(this: DOMMatrix, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
-    /**
      * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     multiplySelf(this: DOMMatrix, error?: Ptr<DOMException | null>): DOMMatrix;
-    /**
-     * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_1
-     * @ntsThrows error nts_dom_exception_take_message
-     * @ntsNoEscape error
-     */
-    preMultiplySelf(this: DOMMatrix, other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
     /**
      * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -36078,12 +36416,6 @@ declare module "nts:dom" {
   export type DOMMatrix = HostClass<"NtsDomDOMMatrix", DOMMatrixReadOnly> & DOMMatrixMethods;
   /** @ntsSymbol nts_dom_as_DOMMatrix */
   export function asDOMMatrix(object: DOMMatrixReadOnly): DOMMatrix | null;
-  /**
-   * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_1
-   * @ntsThrows error nts_dom_exception_take_message
-   * @ntsNoEscape error
-   */
-  export function DOMMatrix_fromMatrix(other: ByValue<DOMMatrixInit> | Fields<DOMMatrixInit>, error?: Ptr<DOMException | null>): DOMMatrix;
   /**
    * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_0
    * @ntsThrows error nts_dom_exception_take_message
@@ -38011,6 +38343,11 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_SVGElement_focus_1
      */
     focus(this: SVGElement, options: ByValue<FocusOptions> | Fields<FocusOptions>): void;
+    /**
+     * @ntsSymbol nts_dom_SVGElement_focus_1_FocusOptions_focusVisible
+     * @ntsDefault preventScroll=0
+     */
+    focus(this: SVGElement, focusVisible: boolean, preventScroll?: boolean): void;
     /**
      * @ntsSymbol nts_dom_SVGElement_focus_0
      */

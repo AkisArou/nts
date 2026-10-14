@@ -574,7 +574,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   const blob = newBlob();
   log("blob", blob.size + "|" + shown(blob.type) + "|" + blob.slice(0, 0, "text/plain").type);
   w.performance.clearMarks("nts-mark");
-  w.performance.mark("nts-mark", {});
+  w.performance.mark("nts-mark");
   const marks = w.performance.getEntriesByName("nts-mark", "mark");
   log("performanceMark", marks.length + "|" + marks.item(0)!.entryType + "|" + marks.item(0)!.name + "|" + (marks.item(0)!.startTime >= 0 ? "timed" : "untimed"));
   w.performance.clearMarks("nts-mark");
@@ -803,7 +803,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   offsets.push("" + scroller.scrollTop);
   scroller.scrollBy(0, 30);
   offsets.push("" + scroller.scrollTop);
-  scroller.scrollTo({ top: 10 });
+  scroller.scrollTop = 10;
   offsets.push("" + scroller.scrollTop);
   mark.scrollIntoView(true);
   offsets.push("" + scroller.scrollTop);
@@ -858,13 +858,15 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
     newRequest("https://x.test/", { method: "✓" });
   });
 
-  // MutationObserver: the records of a child list and an attribute change,
-  // taken before delivery; a sequence of interfaces, read by index.
+  // MutationObserver: the records of a child list, taken before delivery; a
+  // sequence of interfaces, read by index. (An observation of attributes
+  // writes members whose presence matters, which nts:dom spells only as
+  // parameters: lib-dom-vectors.ts writes them as page script does.)
   const watched = d.createElement("div");
   root.appendChild(watched);
   const unused = (records: MutationRecordSequence, observer: MutationObserver): void => {};
   const mutations = newMutationObserver(unused);
-  mutations.observe(watched, { childList: true, attributes: true, attributeOldValue: true, subtree: true });
+  mutations.observe(watched, { childList: true, subtree: true });
   watched.setAttribute("data-state", "one");
   watched.setAttribute("data-state", "two");
   const added = d.createElement("b");

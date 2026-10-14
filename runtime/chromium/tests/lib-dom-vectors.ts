@@ -515,12 +515,12 @@ export function libDomTranscript(): string {
       circle.getAttribute("data-kind") + "|" + gradient.getAttribute("gradientUnits") + "|" + (circle.ownerSVGElement === svg));
   }
 
-  // DOMMatrix: parsed from a transform list, read, inverted, multiplied by
-  // a literal, a point carried through, and written back as text.
+  // DOMMatrix: parsed from a transform list, read, inverted, scaled, a
+  // point carried through, and written back as text.
   {
     const matrix = new DOMMatrix("translate(10px, 20px) scale(2)");
     const inverse = matrix.inverse();
-    const doubled = matrix.multiply({ a: 2, d: 2 });
+    const doubled = matrix.scale(2);
     const point = matrix.transformPoint({ x: 1, y: 1 });
     matrix.translateSelf(5, 5);
     log("domMatrix", matrix.a + "," + matrix.e + "," + matrix.f + "|" + inverse.e + "," + inverse.a + "|" + doubled.a + "," +
@@ -593,6 +593,66 @@ export function libDomTranscript(): string {
     const custom = amount.validity.customError + ":" + amount.validationMessage + ":" + amount.checkValidity();
     amount.setCustomValidity("");
     log("numberValidity", over + "|" + stepped + "|" + custom + "|" + amount.checkValidity() + ":" + amount.validity.valid);
+  }
+
+  // Dictionaries whose members' presence matters to Blink (it asks
+  // hasTop()): given as zero or false is not left out. `scrollTo({top: 0})`
+  // scrolls to the top and keeps the other axis.
+  // `attributes: false` with `attributeOldValue` is page script's TypeError,
+  // where `attributes` left out is taken as true. A popover forced shut stays
+  // shut. Each member is a parameter of its name, given or not.
+  {
+    const scroller = document.createElement("div");
+    scroller.setAttribute("style", "width: 50px; height: 50px; overflow: auto");
+    const big = document.createElement("div");
+    big.setAttribute("style", "width: 400px; height: 400px");
+    scroller.appendChild(big);
+    root.appendChild(scroller);
+    const at = (): string => scroller.scrollLeft + "," + scroller.scrollTop;
+    scroller.scrollTo(30, 40);
+    const steps = [at()];
+    scroller.scrollTo({ top: 0 });
+    steps.push(at());
+    scroller.scrollTo({ left: 0, behavior: "instant" });
+    steps.push(at());
+    scroller.scrollTo({ left: 20, top: 25 });
+    steps.push(at());
+    scroller.scrollBy({ top: 5 });
+    steps.push(at());
+    log("scrollOptions", steps.join("|"));
+
+    const watched = document.createElement("p");
+    const observer = new MutationObserver((): void => {});
+    observer.observe(watched, { attributeOldValue: true });
+    watched.setAttribute("title", "a");
+    watched.setAttribute("title", "b");
+    const records = observer.takeRecords();
+    let refused = "none";
+    try {
+      observer.observe(watched, { attributes: false, attributeOldValue: true });
+    } catch (error) {
+      const message = (error as Error).message;
+      refused = message.slice(message.lastIndexOf(": ") + 2);
+    }
+    observer.disconnect();
+    log("observeOptions", records.length + ":" + (records.length > 1 ? records[1].oldValue : "none") + "|" + refused);
+
+    const popover = document.createElement("div");
+    popover.popover = "manual";
+    root.appendChild(popover);
+    const states = popover.togglePopover({ force: true }) + "," + popover.togglePopover({ force: true }) + "," +
+      popover.togglePopover({ force: false }) + "," + popover.togglePopover({ force: false }) + "," + popover.togglePopover();
+    popover.hidePopover();
+    const button = document.createElement("button");
+    root.appendChild(button);
+    // Without scrolling to it: the page's scroll is the smoke's to keep.
+    button.focus({ focusVisible: true, preventScroll: true });
+    const visible = button.matches(":focus-visible");
+    button.blur();
+    button.focus({ focusVisible: false, preventScroll: true });
+    log("presenceOptions", states + "|" + visible + "," + button.matches(":focus-visible") + "," +
+      (document.activeElement === button));
+    button.blur();
   }
 
   // Events of the types lib.dom's event maps name, made and read: their own

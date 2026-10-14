@@ -323,6 +323,10 @@ typedef struct NtsDomPointerEventSequence NtsDomPointerEventSequence;
 typedef struct NtsDomResizeObserverEntrySequence NtsDomResizeObserverEntrySequence;
 typedef struct NtsDomResizeObserverSizeSequence NtsDomResizeObserverSizeSequence;
 typedef struct NtsDomStaticRangeSequence NtsDomStaticRangeSequence;
+typedef struct NtsDomAddEventListenerOptions {
+  uint8_t capture;
+  uint8_t once;
+} NtsDomAddEventListenerOptions;
 typedef struct NtsDomAnimationEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -372,43 +376,6 @@ typedef struct NtsDomCustomEventInit {
   uint8_t cancelable;
   uint8_t composed;
 } NtsDomCustomEventInit;
-typedef struct NtsDomDOMMatrix2DInit {
-  double a;
-  double b;
-  double c;
-  double d;
-  double e;
-  double f;
-  double m11;
-  double m12;
-  double m21;
-  double m22;
-  double m41;
-  double m42;
-} NtsDomDOMMatrix2DInit;
-typedef struct NtsDomDOMMatrixInit {
-  double a;
-  double b;
-  double c;
-  double d;
-  double e;
-  double f;
-  double m11;
-  double m12;
-  double m21;
-  double m22;
-  double m41;
-  double m42;
-  uint8_t is2D;
-  double m13;
-  double m14;
-  double m23;
-  double m24;
-  double m31;
-  double m32;
-  double m34;
-  double m43;
-} NtsDomDOMMatrixInit;
 typedef struct NtsDomDOMPointInit {
   double x;
   double y;
@@ -465,6 +432,10 @@ typedef struct NtsDomEventInit {
   uint8_t cancelable;
   uint8_t composed;
 } NtsDomEventInit;
+typedef struct NtsDomFilePropertyBag {
+  const NtsBorrowedString* endings;
+  const NtsBorrowedString* type;
+} NtsDomFilePropertyBag;
 typedef struct NtsDomFocusEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -474,7 +445,6 @@ typedef struct NtsDomFocusEventInit {
   NtsDomEventTarget* relatedTarget;
 } NtsDomFocusEventInit;
 typedef struct NtsDomFocusOptions {
-  uint8_t focusVisible;
   uint8_t preventScroll;
 } NtsDomFocusOptions;
 typedef struct NtsDomFullscreenOptions {
@@ -582,10 +552,6 @@ typedef struct NtsDomMouseEventInit {
   double screenY;
 } NtsDomMouseEventInit;
 typedef struct NtsDomMutationObserverInit {
-  uint8_t attributeOldValue;
-  uint8_t attributes;
-  uint8_t characterData;
-  uint8_t characterDataOldValue;
   uint8_t childList;
   uint8_t subtree;
 } NtsDomMutationObserverInit;
@@ -593,18 +559,12 @@ typedef struct NtsDomOptionalEffectTiming {
   const NtsBorrowedString* direction;
   const NtsBorrowedString* easing;
   const NtsBorrowedString* fill;
-  double iterationStart;
-  double iterations;
 } NtsDomOptionalEffectTiming;
 typedef struct NtsDomPageTransitionEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
   uint8_t composed;
-  uint8_t persisted;
 } NtsDomPageTransitionEventInit;
-typedef struct NtsDomPerformanceMarkOptions {
-  double startTime;
-} NtsDomPerformanceMarkOptions;
 typedef struct NtsDomPointerEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -631,16 +591,12 @@ typedef struct NtsDomPointerEventInit {
   NtsDomEventTarget* relatedTarget;
   double screenX;
   double screenY;
-  double altitudeAngle;
-  double azimuthAngle;
   uint8_t isPrimary;
   double persistentDeviceId;
   double pointerId;
   const NtsBorrowedString* pointerType;
   double pressure;
   double tangentialPressure;
-  double tiltX;
-  double tiltY;
   double twist;
 } NtsDomPointerEventInit;
 typedef struct NtsDomPointerLockOptions {
@@ -665,7 +621,6 @@ typedef struct NtsDomRequestInit {
   const NtsBorrowedString* credentials;
   const NtsBorrowedString* duplex;
   const NtsBorrowedString* integrity;
-  uint8_t keepalive;
   const NtsBorrowedString* method;
   const NtsBorrowedString* mode;
   const NtsBorrowedString* priority;
@@ -685,8 +640,6 @@ typedef struct NtsDomScrollIntoViewOptions {
 } NtsDomScrollIntoViewOptions;
 typedef struct NtsDomScrollToOptions {
   const NtsBorrowedString* behavior;
-  double left;
-  double top;
 } NtsDomScrollToOptions;
 typedef struct NtsDomSecurityPolicyViolationEventInit {
   uint8_t bubbles;
@@ -710,7 +663,6 @@ typedef struct NtsDomSetHTMLUnsafeOptions {
 } NtsDomSetHTMLUnsafeOptions;
 typedef struct NtsDomShadowRootInit {
   uint8_t clonable;
-  uint8_t delegatesFocus;
   const NtsBorrowedString* mode;
   uint8_t serializable;
   const NtsBorrowedString* slotAssignment;
@@ -739,9 +691,6 @@ typedef struct NtsDomToggleEventInit {
   const NtsBorrowedString* oldState;
   NtsDomElement* source;
 } NtsDomToggleEventInit;
-typedef struct NtsDomTogglePopoverOptions {
-  uint8_t force;
-} NtsDomTogglePopoverOptions;
 typedef struct NtsDomTouchEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -1638,6 +1587,9 @@ void nts_dom_Element_append_s(NtsDomElement* self, const NtsBorrowedString* node
 void nts_dom_Element_append_n(NtsDomElement* self, NtsDomNode* nodes1, NtsDomException** error);
 void nts_dom_Element_append_0(NtsDomElement* self, NtsDomException** error);
 NtsDomShadowRoot* nts_dom_Element_attachShadow(NtsDomElement* self, NtsDomShadowRootInit shadowRootInitDict, NtsDomException** error);
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus_slotAssignment(NtsDomElement* self, bool shadowRootInitDict_delegatesFocus, const NtsBorrowedString* shadowRootInitDict_mode, const NtsBorrowedString* shadowRootInitDict_slotAssignment, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error);
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_delegatesFocus(NtsDomElement* self, bool shadowRootInitDict_delegatesFocus, const NtsBorrowedString* shadowRootInitDict_mode, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error);
+NtsDomShadowRoot* nts_dom_Element_attachShadow_ShadowRootInit_slotAssignment(NtsDomElement* self, const NtsBorrowedString* shadowRootInitDict_mode, const NtsBorrowedString* shadowRootInitDict_slotAssignment, bool shadowRootInitDict_clonable, bool shadowRootInitDict_serializable, NtsDomException** error);
 void nts_dom_Element_before_sss(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error);
 void nts_dom_Element_before_ssn(NtsDomElement* self, const NtsBorrowedString* nodes1, const NtsBorrowedString* nodes2, NtsDomNode* nodes3, NtsDomException** error);
 void nts_dom_Element_before_sns(NtsDomElement* self, const NtsBorrowedString* nodes1, NtsDomNode* nodes2, const NtsBorrowedString* nodes3, NtsDomException** error);
@@ -1750,9 +1702,23 @@ struct NtsPromise* nts_dom_Element_requestFullscreen_0(NtsDomElement* self);
 struct NtsPromise* nts_dom_Element_requestPointerLock_1(NtsDomElement* self, NtsDomPointerLockOptions options);
 struct NtsPromise* nts_dom_Element_requestPointerLock_0(NtsDomElement* self);
 void nts_dom_Element_scroll_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error);
+void nts_dom_Element_scroll_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Element_scroll_0(NtsDomElement* self);
 void nts_dom_Element_scroll_2(NtsDomElement* self, double x, double y);
 void nts_dom_Element_scrollBy_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error);
+void nts_dom_Element_scrollBy_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Element_scrollBy_0(NtsDomElement* self);
 void nts_dom_Element_scrollBy_2(NtsDomElement* self, double x, double y);
 void nts_dom_Element_scrollIntoView_1_ScrollIntoViewOptions(NtsDomElement* self, NtsDomScrollIntoViewOptions arg, NtsDomException** error);
@@ -1761,6 +1727,13 @@ void nts_dom_Element_scrollIntoView_0(NtsDomElement* self);
 void nts_dom_Element_scrollIntoViewIfNeeded_1(NtsDomElement* self, bool centerIfNeeded);
 void nts_dom_Element_scrollIntoViewIfNeeded_0(NtsDomElement* self);
 void nts_dom_Element_scrollTo_1(NtsDomElement* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_top_behavior(NtsDomElement* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_top(NtsDomElement* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left_behavior(NtsDomElement* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_top_behavior(NtsDomElement* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_left(NtsDomElement* self, double options_left, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_top(NtsDomElement* self, double options_top, NtsDomException** error);
+void nts_dom_Element_scrollTo_1_ScrollToOptions_behavior(NtsDomElement* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Element_scrollTo_0(NtsDomElement* self);
 void nts_dom_Element_scrollTo_2(NtsDomElement* self, double x, double y);
 void nts_dom_Element_setAttribute_2(NtsDomElement* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error);
@@ -3033,12 +3006,13 @@ NtsDomCSSStyleDeclaration* nts_dom_HTMLElement_get_style(NtsDomHTMLElement* self
 void nts_dom_HTMLElement_blur(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_click(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_focus_1(NtsDomHTMLElement* self, NtsDomFocusOptions options);
+void nts_dom_HTMLElement_focus_1_FocusOptions_focusVisible(NtsDomHTMLElement* self, bool options_focusVisible, bool options_preventScroll);
 void nts_dom_HTMLElement_focus_0(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_hidePopover(NtsDomHTMLElement* self, NtsDomException** error);
 struct NtsPromise* nts_dom_HTMLElement_hideUnboundedElement(NtsDomHTMLElement* self);
 void nts_dom_HTMLElement_showPopover_0(NtsDomHTMLElement* self, NtsDomException** error);
 struct NtsPromise* nts_dom_HTMLElement_showUnboundedElement(NtsDomHTMLElement* self);
-bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions(NtsDomHTMLElement* self, NtsDomTogglePopoverOptions options, NtsDomException** error);
+bool nts_dom_HTMLElement_togglePopover_1_TogglePopoverOptions_force(NtsDomHTMLElement* self, bool options_force, NtsDomException** error);
 bool nts_dom_HTMLElement_togglePopover_1_boolean(NtsDomHTMLElement* self, bool options, NtsDomException** error);
 bool nts_dom_HTMLElement_togglePopover_0(NtsDomHTMLElement* self, NtsDomException** error);
 NtsDomHTMLInputElement* nts_dom_as_HTMLInputElement(NtsDomNode* node);
@@ -5419,12 +5393,33 @@ void nts_dom_Window_requestResize(NtsDomWindow* self, NtsDomException** error);
 void nts_dom_Window_resizeBy(NtsDomWindow* self, double x, double y, NtsDomException** error);
 void nts_dom_Window_resizeTo(NtsDomWindow* self, double x, double y, NtsDomException** error);
 void nts_dom_Window_scroll_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error);
+void nts_dom_Window_scroll_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Window_scroll_0(NtsDomWindow* self);
 void nts_dom_Window_scroll_2(NtsDomWindow* self, double x, double y);
 void nts_dom_Window_scrollBy_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error);
+void nts_dom_Window_scrollBy_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Window_scrollBy_0(NtsDomWindow* self);
 void nts_dom_Window_scrollBy_2(NtsDomWindow* self, double x, double y);
 void nts_dom_Window_scrollTo_1(NtsDomWindow* self, NtsDomScrollToOptions options, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_top_behavior(NtsDomWindow* self, double options_left, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_top(NtsDomWindow* self, double options_left, double options_top, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left_behavior(NtsDomWindow* self, double options_left, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_top_behavior(NtsDomWindow* self, double options_top, const NtsBorrowedString* options_behavior, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_left(NtsDomWindow* self, double options_left, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_top(NtsDomWindow* self, double options_top, NtsDomException** error);
+void nts_dom_Window_scrollTo_1_ScrollToOptions_behavior(NtsDomWindow* self, const NtsBorrowedString* options_behavior, NtsDomException** error);
 void nts_dom_Window_scrollTo_0(NtsDomWindow* self);
 void nts_dom_Window_scrollTo_2(NtsDomWindow* self, double x, double y);
 void nts_dom_Window_stop(NtsDomWindow* self);
@@ -5445,7 +5440,7 @@ NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntries(NtsDomPerformance
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByName_2(NtsDomPerformance* self, const NtsBorrowedString* name, const NtsBorrowedString* entryType);
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByName_1(NtsDomPerformance* self, const NtsBorrowedString* name);
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByType(NtsDomPerformance* self, const NtsBorrowedString* entryType);
-NtsDomPerformanceMark* nts_dom_Performance_mark_2(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error);
+NtsDomPerformanceMark* nts_dom_Performance_mark_2_PerformanceMarkOptions_startTime(NtsDomPerformance* self, const NtsBorrowedString* markName, double markOptions_startTime, NtsDomException** error);
 NtsDomPerformanceMark* nts_dom_Performance_mark_1(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomException** error);
 NtsDomPerformanceMeasure* nts_dom_Performance_measure_1(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomException** error);
 double nts_dom_Performance_now(NtsDomPerformance* self);
@@ -5563,6 +5558,21 @@ void nts_dom_URLSearchParams_sort(NtsDomURLSearchParams* self);
 const NtsStringView* nts_dom_URLSearchParams_toString(NtsDomURLSearchParams* self);
 void nts_dom_MutationObserver_disconnect(NtsDomMutationObserver* self);
 void nts_dom_MutationObserver_observe_2(NtsDomMutationObserver* self, NtsDomNode* target, NtsDomMutationObserverInit options, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_attributes(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_attributes, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterData, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributeOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributeOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_attributes(NtsDomMutationObserver* self, NtsDomNode* target, bool options_attributes, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterData(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterData, bool options_childList, bool options_subtree, NtsDomException** error);
+void nts_dom_MutationObserver_observe_2_MutationObserverInit_characterDataOldValue(NtsDomMutationObserver* self, NtsDomNode* target, bool options_characterDataOldValue, bool options_childList, bool options_subtree, NtsDomException** error);
 void nts_dom_MutationObserver_observe_1(NtsDomMutationObserver* self, NtsDomNode* target, NtsDomException** error);
 NtsDomMutationRecordSequence* nts_dom_MutationObserver_takeRecords(NtsDomMutationObserver* self);
 const NtsStringView* nts_dom_MutationRecord_get_type(NtsDomMutationRecord* self);
@@ -5721,7 +5731,6 @@ void nts_dom_CanvasRenderingContext2D_roundRect_4(NtsDomCanvasRenderingContext2D
 void nts_dom_CanvasRenderingContext2D_save(NtsDomCanvasRenderingContext2D* self);
 void nts_dom_CanvasRenderingContext2D_scale(NtsDomCanvasRenderingContext2D* self, double x, double y);
 void nts_dom_CanvasRenderingContext2D_setTransform_6(NtsDomCanvasRenderingContext2D* self, double a, double b, double c, double d, double e, double f);
-void nts_dom_CanvasRenderingContext2D_setTransform_1(NtsDomCanvasRenderingContext2D* self, NtsDomDOMMatrixInit transform, NtsDomException** error);
 void nts_dom_CanvasRenderingContext2D_setTransform_0(NtsDomCanvasRenderingContext2D* self, NtsDomException** error);
 void nts_dom_CanvasRenderingContext2D_stroke_0(NtsDomCanvasRenderingContext2D* self);
 void nts_dom_CanvasRenderingContext2D_stroke_1(NtsDomCanvasRenderingContext2D* self, NtsDomPath2D* path);
@@ -5733,7 +5742,6 @@ void nts_dom_CanvasRenderingContext2D_translate(NtsDomCanvasRenderingContext2D* 
 void nts_dom_CanvasGradient_addColorStop(NtsDomCanvasGradient* self, double offset, const NtsBorrowedString* color, NtsDomException** error);
 NtsDomPath2D* nts_dom_new_Path2D_1(const NtsBorrowedString* path);
 NtsDomPath2D* nts_dom_new_Path2D_0();
-void nts_dom_Path2D_addPath_2(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomDOMMatrix2DInit transform, NtsDomException** error);
 void nts_dom_Path2D_addPath_1(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomException** error);
 void nts_dom_Path2D_arc_6(NtsDomPath2D* self, double x, double y, double radius, double startAngle, double endAngle, bool anticlockwise, NtsDomException** error);
 void nts_dom_Path2D_arc_5(NtsDomPath2D* self, double x, double y, double radius, double startAngle, double endAngle, NtsDomException** error);
@@ -5971,7 +5979,6 @@ double nts_dom_DOMPointReadOnly_get_x(NtsDomDOMPointReadOnly* self);
 double nts_dom_DOMPointReadOnly_get_y(NtsDomDOMPointReadOnly* self);
 double nts_dom_DOMPointReadOnly_get_z(NtsDomDOMPointReadOnly* self);
 double nts_dom_DOMPointReadOnly_get_w(NtsDomDOMPointReadOnly* self);
-NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_1(NtsDomDOMPointReadOnly* self, NtsDomDOMMatrixInit matrix, NtsDomException** error);
 NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_0(NtsDomDOMPointReadOnly* self, NtsDomException** error);
 NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1(NtsDomDOMPointInit other);
 NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_0();
@@ -6185,6 +6192,7 @@ const NtsStringView* nts_dom_HashChangeEvent_get_newURL(NtsDomHashChangeEvent* s
 bool nts_dom_HashChangeEvent_get_isTrusted(NtsDomHashChangeEvent* self);
 NtsDomPageTransitionEvent* nts_dom_as_PageTransitionEvent(NtsDomEvent* event);
 NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2(const NtsBorrowedString* type, NtsDomPageTransitionEventInit eventInitDict);
+NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEventInit_persisted(const NtsBorrowedString* type, bool eventInitDict_persisted, bool eventInitDict_bubbles, bool eventInitDict_cancelable, bool eventInitDict_composed);
 NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_1(const NtsBorrowedString* type);
 bool nts_dom_PageTransitionEvent_get_persisted(NtsDomPageTransitionEvent* self);
 bool nts_dom_PageTransitionEvent_get_isTrusted(NtsDomPageTransitionEvent* self);
@@ -6518,7 +6526,7 @@ const NtsStringView* nts_dom_PerformanceEntry_get_entryType(NtsDomPerformanceEnt
 double nts_dom_PerformanceEntry_get_startTime(NtsDomPerformanceEntry* self);
 double nts_dom_PerformanceEntry_get_duration(NtsDomPerformanceEntry* self);
 NtsDomPerformanceMark* nts_dom_as_PerformanceMark(NtsDomPerformanceEntry* object);
-NtsDomPerformanceMark* nts_dom_new_PerformanceMark_2(const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error);
+NtsDomPerformanceMark* nts_dom_new_PerformanceMark_2_PerformanceMarkOptions_startTime(const NtsBorrowedString* markName, double markOptions_startTime, NtsDomException** error);
 NtsDomPerformanceMark* nts_dom_new_PerformanceMark_1(const NtsBorrowedString* markName, NtsDomException** error);
 NtsDomPerformanceMeasure* nts_dom_as_PerformanceMeasure(NtsDomPerformanceEntry* object);
 bool nts_dom_BarProp_get_visible(NtsDomBarProp* self);
@@ -6638,7 +6646,6 @@ void nts_dom_Clipboard_set_onclipboardchange_boolean(NtsDomClipboard* self, bool
 void nts_dom_Clipboard_set_onclipboardchange_null(NtsDomClipboard* self);
 struct NtsPromise* nts_dom_Clipboard_readText(NtsDomClipboard* self);
 struct NtsPromise* nts_dom_Clipboard_writeText(NtsDomClipboard* self, const NtsBorrowedString* data);
-void nts_dom_CanvasPattern_setTransform_1(NtsDomCanvasPattern* self, NtsDomDOMMatrix2DInit transform, NtsDomException** error);
 void nts_dom_CanvasPattern_setTransform_0(NtsDomCanvasPattern* self, NtsDomException** error);
 NtsDomHTMLAreaElement* nts_dom_as_HTMLAreaElement(NtsDomNode* node);
 const NtsStringView* nts_dom_HTMLAreaElement_get_alt(NtsDomHTMLAreaElement* self);
@@ -7187,7 +7194,6 @@ bool nts_dom_DOMMatrixReadOnly_get_isIdentity(NtsDomDOMMatrixReadOnly* self);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_flipX(NtsDomDOMMatrixReadOnly* self);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_flipY(NtsDomDOMMatrixReadOnly* self);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_inverse(NtsDomDOMMatrixReadOnly* self);
-NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_1(NtsDomDOMMatrixReadOnly* self, NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_0(NtsDomDOMMatrixReadOnly* self, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_3(NtsDomDOMMatrixReadOnly* self, double rotX, double rotY, double rotZ);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_rotate_2(NtsDomDOMMatrixReadOnly* self, double rotX, double rotY);
@@ -7226,7 +7232,6 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_3(NtsDomDOMMatrixReadOnly* 
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_2(NtsDomDOMMatrixReadOnly* self, double tx, double ty);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_1(NtsDomDOMMatrixReadOnly* self, double tx);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* self);
-NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_0(NtsDomException** error);
 const NtsStringView* nts_dom_DOMMatrixReadOnly_toString(NtsDomDOMMatrixReadOnly* self, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_as_DOMMatrix(NtsDomDOMMatrixReadOnly* object);
@@ -7277,9 +7282,7 @@ void nts_dom_DOMMatrix_set_m43(NtsDomDOMMatrix* self, double value);
 double nts_dom_DOMMatrix_get_m44(NtsDomDOMMatrix* self);
 void nts_dom_DOMMatrix_set_m44(NtsDomDOMMatrix* self, double value);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_invertSelf(NtsDomDOMMatrix* self);
-NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error);
-NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_1(NtsDomDOMMatrix* self, NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_4(NtsDomDOMMatrix* self, double x, double y, double z, double angle);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_rotateAxisAngleSelf_3(NtsDomDOMMatrix* self, double x, double y, double z);
@@ -7314,7 +7317,6 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_3(NtsDomDOMMatrix* self, double
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_2(NtsDomDOMMatrix* self, double tx, double ty);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_1(NtsDomDOMMatrix* self, double tx);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self);
-NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_0(NtsDomException** error);
 NtsDomSVGElement* nts_dom_as_SVGElement(NtsDomNode* node);
 NtsDomSVGAnimatedString* nts_dom_SVGElement_get_className(NtsDomSVGElement* self);
@@ -7733,6 +7735,7 @@ void nts_dom_SVGElement_set_focusGroupStart(NtsDomSVGElement* self, bool value);
 NtsDomCSSStyleDeclaration* nts_dom_SVGElement_get_style(NtsDomSVGElement* self);
 void nts_dom_SVGElement_blur(NtsDomSVGElement* self);
 void nts_dom_SVGElement_focus_1(NtsDomSVGElement* self, NtsDomFocusOptions options);
+void nts_dom_SVGElement_focus_1_FocusOptions_focusVisible(NtsDomSVGElement* self, bool options_focusVisible, bool options_preventScroll);
 void nts_dom_SVGElement_focus_0(NtsDomSVGElement* self);
 NtsDomSVGGraphicsElement* nts_dom_as_SVGGraphicsElement(NtsDomNode* node);
 NtsDomSVGAnimatedTransformList* nts_dom_SVGGraphicsElement_get_transform(NtsDomSVGGraphicsElement* self);
