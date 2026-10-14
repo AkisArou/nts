@@ -59,6 +59,8 @@ pub mod written_storage;
 
 mod bridges;
 pub mod cse;
+#[cfg(test)]
+mod cycles_oracle;
 mod dispatch;
 pub mod floating;
 mod initialized;
@@ -3809,6 +3811,8 @@ impl Program {
                 continue;
             }
             for (source, held) in self.layouts.iter().enumerate() {
+                #[cfg(test)]
+                cycles_oracle::record_work(1);
                 if source != target
                     && wanted.fields.len() <= held.fields.len()
                     && wanted
