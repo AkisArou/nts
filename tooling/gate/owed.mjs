@@ -832,7 +832,7 @@ export function stepInputs() {
       bodies.set(m[1], stop < 0 ? rest : rest.slice(0, stop));
     }
     // A segment never ends in `.`: "... in tooling/x.ts." is the file, not "x.ts.".
-    const PATH = /(?:^|[\s"'=(/$])((?:tooling|runtime|tests|benchmarks|compiler|build|docs)(?:\/[A-Za-z0-9_.@+*-]*[A-Za-z0-9_@+*-])+)/g;
+    const PATH = /(?:^|[\s"'=(/$])((?:tooling|runtime|tests|benchmarks|results|compiler|build|docs)(?:\/[A-Za-z0-9_.@+*-]*[A-Za-z0-9_@+*-])+)/g;
     // Code, not prose: a comment that mentions a path does not read it. A
     // directory of two segments (`tooling/conformance`, from a path built
     // with a variable) is too wide to mean anything and is dropped.

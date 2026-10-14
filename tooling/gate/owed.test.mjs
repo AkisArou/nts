@@ -93,7 +93,7 @@ test("what a step runs owes that step", () => {
   owes("tooling/differential/agree.mjs", ["llvm", "llvm-rc", "jvm"]);
   owes("tooling/android/dexes.sh", ["dex"]);
   owes("tooling/gate/definitions", ["definitions"]);
-  owes("tooling/census/test262-language.outcomes.tsv", ["test262-cases"]);
+  owes("results/test262/c/language.tsv", ["test262-cases"]);
   owes("tooling/gate/compile-times.tsv", ["compile-time"]);
 });
 

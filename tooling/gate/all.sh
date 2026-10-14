@@ -1843,7 +1843,7 @@ test262() {
 # parses every file's metadata and classifies feature *names*; nothing is
 # compiled and nothing is run, so "34 features supported" was a claim about
 # tokens. This step is the measured half: `tooling/census/conformance262.ts`
-# over the cases recorded in `tooling/census/test262-language.outcomes.tsv` --
+# over the cases recorded in `results/test262/c/language.tsv` --
 # every case that compiled, linked and ran on the last full run, with what it
 # did. A pass must still pass; a wrong answer must still be *that* wrong answer,
 # so a fail recorded as `uncaught Test262Error: #1` fails here if it starts
@@ -1854,7 +1854,7 @@ test262() {
 # gate (a quarter hour at twelve workers, and killed twice mid-run on this box):
 #
 #   node tooling/census/conformance262.ts --resume --rows ~/.cache/nts/t262.rows \
-#     --record tooling/census/test262-language.outcomes.tsv
+#     --record results/test262/c/language.tsv
 #
 # then raise TEST262_LANGUAGE_PASS_FLOOR to the new pass-count. Lower it only
 # with the REGRESSED lines in the commit message.
@@ -1961,7 +1961,7 @@ test262_recorded() {
   fi
 }
 test262_cases() {
-  test262_recorded test/language tooling/census/test262-language.outcomes.tsv \
+  test262_recorded test/language results/test262/c/language.tsv \
     "$TEST262_LANGUAGE_PASS_FLOOR" TEST262_LANGUAGE_PASS_FLOOR \
     "$TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING" TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING
 }
@@ -1987,7 +1987,7 @@ test262_cases() {
 TEST262_BUILTINS_PASS_FLOOR=776
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
-  test262_recorded test/built-ins tooling/census/test262-builtins.outcomes.tsv \
+  test262_recorded test/built-ins results/test262/c/builtins.tsv \
     "$TEST262_BUILTINS_PASS_FLOOR" TEST262_BUILTINS_PASS_FLOOR \
     "$TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING" TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING
 }
@@ -2006,13 +2006,13 @@ TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=3
 TEST262_HARNESS_PASS_FLOOR=12
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
-  test262_recorded test/annexB tooling/census/test262-annexb.outcomes.tsv \
+  test262_recorded test/annexB results/test262/c/annexb.tsv \
     "$TEST262_ANNEXB_PASS_FLOOR" TEST262_ANNEXB_PASS_FLOOR \
     "$TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING" TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING || return $?
-  test262_recorded test/staging tooling/census/test262-staging.outcomes.tsv \
+  test262_recorded test/staging results/test262/c/staging.tsv \
     "$TEST262_STAGING_PASS_FLOOR" TEST262_STAGING_PASS_FLOOR \
     "$TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING" TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING || return $?
-  test262_recorded test/harness tooling/census/test262-harness.outcomes.tsv \
+  test262_recorded test/harness results/test262/c/harness.tsv \
     "$TEST262_HARNESS_PASS_FLOOR" TEST262_HARNESS_PASS_FLOOR \
     "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
 }
