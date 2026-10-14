@@ -1,5 +1,4 @@
-// expect: a managed value where C takes a pointer: pass a handle, a `Ptr`,
-//         or `null` is not supported by this lowering yet
+// expect: emit-c --rc -> emits-c nts_dom_Document_importNode_2_boolean(
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): lib.dom
 // declares `importNode(node, options?: boolean | ImportNodeOptions)`, one
@@ -19,8 +18,9 @@
 // Found by the Chromium lane writing a kanban app against lib.dom
 // (2026-10-14).
 //
-// Fixed, this expectation stops holding; then a guard,
-// `emit-c --rc -> emits-c nts_dom_Document_importNode_2_boolean(`.
+// **A guard since 2026-10-14** (dd2e506ae): a record parameter takes only an
+// object whose members name its fields (`record_holds`), so `true` fits the
+// boolean's overload alone. Until then the expectation was the refusal.
 //
 // Control, one difference: the same program against the generated nts:dom
 // module, where the checker picks the overload (emit-c --rc, clean, and
