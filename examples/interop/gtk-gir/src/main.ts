@@ -420,10 +420,13 @@ function main(): void {
       return false;
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10, () => {
-      ticks++;
-      label.label = "tick " + String(ticks);
-      // And the query answered, so the log does not depend on which of the
-      // two a loaded machine finishes first.
+      // Count only to three, and keep the source until the query has
+      // answered too: on a loaded machine the query can outlast three
+      // ticks, and the log must read tick 3 either way.
+      if (ticks < 3) {
+        ticks++;
+        label.label = "tick " + String(ticks);
+      }
       if (ticks < 3 || kind === -1 || folders === "") return true;
       console.log("label=" + label.label);
       application.quit();
