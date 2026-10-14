@@ -122,6 +122,8 @@ struct PromiseNodes {
     task: NodeId,
     tasks: NodeId,
     adoption: NodeId,
+    combinator: NodeId,
+    combinator_slot: NodeId,
     promises: NodeId,
 }
 
@@ -138,6 +140,13 @@ pub(crate) struct PromiseTypes {
     pub(crate) tasks: u32,
     /// `{ outer, inner }`, the state of an adoption's two tasks.
     pub(crate) adoption: u32,
+    /// `{ result, values, remaining }`: one `Promise.all` or `Promise.race`.
+    /// `values` is the typed result array (null for `race`), held as `anyref`
+    /// so one type serves every element storage.
+    pub(crate) combinator: u32,
+    /// `{ combinator, source, index }`: the state of the task one element's
+    /// settlement queues.
+    pub(crate) combinator_slot: u32,
     /// The rejected promises nothing listened to yet.
     pub(crate) promises: u32,
     pub(crate) descriptor: u32,
@@ -908,6 +917,26 @@ impl<'a> Builder<'a> {
                 Field::value(PendingSlot::Defined(promise, false), false),
             ]),
         );
+        let combinator = self.add(
+            "combinator".into(),
+            None,
+            true,
+            Shape::Struct(vec![
+                Field::value(PendingSlot::Defined(promise, false), false),
+                Field::value(anyref, false),
+                Field::value(PendingSlot::Scalar(Slot::I32), true),
+            ]),
+        );
+        let combinator_slot = self.add(
+            "combinator slot".into(),
+            None,
+            true,
+            Shape::Struct(vec![
+                Field::value(PendingSlot::Defined(combinator, false), false),
+                Field::value(PendingSlot::Defined(promise, false), false),
+                Field::value(PendingSlot::Scalar(Slot::I32), false),
+            ]),
+        );
         let promises = self.add(
             "promises".into(),
             None,
@@ -920,6 +949,8 @@ impl<'a> Builder<'a> {
             task,
             tasks,
             adoption,
+            combinator,
+            combinator_slot,
             promises,
         };
         self.promise = Some(nodes);
@@ -2179,6 +2210,8 @@ impl<'a> Builder<'a> {
                 task: indices[nodes.task.0],
                 tasks: indices[nodes.tasks.0],
                 adoption: indices[nodes.adoption.0],
+                combinator: indices[nodes.combinator.0],
+                combinator_slot: indices[nodes.combinator_slot.0],
                 promises: indices[nodes.promises.0],
                 descriptor: promise_descriptor,
                 base: ROOT_FIELDS,

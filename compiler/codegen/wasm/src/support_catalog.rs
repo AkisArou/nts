@@ -757,10 +757,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_presence_set", Support::Intrinsic),
     ("nts_presence_set_fn", Support::Intrinsic),
     ("nts_promise_adopt", Support::WasmHelper),
-    (
-        "nts_promise_all",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_all", Support::WasmHelper),
     ("nts_promise_claim", Support::Intrinsic),
     ("nts_promise_fulfill_number", Support::WasmHelper),
     (
@@ -783,10 +780,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         "nts_promise_pointer",
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
-    (
-        "nts_promise_race",
-        Support::Decline("async/scheduler/host lifecycle (M5)"),
-    ),
+    ("nts_promise_race", Support::WasmHelper),
     ("nts_promise_reason", Support::Intrinsic),
     ("nts_promise_reference", Support::Intrinsic),
     ("nts_promise_reject", Support::WasmHelper),

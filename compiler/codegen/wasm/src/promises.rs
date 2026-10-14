@@ -59,6 +59,17 @@ pub(crate) enum Helper {
     /// `(promise, name) -> T`: the settlement of a promise in `state`, read
     /// as `T`, refused by name otherwise.
     Read(i32, Read),
+    /// `(promises, [values,] name) -> promise`: `Promise.all` (with where its
+    /// values go) or `Promise.race`, over an array of this storage.
+    Combinator(u32, Option<Store>),
+}
+
+/// Where `Promise.all` puts each value: the result array's storage, and the
+/// settlement read its elements take.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct Store {
+    wrapper: u32,
+    read: Read,
 }
 
 /// What a settlement is read as.
@@ -92,6 +103,9 @@ pub(crate) enum Thunk {
     AdoptSettled,
     /// Tell the host a promise it watches settled: the state is its id.
     Watch,
+    /// One element of a combinator settled: its value stored and counted
+    /// (`Promise.all`, by `Store`), or its settlement forwarded (`race`).
+    CombinatorSettled(Option<Store>),
 }
 
 /// The module-wide state the checkpoint keeps.
@@ -135,6 +149,8 @@ pub(crate) enum Op {
     ResolveValue,
     EnqueueJob,
     IsPromise,
+    All,
+    Race,
 }
 
 pub(crate) fn external(name: &str) -> Option<Op> {
@@ -158,6 +174,8 @@ pub(crate) fn external(name: &str) -> Option<Op> {
         "nts_promise_pair" => Op::Pair,
         "nts_promise_adopt" => Op::Adopt,
         "nts_promise_resolve_value" => Op::ResolveValue,
+        "nts_promise_all" => Op::All,
+        "nts_promise_race" => Op::Race,
         "nts_enqueue_job" => Op::EnqueueJob,
         "nts_is_promise" => Op::IsPromise,
         _ => return None,
@@ -182,6 +200,8 @@ impl Op {
                 | Self::Adopt
                 | Self::ResolveValue
                 | Self::EnqueueJob
+                | Self::All
+                | Self::Race
         )
     }
 }
@@ -227,30 +247,25 @@ pub(crate) fn call(
         | Op::Reason
         | Op::State
         | Op::Pair
-        | Op::IsPromise => 1,
+        | Op::IsPromise
+        | Op::Race => 1,
         Op::FulfillTagged => 3,
         _ => 2,
     };
     if args.len() != arity {
         return Err(format!("promise helper {op:?} arity mismatch").into());
     }
-    if !matches!(op, Op::New | Op::IsPromise | Op::EnqueueJob) {
+    if !matches!(
+        op,
+        Op::New | Op::IsPromise | Op::EnqueueJob | Op::All | Op::Race
+    ) {
         contract::nonnull(b, args[0], "a method of a null promise")?;
     }
     match op {
         Op::New => {
             let descriptor = objects::descriptor(b.m, p.descriptor)?;
             b.global_get(descriptor);
-            b.instructions(&[
-                objects::UNHASHED,
-                I::I32Const(PENDING),
-                I::RefNull(HeapType::ANY),
-                I::I32Const(0),
-                I::I32Const(0),
-                I::RefNull(HeapType::Concrete(p.tasks)),
-                I::I32Const(0),
-                I::StructNew(p.promise),
-            ]);
+            b.instructions(&fresh(p));
         }
         Op::FulfillVoid
         | Op::FulfillNumber
@@ -303,7 +318,48 @@ pub(crate) fn call(
             b.load(args[0])?;
             b.instruction(&I::RefTestNonNull(HeapType::Concrete(p.promise)));
         }
+        Op::All | Op::Race => combinator(b, op, args)?,
     }
+    Ok(())
+}
+
+/// A pending promise, after its descriptor is on the stack.
+fn fresh(p: PromiseTypes) -> [I<'static>; 8] {
+    [
+        objects::UNHASHED,
+        I::I32Const(PENDING),
+        I::RefNull(HeapType::ANY),
+        I::I32Const(0),
+        I::I32Const(0),
+        I::RefNull(HeapType::Concrete(p.tasks)),
+        I::I32Const(0),
+        I::StructNew(p.promise),
+    ]
+}
+
+/// `Promise.all` and `Promise.race`, as C's `nts_promise_all` and
+/// `nts_promise_race`: one module helper per storage of the promises and of
+/// the values, which subscribes to every element before it returns.
+fn combinator(b: &mut Body<'_, '_>, op: Op, args: &[ValueId]) -> Result<(), Failure> {
+    let promises = b.types().array(b.ty(args[0]))?.wrapper;
+    contract::nonnull(b, args[0], "a promise combinator over a null array")?;
+    let store = if op == Op::All {
+        contract::nonnull(b, args[1], "`Promise.all` into a null array")?;
+        let shape = b.types().array(b.ty(args[1]))?;
+        Some(Store {
+            wrapper: shape.wrapper,
+            read: read_kind(b.types(), &shape.element)
+                .map_err(|_| format!("`Promise.all` of {:?} values", shape.element))?,
+        })
+    } else {
+        None
+    };
+    let helper = callee(b.m, Helper::Combinator(promises, store))?;
+    for &arg in args {
+        b.load(arg)?;
+    }
+    strings::constant(b, &b.func.name.clone());
+    b.call(helper);
     Ok(())
 }
 
@@ -397,12 +453,26 @@ fn read(b: &mut Body<'_, '_>, result: ValueId, op: Op, promise: ValueId) -> Resu
         FULFILLED
     };
     let ty = b.ty(result).clone();
-    let kind = match (op, &ty) {
-        (Op::Value | Op::Reason, _) | (_, HirType::Erased) => Read::Erased,
-        (_, HirType::Float { bits: 64 }) => Read::Number,
-        (_, HirType::Bool) => Read::Boolean,
-        (_, HirType::Managed(ManagedType::String)) => Read::String,
-        (_, HirType::Managed(_)) => match b.types().value_slot(&ty)? {
+    let kind = if matches!(op, Op::Value | Op::Reason) {
+        Read::Erased
+    } else {
+        read_kind(b.types(), &ty)?
+    };
+    let reader = callee(b.m, Helper::Read(state, kind))?;
+    b.load(promise)?;
+    strings::constant(b, &b.func.name.clone());
+    b.call(reader);
+    Ok(())
+}
+
+/// How a settlement is read as `ty`.
+fn read_kind(types: &crate::gc::Plan, ty: &HirType) -> Result<Read, Failure> {
+    Ok(match ty {
+        HirType::Erased => Read::Erased,
+        HirType::Float { bits: 64 } => Read::Number,
+        HirType::Bool => Read::Boolean,
+        HirType::Managed(ManagedType::String) => Read::String,
+        HirType::Managed(_) => match types.value_slot(ty)? {
             Physical::Reference(RefType {
                 heap_type: HeapType::Concrete(index),
                 ..
@@ -410,12 +480,7 @@ fn read(b: &mut Body<'_, '_>, result: ValueId, op: Op, promise: ValueId) -> Resu
             _ => return Err(format!("a promise's settlement read as {ty:?}").into()),
         },
         _ => return Err(format!("a promise's settlement read as {ty:?}").into()),
-    };
-    let reader = callee(b.m, Helper::Read(state, kind))?;
-    b.load(promise)?;
-    strings::constant(b, &b.func.name.clone());
-    b.call(reader);
-    Ok(())
+    })
 }
 
 /// The operations that belong to promises: a closure's call slot (a value only
@@ -584,6 +649,7 @@ fn thunk(m: &mut Builder<'_>, thunk: Thunk) -> Result<Func, Failure> {
                 f.instructions(&[I::LocalGet(0), I::RefCastNonNull(HeapType::I31), I::I31GetS]);
                 f.call(settled);
             }
+            Thunk::CombinatorSettled(store) => combinator_settled(m, &mut f, *store)?,
             Thunk::AdoptSettled => {
                 // The inner settlement, forwarded as it is.
                 let settle = callee(m, Helper::Settle)?;
@@ -609,6 +675,246 @@ fn thunk(m: &mut Builder<'_>, thunk: Thunk) -> Result<Func, Failure> {
         Ok(f)
     })
 }
+/// `Promise.all` (with `store`) or `Promise.race` over `promises`, as C's
+/// `nts_combinator_new`: a pending result, then one task per element,
+/// subscribed in order before it returns, so an element that settles during
+/// the call is not missed. `Promise.all([])` is fulfilled with its empty array
+/// at once; `Promise.race([])` stays pending, since nothing will settle it.
+///
+/// Params: promises, [values,] name. Locals: result, combinator, at, count,
+/// source.
+fn combinator_body(
+    m: &mut Builder<'_>,
+    promises: u32,
+    store: Option<Store>,
+) -> Result<Function, Failure> {
+    let p = types(m)?;
+    let settle = callee(m, Helper::Settle)?;
+    let settled = thunk(m, Thunk::CombinatorSettled(store))?;
+    let descriptor = objects::descriptor(m, p.descriptor)?;
+    let values = u32::from(store.is_some());
+    let name = values + 1;
+    let (result, combinator, at, count, source) =
+        (name + 1, name + 2, name + 3, name + 4, name + 5);
+    let mut f = Function::new([
+        ValType::Ref(concrete(p.promise, true)),
+        ValType::Ref(concrete(p.combinator, true)),
+        ValType::I32,
+        ValType::I32,
+        ValType::Ref(concrete(p.promise, true)),
+    ]);
+    f.global_get(descriptor);
+    f.instructions(&fresh(p));
+    f.instructions(&[
+        I::LocalSet(result),
+        I::LocalGet(0),
+        I::StructGet {
+            struct_type_index: promises,
+            field_index: crate::gc::ARRAY_LENGTH,
+        },
+        I::LocalSet(count),
+        I::LocalGet(result),
+        I::RefAsNonNull,
+        if store.is_some() {
+            I::LocalGet(values)
+        } else {
+            I::RefNull(HeapType::ANY)
+        },
+        I::LocalGet(count),
+        I::StructNew(p.combinator),
+        I::LocalSet(combinator),
+    ]);
+    if store.is_some() {
+        f.instructions(&[
+            I::LocalGet(count),
+            I::I32Eqz,
+            I::If(BlockType::Empty),
+            I::LocalGet(result),
+            I::I32Const(FULFILLED),
+            I::LocalGet(values),
+        ]);
+        f.call(settle);
+        f.instruction(&I::End);
+    }
+    subscribe_each(
+        &mut f,
+        m,
+        promises,
+        settled,
+        [name, combinator, at, count, source],
+    )?;
+    f.instructions(&[I::LocalGet(result), I::End]);
+    Ok(f)
+}
+
+/// Subscribes one task to each element of `promises`, in order, its state a
+/// slot naming the combinator, the element and its index. A null element is
+/// refused by name.
+fn subscribe_each(
+    f: &mut Function,
+    m: &mut Builder<'_>,
+    promises: u32,
+    settled: Func,
+    [name, combinator, at, count, source]: [u32; 5],
+) -> Result<(), Failure> {
+    let p = types(m)?;
+    let backing = m
+        .types
+        .arrays
+        .get(&promises)
+        .ok_or_else(|| Failure::Invariant(format!("unplanned promise array {promises}")))?
+        .backing;
+    let subscribe = callee(m, Helper::Subscribe)?;
+    f.instructions(&[
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(at),
+        I::LocalGet(count),
+        I::I32GeU,
+        I::BrIf(1),
+        I::LocalGet(0),
+        I::StructGet {
+            struct_type_index: promises,
+            field_index: crate::gc::ARRAY_BACKING,
+        },
+        I::LocalGet(at),
+        I::ArrayGet(backing),
+        I::LocalTee(source),
+        I::RefIsNull,
+        I::If(BlockType::Empty),
+    ]);
+    contract::refuse_in(
+        f,
+        m,
+        name,
+        "a promise combinator over an array holding null",
+    )?;
+    f.instructions(&[I::End, I::LocalGet(source)]);
+    f.ref_func(settled);
+    f.instructions(&[
+        I::LocalGet(combinator),
+        I::RefAsNonNull,
+        I::LocalGet(source),
+        I::RefAsNonNull,
+        I::LocalGet(at),
+        I::StructNew(p.combinator_slot),
+        I::StructNew(p.task),
+    ]);
+    f.call(subscribe);
+    f.instructions(&[
+        I::LocalGet(at),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(at),
+        I::Br(0),
+        I::End,
+        I::End,
+    ]);
+    Ok(())
+}
+
+/// The task one element's settlement queues, its state a combinator slot.
+/// `race` forwards the settlement, which a settled result ignores; `all`
+/// rejects with a rejection, or stores the value at the element's index and
+/// fulfils with the array once none remain, as C's `nts_combinator_settled`.
+///
+/// Params: slot. Locals: slot, combinator, source, remaining.
+fn combinator_settled(
+    m: &mut Builder<'_>,
+    f: &mut Function,
+    store: Option<Store>,
+) -> Result<(), Failure> {
+    let p = types(m)?;
+    let settle = callee(m, Helper::Settle)?;
+    let (slot, combinator, source, remaining) = (1, 2, 3, 4);
+    *f = Function::new([
+        ValType::Ref(concrete(p.combinator_slot, true)),
+        ValType::Ref(concrete(p.combinator, true)),
+        ValType::Ref(concrete(p.promise, true)),
+        ValType::I32,
+    ]);
+    let get = |of: u32, index: u32| I::StructGet {
+        struct_type_index: of,
+        field_index: index,
+    };
+    f.instructions(&[
+        I::LocalGet(0),
+        I::RefCastNonNull(HeapType::Concrete(p.combinator_slot)),
+        I::LocalTee(slot),
+        get(p.combinator_slot, 0),
+        I::LocalSet(combinator),
+        I::LocalGet(slot),
+        get(p.combinator_slot, 1),
+        I::LocalSet(source),
+    ]);
+    let forward = |f: &mut Function, state: Option<i32>| {
+        f.instructions(&[I::LocalGet(combinator), get(p.combinator, 0)]);
+        match state {
+            Some(state) => f.instruction(&I::I32Const(state)),
+            None => f.instructions(&[I::LocalGet(source), field(p, p.state())]),
+        }
+        f.instructions(&[I::LocalGet(source), field(p, p.value())]);
+        f.call(settle);
+    };
+    let Some(store) = store else {
+        forward(f, None);
+        return Ok(());
+    };
+    let shape_backing = m
+        .types
+        .arrays
+        .get(&store.wrapper)
+        .ok_or_else(|| Failure::Invariant(format!("unplanned values array {}", store.wrapper)))?
+        .backing;
+    let read = callee(m, Helper::Read(FULFILLED, store.read))?;
+    let name = m.literal("Promise.all");
+    f.instructions(&[
+        I::LocalGet(source),
+        field(p, p.state()),
+        I::I32Const(REJECTED),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+    ]);
+    forward(f, Some(REJECTED));
+    f.instructions(&[
+        I::Return,
+        I::End,
+        I::LocalGet(combinator),
+        get(p.combinator, 1),
+        I::RefCastNonNull(HeapType::Concrete(store.wrapper)),
+        get(store.wrapper, crate::gc::ARRAY_BACKING),
+        I::LocalGet(slot),
+        get(p.combinator_slot, 2),
+        I::LocalGet(source),
+    ]);
+    f.global_get(name);
+    f.call(read);
+    f.instructions(&[
+        I::ArraySet(shape_backing),
+        I::LocalGet(combinator),
+        I::LocalGet(combinator),
+        get(p.combinator, 2),
+        I::I32Const(1),
+        I::I32Sub,
+        I::LocalTee(remaining),
+        I::StructSet {
+            struct_type_index: p.combinator,
+            field_index: 2,
+        },
+        I::LocalGet(remaining),
+        I::I32Eqz,
+        I::If(BlockType::Empty),
+        I::LocalGet(combinator),
+        get(p.combinator, 0),
+        I::I32Const(FULFILLED),
+        I::LocalGet(combinator),
+        get(p.combinator, 1),
+    ]);
+    f.call(settle);
+    f.instruction(&I::End);
+    Ok(())
+}
+
 fn thunk_ref(m: &mut Builder<'_>, which: Thunk) -> Result<Func, Failure> {
     thunk(m, which)
 }
@@ -658,6 +964,14 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
         Helper::Drain | Helper::Leave => vec![],
         Helper::Candidate => vec![promise],
         Helper::Read(..) => vec![promise, strings::STRING],
+        Helper::Combinator(promises, store) => {
+            let mut params = vec![Physical::Reference(concrete(promises, true))];
+            if let Some(store) = store {
+                params.push(Physical::Reference(concrete(store.wrapper, true)));
+            }
+            params.push(strings::STRING);
+            params
+        }
     };
     let result = match helper {
         Helper::Read(_, read) => Some(match read {
@@ -667,6 +981,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Read::String => strings::STRING,
             Read::Reference(index) => Physical::Reference(concrete(index, true)),
         }),
+        Helper::Combinator(..) => Some(promise),
         _ => None,
     };
     m.helper(
@@ -684,6 +999,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Helper::Leave => leave(m),
             Helper::Candidate => candidate(m),
             Helper::Read(state, read) => read_body(m, state, read),
+            Helper::Combinator(promises, store) => combinator_body(m, promises, store),
         },
     )
 }

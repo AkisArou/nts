@@ -448,10 +448,22 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   microtasks a callback queues run before the next timer's callback, as node
   runs them. A one-shot timer's slot empties as it fires; `clearTimer` empties
   one and stops the host's timer. The glue gives each instance its own pair.
-- **Not yet:** `Promise.all` and `race` (3d-b).
+- **`Promise.all` and `Promise.race`** (3d-b), as C's combinator: one helper
+  per storage of the promises (and of `all`'s values) makes a pending result
+  and a `{ result, values, remaining }` combinator, then subscribes one task
+  per element, in order, before returning, its state a `{ combinator,
+  source, index }` slot. `race`'s task forwards the settlement, which a settled
+  result ignores. `all`'s task rejects with the first rejection, or reads the
+  value as the result array's element type (the settlement reads `await`
+  uses) into its index and fulfils with the array once none remain.
+  `Promise.all([])` is fulfilled at once; `Promise.race([])` stays pending. The
+  result array is allocated by lowering and marked `Filled`. An element type
+  no settlement read covers (a bigint) declines by name.
 - **Tests:**
-  - promise-order (32 cases): interleaved awaits, `.then` beside `await`, an
-    async function returning a promise two ticks later, a rejection caught.
+  - promise-order (80 cases): interleaved awaits, `.then` beside `await`, an
+    async function returning a promise two ticks later, a rejection caught;
+    `Promise.all` in input order, of strings, rejected, and of none;
+    `Promise.race` taking the first and rejecting.
     Each export's return is the checkpoint, against node's order after a turn.
   - promise-boundary (14 cases): a promise settled at once, one watched until
     a later export settles it, a string rejection, and a compiled Error

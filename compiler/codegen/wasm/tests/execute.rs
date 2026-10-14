@@ -676,7 +676,7 @@ fn source_promise_order_agrees_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 32, "{output}");
+    assert_eq!(output["cases"], 80, "{output}");
 }
 
 /// A promise an export answers is a JS promise: settled at once, or watched
