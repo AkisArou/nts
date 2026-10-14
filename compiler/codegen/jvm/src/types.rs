@@ -494,6 +494,14 @@ pub const NAMED: &str = "nts/rt/NtsNamed";
 /// [`NAMED`]'s one method, `()Ljava/lang/String;`.
 pub const NAME: &str = "nts$name";
 
+/// The interface a generated class implements to say what it is called in the
+/// program where its JVM name is not that: `runtime/c`'s descriptor name. See
+/// `NtsClassNamed`.
+pub const CLASS_NAMED: &str = "nts/rt/NtsClassNamed";
+
+/// [`CLASS_NAMED`]'s one method, `()Ljava/lang/String;`.
+pub const CLASS_NAME: &str = "nts$class";
+
 /// The field an object carries its optional-property presence bits in.
 ///
 /// `runtime/c` puts them in the header's spare flag bits -- 26 of them above

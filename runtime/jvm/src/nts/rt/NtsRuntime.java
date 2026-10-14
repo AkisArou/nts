@@ -254,10 +254,21 @@ public final class NtsRuntime {
             case NtsValue.UNDEFINED: line.append("undefined"); break;
             case NtsValue.NULL: line.append("null"); break;
             default:
-                line.append(value.ref == null ? "[object]" : value.ref.getClass().getSimpleName());
+                line.append(value.ref == null ? "[object]" : className(value.ref));
                 if (detail != null) { line.append(": ").append(detail); }
         }
         System.out.flush(); System.err.println(line); System.err.flush(); System.exit(1);
+    }
+
+    /**
+     * What an object's class is called in the program -- C's descriptor name:
+     * the generated class's own where it says ({@link NtsClassNamed}), else its
+     * JVM simple name, which is the program's name for every other class.
+     */
+    public static String className(Object ref) {
+        return ref instanceof NtsClassNamed
+            ? ((NtsClassNamed) ref).nts$class()
+            : ref.getClass().getSimpleName();
     }
     /**
      * The callback arrives typed, so there is nothing here to check.

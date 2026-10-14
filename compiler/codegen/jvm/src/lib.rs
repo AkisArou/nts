@@ -625,7 +625,8 @@ fn identity_class(
     } else {
         types::class_name(package, layout)
     };
-    let mut builder = ClassBuilder::new(types::identity_class_name(package, layout, class), base);
+    let name = types::identity_class_name(package, layout, class);
+    let mut builder = ClassBuilder::new(&name, base);
     builder.access = access::PUBLIC | access::SUPER | access::FINAL;
     if interface {
         builder.interfaces.push(types::class_name(package, layout));
@@ -644,6 +645,9 @@ fn identity_class(
                 origin.location,
             )
         })?;
+    // Named for its layout and itself, `Layout__Class`, where C's descriptor
+    // says only `Class`.
+    class_named(&mut builder, &mut pool, &name, &class.name, &origin)?;
     builder.build(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4004",
@@ -1432,6 +1436,13 @@ fn object_class(
     if !interface {
         printing_method(package, program, layout, &mut builder, &mut pool, &origin)?;
         naming_method(package, program, layout, &mut builder, &mut pool, &origin)?;
+        // A layout whose JVM name is not its own -- a generic instantiation's
+        // `<` and `>` are spelled otherwise here -- says what C's descriptor
+        // says, which is the layout's name.
+        let class = types::class_name(package, layout);
+        if class.rsplit('/').next() != Some(layout.name.as_str()) {
+            class_named(&mut builder, &mut pool, &class, &layout.name, &origin)?;
+        }
     }
     // A field the JVM zeroes to `null` where the language's zero is
     // `undefined`.
@@ -1677,6 +1688,51 @@ fn named(
     let mut code = Code::new(vec![VType::Object(class.to_owned())], 1);
     code.const_string(origin, pool, text);
     named_by(builder, pool, code, class, origin)
+}
+
+/// `nts$class`, what this class is called in the program where its JVM name
+/// is not that, and `NtsClassNamed` declared: the name `runtime/c` reads off
+/// its descriptor, which `NtsRuntime.className` reads here.
+fn class_named(
+    builder: &mut ClassBuilder,
+    pool: &mut Pool,
+    class: &str,
+    text: &str,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<(), Diagnostic> {
+    if builder
+        .methods
+        .iter()
+        .any(|method| method.name == types::CLASS_NAME)
+    {
+        return Err(Diagnostic::error(
+            "NTS4009",
+            format!(
+                "`{text}` declares a member named `{}`, which this backend reserves for what a \
+                 class is called",
+                types::CLASS_NAME
+            ),
+            origin.location,
+        ));
+    }
+    let mut code = Code::new(vec![VType::Object(class.to_owned())], 1);
+    code.const_string(origin, pool, text);
+    code.ret(origin, Some(Kind::Ref));
+    let rendered = code.finish(pool).map_err(|error| {
+        Diagnostic::error(
+            "NTS4009",
+            format!("what `{text}` is called could not be written: {error}"),
+            origin.location,
+        )
+    })?;
+    builder.method(
+        access::PUBLIC,
+        types::CLASS_NAME,
+        "()Ljava/lang/String;",
+        Some(rendered),
+    );
+    builder.interfaces.push(types::CLASS_NAMED.to_owned());
+    Ok(())
 }
 
 /// `nts$name` as `code` computes it, onto the stack, and `NtsNamed` declared.

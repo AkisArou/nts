@@ -107,6 +107,31 @@ fn an_uncaught_throw_at_module_scope_exits_one() {
     assert_eq!(stderr.trim(), "nts: uncaught RangeError: at module scope");
 }
 
+/// The uncaught line names the class as the program does, which is C's
+/// descriptor name. Two classes with the same fields share a layout, so each
+/// is an empty subclass named for both -- `Test262Error__Test262Error` -- and
+/// that was the name printed, where C prints `Test262Error`: test262's runner
+/// compared the two lanes' lines and found a difference that was only a name.
+#[test]
+fn an_uncaught_throw_names_a_class_that_shares_its_layout_as_c_does() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "shared",
+        "class Test262Error {\n  message: string;\n  constructor(message: string) {\n    \
+         this.message = message;\n  }\n}\nclass Other {\n  message: string;\n  \
+         constructor(message: string) {\n    this.message = message;\n  }\n}\n\
+         console.log(new Other(\"kept\").message);\nthrow new Test262Error(\"boom\");\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 1, "an uncaught throw: {stderr}");
+    assert_eq!(stdout, "kept\n");
+    assert_eq!(
+        stderr.trim(),
+        "nts: uncaught Test262Error: boom",
+        "C's line"
+    );
+}
+
 /// A run-time refusal ends the run as C's `abort()` does: status 134 and the
 /// line C prints, `nts: refused: ` and the reason. The refusal is a checked read past the end of an array --
 /// `xs[1]!` on a one-element array, where node answers `undefined` and nts
@@ -130,6 +155,26 @@ fn a_run_time_refusal_exits_as_c_aborts() {
     // reads by the `nts: refused: ` prefix. The launcher used to rewrite it to `nts: refused at run time: `,
     // the missing-feature abort's text, which this test then pinned.
     assert_eq!(stderr.trim(), "nts: refused: index 1 is outside [0, 1)");
+}
+
+/// A program with no module evaluation runs nothing and exits 0, as C's
+/// launcher does for one. Here lowering drops the evaluation whole -- `count`
+/// takes an array of `never` -- so `Program` has no `module$init`, and the
+/// refusal is the emitter's to report. The launcher reflected for the method
+/// anyway and died with `NoSuchMethodException` and a stack trace, which a
+/// runner reads as the JVM crashing.
+#[test]
+fn a_program_with_nothing_to_evaluate_exits_zero() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "nothing",
+        "function count(xs: never[]): number {\n  return xs.length;\n}\n\
+         console.log(\"start\");\nconsole.log(count([]));\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "nothing to run: {stderr}");
+    assert_eq!(stdout, "");
+    assert_eq!(stderr, "");
 }
 
 /// The program the refusal test used to run, now that it compiles: a `bigint`

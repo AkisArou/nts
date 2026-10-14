@@ -15,6 +15,13 @@ package nts.rt;
  * from compiled code ({@link NtsRuntime#uncaught}, status 1); a refusal
  * prints its own line -- C's text for that helper -- and exits with C's status
  * for it (134, C's {@code abort()}, unless the helper exits); a clean run exits 0.
+ *
+ * <p><b>A program with no module evaluation runs nothing and exits 0</b>, as
+ * C's launcher does for one: a module that only declares things, or one whose
+ * evaluation lowering dropped whole (NTS1003, on stderr when it was emitted).
+ * Reflecting for the method anyway was a {@code NoSuchMethodException} and a
+ * stack trace, which a runner reads as the JVM crashing rather than as the
+ * refusal the emitter already reported.
  */
 public final class NtsMain {
     private NtsMain() {}
@@ -24,7 +31,13 @@ public final class NtsMain {
             System.err.println("usage: nts.rt.NtsMain <program class>, e.g. nts.gen.Program");
             System.exit(2);
         }
-        java.lang.reflect.Method init = Class.forName(args[0]).getMethod("module$init");
+        java.lang.reflect.Method init;
+        try {
+            init = Class.forName(args[0]).getMethod("module$init");
+        } catch (NoSuchMethodException nothing) {
+            System.exit(0);
+            return;
+        }
         try {
             init.invoke(null);
             NtsEnv.drain(NtsEnv.current());
