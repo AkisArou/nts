@@ -273,6 +273,17 @@ fn construct(b: &mut Body<'_, '_>, op: Op, args: &[ValueId]) -> Result<(), Failu
     Ok(())
 }
 
+/// `Length` of a view, which lowering writes where C reads
+/// `nts_view_length` (an `Array.from` walk over a typed array): the same
+/// element count the call answers.
+pub(crate) fn element_count(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    view: ValueId,
+) -> Result<(), Failure> {
+    property(b, result, Op::ViewLength, view)
+}
+
 /// A buffer's or a view's own property.
 fn property(
     b: &mut Body<'_, '_>,

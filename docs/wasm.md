@@ -501,7 +501,8 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   while it does not fit, and is back when the buffer grows: a test, not a
   latch. At an element access the width is static, so the test is inline,
   with both cases chosen by `select` and no call. A checked index outside the
-  view is refused by name, as C's `nts_bounds` stops the program.
+  view is refused by name, as C's `nts_bounds` stops the program. A `Length`
+  operation on a view (an `Array.from` walk's bound) reads the same count.
 - **Allocation past `MAX_BYTES`** (2^30 - 64; V8's largest byte array is
   1,073,741,799, measured) answers null. The lowering turns that into node's
   "Array buffer allocation failed" `RangeError`, the contract of C's failed

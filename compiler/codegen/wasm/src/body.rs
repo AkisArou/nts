@@ -11,7 +11,7 @@ use crate::{
     types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
-use nts_core::hir::{BlockId, Callee, Func, HirType, OpKind, Terminator, ValueId};
+use nts_core::hir::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId};
 use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Instruction as I};
 
@@ -596,10 +596,12 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         Ok(())
     }
-    /// A string's, an array's or a collection's length.
+    /// A string's, an array's, a view's or a collection's length.
     fn length(&mut self, result: ValueId, value: ValueId) -> Result<(), Failure> {
         let ty = self.ty(value);
-        if crate::strings::is_string(ty) {
+        if matches!(ty, HirType::Managed(ManagedType::View(_))) {
+            crate::buffers::element_count(self, result, value)
+        } else if crate::strings::is_string(ty) {
             crate::strings::length(self, result, value)
         } else if crate::arrays::is_array(ty) {
             crate::arrays::length(self, result, value)

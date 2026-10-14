@@ -286,3 +286,21 @@ export function bigint64(v: number): string {
   view.setBigInt64(16, (1n << 70n) + k, false);
   return `${view.getBigInt64(0, (v | 0) % 2 === 0)}|${view.getBigUint64(0, false)}|${view.getBigInt64(8, true)}|${view.getBigUint64(8, true)}|${view.getBigInt64(16, false)}|${view.getUint8(15)}`;
 }
+
+// `Array.from` over a typed array walks it to its length (C's
+// `nts_view_length`): of each element kind, and of a view that tracks a buffer
+// which grew.
+export function arraysFromViews(v: number): number {
+  const bytes = new Uint8Array([1, 2, v & 0xff]);
+  const words = new Int16Array([-2, v & 0x7fff]);
+  const floats = new Float64Array([0.5, v]);
+  const buffer = new ArrayBuffer(2, { maxByteLength: 8 });
+  const tracking = new Uint8Array(buffer);
+  buffer.resize(v > 0 && v < 7 ? Math.floor(v) + 1 : 5);
+  tracking[0] = 9;
+  const a = Array.from(bytes);
+  const b = Array.from(words);
+  const c = Array.from(floats);
+  const d = Array.from(tracking);
+  return a.length * 1000 + a[2]! + b[0]! * 10 + b.length * 100 + c[1]! + c.length + d.length * 100000 + d[0]!;
+}
