@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "agrees",
-  "nts": "checked 43 of 87 cases; the rest were not reached (a pool value in a loop bound will do that) | agreed on every case",
+  "category": "aborted",
+  "nts": "17 case(s) the compiled program declined",
   "node": null,
-  "measured_with": "cbf8982bc6dc781c",
+  "measured_with": "12b44ce127388040",
   "source": "measured"
 }

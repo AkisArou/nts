@@ -19,8 +19,12 @@
 // slot by name rather than guess which absence it held.
 //
 // Fixed in the lowering: `nts_array_element` is told which absence a null
-// slot holds, read off the element type (`null_slot`). The record now pins
-// the agreement.
+// slot holds, read off the element type (`null_slot`). The record pins the
+// agreement on every case that runs -- and says that 17 of the check's pool
+// do not: an index that is not a whole number is refused by name, where node
+// answers `undefined`. The record read "agrees" over those until
+// outcomes-check stopped dropping the count-first "declined" line
+// (2026-10-14).
 class Point {
   constructor(readonly x: number) {}
 }

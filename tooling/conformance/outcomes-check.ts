@@ -335,8 +335,16 @@ function runCheck(dir, backend, options) {
     env: backend === null ? rest : { ...rest, NTS_BACKEND: backend },
   });
   const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
+  // The CLI says a decline as "17 case(s) the compiled program declined -- …",
+  // count first: matched by its words, not by a line start, or it drops out
+  // of the record and the check reads "agreed on every case" over cases that
+  // never ran (CompilerHelper's BigInt(number) probe, 2026-10-14: 21 of 696).
+  const declined = /\bcase\(s\) the compiled program declined\b/;
   const lines = said.filter(
-    (l) => /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) || /\bdisagree/i.test(l),
+    (l) =>
+      /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) ||
+      /\bdisagree/i.test(l) ||
+      declined.test(l),
   ).map(stableCheckText);
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
@@ -346,6 +354,12 @@ function runCheck(dir, backend, options) {
   // the worse answer when a program gives both.
   const aborted = said.find((l) => l.startsWith("the compiled program aborted: "));
   if (aborted) return { category: "aborted", nts: aborted.replace(/^the compiled program aborted: /, "") };
+  // **Declined is not agreed**: those cases stopped -- an uncaught throw, a
+  // refusal by name -- and were never compared. The first such line, without
+  // its explanation, which does not change; below a named abort, whose reason
+  // says more.
+  const decline = lines.find((l) => declined.test(l));
+  if (decline) return { category: "aborted", nts: decline.replace(/\s+--\s.*$/, "") };
   if (/nothing to check/.test(text) && /refused:/.test(text)) {
     const first = lines.find((l) => l.startsWith("refused:"));
     // A location, if the line carries one, is where the fixture's text puts the
