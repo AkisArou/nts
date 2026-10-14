@@ -72,23 +72,6 @@ fn from_param(name: &str, masked: bool) -> Func {
     }
     b.round_trip(integer)
 }
-fn function_names(bytes: &[u8]) -> Vec<String> {
-    let mut names = vec![];
-    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
-        if let wasmparser::Payload::CustomSection(section) = payload.unwrap()
-            && let wasmparser::KnownCustom::Name(reader) = section.as_known()
-        {
-            for name in reader {
-                if let wasmparser::Name::Function(map) = name.unwrap() {
-                    for naming in map {
-                        names.push(naming.unwrap().name.to_owned());
-                    }
-                }
-            }
-        }
-    }
-    names
-}
 
 #[test]
 fn integers_erase_to_the_values_node_reads_back() {
@@ -120,7 +103,7 @@ fn integers_erase_to_the_values_node_reads_back() {
 fn an_integer_that_fits_by_its_definition_erases_without_a_box() {
     let names = |masked| {
         let emitted = nts_codegen_wasm::emit(&program(vec![from_param("probe", masked)])).unwrap();
-        function_names(&emitted.bytes)
+        common::function_names(&emitted.bytes)
     };
     assert!(!names(true).iter().any(|n| n == "value.boxNumber"));
     assert!(names(false).iter().any(|n| n == "value.boxNumber"));

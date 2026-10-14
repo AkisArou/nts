@@ -25,7 +25,7 @@ use crate::{
     numeric, objects,
     types::{Physical, Slot},
 };
-use nts_core::hir::{HirType, ManagedType, ValueId};
+use nts_core::hir::{HirType, ManagedType, ValueId, builtin::element_kind};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 pub(crate) const MAX_BYTES: u32 = (1 << 30) - 64;
@@ -35,6 +35,8 @@ pub(crate) const LENGTH: u32 = ROOT_FIELDS;
 pub(crate) const RESERVED: u32 = ROOT_FIELDS + 1;
 pub(crate) const RESIZABLE: u32 = ROOT_FIELDS + 2;
 pub(crate) const BYTES: u32 = ROOT_FIELDS + 3;
+/// An owned kind's elements, when any kind is owned: see `owned_views.rs`.
+pub(crate) const TYPED: u32 = ROOT_FIELDS + 4;
 // A view's. A DataView has the first three, then its tracking flag.
 pub(crate) const BUFFER: u32 = ROOT_FIELDS;
 pub(crate) const OFFSET: u32 = ROOT_FIELDS + 1;
@@ -43,42 +45,6 @@ pub(crate) const ELEMENTS: u32 = ROOT_FIELDS + 2;
 pub(crate) const KIND: u32 = ROOT_FIELDS + 3;
 pub(crate) const WIDTH: u32 = ROOT_FIELDS + 4;
 pub(crate) const TRACKING: u32 = ROOT_FIELDS + 5;
-
-/// Which of the runtime's element kinds (`NTS_ELEMENT_*`) a view's element
-/// is. The numbering is `nts_core::hir::builtin::element_kind`'s, which the
-/// lowering's `nts_view_new` and `nts_is_view_kind` constants carry; kind 2,
-/// `Uint8ClampedArray`, has no element type the lowering accepts.
-pub(crate) const fn kind(element: &HirType) -> Option<u32> {
-    Some(match element {
-        HirType::Int {
-            bits: 8,
-            signed: true,
-        } => 0,
-        HirType::Int {
-            bits: 8,
-            signed: false,
-        } => 1,
-        HirType::Int {
-            bits: 16,
-            signed: true,
-        } => 3,
-        HirType::Int {
-            bits: 16,
-            signed: false,
-        } => 4,
-        HirType::Int {
-            bits: 32,
-            signed: true,
-        } => 5,
-        HirType::Int {
-            bits: 32,
-            signed: false,
-        } => 6,
-        HirType::Float { bits: 32 } => 7,
-        HirType::Float { bits: 64 } => 8,
-        _ => return None,
-    })
-}
 
 /// The calls this module answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +162,17 @@ pub(crate) fn call(
     let subject = args[0];
     match op {
         Op::IsBuffer | Op::IsView | Op::IsViewKind | Op::IsDataView => test(b, op, args),
+        // A buffer for an owned kind holds that kind's elements, not bytes.
+        Op::BufferNew if crate::owned_views::private_kind(b, result).is_some() => {
+            let kind = crate::owned_views::private_kind(b, result)
+                .ok_or_else(|| Failure::Invariant("private buffer kind".into()))?;
+            crate::owned_views::buffer(b, kind, subject)
+        }
+        Op::ViewNew if crate::owned_views::of(b, b.ty(result)).is_some() => {
+            let view = crate::owned_views::of(b, b.ty(result))
+                .ok_or_else(|| Failure::Invariant("owned view".into()))?;
+            crate::owned_views::view(b, view, args)
+        }
         Op::BufferNew | Op::BufferNewResizable | Op::BufferResize | Op::ViewNew => {
             construct(b, op, args)
         }
@@ -300,6 +277,10 @@ fn property(
         _ => "a property of a null typed array",
     };
     contract::nonnull(b, subject, why)?;
+    if let Some(view) = crate::owned_views::of(b, b.ty(subject)) {
+        crate::owned_views::property(b, view, subject, op)?;
+        return numeric::convert(b, &arrays::U32, &b.ty(result).clone());
+    }
     match op {
         // Detaching zeroes all three, as C's transfer does. A fixed buffer
         // reserved its length, which is its `maxByteLength`.
@@ -417,7 +398,11 @@ pub(crate) fn kind_guard(
     element: &HirType,
 ) -> Result<(), Failure> {
     let t = types(b.m)?;
-    let kind = kind(element).ok_or_else(|| format!("a view of {element:?}"))?;
+    // An owned kind has a struct type of its own, so the cast was the test.
+    if b.types().owned_views.contains_key(element) {
+        return Ok(());
+    }
+    let kind = element_kind(element).ok_or_else(|| format!("a view of {element:?}"))?;
     b.load(value)?;
     b.instructions(&[
         I::RefCastNonNull(HeapType::Concrete(t.view)),
@@ -447,7 +432,7 @@ fn length(b: &mut Body<'_, '_>, view: ValueId) -> Result<(), Failure> {
 
 fn element(b: &Body<'_, '_>, view: ValueId) -> Result<HirType, Failure> {
     match b.ty(view) {
-        HirType::Managed(ManagedType::View(element)) if kind(element).is_some() => {
+        HirType::Managed(ManagedType::View(element)) if element_kind(element).is_some() => {
             Ok((**element).clone())
         }
         other => Err(format!("an element of a {other:?}").into()),
@@ -562,6 +547,9 @@ pub(crate) fn get(
     at: ValueId,
     checked: bool,
 ) -> Result<(), Failure> {
+    if let Some(owned) = crate::owned_views::of(b, b.ty(view)) {
+        return crate::owned_views::get(b, result, owned, view, at, checked);
+    }
     let element = place(b, view, at, checked)?;
     let t = types(b.m)?;
     match element {
@@ -602,6 +590,9 @@ pub(crate) fn set(
 ) -> Result<(), Failure> {
     if b.ty(result) != &HirType::Void {
         return Err(Failure::Invariant("non-void ArraySet result".into()));
+    }
+    if let Some(owned) = crate::owned_views::of(b, b.ty(view)) {
+        return crate::owned_views::set(b, owned, view, at, value, checked);
     }
     let element = place(b, view, at, checked)?;
     let t = types(b.m)?;
@@ -723,9 +714,11 @@ fn make(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
         I::LocalGet(2),
         I::LocalGet(reserved),
         I::ArrayNewDefault(t.bytes),
-        I::StructNew(t.buffer),
-        I::End,
     ]);
+    if t.typed {
+        f.instruction(&I::RefNull(RefType::ANYREF.heap_type));
+    }
+    f.instructions(&[I::StructNew(t.buffer), I::End]);
     Ok(f)
 }
 
@@ -973,30 +966,4 @@ fn store64(m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.call(half);
     f.instruction(&I::End);
     Ok(f)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The numbering is the core's and the runtime's, by value.
-    #[test]
-    fn kinds_are_the_runtimes() {
-        let int = |bits, signed| HirType::Int { bits, signed };
-        let kinds = [
-            (int(8, true), 0),
-            (int(8, false), 1),
-            (int(16, true), 3),
-            (int(16, false), 4),
-            (int(32, true), 5),
-            (int(32, false), 6),
-            (HirType::Float { bits: 32 }, 7),
-            (HirType::Float { bits: 64 }, 8),
-        ];
-        for (element, number) in kinds {
-            assert_eq!(kind(&element), Some(number), "{element:?}");
-        }
-        assert_eq!(kind(&int(64, true)), None);
-        assert_eq!(kind(&HirType::Erased), None);
-    }
 }

@@ -662,6 +662,37 @@ fn source_string_services_agree_with_node() {
     );
 }
 
+/// Typed arrays whose kind owns its buffers keep their elements in arrays of
+/// their own type: `Float64Array` and `Int32Array` here are owned, and
+/// `Int16Array`, given away through `.buffer`, stays on bytes, so `set` crosses
+/// between the two. The owned helpers are asserted present, so a fall back to bytes fails
+/// here rather than passing on bytes' answers.
+#[test]
+fn source_owned_views_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/owned-views");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    for owned in ["owned.View(8)", "owned.View(5)", "owned.Buffer(8)"] {
+        assert!(
+            names.iter().any(|name| name == owned),
+            "{owned} in {names:?}"
+        );
+    }
+    assert!(
+        !names.iter().any(|name| name == "owned.View(3)"),
+        "Int16Array is exposed and stays on bytes"
+    );
+    let output = common::run_with_node_flags(
+        "owned-views",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 136, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+}
+
 /// The order promise reactions and resumptions run in: each export's return
 /// is the checkpoint that drains them, and a second export reads the order,
 /// against node's order after a turn.

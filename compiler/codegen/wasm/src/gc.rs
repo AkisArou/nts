@@ -6,7 +6,7 @@ use crate::{
 };
 use nts_core::hir::{HirType, ManagedType, Program};
 use nts_semantic_schema::TypeId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{
     AbstractHeapType, ArrayType, CompositeInnerType, CompositeType, FieldType, HeapType, RefType,
@@ -199,6 +199,23 @@ pub(crate) struct BufferTypes {
     pub(crate) buffer_descriptor: u32,
     pub(crate) view_descriptor: u32,
     pub(crate) dataview_descriptor: u32,
+    /// Whether a buffer has the owned kinds' typed field after its bytes.
+    pub(crate) typed: bool,
+}
+
+/// A typed array whose kind owns its buffers (`hir::views::owned_view_kinds`):
+/// its elements in an array of their own type, read with no byte assembly.
+///
+/// No other kind and nothing else can reach such a buffer's bytes, and it is
+/// never resized or detached, so its views' lengths are fixed and a view is a
+/// window, in elements, on the one array its buffer holds.
+#[derive(Debug, Clone)]
+pub(crate) struct OwnedView {
+    pub(crate) element: HirType,
+    /// `(array (mut T))`, packed for an 8- or 16-bit element.
+    pub(crate) store: u32,
+    /// `{ store, start, length }` after the root, in elements.
+    pub(crate) view: u32,
 }
 
 /// A symbol, as the C runtime's `NtsSymbol`: an object-root struct holding
@@ -376,6 +393,8 @@ pub(crate) struct Plan {
     pub(crate) symbol: Option<SymbolTypes>,
     /// `(array (mut eqref))`: the arrays a `String()` join is inside of.
     pub(crate) joining: Option<u32>,
+    /// Each owned kind's storage, by element type.
+    pub(crate) owned_views: FxHashMap<HirType, OwnedView>,
     pub(crate) root: Option<RootTypes>,
     pub(crate) objects: crate::object_plan::Plan,
     pub(crate) arrays: BTreeMap<u32, Array>,
@@ -659,6 +678,10 @@ struct Builder<'a> {
     buffers: Option<BufferNodes>,
     symbol: Option<NodeId>,
     joining: Option<NodeId>,
+    /// The element types whose views own their buffers, and each one's store
+    /// and view types once planned.
+    owned: FxHashSet<HirType>,
+    owned_views: FxHashMap<HirType, (NodeId, NodeId)>,
     callable_plan: crate::callable_plan::Plan,
     callables: BTreeMap<usize, CallableNodes>,
     virtual_plan: crate::callable_plan::Plan,
@@ -704,6 +727,8 @@ impl<'a> Builder<'a> {
             buffers: None,
             symbol: None,
             joining: None,
+            owned: nts_core::hir::views::owned_view_kinds(program),
+            owned_views: FxHashMap::default(),
             callable_plan,
             callables: BTreeMap::new(),
             virtual_plan,
@@ -989,6 +1014,11 @@ impl<'a> Builder<'a> {
             i32(true),
             Field::value(PendingSlot::Defined(bytes, true), true),
         ]);
+        // An owned kind's buffer holds its elements' array here, typed when a
+        // view over it is made.
+        if !self.owned.is_empty() {
+            fields.push(Field::value(PendingSlot::Reference(RefType::ANYREF), true));
+        }
         let buffer = self.add("buffer".into(), Some(root), true, Shape::Struct(fields));
         let window = |kind: bool| {
             let mut fields = prefix.clone();
@@ -1074,6 +1104,44 @@ impl<'a> Builder<'a> {
             erased.bigint = Some(id);
         }
         id
+    }
+
+    /// An owned kind's store and view types, planned once per kind.
+    fn owned_view(&mut self, element: &HirType) -> Result<(NodeId, NodeId), String> {
+        if let Some(nodes) = self.owned_views.get(element) {
+            return Ok(*nodes);
+        }
+        let buffers = self.buffer_types();
+        let store = if let HirType::Int { bits: 8, .. } = element {
+            buffers.bytes
+        } else {
+            let mut field = self.field(element)?;
+            field.mutable = true;
+            self.add(
+                format!("store<{element:?}>"),
+                None,
+                true,
+                Shape::Array(field),
+            )
+        };
+        let root = self.root();
+        let Shape::Struct(mut fields) = self.nodes[root.0].shape.clone() else {
+            return Err("object root is not a struct".into());
+        };
+        let i32 = Field::value(PendingSlot::Scalar(Slot::I32), false);
+        fields.extend([
+            Field::value(PendingSlot::Defined(store, false), false),
+            i32,
+            i32,
+        ]);
+        let view = self.add(
+            format!("owned view<{element:?}>"),
+            Some(root),
+            true,
+            Shape::Struct(fields),
+        );
+        self.owned_views.insert(element.clone(), (store, view));
+        Ok((store, view))
     }
 
     fn erased_types(&mut self) {
@@ -1172,10 +1240,14 @@ impl<'a> Builder<'a> {
                 PendingSlot::Defined(self.buffer_types().buffer, true)
             }
             HirType::Managed(ManagedType::View(element)) => {
-                if crate::buffers::kind(element).is_none() {
+                if nts_core::hir::builtin::element_kind(element).is_none() {
                     return Err(format!("a view of {element:?}, which has no element kind"));
                 }
-                PendingSlot::Defined(self.buffer_types().view, true)
+                if self.owned.contains(&**element) {
+                    PendingSlot::Defined(self.owned_view(element)?.1, true)
+                } else {
+                    PendingSlot::Defined(self.buffer_types().view, true)
+                }
             }
             HirType::Managed(ManagedType::AnyView) => {
                 PendingSlot::Defined(self.buffer_types().view, true)
@@ -2173,6 +2245,22 @@ impl<'a> Builder<'a> {
             })
             .collect()
     }
+    /// Each owned kind's store and view types, at their final indices.
+    fn planned_owned_views(&self, indices: &[u32]) -> FxHashMap<HirType, OwnedView> {
+        self.owned_views
+            .iter()
+            .map(|(element, (store, view))| {
+                (
+                    element.clone(),
+                    OwnedView {
+                        element: element.clone(),
+                        store: indices[store.0],
+                        view: indices[view.0],
+                    },
+                )
+            })
+            .collect()
+    }
     fn finish(self) -> Result<Plan, String> {
         let graph = self.dependencies();
         let components = self.one_group(components(&graph), &graph);
@@ -2201,6 +2289,7 @@ impl<'a> Builder<'a> {
             usize::from(self.symbol.is_some()),
             nts_core::hir::tags::SYMBOL,
         )?;
+        let owned_views = self.planned_owned_views(&indices);
         Ok(Plan {
             arrays,
             collections,
@@ -2243,6 +2332,7 @@ impl<'a> Builder<'a> {
                 symbol: indices[node.0],
                 descriptor: symbol_descriptor,
             }),
+            owned_views,
             buffers: self.buffers.map(|nodes| BufferTypes {
                 bytes: indices[nodes.bytes.0],
                 buffer: indices[nodes.buffer.0],
@@ -2251,6 +2341,7 @@ impl<'a> Builder<'a> {
                 buffer_descriptor,
                 view_descriptor: buffer_descriptor + 1,
                 dataview_descriptor: buffer_descriptor + 2,
+                typed: !self.owned.is_empty(),
             }),
             slots: self
                 .slots

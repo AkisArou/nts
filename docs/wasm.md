@@ -569,6 +569,40 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   version found a core defect:
   outcomes/a-negative-int32-element-read-as-unsigned.
 
+### Owned typed-array kinds (3e-4)
+
+`hir::views::owned_view_kinds` (core) names the element types whose every
+view owns its buffer. For such a kind, nothing but views of that kind reaches
+the bytes, and the buffer comes from `nts_buffer_new` and is never resized,
+transferred or detached. For those kinds `owned_views.rs` drops the byte
+assembly:
+- **Storage.** An owned view is its own struct type per kind:
+  `{store, start, length}`, in elements, over an `(array (mut T))`, packed for
+  8 and 16 bits. A private buffer holds that array in a typed field after its
+  empty bytes; a null bytes array is what detached means, so the buffer's
+  queries still read their fields.
+- **Access.**
+  - Elements are one `array.get` or `array.set`. A checked index is one
+    compare with the length field.
+  - `subarray` shares the store at an element offset; `slice` copies it.
+  - `fill` and `copyWithin` are one `array.fill` or `array.copy`.
+  - `set` within one owned kind is one `array.copy`; across kinds it
+    converts each value.
+- **A second net.** An owned view and a byte-backed one are unrelated struct
+  types, so a flow the core's rule missed is refused by `transfer` rather
+  than read wrongly.
+- **Kernels** (tooling/wasm/bench/typed-arrays; exploratory), ns per
+  element, node / bytes / owned:
+  - Float64Array reads 0.56 / 3.53 / 0.65;
+  - writes 0.66 / 3.42 / 0.68;
+  - Int32Array reads 0.55 / 1.27 / 0.64.
+  
+  Reads are still about 15% behind node, which removes the bounds test in
+  a counted loop.
+- **Tests:** the owned-views fixture (136 cases). The element numbering is
+  the core's `builtin::element_kind`, read directly; `element_of` is its
+  inverse, pinned by a round-trip test.
+
 ### Values: class tokens, absent scalars, symbols (3f, 3g)
 
 - **A class used as a value** is a token: a static closure of a class with no

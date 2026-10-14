@@ -111,6 +111,7 @@ pub(crate) enum FuncKey {
     FromHost,
     /// An open primitive made the JS value it denotes.
     HostValue(crate::boundary::Purpose),
+    OwnedView(crate::owned_views::Helper),
 }
 
 /// Every global the module can contain, named by what it means.

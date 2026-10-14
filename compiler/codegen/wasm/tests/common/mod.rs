@@ -91,3 +91,22 @@ pub(crate) fn run_with_node_flags(
     }
     output
 }
+
+/// The module's function names, from its name section.
+pub(crate) fn function_names(bytes: &[u8]) -> Vec<String> {
+    let mut names = vec![];
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        if let wasmparser::Payload::CustomSection(section) = payload.unwrap()
+            && let wasmparser::KnownCustom::Name(reader) = section.as_known()
+        {
+            for name in reader {
+                if let wasmparser::Name::Function(map) = name.unwrap() {
+                    for naming in map {
+                        names.push(naming.unwrap().name.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    names
+}

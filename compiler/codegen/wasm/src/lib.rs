@@ -39,6 +39,7 @@ mod module;
 mod numeric;
 mod object_plan;
 mod objects;
+mod owned_views;
 mod presence;
 mod printed;
 mod promises;

@@ -93,6 +93,9 @@ pub(crate) fn call(
     if args.len() != arity {
         return Err(format!("typed-array method {op:?} arity mismatch").into());
     }
+    if crate::owned_views::involved(b, op, args) {
+        return crate::owned_views::method(b, result, op, args);
+    }
     let receiver = args[0];
     let buffer = matches!(op, Op::BufferSlice | Op::Transfer);
     let wanted = if buffer {
