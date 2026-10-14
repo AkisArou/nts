@@ -31,6 +31,10 @@ fn logical_types_facts_and_aliases_are_guarded_before_wasm_calls() {
     let mut known = identity("known", &I32);
     known.params[0].known = nts_core::hir::facts::Facts::new(1.0, 3.0, true, false, false);
     funcs.push(known);
+    // A defaulted parameter crosses as a required one; omitting it is refused.
+    let mut defaulted = identity("defaulted", &F64);
+    defaulted.params[0].shape = ParamShape::Defaulted;
+    funcs.push(defaulted);
     let mut infinity = identity("infinityOnly", &F64);
     infinity.params[0].known =
         nts_core::hir::facts::Facts::new(f64::INFINITY, f64::INFINITY, true, false, false);
@@ -74,7 +78,7 @@ fn logical_types_facts_and_aliases_are_guarded_before_wasm_calls() {
 }
 
 #[test]
-fn publication_uses_public_api_and_declines_public_default_parameters() {
+fn publication_uses_public_api_and_requires_public_default_parameters() {
     let mut private = identity("internal", &I32);
     private.params[0].shape = ParamShape::Defaulted;
     let mut public = function("public", &[I32], I32);
@@ -96,9 +100,28 @@ fn publication_uses_public_api_and_declines_public_default_parameters() {
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert_eq!(emitted.manifest.exports.len(), 1);
     assert_eq!(emitted.manifest.exports[0].name, "published");
+    // A defaulted parameter crosses as a required one: the host cannot
+    // evaluate its initializer, so an omitted argument is refused by name.
     p.public_api
         .push(("internal".to_owned(), "defaulted".to_owned()));
+    let emitted = nts_codegen_wasm::emit(&p).unwrap();
+    let exported = emitted
+        .manifest
+        .exports
+        .iter()
+        .find(|export| export.name == "defaulted")
+        .unwrap();
+    assert!(exported.params[0].defaulted);
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node).unwrap();
+    assert!(
+        glue.instance
+            .contains("an omitted argument of a defaulted parameter"),
+        "the glue refuses an omitted defaulted argument by name"
+    );
+    // An optional one is still refused at publication.
+    let index = p.funcs.iter().position(|f| f.name == "internal").unwrap();
+    p.funcs[index].params[0].shape = ParamShape::Optional;
     let error = nts_codegen_wasm::emit(&p).unwrap_err();
     assert!(error.to_string().contains("NTS5001"));
-    assert!(error.to_string().contains("defaulted"));
+    assert!(error.to_string().contains("optional/rest public boundary"));
 }

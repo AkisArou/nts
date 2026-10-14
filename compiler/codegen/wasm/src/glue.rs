@@ -644,6 +644,10 @@ fn params(export: &FunctionExport) -> String {
         .join(", ")
 }
 
+/// A host caller omitting a defaulted argument: the initializer runs only at
+/// a compiled call, which the core inlines it into.
+const OMITTED_DEFAULT: &str = "an omitted argument of a defaulted parameter, whose initializer only a compiled caller evaluates";
+
 /// The wrapper of export `at`, calling the wasm function bound to `e{at}`.
 fn wrapper(
     at: usize,
@@ -654,6 +658,14 @@ fn wrapper(
     let _ = writeln!(out, "    {}({}) {{", quote(&export.name), params(export));
     let mut passed = Vec::new();
     for param in 0..export.params.len() {
+        if export.params[param].defaulted {
+            let _ = writeln!(
+                out,
+                "      if (a{param} === undefined) decline({}, {});",
+                quote(&export.name),
+                quote(OMITTED_DEFAULT)
+            );
+        }
         passed.push(parameter(export, param, captures, out)?);
     }
     let call = format!("e{at}({})", passed.join(", "));

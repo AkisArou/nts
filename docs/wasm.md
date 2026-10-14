@@ -1035,9 +1035,13 @@ checks arity and logical scalar types, and enforces the parameter facts used by
 specialization. It refuses non-fitting numeric inputs by name, including `-0`
 at integer boundaries and nonexact f32 inputs. The 64-bit numeric boundary uses
 BigInt as wasm's physical carrier but accepts/returns only safe JS numbers;
-unsupported BigInt language values do not enter through that path. Public
-optional/default/rest parameter shapes decline, while compiled private calls
-may use the defaults already evaluated by lowering.
+unsupported BigInt language values do not enter through that path. A public
+defaulted parameter crosses as a required one, as N-API's does: lowering
+evaluates the initializer at each compiled call that omits the argument, so a
+host caller has nowhere to get it from, and omitting it is refused by name
+("an omitted argument of a defaulted parameter") rather than given an invented
+value. Public optional and rest parameters decline; compiled private calls use
+all three shapes.
 
 Publication tables carry names without Origins. An unsupported public surface
 therefore has an explicitly named `UnsupportedSurface` refusal, rather than a

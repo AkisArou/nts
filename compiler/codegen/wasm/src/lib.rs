@@ -105,6 +105,11 @@ pub struct FunctionExport {
 pub struct Parameter {
     pub ty: BoundaryType,
     pub guard: Option<NumberGuard>,
+    /// `x: T = expr`: the core evaluates the initializer at each compiled
+    /// call that omits the argument, so a host caller must pass it, and one
+    /// that omits it is refused by name rather than given an invented value.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub defaulted: bool,
 }
 
 /// Facts specialization assumes at an incoming numeric boundary. Infinite

@@ -32,6 +32,11 @@ for (const v of [0, 4, 127]) decline('known', v);
 same('infinityOnly', Infinity);
 for (const v of [0, 1, NaN, -Infinity]) decline('infinityOnly', v);
 decline('tooLarge');
+// A defaulted parameter is required at the boundary: the host cannot run the
+// initializer the core inlines at each compiled call, so omitting it is
+// refused by name rather than given an invented value.
+same('defaulted', 2.5); same('defaulted', -0);
+assert.throws(() => wasm.defaulted(), e => e instanceof WasmInputDecline && e.message.includes('defaulted parameter')); cases++;
 // A missing argument is undefined, outside the declared type; an extra one is
 // ignored, as node ignores it.
 decline('i32'); assert.equal(wasm.i32(1, 2), 1); cases++;

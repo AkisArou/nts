@@ -790,13 +790,7 @@ fn manifest(
             )));
         }
         if let Some(func) = definitions.get(emitted.as_str()) {
-            if func.params.iter().any(|p| p.shape != ParamShape::Ordinary) {
-                return Err(EmitError::Declined(vec![refuse(
-                    func,
-                    &func.origin,
-                    format!("optional/default/rest public boundary `{published}`"),
-                )]));
-            }
+            unpublishable(func, published)?;
             let id = m
                 .program_func(emitted)
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
@@ -940,6 +934,25 @@ fn surface_decline(program: &Program, name: &str) -> EmitError {
     }
 }
 
+/// An export whose parameter shape no host call can fill: an optional or a
+/// rest parameter. A defaulted one crosses as a required one, as N-API's
+/// does: no host caller can evaluate the initializer, which the core inlines
+/// at each compiled call.
+fn unpublishable(func: &HirFunc, published: &str) -> Result<(), EmitError> {
+    if func
+        .params
+        .iter()
+        .any(|p| matches!(p.shape, ParamShape::Optional | ParamShape::Rest))
+    {
+        return Err(EmitError::Declined(vec![refuse(
+            func,
+            &func.origin,
+            format!("optional/rest public boundary `{published}`"),
+        )]));
+    }
+    Ok(())
+}
+
 fn parameter(p: &nts_core::hir::Param) -> Result<Parameter, String> {
     let ty = BoundaryType::from_hir(&p.ty)?;
     if ty == BoundaryType::Promise {
@@ -968,7 +981,11 @@ fn parameter(p: &nts_core::hir::Param) -> Result<Parameter, String> {
     } else {
         None
     };
-    Ok(Parameter { ty, guard })
+    Ok(Parameter {
+        ty,
+        guard,
+        defaulted: p.shape == ParamShape::Defaulted,
+    })
 }
 
 fn bound(value: f64) -> NumberBound {
