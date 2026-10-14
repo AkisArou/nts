@@ -1794,7 +1794,7 @@ mod tests {
         };
         let mut array = op(OpKind::ArrayNew {
             length: ValueId(0),
-            zeroed: true,
+            fill: super::super::ArrayFill::Holes,
         });
         array.ty = HirType::Managed(super::super::ManagedType::Array(Box::new(byte.clone())));
         let mut read = op(OpKind::ArrayGet {
