@@ -65905,6 +65905,9 @@ impl<'a> FuncBuilder<'a> {
         record.parameters.iter().zip(arguments).all(|(parameter, argument)| {
             let Some(&given) = self.snapshot.node_types.get(argument) else { return true };
             let taken = parameter.ty;
+            if let Some(lent) = super::native::native_array_argument(self.snapshot, taken) {
+                return self.lends_as(&lent, given);
+            }
             if super::native::string_encoding(self.snapshot, taken).is_some() || super::native::is_string(self.snapshot, taken) {
                 return matches!(self.represent(given), Some(HirType::Managed(ManagedType::String)));
             }
@@ -65922,6 +65925,52 @@ impl<'a> FuncBuilder<'a> {
             }
             true
         })
+    }
+
+    /// Whether an argument of type `given` is an array a parameter lending
+    /// `lent` -- the array its `CStrings`, `CHandles`, `CBytes` or `CElements`
+    /// markers are intersected with -- can lend: strings to `CStrings`,
+    /// handles of the class or one extending it to `CHandles`, a typed array
+    /// of the elements C reads to `CBytes` and `CElements`. So
+    /// `new Blob(["a"])` takes nts:dom's strings overload and
+    /// `new Blob([blob])` its blobs' (the Chromium lane's
+    /// lib-dom-an-array-overload-chosen-by-its-elements). `null` and
+    /// `undefined` fit, being the NULL C is lent, as does an array of any
+    /// other element, which the lend itself decides.
+    fn lends_as(&self, lent: &HirType, given: TypeId) -> bool {
+        use super::native::Pointee;
+        let absent = matches!(
+            self.snapshot
+                .types
+                .get(given.0 as usize)
+                .map(|record| &record.kind),
+            Some(TypeKind::Null | TypeKind::Undefined)
+        );
+        let Some(have) = self.represent(given) else {
+            return true;
+        };
+        match (lent, &have) {
+            (
+                HirType::Managed(ManagedType::Array(want)),
+                HirType::Managed(ManagedType::Array(have)),
+            ) => match (&**want, &**have) {
+                (
+                    HirType::NativePointer(Pointee::Opaque(want)),
+                    HirType::NativePointer(Pointee::Opaque(have)),
+                ) => have == want || have.upcasts_to(want),
+                (HirType::Managed(ManagedType::String), have) => {
+                    *have == HirType::Managed(ManagedType::String)
+                }
+                (HirType::NativePointer(Pointee::Opaque(_)), _) => false,
+                _ => true,
+            },
+            (
+                HirType::Managed(ManagedType::View(want)),
+                HirType::Managed(ManagedType::View(have)),
+            ) => want == have,
+            (HirType::Managed(ManagedType::Array(_) | ManagedType::View(_)), _) => absent,
+            _ => true,
+        }
     }
 
     /// Whether every member `argument` can carry is a field of `record`, the C
@@ -68998,6 +69047,47 @@ impl<'a> FuncBuilder<'a> {
         Ok(object)
     }
 
+    /// A typed array's storage lent to a call that reads it as `element`s
+    /// (`Role::Bytes`), in place (`nts_view_bytes`), given back after the call
+    /// (`Lent::View`). No copy: C reads the elements the program holds.
+    ///
+    /// **Nothing else has that storage.** The call is checked against the
+    /// declaration the program wrote, and a lib.dom member a binding
+    /// implements is checked against lib.dom's, which takes any sequence of
+    /// numbers: so `ctx.setLineDash([5, 3])` gave a `number[]` where nts:dom
+    /// lends a `Float64Array`, and `nts_view_bytes` read the array's header as
+    /// a view's (the Chromium lane's
+    /// lib-dom-a-number-array-for-a-typed-array-parameter). Anything else is
+    /// refused by name, as `lend_handles` refuses an array of non-handles.
+    fn lend_bytes(
+        &mut self,
+        id: NodeId,
+        view: ValueId,
+        element: &HirType,
+        want: HirType,
+        lent: &mut Vec<Lent>,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        match &self.values[view.0 as usize].ty {
+            HirType::Managed(ManagedType::View(held)) if **held == *element => {}
+            HirType::Managed(ManagedType::View(_)) => {
+                return Err(self.unsupported(
+                    id,
+                    "a `CBytes` or `CElements` argument whose typed array holds other elements than C reads",
+                ));
+            }
+            held => {
+                let why = format!(
+                    "a `CBytes` or `CElements` argument that is {}, not a typed array: C would read it as one",
+                    named_representation(held)
+                );
+                return Err(self.unsupported(id, &why));
+            }
+        }
+        lent.push(Lent::View { view });
+        Ok(self.borrow_bytes(view, want, &origin))
+    }
+
     /// A typed array's storage where C takes a pointer to its elements, NULL
     /// for `null`: `nts_view_bytes`, in place -- read as the bytes it is and
     /// cast to the element pointer C takes, which is a `const int32_t *` for
@@ -69051,6 +69141,25 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         use super::native::{Pointee, Role};
         let origin = self.origin(id);
+        // **Only a `string[]` has strings to convert.** The call is checked
+        // against the declaration the program wrote, and a lib.dom member a
+        // binding implements is checked against lib.dom's: so `new
+        // Blob([blob, blob])` gave a `Blob[]` where nts:dom lends a
+        // `string[]`, and `nts_strings_to_cstrings` read each handle as a
+        // string (the Chromium lane's
+        // lib-dom-a-cstrings-argument-whose-elements-are-not-strings). Refused
+        // by name, as `lend_handles` refuses an array of non-handles.
+        if matches!(role, Role::Strings | Role::HStrings)
+            && !matches!(
+                &self.values[array.0 as usize].ty,
+                HirType::Managed(ManagedType::Array(element))
+                    if **element == HirType::Managed(ManagedType::String)
+            )
+        {
+            return Err(
+                self.unsupported(id, "a `CStrings` argument whose elements are not strings")
+            );
+        }
         Ok(match role {
             Role::Strings => self.lend_strings(array, want, lent, &origin),
             Role::HStrings => self.lend_hstrings(array, want, lent, &origin),
@@ -69661,10 +69770,19 @@ impl<'a> FuncBuilder<'a> {
                 // time; it is the view's last use, without which reference
                 // counting released a temporary view -- and with it the only
                 // reference to the buffer -- before C read the bytes.
-                Role::Bytes => c_args.extend(argument.map(|view| {
-                    lent.push(Lent::View { view });
-                    self.borrow_bytes(view, target.parameters[at].representation(), &origin)
-                })),
+                Role::Bytes(element) => c_args.extend(
+                    argument
+                        .map(|view| {
+                            self.lend_bytes(
+                                id,
+                                view,
+                                &element,
+                                target.parameters[at].representation(),
+                                &mut lent,
+                            )
+                        })
+                        .transpose()?,
+                ),
                 // An array of handles in place: its element block, for the
                 // call, and the array given back after it.
                 Role::Handles => c_args.extend(
@@ -70188,7 +70306,7 @@ impl<'a> FuncBuilder<'a> {
                 role,
                 super::native::Role::Strings
                     | super::native::Role::HStrings
-                    | super::native::Role::Bytes
+                    | super::native::Role::Bytes(_)
                     | super::native::Role::Handles
             ) && native.retention[slot] != super::native::Retention::NotRetained
         }) {

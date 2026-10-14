@@ -1,4 +1,4 @@
-// expect: a `CHandles` argument whose elements are not handles
+// expect: emit-c --rc -> emits-c nts_dom_new_Blob_s(
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a
 // lib.dom member a binding spells as several C functions is the one whose
@@ -8,10 +8,11 @@
 // others -- the binding offers one overload per element kind (src/blob.d.ts):
 // `nts_dom_new_Blob_b` for blobs, `nts_dom_new_Blob_s` for strings.
 //
-// The choice does not look at the array's elements: the first array overload
-// is taken for any array, so `new Blob(["a,b\n", "c"])`, an array of strings,
-// is given to the blobs' and refused there. Page script makes a two-part blob
-// of four bytes.
+// The choice did not look at the array's elements: the first array overload
+// was taken for any array, so `new Blob(["a,b\n", "c"])`, an array of
+// strings, was given to the blobs' and refused there. Page script makes a
+// two-part blob of four bytes. An array argument now fits a lent array only
+// of its kind (lower.rs `lends_as`), and this takes the strings'.
 //
 // Found by the Chromium lane (2026-10-14) binding sequence arguments.
 //

@@ -488,7 +488,11 @@ pub enum Role {
     /// `Uint8Array`'s bytes (`CBytes<Q>`) or any typed array's elements
     /// (`CElements<A, Q>`): `nts_view_bytes`, no copy. The view is the
     /// caller's argument, alive across the call, and its storage never moves.
-    Bytes,
+    ///
+    /// Carries the element C reads the storage as, which the argument's must
+    /// be: a call checked against lib.dom's signature rather than the
+    /// binding's can pass another kind of array here (`lend_bytes`).
+    Bytes(HirType),
     /// An array of handles as C's array of pointers (`CHandles<H, Q>`): the
     /// array's own element block, lent in place for the call
     /// (`nts_array_handles`), which already holds the pointers C reads. The
@@ -917,7 +921,7 @@ impl Function {
                 | Role::FilledHandles
                 | Role::FilledStrings
                 | Role::FilledRecords(_)
-                | Role::Bytes
+                | Role::Bytes(_)
                 | Role::Handles
                 | Role::Copied
                 | Role::ErrorSlot { .. } => {
@@ -3427,7 +3431,11 @@ fn native_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<NativeArray> 
                 "void" => Pointee::Void,
                 _ => return None,
             };
-            (Role::Bytes, managed, Type::Pointer(pointee))
+            (
+                Role::Bytes((**element).clone()),
+                managed,
+                Type::Pointer(pointee),
+            )
         }
         (None, None, None, Some(spelling)) => handles_array(snapshot, value, &spelling)?,
         _ => return None,
@@ -3506,7 +3514,7 @@ fn borrowed_elements(
     } else {
         Pointee::Scalar(scalar)
     };
-    Some((Role::Bytes, managed, Type::Pointer(pointee)))
+    Some((Role::Bytes(wants), managed, Type::Pointer(pointee)))
 }
 
 /// A `CHandles<H, Q>` array's parts: its block is C's array of pointers to

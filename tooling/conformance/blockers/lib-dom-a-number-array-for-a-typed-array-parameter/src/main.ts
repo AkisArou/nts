@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c nts_view_bytes(
+// expect: a `CBytes` or `CElements` argument that is an array, not a typed array
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a call
 // is typechecked against lib.dom's signature and lowered to the binding's,
@@ -9,10 +9,12 @@
 // give a `number[]` there as well as a Float64Array (dom.iterable's
 // `Iterable<number>`).
 //
-// The `number[]` is lent through `nts_view_bytes` as though it were a typed
-// array: its NtsArray is read as an NtsView, whose buffer pointer is not
+// The `number[]` was lent through `nts_view_bytes` as though it were a typed
+// array: its NtsArray was read as an NtsView, whose buffer pointer is not
 // there -- a type confusion. A `number[]` keeps its elements as doubles in
-// its own block (`NTS_ITEMS(array, double)`), which is what C wants.
+// its own block (`NTS_ITEMS(array, double)`), which is what C wants; lending
+// that block in place is the follow-up. Until then the array is refused by name
+// (lower.rs `lend_bytes`) rather than read as a view.
 //
 // Found by the Chromium lane (2026-10-14) binding sequence arguments.
 //

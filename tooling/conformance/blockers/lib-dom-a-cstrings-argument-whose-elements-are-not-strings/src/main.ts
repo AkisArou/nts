@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c nts_strings_to_cstrings(
+// expect: a `CStrings` argument whose elements are not strings
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a call
 // is typechecked against lib.dom's signature and lowered to the binding's,
@@ -7,10 +7,12 @@
 // `sequence<BlobPart>`, bound for its string parts), and lib.dom lets the
 // call give a Blob[] there.
 //
-// The array is converted by `nts_strings_to_cstrings` whatever its elements
-// are (lower.rs `lend_strings`), so the blobs' handles are read as strings: a
-// type confusion, where `lend_handles` refuses an array whose elements are not
-// handles. Page script makes a blob of the parts' bytes.
+// The array was converted by `nts_strings_to_cstrings` whatever its elements
+// were, so the blobs' handles were read as strings: a type confusion, where
+// `lend_handles` refused an array whose elements are not handles. Page script
+// makes a blob of the parts' bytes. Now refused by name the same way
+// (lower.rs `lend_array`); binding Blob's blob parts is an overload of
+// their own (lib-dom-an-array-overload-chosen-by-its-elements).
 //
 // Found by the Chromium lane (2026-10-14) binding sequence arguments.
 //
