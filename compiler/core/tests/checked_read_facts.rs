@@ -37,6 +37,8 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         "ordinaryArray",
         "unusedRead",
         "allZero",
+        "holeInAssignment",
+        "restInAssignment",
     ] {
         let (index, body) = prepared
             .program
@@ -53,6 +55,17 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
             .copied()
             .filter(|id| matches!(body.values[id.0 as usize].kind, OpKind::ArrayGet { .. }))
             .collect();
+        // A hole or a rest in an assignment pattern reads nothing at its
+        // position: a read there would be dead, and a dead checked read still
+        // stops, so `[,] = []` would abort where JavaScript does nothing.
+        if matches!(name, "holeInAssignment" | "restInAssignment") {
+            assert_eq!(
+                reads.len(),
+                1,
+                "{name}: only the element that takes a value is read: {body:#?}"
+            );
+            continue;
+        }
         if name == "unusedRead" {
             assert!(
                 reads.is_empty(),

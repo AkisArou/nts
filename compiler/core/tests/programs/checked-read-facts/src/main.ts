@@ -27,3 +27,23 @@ export function allZero(index: number): number {
   const zeros = new Uint8Array(4);
   return zeros[index | 0]!;
 }
+
+// A hole in an assignment pattern occupies a position and reads nothing, so
+// `[,] = []` has no read to stop at. Only `b` is read here.
+export function holeInAssignment(n: number): number {
+  const xs: number[] = n > 0 ? [n, 2] : [];
+  let b = 0;
+  [, b] = xs.length > 1 ? xs : [0, 0];
+  [,] = xs;
+  return b;
+}
+
+// A rest reads its own tail: nothing reads the rest's position as an element,
+// so a rest past the end has nothing to stop at either. Only `a` is read.
+export function restInAssignment(n: number): number {
+  const xs = [n];
+  let a = 0;
+  let rest: number[] = [];
+  [a, ...rest] = xs;
+  return a + rest.length;
+}

@@ -46768,8 +46768,6 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             }
 
-            let read = self.pattern_element_read(element, property, object, value, position)?;
-
             // **A hole**: `[, a] = xs`. It binds nothing and still *occupies
             // a position*, and the two facts have to travel together -- the
             // count is what says `a` is the second element, which `enumerate`
@@ -46806,6 +46804,14 @@ impl<'a> FuncBuilder<'a> {
                 }
                 continue;
             }
+
+            // **Read only for an element that takes a value.** A hole reads
+            // nothing and a rest reads its tail, so the element read waits
+            // until both have gone. Read first, it was dead for both, and only
+            // dead-code removal kept `[,] = []` from stopping at a checked read
+            // of index 0 -- until a checked read became an effect, since it may
+            // stop, and `for ([,] of [[]])` aborted.
+            let read = self.pattern_element_read(element, property, object, value, position)?;
 
             // **A nested pattern**: `[[a, b]] = xss`, `[{ x: a }] = rows`,
             // `({ p: [a, b] } = o)`. The element's destination is itself an
