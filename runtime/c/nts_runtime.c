@@ -1089,7 +1089,7 @@ static __int128 nts_bigint_low_bits(double bits, __int128 value, bool sign) {
    * signed path below shifts by `width - 1`, which underflows to a shift count
    * no C shift has. The test above admits `0.5` because it asks about the
    * *double*; this asks about what the conversion produced. Zero bits of a
-   * value is zero. Every other unsupported width still refuses above. */
+   * value is zero. Lowering's ToIndex guard already checked the range. */
   if (width == 0u) {
     return 0;
   }

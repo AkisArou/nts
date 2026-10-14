@@ -1,6 +1,15 @@
 // Safe literal operators need no RangeError guard or raising copy.
 // The caller try requests raising entries only from the unsafe controls.
 
+export function discardedMask(width: number, value: bigint): number {
+  BigInt.asUintN(width, value);
+  return 7;
+}
+
+export function catchDiscardedMask(width: number, value: bigint): number {
+  try { return discardedMask(width, value); } catch { return 3; }
+}
+
 function divide(x: bigint, rhs: bigint): bigint { return x / 2n; }
 export function catchDivide(x: bigint, rhs: bigint): bigint {
   try { return divide(x, rhs); } catch { return -1n; }

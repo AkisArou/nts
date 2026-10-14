@@ -958,10 +958,12 @@ extern bool (*nts_objc_key_equal)(const void *a, const void *b);
  * `bits` of two's complement, signed or not.
  *
  * `bits` is a `double` because that is how this ABI passes a number the
- * compiler knew all along, and it is a `number` in the source too. Zero gives
- * zero and anything at or above 128 is the value unchanged, which is what the
- * specification says for a width that cannot lose anything -- here, rather than
- * at each call, because a shift by the full width is undefined in C. */
+ * compiler knew all along, and it is a `number` in the source too. Lowering
+ * validates it with ToIndex before the call. Zero bits give zero; widths at or
+ * above 128 preserve a signed value. An unsigned result from a negative value
+ * at those widths cannot fit in signed 128 bits and refuses by name. The
+ * full-width cases live here because shifting by the full width is undefined
+ * in C. */
 __int128 nts_bigint_as_intn(double bits, __int128 value);
 __int128 nts_bigint_as_uintn(double bits, __int128 value);
 NtsBigIntBox *nts_bigint_box(__int128 value);

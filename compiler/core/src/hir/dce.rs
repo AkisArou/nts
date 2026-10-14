@@ -102,6 +102,7 @@ pub fn eliminate(func: &mut Func) -> usize {
 // are lowered as control flow before the call and survive a discarded result.
 const PURE_RUNTIME_CALLS: &[&str] = &[
     "nts_tag_name",
+    "nts_bigint_as_uintn",
     "nts_bigint_shl",
     "nts_bigint_shr",
     "nts_bigint_pow",
