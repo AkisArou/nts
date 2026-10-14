@@ -487,7 +487,7 @@ fn retype(ty: &mut HirType, narrowed: &FxHashMap<HirType, HirType>) {
 mod tests {
     use super::*;
     use crate::hir::facts::Facts;
-    use crate::hir::{Block, Func, Op, Terminator, ValueId};
+    use crate::hir::{ArrayFill, Block, Func, Op, Terminator, ValueId};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
@@ -517,7 +517,7 @@ mod tests {
             op(
                 OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 numbers(),
             ),

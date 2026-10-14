@@ -979,6 +979,50 @@ impl Bridging {
     }
 }
 
+/// What an array's slots hold before the program writes them, and who may
+/// see one unwritten.
+///
+/// Two questions, which the three answers keep apart. **Memory**: may the
+/// slots be left as they came from the allocator? Only where nothing --
+/// not even a release of a half-built array after a throw -- can read one
+/// before it is written. **Observation**: can code the source wrote read a
+/// slot before it is written, and so see a hole? A backend whose typed
+/// storage has no `undefined` (Wasm's) must prove every slot written before
+/// such a read, unless the answer is no.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ArrayFill {
+    /// Zeroed, and the source may read a slot it has not written:
+    /// `new Array(n)`. A read there is a hole, `undefined`, and a zero is how
+    /// a slot with no `undefined` in its representation says so.
+    Holes,
+    /// Zeroed, but every slot is written before any code the source wrote can
+    /// read the array: a literal, a tuple, `Array.from`'s counted walk, the
+    /// `Promise.all` result. Zeroed still, because a throw while it fills -- an
+    /// element expression, a rejection -- may release it half built, and a
+    /// release walks every slot.
+    Filled,
+    /// Not zeroed: this lowering writes every slot before anything at all can
+    /// read one, with no throw between. Today `map` and the typed-array `of`
+    /// alone: worth 7% on `pipeline`, and worth being narrow about, because
+    /// the failure is reading uninitialized memory rather than a zero.
+    Uninitialized,
+}
+
+impl ArrayFill {
+    /// Whether the allocator must zero the slots.
+    #[must_use]
+    pub fn zeroed(self) -> bool {
+        !matches!(self, Self::Uninitialized)
+    }
+
+    /// Whether every slot is written before code the source wrote can read
+    /// one: no hole is ever observed.
+    #[must_use]
+    pub fn dense(self) -> bool {
+        !matches!(self, Self::Holes)
+    }
+}
+
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
@@ -1258,20 +1302,8 @@ pub enum OpKind {
     /// type, which is a [`ManagedType::Array`].
     ArrayNew {
         length: ValueId,
-        /// Whether the elements have to be zeroed.
-        ///
-        /// They do for anything the *source* can observe before writing, because
-        /// there is no `undefined` in a double and so a hole has no
-        /// representation to leave behind. `new Array(n)` is that case.
-        ///
-        /// `false` only where this lowering fills every slot itself before the
-        /// array can be read, which today is `map` alone: its loop runs from 0
-        /// to the length it allocated, `deliver` stores on every path through
-        /// the body, and there is no early exit. Worth 7% on `pipeline`, which
-        /// it takes to parity with hand-written C++ -- and worth being narrow
-        /// about, because the failure mode is reading uninitialized memory
-        /// rather than reading a zero.
-        zeroed: bool,
+        /// What the slots hold before the program writes them: see [`ArrayFill`].
+        fill: ArrayFill,
     },
     /// The element count of a variable-length managed object.
     ///
@@ -8134,7 +8166,7 @@ mod tests {
             Op {
                 kind: OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 ty: numbers.clone(),
                 origin: origin(),
@@ -8264,7 +8296,7 @@ mod tests {
             Op {
                 kind: OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 ty: numbers.clone(),
                 origin: origin(),
@@ -8351,7 +8383,7 @@ mod tests {
             Op {
                 kind: OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 ty: numbers.clone(),
                 origin: origin(),
@@ -8359,7 +8391,7 @@ mod tests {
             Op {
                 kind: OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 ty: numbers.clone(),
                 origin: origin(),

@@ -1261,7 +1261,7 @@ fn escape_into(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hir::{Block, Field, HirType, Layout, ManagedType, Op, Param, TypeId};
+    use crate::hir::{ArrayFill, Block, Field, HirType, Layout, ManagedType, Op, Param, TypeId};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
@@ -2091,7 +2091,7 @@ mod tests {
                     op(
                         OpKind::ArrayNew {
                             length: ValueId(0),
-                            zeroed: false,
+                            fill: ArrayFill::Uninitialized,
                         },
                         HirType::Managed(ManagedType::Array(Box::new(object()))),
                     ),

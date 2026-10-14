@@ -1,6 +1,6 @@
 //! Refuse observable typed holes which prepared HIR's zero fill cannot represent.
 //!
-//! A typed `ArrayNew { zeroed: true }` holds zeros, not `undefined`, so a slot
+//! A typed `ArrayNew { fill: ArrayFill::Holes }` holds zeros, not `undefined`, so a slot
 //! may be observed only once a store has written it. The proof is a forward
 //! must-analysis over the control-flow graph: a constant slot is written at a
 //! point when a store wrote it on every path from the allocation to there. So
@@ -11,7 +11,7 @@
 //! argument) needs every slot.
 
 use crate::{EmitError, error::Failure};
-use nts_core::hir::{BlockId, Func, HirType, ManagedType, OpKind, ValueId};
+use nts_core::hir::{ArrayFill, BlockId, Func, HirType, ManagedType, OpKind, ValueId};
 use rustc_hash::FxHashMap;
 use std::collections::BTreeSet;
 
@@ -88,7 +88,7 @@ fn allocations(func: &Func) -> FxHashMap<ValueId, Option<u32>> {
             let op = func.value(id);
             if let OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             } = op.kind
                 && let HirType::Managed(ManagedType::Array(element)) = &op.ty
                 && element.as_ref() != &HirType::Erased

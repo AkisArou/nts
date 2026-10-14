@@ -3681,13 +3681,13 @@ fn allocation(
     let op = &func.values[value.0 as usize];
     let out = out.to_owned();
     Ok(match &op.kind {
-        OpKind::ArrayNew { length, zeroed } => {
+        OpKind::ArrayNew { length, fill } => {
             let HirType::Managed(nts_core::hir::ManagedType::Array(element)) = &op.ty else {
                 return Err(refuse(func, "an array of something with no element type"));
             };
             // Two entry points rather than a flag, so the branch is taken here
             // rather than once per allocation at run time.
-            let allocate = if *zeroed {
+            let allocate = if fill.zeroed() {
                 "@nts_array_new"
             } else {
                 "@nts_array_new_uninitialized"

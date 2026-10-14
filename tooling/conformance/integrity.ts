@@ -507,7 +507,10 @@ export function unbuiltUnerases(prepared, { byName, byId }) {
     const definition = f.values.get(value);
     const element = /^managed<\[managed<obj#(\d+)>\]>$/.exec(definition?.type ?? "")?.[1];
     if (!layout || byId.get(element) !== layout) return false;
-    if (/^array\.new %\d+$/.test(definition.op)) return true;
+    // `filled`: a literal or a counted walk, printed so since 2026-10-14 and
+    // the same local allocation it was before. (`uninitialized`, `map`'s, is
+    // not accepted here, and was not before: a question of its own.)
+    if (/^array\.new(?: filled)? %\d+$/.test(definition.op)) return true;
     const index = f.params.get(value);
     if (index === undefined) return false;
     if (f.exported) return true;

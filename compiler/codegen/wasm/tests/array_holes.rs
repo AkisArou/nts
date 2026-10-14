@@ -3,7 +3,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 use common::hir::{F64, U32, block, function, program, value};
-use nts_core::hir::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId};
+use nts_core::hir::{
+    ArrayFill, BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+};
 
 fn array() -> HirType {
     HirType::Managed(ManagedType::Array(Box::new(F64)))
@@ -22,7 +24,7 @@ fn base(name: &str) -> (Func, Vec<ValueId>, ValueId, ValueId, ValueId) {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(),
     );

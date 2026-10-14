@@ -16,8 +16,9 @@ use nts_semantic_schema::{
 
 use super::facts::Facts;
 use super::{
-    Absent, BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind, HirType, Layout,
-    ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, UnOp, ValueId,
+    Absent, ArrayFill, BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind,
+    HirType, Layout, ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, UnOp,
+    ValueId,
 };
 
 /// Closures crossing the type they were written at, recorded where that is known.
@@ -24590,7 +24591,8 @@ impl<'a> FuncBuilder<'a> {
                 let array = self.push(
                     OpKind::ArrayNew {
                         length,
-                        zeroed: true,
+                        // Filled: a tuple literal: every element is stored before the tuple is bound to anything.
+                        fill: ArrayFill::Filled,
                     },
                     represented,
                     origin.clone(),
@@ -33431,7 +33433,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty.clone(),
             origin.clone(),
@@ -34577,7 +34579,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             array_ty,
             origin.clone(),
@@ -37000,7 +37002,8 @@ impl<'a> FuncBuilder<'a> {
         let out = self.push(
             OpKind::ArrayNew {
                 length: start,
-                zeroed: true,
+                // Filled: `Array.from`'s walk: a counted one stores exactly its length's elements, an uncounted one starts empty and appends, and no code the source wrote runs inside the loop.
+                fill: ArrayFill::Filled,
             },
             ty.clone(),
             origin.clone(),
@@ -37237,7 +37240,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty,
             origin.clone(),
@@ -37350,7 +37353,7 @@ impl<'a> FuncBuilder<'a> {
             let pair = self.push(
                 OpKind::ArrayNew {
                     length,
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 element.clone(),
                 origin.clone(),
@@ -38300,7 +38303,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty.clone(),
             origin.clone(),
@@ -39100,7 +39103,8 @@ impl<'a> FuncBuilder<'a> {
             // collector that walked the rest would follow whatever was there.
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                // Filled: the `Promise.all` result: the runtime fills it as the promises settle, and the program receives it only once every one has; a rejection delivers the reason instead.
+                fill: ArrayFill::Filled,
             },
             HirType::Managed(ManagedType::Array(collected.clone())),
             origin.clone(),
@@ -50180,7 +50184,8 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                // Filled: an array literal: no code the source wrote can name it until every element is stored -- an element that throws leaves it unreachable.
+                fill: ArrayFill::Filled,
             },
             ty,
             origin.clone(),
@@ -50283,7 +50288,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty,
             origin,
@@ -54772,7 +54777,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(
                 OpKind::ArrayNew {
                     length,
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 ty,
                 origin,
@@ -55217,7 +55222,7 @@ impl<'a> FuncBuilder<'a> {
         let values = self.push(
             OpKind::ArrayNew {
                 length: count,
-                zeroed: false,
+                fill: ArrayFill::Uninitialized,
             },
             HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER))),
             origin.clone(),
@@ -56717,7 +56722,7 @@ impl<'a> FuncBuilder<'a> {
         let out = self.push(
             OpKind::ArrayNew {
                 length: total,
-                zeroed: false,
+                fill: ArrayFill::Uninitialized,
             },
             ty.clone(),
             origin.clone(),
@@ -65459,7 +65464,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length: size,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty,
             origin.clone(),
@@ -67251,7 +67256,7 @@ impl<'a> FuncBuilder<'a> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             array_ty,
             origin.clone(),
@@ -67699,7 +67704,7 @@ impl<'a> FuncBuilder<'a> {
         let out = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty,
             origin.clone(),
@@ -67955,7 +67960,7 @@ impl<'a> FuncBuilder<'a> {
         let keys = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             HirType::Managed(ManagedType::Array(key_ty.clone())),
             origin.clone(),
@@ -67963,7 +67968,7 @@ impl<'a> FuncBuilder<'a> {
         let values = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             HirType::Managed(ManagedType::Array(value_ty.clone())),
             origin.clone(),
@@ -73223,7 +73228,7 @@ impl<'a> FuncBuilder<'a> {
         let empty = self.push(
             OpKind::ArrayNew {
                 length: zero,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty.clone(),
             origin,
@@ -77364,7 +77369,7 @@ impl<'a> FuncBuilder<'a> {
         let made = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: false,
+                fill: ArrayFill::Uninitialized,
             },
             ty.clone(),
             origin.clone(),

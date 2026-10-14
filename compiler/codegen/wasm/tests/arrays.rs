@@ -3,7 +3,7 @@
 mod common;
 use common::hir::{F64, I32, U32, block, function, program, value};
 use nts_core::hir::{
-    Absent, BinOp, BlockId, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+    Absent, ArrayFill, BinOp, BlockId, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
 };
 
 fn array(element: HirType) -> HirType {
@@ -49,7 +49,7 @@ fn roundtrip(name: &str, element: HirType, index: HirType, checked: bool) -> Fun
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: false,
+            fill: ArrayFill::Uninitialized,
         },
         array(element.clone()),
     );
@@ -78,7 +78,7 @@ fn length(name: &str, index: HirType) -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: input,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(F64),
     );
@@ -95,7 +95,7 @@ fn erased(name: &str, element: Option<HirType>) -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(HirType::Erased),
     );
@@ -146,7 +146,7 @@ fn nested() -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(F64),
     );
@@ -156,7 +156,7 @@ fn nested() -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(array(F64)),
     );
@@ -193,7 +193,7 @@ fn grow() -> Func {
         &mut entry,
         OpKind::ArrayNew {
             length: zero,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(F64),
     );
@@ -391,7 +391,7 @@ fn append() -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(F64),
     );
@@ -425,7 +425,7 @@ fn wide(name: &str, constant: i128, element: HirType) -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: len,
-            zeroed: false,
+            fill: ArrayFill::Uninitialized,
         },
         array(element.clone()),
     );
@@ -462,7 +462,7 @@ fn reference_append() -> Func {
         &mut ops,
         OpKind::ArrayNew {
             length: zero,
-            zeroed: true,
+            fill: ArrayFill::Holes,
         },
         array(string()),
     );

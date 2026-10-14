@@ -24,7 +24,7 @@ use std::fmt::Write as _;
 use anyhow::{Context, Result, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir::facts;
-use nts_core::hir::{self, BinOp, HirType, ManagedType, OpKind};
+use nts_core::hir::{self, ArrayFill, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
@@ -3198,10 +3198,15 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             "%{index} = field.view %{} obj#{} -> obj#{} : {ty}",
             value.0, source.0, face.0
         ),
-        OpKind::ArrayNew { length, zeroed } => {
-            // Printed, because "not zeroed" is a claim about what the rest of
-            // the function does and is worth being able to read back.
-            let fill = if *zeroed { "" } else { " uninitialized" };
+        OpKind::ArrayNew { length, fill } => {
+            // Printed, because "not zeroed" and "never seen with a hole" are
+            // claims about what the rest of the function does and are worth
+            // being able to read back.
+            let fill = match fill {
+                ArrayFill::Holes => "",
+                ArrayFill::Filled => " filled",
+                ArrayFill::Uninitialized => " uninitialized",
+            };
             format!("%{index} = array.new{fill} %{} : {ty}", length.0)
         }
         OpKind::Length(array) => format!("%{index} = array.len %{} : {ty}", array.0),

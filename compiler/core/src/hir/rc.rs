@@ -111,7 +111,7 @@
 
 use super::liveness;
 use super::own::{self, Ownership};
-use super::{BlockId, Func, HirType, Layout, ManagedType, Op, OpKind, Program, ValueId};
+use super::{ArrayFill, BlockId, Func, HirType, Layout, ManagedType, Op, OpKind, Program, ValueId};
 
 /// What one pass inserted.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -1196,7 +1196,10 @@ fn load_slot(
         OpKind::ArraySet { array, .. }
             if matches!(
                 func.values[array.0 as usize].kind,
-                OpKind::ArrayNew { zeroed: false, .. }
+                OpKind::ArrayNew {
+                    fill: ArrayFill::Uninitialized,
+                    ..
+                }
             ) =>
         {
             return None;
@@ -1590,7 +1593,7 @@ mod tests {
             op(
                 OpKind::ArrayNew {
                     length: ValueId(0),
-                    zeroed: true,
+                    fill: ArrayFill::Holes,
                 },
                 array,
             ),

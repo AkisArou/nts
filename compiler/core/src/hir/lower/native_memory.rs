@@ -1,7 +1,8 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
 use super::{
-    Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place, ValueId,
+    ArrayFill, Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place,
+    ValueId,
 };
 use crate::hir::native::{Encoding, Handle, Pointee, Referenced, Scalar, Type, Written};
 use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
@@ -613,7 +614,7 @@ impl FuncBuilder<'_> {
         let array = self.push(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             ty,
             origin.clone(),

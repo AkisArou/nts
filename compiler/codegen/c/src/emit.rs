@@ -5433,10 +5433,10 @@ fn memory_op(
             value: stored,
         } => field_store(func, op, *object, *field, *stored, context)?,
         OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => suspension(op)?,
-        OpKind::ArrayNew { length, zeroed } => {
+        OpKind::ArrayNew { length, fill } => {
             // Two entry points rather than a flag argument, so the branch is
             // taken here rather than once per allocation at run time.
-            let allocate = if *zeroed {
+            let allocate = if fill.zeroed() {
                 "nts_array_new"
             } else {
                 "nts_array_new_uninitialized"

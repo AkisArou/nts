@@ -3,7 +3,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 use common::hir::{F64, U32, block, function, program, value};
-use nts_core::hir::{Absent, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId};
+use nts_core::hir::{
+    Absent, ArrayFill, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+};
 
 fn array(element: HirType) -> HirType {
     HirType::Managed(ManagedType::Array(Box::new(element)))
@@ -32,7 +34,7 @@ impl Build {
         let a = self.op(
             OpKind::ArrayNew {
                 length,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             array(element),
         );

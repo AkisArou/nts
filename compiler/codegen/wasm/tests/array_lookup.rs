@@ -3,7 +3,7 @@
 mod common;
 use common::hir::{F64, U32, block, function, program, value};
 use nts_core::hir::{
-    Absent, BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+    Absent, ArrayFill, BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
 };
 fn array(ty: HirType) -> HirType {
     HirType::Managed(ManagedType::Array(Box::new(ty)))
@@ -35,7 +35,7 @@ impl Build {
         let a = self.op(
             OpKind::ArrayNew {
                 length: len,
-                zeroed: true,
+                fill: ArrayFill::Holes,
             },
             array(ty),
         );
