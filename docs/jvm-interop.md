@@ -32,12 +32,12 @@ prevented.
 reads as well as writes: [`read`] parses class files, [`bind`] renders
 declarations, [`escapes`] answers which parameters a method retains.
 
-~~There is still no `bind` **subcommand** -- it is `examples/bind.rs`, driven by
+~~There is still no `bind` **subcommand** -- it is `compiler/jvm-emitter/examples/bind.rs`, driven by
 the projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this
 lane does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
 `version`.~~ **Corrected 2026-09-15.** `nts bind` is a subcommand, with
 `--jar`/`--classes`, `--package`, `--out`, `--prelude`, `--keeps`,
-`--self-contained`, `--members` and `--overrides`; `examples/bind.rs` is gone;
+`--self-contained`, `--members` and `--overrides`; `compiler/jvm-emitter/examples/bind.rs` is gone;
 and the ownership sentence was the load-bearing error, because it is why nobody
 looked. The CLI has seventeen commands, not six:
 
