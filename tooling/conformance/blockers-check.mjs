@@ -178,8 +178,17 @@ function run(args) {
   return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 }
 
+// The fixtures git tracks, as interop counts its projects. A gate tree reused
+// across commits keeps a directory a fixture left behind when a later commit
+// does not have it -- its ignored node_modules survive the clean -- and reading
+// that directory's main.ts failed the step with ENOENT (2026-10-14, six GTK
+// fixtures of a train that had not landed). Outside a checkout, the directory.
+const tracked = (() => {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: FIXTURES, encoding: "utf8" });
+  return listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;
+})();
 const names = readdirSync(FIXTURES, { withFileTypes: true })
-  .filter((e) => e.isDirectory())
+  .filter((e) => e.isDirectory() && (tracked === null || tracked.has(e.name)))
   .map((e) => e.name)
   .sort();
 

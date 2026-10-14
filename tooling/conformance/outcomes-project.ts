@@ -7,6 +7,7 @@
 // without it, so two tools deriving the project separately would be two
 // derivations of the program the fixture means -- the kind that drift.
 
+import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,11 +31,21 @@ export const RUNTIME_SPECIFIER = "@nts/runtime/";
 export const RUNTIME_ROOT = join(ROOT, "runtime");
 const HARNESS = readFileSync(join(HERE, "outcomes-harness.ts"), "utf8");
 
-/** Every fixture's name, sorted. */
-export const outcomeFixtures = () =>
-  existsSync(OUTCOMES)
-    ? readdirSync(OUTCOMES, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
-    : [];
+/**
+ * Every fixture's name, sorted: the ones git tracks, where this is a checkout.
+ * A gate tree reused across commits keeps a fixture directory a later commit
+ * does not have -- its ignored node_modules survive the clean -- and reading it
+ * failed blockers-check with ENOENT (2026-10-14); this is the same listing.
+ */
+export const outcomeFixtures = () => {
+  if (!existsSync(OUTCOMES)) return [];
+  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: OUTCOMES, encoding: "utf8" });
+  const tracked = listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;
+  return readdirSync(OUTCOMES, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && (tracked === null || tracked.has(e.name)))
+    .map((e) => e.name)
+    .sort();
+};
 
 /** `check` when the fixture's main.ts says `// run: check`, else `build`. */
 export const runMode = (name) =>
