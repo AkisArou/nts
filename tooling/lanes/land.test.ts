@@ -102,8 +102,11 @@ function land(s: Scratch, tree: string): { child: ChildProcess; done: Promise<La
   return { child, done };
 }
 
+// A minute, not seconds: the gate runs this beside its heavy steps, where a
+// landing can take more than ten seconds to start and join the queue. Only a
+// real hang should fail here.
 async function until(what: string, ok: () => boolean): Promise<void> {
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1200; i++) {
     if (ok()) return;
     await new Promise((r) => setTimeout(r, 50));
   }
