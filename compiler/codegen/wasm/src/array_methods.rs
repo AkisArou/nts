@@ -190,9 +190,9 @@ fn put(
     end: End,
 ) -> Result<(), Failure> {
     length(b, shape, array)?;
-    b.instruction(&I::I32Const(-1));
+    b.instruction(&I::I32Const(arrays::capacity(&shape.element)));
     b.instruction(&I::I32LtU);
-    contract::require(b, "an array longer than 2^32 - 1 elements")?;
+    contract::require(b, arrays::PAST_CAPACITY)?;
     let grow = arrays::grow(b.m, shape)?;
     b.load(array)?;
     length(b, shape, array)?;

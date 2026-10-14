@@ -359,9 +359,9 @@ fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Re
     b.instruction(&I::I32Eq);
     b.instruction(&I::If(BlockType::Empty));
     logical_length(b, array, ty)?;
-    b.instruction(&I::I32Const(-1));
+    b.instruction(&I::I32Const(capacity(&shape.element)));
     b.instruction(&I::I32LtU);
-    contract::require(b, "an array longer than 2^32 - 1 elements")?;
+    contract::require(b, PAST_CAPACITY)?;
     b.load(array)?;
     logical_length(b, array, ty)?;
     b.instruction(&I::I32Const(1));
@@ -378,8 +378,29 @@ fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Re
     b.instruction(&I::End);
     Ok(())
 }
+/// Growth past [`capacity`]: the engine would trap allocating the storage.
+pub(crate) const PAST_CAPACITY: &str =
+    "an array longer than this engine holds, where node throws a RangeError";
+
+/// The longest an array of `element` grows. The engine refuses a GC array
+/// past 2^30 bytes (V8, measured: 2^30 - 25 one-byte elements, 2^27 - 4
+/// eight-byte ones, a reference taking eight), and its `array.new` traps
+/// there, so growth stops a little short and refuses by name. Node's own
+/// arrays throw a `RangeError` near the same length.
+pub(crate) fn capacity(element: &HirType) -> i32 {
+    let bytes = match element {
+        HirType::Int { bits: 8, .. } => 1,
+        HirType::Int { bits: 16, .. } => 2,
+        HirType::Int { bits: 32, .. } | HirType::Float { bits: 32 } | HirType::Bool => 4,
+        HirType::BigInt => 16,
+        _ => 8,
+    };
+    ((1 << 30) - 64) / bytes
+}
+
 /// The helper that grows an array's backing to at least a capacity,
-/// preserving the wrapper and therefore every alias of it.
+/// preserving the wrapper and therefore every alias of it. A capacity past
+/// [`capacity`] refuses by name; doubling stops at it.
 pub(crate) fn grow(m: &mut Builder<'_>, shape: &gc::Array) -> Result<Func, Failure> {
     m.helper(
         FuncKey::ArrayGrow(shape.wrapper),
@@ -396,6 +417,10 @@ pub(crate) fn grow(m: &mut Builder<'_>, shape: &gc::Array) -> Result<Func, Failu
     )
 }
 fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let limit = capacity(&shape.element);
+    let decline = contract::decline(m)?;
+    let name = m.literal("array growth");
+    let why = m.literal(PAST_CAPACITY);
     let mut f = Function::new([
         ValType::I32,
         ValType::Ref(RefType {
@@ -403,6 +428,16 @@ fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure
             heap_type: HeapType::Concrete(shape.backing),
         }),
     ]);
+    f.instructions(&[
+        I::LocalGet(1),
+        I::I32Const(limit),
+        I::I32GtU,
+        I::If(BlockType::Empty),
+    ]);
+    f.global_get(name);
+    f.global_get(why);
+    f.call(decline);
+    f.instructions(&[I::Unreachable, I::End]);
     f.instructions(&[
         I::LocalGet(0),
         I::StructGet {
@@ -439,6 +474,13 @@ fn grow_body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure
         I::I32LtU,
         I::If(BlockType::Empty),
         I::I32Const(4),
+        I::LocalSet(2),
+        I::End,
+        I::LocalGet(2),
+        I::I32Const(limit),
+        I::I32GtU,
+        I::If(BlockType::Empty),
+        I::I32Const(limit),
         I::LocalSet(2),
         I::End,
     ]);

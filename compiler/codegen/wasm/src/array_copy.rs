@@ -128,9 +128,11 @@ fn inner(
         arrays::logical_length(b, args[1], shape.wrapper)?;
         b.instruction(&I::F64ConvertI32U);
         b.instruction(&I::F64Add);
-        b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
+        b.instruction(&I::F64Const(
+            f64::from(arrays::capacity(&shape.element)).into(),
+        ));
         b.instruction(&I::F64Le);
-        contract::require(b, "an array longer than 2^32 - 1 elements")?;
+        contract::require(b, arrays::PAST_CAPACITY)?;
     }
     b.load(args[0])?;
     if matches!(method.helper, Helper::Slice | Helper::Splice) {
