@@ -11,7 +11,8 @@ import java.math.BigInteger;
  * <p>**An arithmetic result past 128 bits stops by name** ({@link #overflow}),
  * as C's and LLVM's checked operations call {@code nts_bigint_overflow}: node's
  * bigint grows there, and a wrapped answer would be a wrong one. Only
- * {@code asIntN}/{@code asUintN} wrap, because wrapping is what they ask for.
+ * {@code asIntN} and {@code asUintN} wrap, because wrapping is what they ask
+ * for, and {@code asUintN} still stops where its unsigned result needs bit 127.
  */
 public final class NtsBigInt {
     public final long hi;
@@ -372,10 +373,19 @@ public final class NtsBigInt {
         if (n == 64) { return fromLong(a.lo); }
         return of((a.hi << (128 - n)) >> (128 - n), a.lo);
     }
+    /**
+     * {@code BigInt.asUintN}: the value modulo 2^n. That fits in 128 signed bits
+     * for any n up to 127, and from 128 on only when the value is not negative:
+     * a negative one is 2^n plus itself, at least 2^127, so it stops by name
+     * rather than come back negative.
+     */
     public static NtsBigInt asUintN(double bits, NtsBigInt a) {
         int n = (int) bits;
         if (n <= 0) { return ZERO; }
-        if (n >= 128) { return a; }
+        if (n >= 128) {
+            if (a.hi < 0L) { throw pastBits(); }
+            return a;
+        }
         if (n < 64) { return of(0L, a.lo & (-1L >>> (64 - n))); }
         if (n == 64) { return of(0L, a.lo); }
         return of(a.hi & (-1L >>> (128 - n)), a.lo);

@@ -239,6 +239,14 @@ public final class RuntimeRegression {
         exact(() -> NtsBigInt.pow(NtsBigInt.fromLong(2), NtsBigInt.fromBigInteger(two.pow(100))), two.pow(200), "2 ** 2^100");
         exact(() -> NtsBigInt.pow(minusOne, NtsBigInt.fromBigInteger(two.pow(100).add(BigInteger.ONE))), BigInteger.ONE.negate(),
             "-1 ** (2^100 + 1)");
+        // asUintN past signed 128 bits: a negative value at width 128 or more.
+        BigInteger pow128 = two.pow(128);
+        exact(() -> NtsBigInt.asUintN(127, minusOne), two.pow(127).subtract(BigInteger.ONE), "asUintN(127, -1)");
+        exact(() -> NtsBigInt.asUintN(128, minusOne), pow128.subtract(BigInteger.ONE), "asUintN(128, -1)");
+        exact(() -> NtsBigInt.asUintN(200, minusOne), two.pow(200).subtract(BigInteger.ONE), "asUintN(200, -1)");
+        exact(() -> NtsBigInt.asUintN(128, max), MAX128, "asUintN(128, 2^127 - 1)");
+        exact(() -> NtsBigInt.asUintN(200, max), MAX128, "asUintN(200, 2^127 - 1)");
+        exact(() -> NtsBigInt.asUintN(127, min), BigInteger.ZERO, "asUintN(127, -2^127)");
         String said = null;
         try { NtsBigInt.overflow(); } catch (NtsRefusal stopped) { said = stopped.getMessage(); }
         equal(said, "nts: refused at run time: a bigint past 128 bits, which this runtime does not hold", "overflow() is C's nts_bigint_overflow");
@@ -282,7 +290,8 @@ public final class RuntimeRegression {
             int last = round < 150 ? 128 : first;
             for (int n = first; n <= last; ++n) {
                 BigInteger low = aa.and(BigInteger.ONE.shiftLeft(n).subtract(BigInteger.ONE));
-                bigint(NtsBigInt.asUintN(n, a), low, "asUintN " + n);
+                final int width = n;
+                exact(() -> NtsBigInt.asUintN(width, a), low, "asUintN " + n);
                 BigInteger signed = n > 0 && low.testBit(n - 1) ? low.subtract(BigInteger.ONE.shiftLeft(n)) : low;
                 bigint(NtsBigInt.asIntN(n, a), signed, "asIntN " + n);
             }
