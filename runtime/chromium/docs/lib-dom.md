@@ -81,12 +81,12 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-14, 293 interfaces, 7094 functions):
+  2026-10-14, 293 interfaces, 7096 functions):
   - lib.dom.d.ts declares 3621 members on the bound interfaces.
-  - 3146 are bound, the CSS properties among them. Blink serves those
+  - 3148 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 238 are in Blink's IDL but skipped, and `report.json` says why. The
+  - 236 are in Blink's IDL but skipped, and `report.json` says why. The
     largest groups: 64 result types (`any`, frozen arrays, promises,
     sequences, `object`), 62 naming an interface not bound, 60 defined in
     Blink's modules component on an interface the allowlist does not take
@@ -226,7 +226,7 @@ generated, and checked against page script by the differential vectors.
 | `new MutationObserver(cb)` (and Resize, Intersection) | `newMutationObserver(cb)`, the closure called with a `MutationRecordSequence` and the observer | `new` on an observer |
 | `new IntersectionObserver(cb, { root, rootMargin, threshold })` | `newIntersectionObserver(cb, options)`, the options a struct written as the object literal, a member left out the default; one threshold (a list is refused: "an array where a number is wanted") | an options argument |
 | `record.addedNodes`, `observer.takeRecords()`, `event.composedPath()` (a `sequence<T>`) | `TSequence`: `length` and `item(i)` | a sequence result |
-| `el.getAttributeNames()`, `params.getAll(name)`, `headers.getSetCookie()` (a method answering `sequence<DOMString>`) | `DOMStringSequence`: `length`, and `item(i)` lending each string as a `StringView` | a sequence result, read as `string[]`; an attribute's (`navigator.languages`) waits on blockers/lib-dom-a-sequence-attribute-read-as-its-array |
+| `el.getAttributeNames()`, `params.getAll(name)`, `headers.getSetCookie()`, `navigator.languages` (a method or attribute answering `sequence<DOMString>`) | `DOMStringSequence`: `length`, and `item(i)` lending each string as a `StringView` | a sequence result, read as `string[]`, and an attribute's (`navigator.languages`, `dataTransfer.types`): each read is a fresh array copied through `item` (6b9fa844a), exact but for `===` between two reads |
 | `ctx.fill("evenodd")`, `history.scrollRestoration = "manual"` (an IDL enum) | the enum is its literal union (`type SelectionMode = "select" \| ...`), crossing as a C string matched against Blink's enum class; outside it, an argument throws the binding's TypeError and an attribute keeps its value with a console warning. A value read (`document.readyState`) is the union too, answered as Blink's own static literal | an enum-typed argument or attribute |
 | `requestIdleCallback(f, { timeout: 500 })` | `requestIdleCallback(f, 500)`; `f(deadline)` gets the IdleDeadline (`timeRemaining()`, `didTimeout`) | an options argument |
 | `new Image(w, h)`, `new Audio(src)`, `new Option(text, value)` (a [LegacyFactoryFunction]) | `newImage(w, h)`, named for the factory, calling `CreateForJSConstructor` as V8's binding does | `new` of the factory, once the delegation names the function for the `new` expression's callee (blockers/lib-dom-new-of-a-legacy-factory-function) |

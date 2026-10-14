@@ -5947,6 +5947,7 @@ const NtsStringView* nts_dom_Navigator_get_platform(NtsDomNavigator* self);
 const NtsStringView* nts_dom_Navigator_get_product(NtsDomNavigator* self);
 const NtsStringView* nts_dom_Navigator_get_userAgent(NtsDomNavigator* self);
 const NtsStringView* nts_dom_Navigator_get_language(NtsDomNavigator* self);
+NtsDomDOMStringSequence* nts_dom_Navigator_get_languages(NtsDomNavigator* self);
 bool nts_dom_Navigator_get_onLine(NtsDomNavigator* self);
 bool nts_dom_Navigator_get_webdriver(NtsDomNavigator* self);
 NtsDomHTMLTableCaptionElement* nts_dom_as_HTMLTableCaptionElement(NtsDomNode* node);
@@ -6135,6 +6136,7 @@ void nts_dom_DataTransfer_set_dropEffect(NtsDomDataTransfer* self, const NtsBorr
 const NtsStringView* nts_dom_DataTransfer_get_effectAllowed(NtsDomDataTransfer* self);
 void nts_dom_DataTransfer_set_effectAllowed(NtsDomDataTransfer* self, const NtsBorrowedString* value);
 NtsDomDataTransferItemList* nts_dom_DataTransfer_get_items(NtsDomDataTransfer* self);
+NtsDomDOMStringSequence* nts_dom_DataTransfer_get_types(NtsDomDataTransfer* self);
 NtsDomFileList* nts_dom_DataTransfer_get_files(NtsDomDataTransfer* self);
 void nts_dom_DataTransfer_clearData_1(NtsDomDataTransfer* self, const NtsBorrowedString* format);
 void nts_dom_DataTransfer_clearData_0(NtsDomDataTransfer* self);

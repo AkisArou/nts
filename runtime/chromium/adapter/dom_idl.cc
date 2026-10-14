@@ -41102,6 +41102,12 @@ const NtsStringView* nts_dom_Navigator_get_language(NtsDomNavigator* self) {
   return context.Lend(nts_dom::AsString(receiver->language()), false);
 }
 
+NtsDomDOMStringSequence* nts_dom_Navigator_get_languages(NtsDomNavigator* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Navigator>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->languages()));
+}
+
 bool nts_dom_Navigator_get_onLine(NtsDomNavigator* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Navigator>(self);
@@ -42318,6 +42324,12 @@ NtsDomDataTransferItemList* nts_dom_DataTransfer_get_items(NtsDomDataTransfer* s
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DataTransfer>(self);
   return HandleOf<NtsDomDataTransferItemList>(receiver->items());
+}
+
+NtsDomDOMStringSequence* nts_dom_DataTransfer_get_types(NtsDomDataTransfer* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::DataTransfer>(self);
+  return nts_dom::SequenceHandle<NtsDomDOMStringSequence>(nts_dom::Sequence(receiver->types()));
 }
 
 NtsDomFileList* nts_dom_DataTransfer_get_files(NtsDomDataTransfer* self) {

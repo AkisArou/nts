@@ -27900,6 +27900,14 @@ declare module "nts:dom" {
      */
     readonly language: StringView;
     /**
+     * @ntsSymbol nts_dom_Navigator_get_languages
+     */
+    _get_languages(this: Navigator): DOMStringSequence;
+    /**
+     * @ntsGet _get_languages
+     */
+    readonly languages: DOMStringSequence;
+    /**
      * @ntsSymbol nts_dom_Navigator_get_onLine
      */
     _get_onLine(this: Navigator): boolean;
@@ -29106,6 +29114,14 @@ declare module "nts:dom" {
      * @ntsGet _get_items
      */
     readonly items: DataTransferItemList;
+    /**
+     * @ntsSymbol nts_dom_DataTransfer_get_types
+     */
+    _get_types(this: DataTransfer): DOMStringSequence;
+    /**
+     * @ntsGet _get_types
+     */
+    readonly types: DOMStringSequence;
     /**
      * @ntsSymbol nts_dom_DataTransfer_get_files
      */

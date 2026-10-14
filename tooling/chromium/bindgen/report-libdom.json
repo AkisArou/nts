@@ -1,8 +1,8 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3146,
-    "skipped": 238,
+    "bound": 3148,
+    "skipped": 236,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
@@ -23,7 +23,6 @@
     "[RuntimeEnabled=OrientationEvent] per-platform": 2,
     "variadic any...": 2,
     "[RuntimeEnabled=ExtendedTextMetrics] overridable": 2,
-    "an attribute": 2,
     "interface TextTrack": 2,
     "[RuntimeEnabled=RemotePlayback] overridable": 2,
     "[RuntimeEnabled=AudioOutputDevices] overridable": 2,
@@ -2670,6 +2669,7 @@
         "cookieEnabled",
         "hardwareConcurrency",
         "language",
+        "languages",
         "maxTouchPoints",
         "onLine",
         "platform",
@@ -2690,7 +2690,6 @@
         "getGamepads": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "gpu": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "javaEnabled": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "languages": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)",
         "locks": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "login": "[RuntimeEnabled=FedCm] overridable",
         "mediaCapabilities": "defined in Blink's modules component, on an interface the allowlist does not take from there",
@@ -2966,11 +2965,10 @@
         "getData",
         "items",
         "setData",
-        "setDragImage"
+        "setDragImage",
+        "types"
       ],
-      "skipped": {
-        "types": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
-      },
+      "skipped": {},
       "absent": {}
     },
     "DataTransferItem": {

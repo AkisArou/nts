@@ -1373,12 +1373,6 @@ class Generator:
         try:
             self.check_member(attribute)
             result = self.result(attribute.idl_type)
-            # lib.dom types it as an array, and the compiler reads a sequence
-            # attribute as that array without copying it: bound, it would be
-            # wrong code where today it is a refusal. A method's result is copied.
-            if result.ts == f"{TEXT_SEQUENCE}Sequence":
-                raise Skip("an attribute answering a sequence of strings, which lib.dom reads as an array "
-                           "(blockers/lib-dom-a-sequence-attribute-read-as-its-array)")
             context = base.make_copy(attribute=attribute, attribute_get=True)
             getter = self.bind(interface, attribute, f"nts_dom_{interface.identifier}_get_{identifier}", [],
                                result, context)

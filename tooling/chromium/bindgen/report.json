@@ -1,5 +1,5 @@
 {
-  "bound": 7094,
+  "bound": 7096,
   "skipped": [
     {
       "interface": "AddEventListenerOptions",
@@ -2798,11 +2798,6 @@
     },
     {
       "interface": "Navigator",
-      "member": "get languages",
-      "why": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
-    },
-    {
-      "interface": "Navigator",
       "member": "get userAgentData",
       "why": "interface NavigatorUAData is not bound"
     },
@@ -3115,11 +3110,6 @@
       "interface": "HTMLLegendElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
-    },
-    {
-      "interface": "DataTransfer",
-      "member": "get types",
-      "why": "an attribute answering a sequence of strings, which lib.dom reads as an array (blockers/lib-dom-a-sequence-attribute-read-as-its-array)"
     },
     {
       "interface": "DataTransferItem",

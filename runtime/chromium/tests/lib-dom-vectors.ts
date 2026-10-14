@@ -752,6 +752,18 @@ export function libDomTranscript(): string {
       changed.method + ":" + changed.url + "|" + inside);
   }
 
+  // Attributes answering a list of strings, each read a fresh array lib.dom
+  // types as one: the page's languages, the first its own language, and a
+  // drag store's types once it holds two.
+  {
+    const languages = navigator.languages;
+    const store = new DataTransfer();
+    store.setData("text/plain", "a");
+    store.setData("text/uri-list", "https://example.com/");
+    log("stringLists", (languages.length > 0) + "," + (languages[0] === navigator.language) + "|" +
+      store.types.join(",") + "|" + store.types.length);
+  }
+
   root.remove();
   return lines.join("\n");
 }
