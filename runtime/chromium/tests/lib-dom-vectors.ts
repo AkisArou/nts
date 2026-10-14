@@ -764,6 +764,35 @@ export function libDomTranscript(): string {
       store.types.join(",") + "|" + store.types.length);
   }
 
+  // Members C is told were given or not (c:types `Given`): a request's
+  // keepalive turned off, kept from the request it is made from by `{}`, and
+  // kept by `{ keepalive: undefined }` (WebIDL: not present); a matrix
+  // multiplied by a literal; one made from m41 and m42 alone, which e and f
+  // follow; one whose e and m41 disagree, page script's TypeError; a mark at
+  // a given time of 0. V8's message carries its context first, the
+  // program's does not, and the program's error is an Error whose message is
+  // "Name: message" (ledger row 27).
+  {
+    const base = new Request("https://example.com/k", { keepalive: true });
+    const kept = new Request(base, { keepalive: false }).keepalive + "," + new Request(base, {}).keepalive + "," +
+      new Request(base, { keepalive: undefined }).keepalive;
+    const product = new DOMMatrix().multiply({ a: 2, d: 2, e: 5 });
+    const moved = DOMMatrix.fromMatrix({ m41: 3, m42: 4 });
+    let clash = "ok";
+    try {
+      DOMMatrix.fromMatrix({ e: 1, m41: 2 });
+    } catch (error) {
+      const message = (error as Error).message;
+      const at = message.lastIndexOf("': ");
+      const text = at < 0 ? message : message.slice(at + 3);
+      clash = (error as Error).name === "Error" ? text : (error as Error).name + ": " + text;
+    }
+    const mark = performance.mark("given", { startTime: 0 });
+    log("givenMembers", kept + "|" + product.a + "," + product.d + "," + product.e + "|" + moved.e + "," + moved.f + "," +
+      moved.is2D + "|" + clash + "|" + mark.startTime);
+    performance.clearMarks("given");
+  }
+
   root.remove();
   return lines.join("\n");
 }

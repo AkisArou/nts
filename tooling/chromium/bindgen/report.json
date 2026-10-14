@@ -1,11 +1,6 @@
 {
-  "bound": 7096,
+  "bound": 7042,
   "skipped": [
-    {
-      "interface": "AddEventListenerOptions",
-      "member": "signal",
-      "why": "dictionary member of type optional AbortSignal"
-    },
     {
       "interface": "EventTarget",
       "member": "addEventListener/3",
@@ -230,11 +225,6 @@
       "interface": "Element",
       "member": "computedStyleMap/0",
       "why": "interface StylePropertyMapReadOnly is not bound"
-    },
-    {
-      "interface": "DOMPointInit",
-      "member": "w",
-      "why": "dictionary member whose default 1 is not zero"
     },
     {
       "interface": "DOMQuadInit",
@@ -1533,38 +1523,8 @@
     },
     {
       "interface": "PointerEventInit",
-      "member": "height",
-      "why": "dictionary member whose default 1 is not zero"
-    },
-    {
-      "interface": "PointerEventInit",
       "member": "predictedEvents",
       "why": "dictionary member of type optional sequence<PointerEvent>"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "width",
-      "why": "dictionary member whose default 1 is not zero"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "altitudeAngle",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "azimuthAngle",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "tiltX",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
-    },
-    {
-      "interface": "PointerEventInit",
-      "member": "tiltY",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, its number detail left out would need an @ntsDefault, which gives only an integer or null (workarounds.md, 7)"
     },
     {
       "interface": "WheelEventInit",
@@ -2002,11 +1962,6 @@
       "why": "dictionary member of type optional HeadersInit"
     },
     {
-      "interface": "RequestInit",
-      "member": "keepalive",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 11 members given or not, more than overloads spell (4)"
-    },
-    {
       "interface": "Window",
       "member": "fetchLater/2",
       "why": "interface FetchLaterResult is not bound"
@@ -2435,16 +2390,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "setLineDash/1",
       "why": "parameter type sequence<unrestricted double>"
-    },
-    {
-      "interface": "DOMMatrixInit",
-      "member": "m33",
-      "why": "dictionary member whose default 1 is not zero"
-    },
-    {
-      "interface": "DOMMatrixInit",
-      "member": "m44",
-      "why": "dictionary member whose default 1 is not zero"
     },
     {
       "interface": "CanvasRenderingContext2D",
@@ -3725,16 +3670,6 @@
       "interface": "OptionalEffectTiming",
       "member": "endDelay",
       "why": "dictionary member of type optional (double or CSSNumericValue)"
-    },
-    {
-      "interface": "OptionalEffectTiming",
-      "member": "iterationStart",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 5 members given or not, more than overloads spell (4)"
-    },
-    {
-      "interface": "OptionalEffectTiming",
-      "member": "iterations",
-      "why": "dictionary member whose presence Blink asks, which a struct cannot carry: spread onto parameters, 5 members given or not, more than overloads spell (4)"
     },
     {
       "interface": "KeyframeEffect",

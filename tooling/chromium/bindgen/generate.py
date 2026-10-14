@@ -144,11 +144,6 @@ def native_member(name):
 FIELD_C = {"boolean": "uint8_t", "string": "const NtsBorrowedString*", "bytes": "const NtsBorrowedString*",
            "enum": "const NtsBorrowedString*"}
 FIELD_TS = {"boolean": "CBool<Uint8>", "string": "StringView", "bytes": "StringView", "enum": "StringView"}
-# The most members whose presence matters (Generator.dictionary) a dictionary
-# binds with: one overload per subset of them, sixteen at most.
-SPREAD_PRESENCE = 4
-
-
 def presence_asked():
     """The dictionary members whose presence Blink's own code asks -- every
     `has<Member>()` its sources call, by member name (`hasTop()`: `top`). A
@@ -186,7 +181,6 @@ class Param:
         self.prelude, self.may_throw = prelude, may_throw
         self.enum = None  # (Blink's enum class, IDL name) for an IDL enum
         self.converter = converter  # the dictionary conversion its prelude calls
-        self.defaults = []  # `name=value` an @ntsDefault gives a parameter left out
         self.arm = None  # the interface a union-of-interfaces argument is bound as
         self.lent = False  # an array lent for the call (@ntsNoEscape)
 
@@ -445,26 +439,24 @@ class Generator:
         program writes as an object literal (`Fields<T>`, a zeroed compound
         literal in the caller's frame, nothing allocated), and the adapter's
         conversion to Blink's dictionary, which sets only what the literal
-        wrote. So a member binds where zero is what leaving it out means: a
-        boolean whose default is false, a number whose default is 0, either
-        with no default where Blink never asks whether it was given
-        (presence_asked), and a string or an enum, a StringView field lent for
-        the call whose NULL is left out (Blink's default applies). A boolean or
-        number with no default whose presence Blink asks is no field:
+        wrote. A boolean whose default is false and a number whose default is
+        0 are plain fields, zero being what leaving one out means, where Blink
+        never asks whether it was given (presence_asked); a string or an enum
+        is a StringView field lent for the call, NULL left out (Blink's
+        default applies). A boolean or number whose presence Blink asks, or
+        whose default is not zero, is a c:types `Given` field -- `{ given;
+        value }`, given when the program's value is not undefined -- so
         `scrollTo({top: 0})` scrolls where `scrollTo({})` does not, and a
-        zeroed struct cannot tell the two apart. Up to SPREAD_PRESENCE such
-        members bind by spread_parameter, as the call's last argument. Handles,
-        sequences, nullable members and other defaults are left out, each
-        recorded. The fields, the conversion's name (None without fields),
-        whether it can throw, and the members whose presence matters; or Skip
-        when nothing binds."""
+        member left out takes Blink's own default. Handles, sequences and
+        other nullable members are left out, each recorded. The fields, the
+        conversion's name and whether it can throw; or Skip when nothing
+        binds."""
         identifier = dictionary.identifier
         if identifier in self.dictionaries:
             if isinstance(self.dictionaries[identifier], str):
                 raise Skip(self.dictionaries[identifier])
             return self.dictionaries[identifier]
         fields = []
-        presence = []  # (member, keyword, idl_type): no default, presence asked
 
         def unbindable(member, why):
             # A required member the struct cannot carry would reach Blink
@@ -512,33 +504,15 @@ class Generator:
                 unbindable(member, f"dictionary member of type {member.idl_type.syntactic_form}")
                 continue
             zero = "false" if keyword == "boolean" else "0"
-            if self.presence_matters(member):
-                presence.append((member, keyword, idl_type))
-                continue
-            if literal not in (None, zero) and not (keyword != "boolean" and literal in ("0.0", "0")):
-                unbindable(member, f"dictionary member whose default {literal} is not zero")
+            zeroed = literal in (None, zero) or (keyword != "boolean" and literal in ("0.0", "0"))
+            if self.presence_matters(member) or not zeroed:
+                fields.append((member.identifier, "given:" + keyword, idl_type, False))
                 continue
             fields.append((member.identifier, keyword, idl_type, False))
-        if len(presence) > SPREAD_PRESENCE:
-            # Bound without them, a literal writing one would lose it.
-            self.dictionaries[identifier] = (f"dictionary {identifier} has {len(presence)} members whose presence "
-                                             f"Blink asks, more than overloads spell ({SPREAD_PRESENCE})")
-            raise Skip(self.dictionaries[identifier])
-        why = self.unspreadable(identifier, fields, presence)
-        if why:
-            # Bound as the struct without them: each is recorded, and a
-            # literal that writes one is the compiler's to refuse.
-            for member, _, _ in presence:
-                self.skipped.append({"interface": identifier, "member": member.identifier,
-                                     "why": f"dictionary member whose presence Blink asks, which a struct cannot carry: {why}"})
-            presence = []
-        if not fields and not presence:
+        if not fields:
             self.dictionaries[identifier] = f"dictionary {identifier} has no member a C struct can carry"
             raise Skip(self.dictionaries[identifier])
         self.headers.add(PathManager(dictionary).api_path(ext="h"))
-        if not fields:
-            self.dictionaries[identifier] = ([], None, False, presence)
-            return self.dictionaries[identifier]
         tag = f"NtsDom{identifier}"
         convert = f"NtsDomTo{identifier}"
         # The conversion page script's binding makes reading a dictionary:
@@ -549,7 +523,8 @@ class Generator:
                 f"blink::ExceptionState& exception_state) {{",
                 "  v8::Isolate* isolate = context.v8_isolate.get();",
                 f"  auto* to = blink::{identifier}::Create(isolate);"]
-        if any(keyword in NUMERIC and keyword != "unrestricted double" for _, keyword, _, _ in fields):
+        if any(self.numeric_kind(keyword) not in (None, "unrestricted double")
+               and not self.conversion_throws(idl_type) for _, keyword, idl_type, _ in fields):
             body.append("  blink::DummyExceptionStateForTesting conversion;")
         for name, keyword, idl_type, required in fields:
             blink_name = implemented[name]
@@ -584,17 +559,44 @@ class Generator:
                 body.append(f"  if (from.{field}) to->{setter}({self.node(interface, 'from.' + field)});")
             elif keyword == "boolean":
                 body.append(f"  if (from.{field}) to->{setter}(true);")
-            elif keyword == "unrestricted double":
-                body.append(f"  if (from.{field} != 0) to->{setter}(from.{field});")
+            elif keyword == "given:boolean":
+                body.append(f"  if (from.{field}.given) to->{setter}(from.{field}.value != 0);")
             else:
-                tag_name = native_value_tag(idl_type)
-                body.append(f"  if (from.{field} != 0) to->{setter}(blink::NativeValueTraits<blink::{tag_name}>::NativeValue("
-                            f"isolate, v8::Number::New(isolate, from.{field}), conversion));")
+                # A number: a plain field set where not zero, a Given one
+                # where given; converted as V8 converts one, which throws for
+                # a value the type refuses (NaN for a `double`).
+                given = keyword.startswith("given:")
+                value = f"from.{field}.value" if given else f"from.{field}"
+                test = f"from.{field}.given" if given else f"{value} != 0"
+                if self.numeric_kind(keyword) == "unrestricted double":
+                    body.append(f"  if ({test}) to->{setter}({value});")
+                else:
+                    tag_name = native_value_tag(idl_type)
+                    state = "exception_state" if self.conversion_throws(idl_type) else "conversion"
+                    body += [f"  if ({test}) {{",
+                             f"    const auto value = blink::NativeValueTraits<blink::{tag_name}>::NativeValue("
+                             f"isolate, v8::Number::New(isolate, {value}), {state});"]
+                    if state == "exception_state":
+                        body.append("    if (exception_state.HadException()) return nullptr;")
+                    body += [f"    to->{setter}(value);", "  }"]
         body += ["  return to;", "}"]
         self.converters[convert] = "\n".join(body)
-        throws = any(keyword in ("enum", "bytes") or required for _, keyword, _, required in fields)
-        self.dictionaries[identifier] = (fields, convert, throws, presence)
+        throws = any(keyword in ("enum", "bytes") or required
+                     or (self.numeric_kind(keyword) is not None and self.conversion_throws(idl_type))
+                     for _, keyword, idl_type, required in fields)
+        self.dictionaries[identifier] = (fields, convert, throws)
         return self.dictionaries[identifier]
+
+    @staticmethod
+    def numeric_kind(keyword):
+        """A field's IDL number type, plain or Given; None for any other."""
+        kind = keyword[len("given:"):] if keyword.startswith("given:") else keyword
+        return kind if kind in NUMERIC else None
+
+    @staticmethod
+    def conversion_throws(idl_type):
+        """Whether V8's conversion of a number to this type can throw."""
+        return any(mark in native_value_tag(idl_type) for mark in THROWING_CONVERSIONS)
 
     def parameter(self, idl_type, identifier):
         name = self.safe(identifier)
@@ -603,10 +605,7 @@ class Generator:
         or_null = " | null" if nullable else ""
         if unwrapped.is_dictionary and not nullable:
             dictionary = unwrapped.type_definition_object
-            fields, convert, throws, presence = self.dictionary(dictionary)
-            if not fields:
-                raise Skip(f"dictionary {dictionary.identifier}, whose members' presence matters, other than as the "
-                           "call's last argument (spread_parameter)")
+            fields, convert, throws = self.dictionary(dictionary)
             # Converted before the call, as the binding reads a dictionary
             # argument; a dictionary that can fail (an enum, a required
             # member) makes the function one that throws.
@@ -747,87 +746,13 @@ class Generator:
     def presence_matters(self, member):
         """Whether a dictionary member is a boolean or a number with no
         default whose presence Blink asks (presence_asked): one a zeroed
-        struct cannot carry (dictionary)."""
+        struct field cannot carry, a `Given` one (dictionary)."""
         idl_type = member.idl_type.unwrap(typedef=True)
         keyword = idl_type.keyword_typename
         implemented = member.extended_attributes.value_of("ImplementedAs") or member.identifier
         return (not member.idl_type.does_include_nullable_type and (keyword == "boolean" or keyword in NUMERIC)
                 and member.default_value is None and not member.is_required and implemented in self.asked
                 and not self.unshipped(member.extended_attributes))
-
-    def presence_dictionary(self, idl_type, arm):
-        """The dictionary an argument is, or its union arm names, when the
-        presence of some of its members matters; else None (and a dictionary
-        that does not bind is the plain path's Skip to report)."""
-        if arm is None:
-            if idl_type.does_include_nullable_type:
-                return None
-            unwrapped = idl_type.unwrap(typedef=True)
-            if not unwrapped.is_dictionary:
-                return None
-            dictionary = unwrapped.type_definition_object
-        else:
-            members = [t.unwrap(typedef=True) for t in members_of(idl_type.unwrap(typedef=True))]
-            dictionary = next((t.type_definition_object for t in members
-                               if t.is_dictionary and t.type_definition_object.identifier == arm), None)
-            if dictionary is None:
-                return None
-        if not any(self.presence_matters(member) for member in dictionary.members):
-            return None
-        try:
-            return dictionary if self.dictionary(dictionary)[3] else None
-        except Skip:
-            return None
-
-    def spread_arms(self, idl_type, arms):
-        """A call's last argument's arms, with a dictionary whose members'
-        presence matters (directly, or a union's arm) offered once for each
-        subset of those members given: ("spread", dictionary, members, arm).
-        The subset none is given takes the struct's members alone, and is
-        offered only where the dictionary has some."""
-        out = []
-        for arm in arms:
-            dictionary = None if isinstance(arm, tuple) else self.presence_dictionary(idl_type, arm)
-            if dictionary is None:
-                out.append(arm)
-                continue
-            fields, _, _, presence = self.dictionary(dictionary)
-            # The struct of the members that are not, as a literal writes it
-            # (`{mode: "open"}`) -- nts:dom's spelling, and the overload a
-            # lib.dom literal writing none of them fits -- then one overload
-            # per subset given.
-            if fields:
-                out.append(arm)
-            names = self.given_or_not(fields, presence)
-            for size in range(len(names), 0, -1):
-                out += [("spread", dictionary.identifier, subset, arm) for subset in itertools.combinations(names, size)]
-        return out
-
-    @staticmethod
-    def given_or_not(fields, presence):
-        """What a spread dictionary's overloads tell apart by being written
-        or not: the members whose presence matters, and its optional strings
-        and enums -- a string parameter left out takes no @ntsDefault. Its
-        booleans and handles are optional parameters, false and null left
-        out, as in the struct; its required strings always written."""
-        return ([member.identifier for member, _, _ in presence]
-                + [name for name, keyword, _, required in fields if keyword in ("string", "bytes", "enum") and not required])
-
-    def unspreadable(self, identifier, fields, presence):
-        """Why a dictionary with members whose presence matters cannot be
-        spread onto parameters (spread_parameter), or None."""
-        if not presence:
-            return None
-        number = next((name for name, keyword, _, _ in fields
-                       if keyword not in ("boolean", "string", "bytes", "enum") and not keyword.startswith("handle:")), None)
-        if number is not None:
-            return (f"spread onto parameters, its number {number} left out would need an @ntsDefault, which gives "
-                    "only an integer or null (workarounds.md, 7)")
-        varying = self.given_or_not(fields, presence)
-        if len(varying) > SPREAD_PRESENCE:
-            return (f"spread onto parameters, {len(varying)} members given or not, more than overloads spell "
-                    f"({SPREAD_PRESENCE})")
-        return None
 
     @staticmethod
     def reads_a_dictionary(idl_type):
@@ -926,86 +851,6 @@ class Generator:
         param = Param(name, f"{self.handle_tag(interface_id)}* {name}", f"{name}: {interface_id}", expr, True,
                       prelude=prelude)
         param.arm = interface_id
-        return param
-
-    def spread_parameter(self, argument, arm, arguments):
-        """A dictionary whose members' presence matters, as the call's last
-        argument spelled member by member: the members of `subset` given --
-        each a parameter the call must write -- and the struct's members
-        optional, zero left out as in the struct. The compiler spreads an
-        object literal's members onto the parameters of their names and
-        takes the overload whose given members are the literal's
-        (blockers/lib-dom-dictionary-as-arguments) -- as nts:dom's
-        addEventListener spells `passive` given or not -- so `scrollTo({top:
-        0})` and `scrollTo({})` are two calls, as they are to Blink. The
-        adapter makes Blink's dictionary as the struct's conversion does,
-        then sets each given member, converted as a parameter is."""
-        _, identifier, subset, union_arm = arm
-        dictionary = self.database.find(identifier)
-        fields, convert, throws, presence = self.dictionary(dictionary)
-        given = [entry for entry in presence if entry[0].identifier in subset]
-        written = [entry for entry in fields
-                   if entry[1] not in ("string", "bytes", "enum") or entry[3] or entry[0] in subset]
-        names = [member.identifier for member, _, _ in given] + [name for name, _, _, _ in written]
-        taken = {other.identifier for other in arguments if other is not argument}
-        clash = next((name for name in names if name in taken or name in RESERVED), None)
-        if clash is not None:
-            raise Skip(f"dictionary {identifier}'s member {clash} cannot be a parameter of its name")
-        prefix = self.safe(argument.identifier)
-        c, ts, sets = [], [], []
-        may_throw = throws
-        for member, keyword, idl_type in given:
-            local = f"{prefix}_{native_member(member.identifier)}"
-            implemented = member.extended_attributes.value_of("ImplementedAs") or member.identifier
-            value = local
-            if keyword == "boolean":
-                c.append(f"bool {local}")
-                ts.append(f"{member.identifier}: boolean")
-            else:
-                c.append(f"double {local}")
-                ts.append(f"{member.identifier}: Float64")
-                if keyword != "unrestricted double":
-                    tag = native_value_tag(idl_type)
-                    value = (f"blink::NativeValueTraits<blink::{tag}>::NativeValue(context.v8_isolate.get(), "
-                             f"v8::Number::New(context.v8_isolate.get(), {local}), {{exceptions}})")
-                    may_throw = may_throw or any(mark in tag for mark in THROWING_CONVERSIONS)
-            sets.append(f"{prefix}_converted->set{implemented[0].upper()}{implemented[1:]}({value});")
-        defaults = []
-        # Strings written, then the optional parameters: false, or null, left
-        # out, as the struct leaves them.
-        for name, keyword, _, _ in written:
-            if keyword in ("string", "bytes", "enum"):
-                local = f"{prefix}_{native_member(name)}"
-                c.append(f"{FIELD_C[keyword]} {local}")
-                ts.append(f"{name}: StringView")
-        for name, keyword, _, _ in written:
-            local = f"{prefix}_{native_member(name)}"
-            if keyword.startswith("handle:"):
-                c.append(f"{self.handle_tag(keyword[len('handle:'):])}* {local}")
-                ts.append(f"{name}?: {keyword[len('handle:'):]} | null")
-                defaults.append(f"{name}=null")
-            elif keyword == "boolean":
-                c.append(f"bool {local}")
-                ts.append(f"{name}?: boolean")
-                defaults.append(f"{name}=0")
-        if fields:
-            assigned = " ".join(f"{prefix}_fields.{native_member(name)} = {prefix}_{native_member(name)};"
-                                for name, _, _, _ in written)
-            prelude = (f"NtsDom{identifier} {prefix}_fields = {{}}; {assigned} "
-                       f"auto* {prefix}_converted = {convert}(context, {prefix}_fields, {{exceptions}});")
-        else:
-            prelude = f"auto* {prefix}_converted = blink::{identifier}::Create(context.v8_isolate.get());"
-        if sets:
-            prelude += f" if ({prefix}_converted) {{ {' '.join(sets)} }}"
-        expr = f"{prefix}_converted"
-        if union_arm is not None:
-            unwrapped = argument.idl_type.unwrap(typedef=True)
-            self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
-            expr = f"blink::MakeGarbageCollected<blink::{blink_type_info(unwrapped).typename}>({expr})"
-        param = Param(prefix, ", ".join(c), ", ".join(ts), expr, True, prelude=prelude, may_throw=may_throw,
-                      converter=convert if fields else None)
-        param.arm = "_".join([identifier, *subset])
-        param.defaults = defaults
         return param
 
     def arm_parameter(self, idl_type, identifier, arm):
@@ -1345,12 +1190,9 @@ class Generator:
 
     @staticmethod
     def notes(function):
-        """A function's declaration tags: its symbol, the @ntsDefault its
-        parameters left out take, and its error slot."""
+        """A function's declaration tags: its symbol, the arrays it lends for
+        the call, and its error slot."""
         notes = [f"@ntsSymbol {function.symbol}"]
-        defaults = [default for param in function.params for default in param.defaults]
-        if defaults:
-            notes.append("@ntsDefault " + " ".join(defaults))
         notes += [f"@ntsNoEscape {param.name}" for param in function.params if param.lent]
         return notes + (list(THROWS) if function.throws else [])
 
@@ -1551,8 +1393,6 @@ class Generator:
                     if len(dictionaries) == 1:
                         at = dictionaries[0]
                         choices[at] = self.object_arms(arguments[at].idl_type, choices[at])
-                    if count:
-                        choices[-1] = self.spread_arms(arguments[count - 1].idl_type, choices[-1])
                     truncate = next((index for index in range(count, len(arguments))
                                      if arguments[index].default_value is None), None)
                     filled = [(argument.identifier, self.default_value(argument))
@@ -1571,8 +1411,6 @@ class Generator:
                         for argument, arm in zip(arguments[:count], arms):
                             if isinstance(arm, tuple) and arm[0] == "object":
                                 param = self.object_parameter(argument, arm)
-                            elif isinstance(arm, tuple):
-                                param = self.spread_parameter(argument, arm, arguments[:count])
                             else:
                                 param = (self.arm_parameter(argument.idl_type, argument.identifier, arm) if arm
                                          else self.parameter(argument.idl_type, argument.identifier))
@@ -2093,6 +1931,25 @@ class Generator:
         return [f"  export type {identifier} = {' | '.join(json.dumps(v) for v in values)};"
                 for identifier, values in sorted(self.enums.items())]
 
+    def field_ts(self, keyword):
+        """A struct field's TypeScript type: a handle, a `Given` boolean or
+        number (c:types: given when the program's value is not undefined),
+        or the plain field."""
+        if keyword.startswith("handle:"):
+            return f"{keyword[len('handle:'):]} | null"
+        if keyword.startswith("given:"):
+            return f"Given<{FIELD_TS.get(keyword[len('given:'):], 'Float64')}>"
+        return FIELD_TS.get(keyword, "Float64")
+
+    def field_c(self, keyword):
+        """The same field's C type: `Given<T>` is an untagged `{ given; value }`
+        inside the record."""
+        if keyword.startswith("handle:"):
+            return self.handle_tag(keyword[len("handle:"):]) + "*"
+        if keyword.startswith("given:"):
+            return f"struct {{ uint8_t given; {FIELD_C.get(keyword[len('given:'):], 'double')} value; }}"
+        return FIELD_C.get(keyword, "double")
+
     def dictionary_types(self):
         """Each bound dictionary as a C struct type, written at a call site as
         an object literal: `newEvent("go", {bubbles: true})`."""
@@ -2100,8 +1957,7 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str) or not entry[0]:
                 continue
-            members = "; ".join(f"{name}: " + (f"{keyword[len('handle:'):]} | null" if keyword.startswith("handle:")
-                                               else FIELD_TS.get(keyword, "Float64")) for name, keyword, _, _ in entry[0])
+            members = "; ".join(f"{name}: {self.field_ts(keyword)}" for name, keyword, _, _ in entry[0])
             lines.append(f'  export type {identifier} = Struct<{{ {members} }}, "NtsDom{identifier}">;')
         return lines
 
@@ -2178,8 +2034,7 @@ class Generator:
         for identifier, entry in sorted(self.dictionaries.items()):
             if isinstance(entry, str) or not entry[0]:
                 continue
-            members = "".join(f"  {self.handle_tag(keyword[len('handle:'):]) + '*' if keyword.startswith('handle:') else FIELD_C.get(keyword, 'double')} "
-                              f"{native_member(name)};\n" for name, keyword, _, _ in entry[0])
+            members = "".join(f"  {self.field_c(keyword)} {native_member(name)};\n" for name, keyword, _, _ in entry[0])
             typedefs += f"\ntypedef struct NtsDom{identifier} {{\n{members}}} NtsDom{identifier};"
         prototypes = []
         accessors = self.sequence_functions()
@@ -2305,7 +2160,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, CHandles, Closure, Counted, Fields, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
+  import type {{ ByValue, CBool, CHandles, Closure, Counted, Fields, Given, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
   import type {{ AsNumber, BigInt64, BigUint64, c_size_t, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 }} from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;

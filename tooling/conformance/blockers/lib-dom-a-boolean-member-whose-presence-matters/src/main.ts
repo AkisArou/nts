@@ -1,5 +1,4 @@
-// expect: `keepalive`, a member the binding's `NtsDomRequestInit` has no field
-//         for, which would be dropped
+// expect: emit-c --rc -> emits-c nts_dom_new_Request_2_Request(
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): an
 // object literal lib.dom types as a dictionary is copied into the struct
@@ -22,7 +21,10 @@
 // Found by the Chromium lane (2026-10-14) binding dictionaries whose members'
 // presence matters (chromium/dict-presence).
 //
-// Fixed, a guard: `emit-c --rc -> emits-c nts_dom_new_Request_2_Request(`.
+// **A guard since the compiler lane's Given<T>**: RequestInit's `keepalive`
+// is a `Given<CBool<Uint8>>` field, `given` when the value is not undefined;
+// lib-dom-vectors.ts's `givenMembers` holds the three answers to page
+// script's. Until then the expectation was the refusal.
 //
 // Control, one difference -- a string member, whose view says whether it was
 // given -- emits that call:
