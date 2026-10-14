@@ -1610,7 +1610,16 @@ allocation to there. An element read needs its slot, complete initialization
 permits aliases/escape, and length-only use needs no such proof. So an array
 literal whose elements branch (a ternary, `??`, a bigint power's exponent check,
 a call that may raise) is admitted, while a store on one branch only, or in a
-loop body the loop may skip, proves nothing where the paths meet. Unproven typed holes
+loop body the loop may skip, proves nothing where the paths meet. Two more facts
+name SSA values: a written prefix, which a counted fill
+`for (i = 0; i < length; i++) a[i] = …` carries around its loop as `[0, i)` in
+the header's parameter (a block parameter takes its argument's facts along each
+edge, and a fact naming a value is forgotten when the value is computed again)
+and which completes the array on the loop's exit edge when `length` is the
+allocation's own; and the index values stored, so `a[at] = v; … a[at]` reads a
+written slot. A start other than 0, a step other than 1, a test other than
+`i < length` (`i <= length - 1` is not normalised), a store under an `if`, or a
+`break` before the store leaves the array incomplete. Unproven typed holes
 decline by function and source origin; `zeroed: false` retains HIR's explicit
 promise that lowering fills every slot before observation. Erased backing starts
 with the undefined singleton. This admission check changes no native lane.

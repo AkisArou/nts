@@ -157,6 +157,26 @@ fn source_branching_array_literals_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Typed arrays made with `new Array(n)` and written before they are read: a
+/// loop counting from zero to the array's own length fills it (numbers,
+/// objects, strings, rows of a grid), and a slot reads back at the index value
+/// that stored it. None declines as a hole.
+#[test]
+fn source_filled_arrays_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/array-fills");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "array-fills",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 #[test]
 fn source_array_helpers_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-methods");
