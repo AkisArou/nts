@@ -1,4 +1,5 @@
-// A private class alone on an interface's layout must keep its own name.
+// FIXED: kept as a guard. Main 23a533015 printed Earlier where node printed
+// PrivateFailure. A private class alone on an interface's layout keeps its name.
 // No plain record is allocated, and the class is not exported: publication
 // cannot explain its descriptor. The separate control changes only the
 // interface's field name, giving the class a layout named for itself.
