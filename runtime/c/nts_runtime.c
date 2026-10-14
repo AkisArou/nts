@@ -1079,6 +1079,9 @@ static __int128 nts_bigint_low_bits(double bits, __int128 value, bool sign) {
     return 0;
   }
   if (bits >= 128.0) {
+    if (!sign && value < 0) {
+      nts_bigint_overflow();
+    }
     return value;
   }
   unsigned width = (unsigned)bits;

@@ -181,6 +181,12 @@ export function checkedRem(a: bigint, b: bigint): bigint { return a % b; }
 export function checkedShl(a: bigint, b: bigint): bigint { return a << b; }
 export function checkedShr(a: bigint, b: bigint): bigint { return a >> b; }
 export function checkedPow(a: bigint, b: bigint): bigint { return a ** b; }
+export function checkedIntMask(a: bigint, b: bigint): bigint {
+  return BigInt.asIntN(Number(b), a);
+}
+export function checkedUintMask(a: bigint, b: bigint): bigint {
+  return BigInt.asUintN(Number(b), a);
+}
 export function checkedBranch(a: bigint, b: bigint): bigint {
   return b < 0n ? a + b : a - b;
 }
@@ -211,6 +217,8 @@ extern __int128 checkedRem(__int128, __int128);
 extern __int128 checkedShl(__int128, __int128);
 extern __int128 checkedShr(__int128, __int128);
 extern __int128 checkedPow(__int128, __int128);
+extern __int128 checkedIntMask(__int128, __int128);
+extern __int128 checkedUintMask(__int128, __int128);
 extern __int128 checkedBranch(__int128, __int128);
 extern __int128 checkedUntaken(__int128, __int128);
 extern __int128 checkedUnentered(__int128, __int128);
@@ -269,6 +277,13 @@ int main(void) {
     {checkedBranch, min + 1, -1, min}, {checkedBranch, max, 1, max - 1},
     {checkedUntaken, max, 0, max}, {checkedUntaken, max - 1, -1, max},
     {checkedUnentered, max, 0, max}, {checkedUnentered, max - 1, 1, max},
+    {checkedIntMask, min, 128, min}, {checkedIntMask, min, 200, min},
+    {checkedIntMask, max, 128, max}, {checkedIntMask, -1, 127, -1},
+    {checkedUintMask, min, 0, 0}, {checkedUintMask, -1, 1, 1},
+    {checkedUintMask, -1, 64, ((__int128)1 << 64) - 1},
+    {checkedUintMask, -1, 127, max}, {checkedUintMask, min, 127, 0},
+    {checkedUintMask, 0, 128, 0}, {checkedUintMask, max, 128, max},
+    {checkedUintMask, max, 200, max},
   };
   Case past[] = {
     {checkedAdd, max, 1, 0}, {checkedAdd, min, -1, 0},
@@ -282,6 +297,8 @@ int main(void) {
     {checkedShr, 1, min, 0}, {checkedPow, 2, 127, 0},
     {checkedPow, -2, 128, 0}, {checkedPow, min, 2, 0},
     {checkedBranch, min, -1, 0},
+    {checkedUintMask, -1, 128, 0}, {checkedUintMask, min, 128, 0},
+    {checkedUintMask, -1, 200, 0}, {checkedUintMask, min, 200, 0},
   };
   for (size_t i = 0; i < sizeof(valid) / sizeof(*valid); ++i) {
     if (valid[i].op(valid[i].a, valid[i].b) != valid[i].want) {

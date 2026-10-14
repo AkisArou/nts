@@ -6,7 +6,7 @@
 // Each invalid-width arm has controls that change only the width; values are
 // nonnegative and at most 260, so unsigned overflow cannot hide this defect.
 // The raw masking calls are in helpers called inside the caller's try.
-// Before the fix C and LLVM disagree on all 406 cases in the 14 invalid-
+// Before the fix C and LLVM disagree with node on all 406 cases in the 14 invalid-
 // width exports. The other 24 exports independently agree on 696 cases.
 // Node v24.20.0/V8 currently says:
 // "Invalid value: not (convertible to) a safe integer".

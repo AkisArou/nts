@@ -5856,20 +5856,35 @@ fn an_operator_that_can_raise(probe: &FuncBuilder, at: NodeId) -> bool {
         return false;
     }
     let children = probe.children(at);
-    let [_, operator, _] = children.as_slice() else {
+    let [_, operator, rhs] = children.as_slice() else {
         return false;
     };
-    matches!(
-        probe.kind_of(*operator),
+    let operator = probe.kind_of(*operator);
+    let power = matches!(
+        operator,
+        Some(syntax::ASTERISK_ASTERISK_TOKEN | syntax::ASTERISK_ASTERISK_EQUALS_TOKEN)
+    );
+    let divisor = matches!(
+        operator,
         Some(
-            syntax::ASTERISK_ASTERISK_TOKEN
-                | syntax::ASTERISK_ASTERISK_EQUALS_TOKEN
-                | syntax::SLASH_TOKEN
+            syntax::SLASH_TOKEN
                 | syntax::SLASH_EQUALS_TOKEN
                 | syntax::PERCENT_TOKEN
                 | syntax::PERCENT_EQUALS_TOKEN
         )
-    )
+    );
+    if !power && !divisor {
+        return false;
+    }
+    // A safe literal needs neither a guard nor a raising convention at its
+    // callers. Read bigint syntax exactly: a Number constant could round it.
+    let rhs = probe.through_parentheses(*rhs);
+    if probe.kind_of(rhs) == Some(syntax::BIGINT_LITERAL)
+        && let Some(value) = probe.node(rhs).text.as_deref().and_then(parse_bigint)
+    {
+        return if power { value < 0 } else { value == 0 };
+    }
+    true
 }
 
 fn walk_one_declaration(
@@ -38587,6 +38602,14 @@ impl<'a> FuncBuilder<'a> {
         if self.values[value.0 as usize].ty != HirType::BigInt {
             return Err(self.unsupported(id, "`BigInt.asIntN` of something that is not a `bigint`"));
         }
+        // Both arguments are evaluated before ToIndex can throw. Keep its
+        // comparisons in lowering so the caller can catch the RangeError.
+        let width = self.coerce(width, &HirType::NUMBER, id)?;
+        self.guard_buffer_length(
+            id,
+            width,
+            "Invalid value: not (convertible to) a safe integer",
+        )?;
         let origin = self.origin(id);
         Ok(self.call_runtime(helper, vec![width, value], HirType::BigInt, &origin))
     }
@@ -74429,19 +74452,21 @@ impl<'a> FuncBuilder<'a> {
             // A negative exponent is a JavaScript RangeError, not a runtime
             // domain refusal. Lower its throw so a local or caller catch can
             // handle it, just as the radix guard does.
-            let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
-            let negative = self.push(
-                OpKind::Binary {
-                    op: BinOp::Lt,
-                    lhs: exponent,
-                    rhs: zero,
-                },
-                HirType::Bool,
-                origin.clone(),
-            );
-            // Node v24.20.0/V8's observed text; this is oracle wording rather
-            // than the specification's sentence about negative exponents.
-            self.bigint_range_error_if(id, negative, "undefined must be positive")?;
+            if !matches!(self.values[exponent.0 as usize].kind, OpKind::ConstInt(n) if n >= 0) {
+                let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
+                let negative = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Lt,
+                        lhs: exponent,
+                        rhs: zero,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                // Node v24.20.0/V8's observed text; this is oracle wording rather
+                // than the specification's sentence about negative exponents.
+                self.bigint_range_error_if(id, negative, "undefined must be positive")?;
+            }
             return Ok(self.runtime_call("nts_bigint_pow", vec![base, exponent], ty, origin));
         }
         if let OpKind::ConstFloat(power) = self.values[exponent.0 as usize].kind
@@ -74498,6 +74523,7 @@ impl<'a> FuncBuilder<'a> {
         if matches!(op, BinOp::Div | BinOp::Rem)
             && self.values[lhs.0 as usize].ty == HirType::BigInt
             && self.values[rhs.0 as usize].ty == HirType::BigInt
+            && !matches!(self.values[rhs.0 as usize].kind, OpKind::ConstInt(n) if n != 0)
         {
             let origin = self.origin(id);
             let zero = self.push(OpKind::ConstInt(0), HirType::BigInt, origin.clone());
