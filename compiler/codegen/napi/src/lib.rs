@@ -445,7 +445,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::Object(id)) => {
             layouts.iter().find(|l| l.types.contains(id)).map_or_else(
                 || "void *".to_owned(),
-                |l| format!("NtsObj_{} *", c_identifier(&l.name)),
+                |l| format!("{} *", nts_codegen_c::object_type_name(l)),
             )
         }
         HirType::Float { bits: 32 } => "float".to_owned(),
@@ -2889,7 +2889,7 @@ fn marshal(
         }
         Cross::Object(at) => {
             let layout = &layouts[*at];
-            let struct_name = format!("NtsObj_{}", c_identifier(&layout.name));
+            let struct_name = nts_codegen_c::object_type_name(layout);
             let helper = object_helper(layout);
             let mut text = format!(
                 "    {struct_name} *result = {call};\n{after_call}    napi_status result_status = {helper}(env, result, &out);\n"
@@ -2923,7 +2923,7 @@ fn object_helper(layout: &hir::Layout) -> String {
 /// changes is the failure path, which returns a status where the inline form
 /// jumped to the wrapper's cleanup label.
 fn emit_object_helper(out: &mut String, layout: &hir::Layout, layouts: &[hir::Layout]) {
-    let struct_name = format!("NtsObj_{}", c_identifier(&layout.name));
+    let struct_name = nts_codegen_c::object_type_name(layout);
     let name = object_helper(layout);
     let _ = write!(
         out,
@@ -3738,7 +3738,7 @@ fn declare_value_exports(
 /// unwraps cannot disagree about spelling. Matching on `layout.name` would
 /// reintroduce exactly the disagreement that was designed out.
 fn c_type_is(layout: &hir::Layout, instance: &str) -> bool {
-    format!("NtsObj_{}", c_identifier(&layout.name)) == instance
+    nts_codegen_c::object_type_name(layout) == instance
 }
 
 /// A getter per instance field, and the descriptors that publish them.
@@ -3787,11 +3787,9 @@ fn field_accessors(
             continue;
         };
         let member = c_member(&field.name);
-        let symbol = format!(
-            "nts_napi_get_{}_{}",
-            c_identifier(&layout.name),
-            c_identifier(&field.name)
-        );
+        // Mangle the complete symbol: a layout named `union` is not a
+        // keyword after this prefix, and must remain distinct from `union_`.
+        let symbol = c_identifier(&format!("nts_napi_get_{}_{}", layout.name, field.name));
         let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
             continue;
         };
@@ -4035,7 +4033,7 @@ fn emit_layouts(
     mentioned.dedup();
 
     for at in &mentioned {
-        let name = format!("NtsObj_{}", c_identifier(&program.layouts[*at].name));
+        let name = nts_codegen_c::object_type_name(&program.layouts[*at]);
         let _ = writeln!(out, "typedef struct {name} {name};");
     }
     if !mentioned.is_empty() {
@@ -4043,7 +4041,7 @@ fn emit_layouts(
     }
     for at in &structs {
         let layout = &program.layouts[*at];
-        let name = format!("NtsObj_{}", c_identifier(&layout.name));
+        let name = nts_codegen_c::object_type_name(layout);
         let _ = writeln!(out, "struct {name} {{");
         out.push_str("    NtsHeader header;\n");
         for field in &layout.fields {
@@ -4060,9 +4058,9 @@ fn emit_layouts(
         let layout = &program.layouts[*at];
         let _ = writeln!(
             out,
-            "static napi_status {}(napi_env env, const NtsObj_{} *result, napi_value *into);",
+            "static napi_status {}(napi_env env, const {} *result, napi_value *into);",
             object_helper(layout),
-            c_identifier(&layout.name)
+            nts_codegen_c::object_type_name(layout)
         );
     }
     if !needed.is_empty() {

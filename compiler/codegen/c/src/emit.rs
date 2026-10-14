@@ -3996,7 +3996,10 @@ fn descriptor_for(
     }
 }
 
-fn object_type_name(layout: &nts_core::hir::Layout) -> String {
+/// The physical C type spelling shared by the program and its addon wrappers.
+/// The prefix makes a layout named after a C keyword an ordinary identifier.
+#[must_use]
+pub fn object_type_name(layout: &nts_core::hir::Layout) -> String {
     format!(
         "NtsObj_{}",
         layout.name.replace(|c: char| !c.is_alphanumeric(), "_")

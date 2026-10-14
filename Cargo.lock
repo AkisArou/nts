@@ -259,9 +259,11 @@ dependencies = [
 name = "nts-codegen-napi"
 version = "0.0.0"
 dependencies = [
+ "camino",
  "nts-codegen-c",
  "nts-core",
  "nts-diagnostics",
+ "nts-frontend-ts",
  "nts-semantic-schema",
  "rustc-hash",
 ]
