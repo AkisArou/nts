@@ -359,6 +359,9 @@ fn assert_linear(self_reference: bool) {
         reset_work();
         let _ = program.cycles();
         let steps = work();
+        eprintln!(
+            "cycle construction: closures={count}, reference={self_reference}, entries={steps}"
+        );
         assert!(steps > 0, "the construction counter must run");
         assert!(
             steps <= 10 * program.layouts.len() + 32,
@@ -443,6 +446,29 @@ fn mixed_graphs_keep_every_old_layout_and_array_answer() {
                 entry.types.push(TypeId(1));
             }
             program.layouts.push(entry);
+        }
+        equivalent(&program);
+    }
+}
+
+#[test]
+fn all_small_prefix_graphs_keep_the_scan_answers() {
+    // Three layouts drawn from empty, scalar and every object-reference shape.
+    // This includes acyclic chains as well as each possible back edge, without
+    // an erased field making every referenceful layout cyclic at once.
+    for code in 0..216u32 {
+        let mut shape = code;
+        let mut program = Program::default();
+        for id in 1..=3 {
+            let choice = shape % 6;
+            shape /= 6;
+            let fields = match choice {
+                0 => Vec::new(),
+                1 => vec![field("next", HirType::NUMBER)],
+                2 => vec![field("next", HirType::Managed(ManagedType::String))],
+                _ => vec![field("next", object(choice - 2))],
+            };
+            program.layouts.push(layout(id, fields));
         }
         equivalent(&program);
     }

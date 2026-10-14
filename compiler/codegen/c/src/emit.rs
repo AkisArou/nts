@@ -980,7 +980,15 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // bug rather than a style preference.
     let literals = literal_table(program);
 
-    let mut bodies = emit_bodies(program, abi, &literals, &mut diagnostics, &mut refused);
+    let cycles = program.cycles();
+    let mut bodies = emit_bodies(
+        program,
+        abi,
+        &cycles,
+        &literals,
+        &mut diagnostics,
+        &mut refused,
+    );
     drop_orphaned_bodies(program, &mut bodies, &mut diagnostics, &mut refused);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
@@ -1077,6 +1085,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
         &mut writer,
         &origin,
         program,
+        &cycles,
         &defined,
         &literals,
         &mut diagnostics,
@@ -1615,13 +1624,13 @@ fn literal_name(literals: &[String], text: &str) -> String {
 fn emit_bodies<'a>(
     program: &'a Program,
     abi: NativeAbi,
+    cycles: &nts_core::hir::Cycles,
     literals: &[String],
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
 ) -> Vec<(String, CodeWriter, &'a Func)> {
     let mut bodies = Vec::new();
     let templates = nts_core::hir::templates::present(program);
-    let cycles = program.cycles();
     let layouts = nts_core::hir::fields::LayoutIndex::build(program);
     for func in program.native_funcs() {
         // An `abstract` method is a signature and no body. It is in `funcs` so
@@ -1638,7 +1647,7 @@ fn emit_bodies<'a>(
         let context = Context {
             program,
             layouts: &layouts,
-            cycles: &cycles,
+            cycles,
             abi,
             literals,
             templates,
@@ -3371,11 +3380,12 @@ fn emit_object_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Program,
+    cycles: &nts_core::hir::Cycles,
     defined: &rustc_hash::FxHashSet<String>,
     literals: &[String],
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let cyclic_layouts = program.cyclic_layouts();
+    let cyclic_layouts = &cycles.cyclic;
     let needed = layouts_needing_descriptors(program);
     let published = published_class_layouts(program);
     let mut emitted_rows = rustc_hash::FxHashSet::default();
