@@ -753,17 +753,35 @@ fn main() -> Result<()> {
         // week before it existed.
         // `--os windows` renders it for another OS's calling convention, which
         // is how that convention is read without a machine that runs it.
+        //
+        // `--out <dir>` writes a buildable program, as `emit-c --out` does:
+        // the same runtime, entry point and loop host, with `program.ll` in
+        // `program.c`'s place. That is the build `nts build` already makes for
+        // an `llvm` product; a conformance run needs it without a config.
         Some("emit-llvm") => {
             let rest: Vec<String> = args.collect();
             let os = rest
                 .windows(2)
                 .find(|pair| pair[0] == "--os")
                 .map_or(host_os(), |pair| pair[1].as_str());
-            emit_llvm(
-                &project(&rest)?,
-                Emission::from_flags(),
-                llvm_platform(os, host_arch()),
-            )
+            let platform = llvm_platform(os, host_arch());
+            let out = rest
+                .iter()
+                .position(|a| a == "--out")
+                .and_then(|at| rest.get(at + 1))
+                .map(Utf8PathBuf::from);
+            match out {
+                Some(out) => emit_c(
+                    &project(&rest)?,
+                    Some(&out),
+                    Emission {
+                        llvm: Some(platform),
+                        ..Emission::from_flags()
+                    },
+                )
+                .map(|_| ()),
+                None => emit_llvm(&project(&rest)?, Emission::from_flags(), platform),
+            }
         }
         // The third backend. Not textual, so `--text` renders the listing that
         // stands in for reading `program.c` -- disassembled from the bytes
@@ -3387,6 +3405,21 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
     Ok(())
 }
 
+/// What an emission wrote that a standalone build links, as
+/// [`write_standalone`] needs it.
+#[derive(Clone, Copy)]
+struct Linked<'a> {
+    /// `program.c`, or `program.ll` when the LLVM backend rendered the
+    /// program: the one file the printed link line differs in.
+    program_file: &'a str,
+    /// The runtime's other sources the build compiles beside it.
+    sources: &'a [&'a str],
+    /// Whether the program has a witness to link.
+    witness: bool,
+    /// What the backend declined, by name.
+    declined: &'a [String],
+}
+
 /// The entry point of a standalone program, and the host it needs.
 ///
 /// Both are a *choice* rather than part of the runtime: an embedder with its
@@ -3395,12 +3428,16 @@ fn print_types(tsconfig: &Utf8Path) -> Result<()> {
 fn write_standalone(
     program: &hir::Program,
     out: &Utf8Path,
-    sources: &[&str],
+    linked: &Linked<'_>,
     linking: bool,
-    witness: bool,
-    declined: &[String],
     host: nts_codegen_c::LoopHost,
 ) -> Result<()> {
+    let Linked {
+        program_file: program_unit,
+        sources,
+        witness,
+        declined,
+    } = *linked;
     // A program that is only declarations has nothing to evaluate, and calling
     // a function that was never emitted is a link error.
     //
@@ -3452,7 +3489,7 @@ fn write_standalone(
     // binding and needs no witness. That difference looked like `--main`
     // suppressing it until a program that calls one at top level said otherwise.
     println!(
-        "wrote program.c, main.c, {}, {}, {}{}{} to {out}",
+        "wrote {program_unit}, main.c, {}, {}, {}{}{} to {out}",
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
         nts_codegen_c::UV_HOST_SOURCE_NAME,
@@ -3491,7 +3528,7 @@ fn write_standalone(
             nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
         println!(
-            "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c program.c {} {}{glib_source} -luv -lm{glib_flags} -o program",
+            "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c {program_unit} {} {}{glib_source} -luv -lm{glib_flags} -o program",
             sources.join(" "),
             nts_codegen_c::UV_HOST_SOURCE_NAME
         );
@@ -8972,17 +9009,25 @@ fn write_c_output(
             );
         }
         let host = emission.host.for_program(program);
+        let program_unit = if emission.llvm.is_some() {
+            PROGRAM_IR_NAME
+        } else {
+            PROGRAM_SOURCE_NAME
+        };
         write_standalone(
             program,
             out,
-            &extra,
+            &Linked {
+                program_file: program_unit,
+                sources: &extra,
+                witness: !emitted.witness.is_empty(),
+                declined: &emitted.refused,
+            },
             emission.linking,
-            !emitted.witness.is_empty(),
-            &emitted.refused,
             host,
         )?;
         return Ok(Wrote {
-            sources: std::iter::once("program.c".to_owned())
+            sources: std::iter::once(program_unit.to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
                 .chain([
                     "main.c".to_owned(),

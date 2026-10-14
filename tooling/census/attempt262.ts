@@ -17,6 +17,7 @@ import { environment, flagsOf, materialise, placeOf, workspace } from "./project
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
+const FIRST_CODE = /NTS\d{4}/;
 
 /**
  * `TS2322 Type 'string' is not assignable to type 'number'.` — code and message.
@@ -180,19 +181,22 @@ function includedHeaders(out, source) {
 export function withCachedObjects(printed, out, tools) {
   const cache = tools.objectCache;
   if (!cache || process.env.NTS_CENSUS_NO_OBJECT_CACHE) return { args: printed, objects: undefined };
-  const sources = printed.filter((part) => part.endsWith(".c"));
+  // `program.ll` is the LLVM backend's program, compiled in `program.c`'s
+  // place: a source like any `.c`, never a flag to hand every other compile.
+  const isSource = (part) => part.endsWith(".c") || part.endsWith(".ll");
+  const sources = printed.filter(isSource);
   const at = printed.indexOf("-o");
   const libraries = printed.filter((part) => /^-l/.test(part));
   const compileFlags = printed.filter(
     (part, index) =>
-      !part.endsWith(".c") && !/^-l/.test(part) && !part.startsWith("-Wl,") &&
+      !isSource(part) && !/^-l/.test(part) && !part.startsWith("-Wl,") &&
       index !== at && index !== at + 1,
   );
   mkdirSync(cache, { recursive: true });
   const objects = { hit: 0, miss: 0 };
   const linked = [];
   for (const source of sources) {
-    if (source === "program.c") {
+    if (source === "program.c" || source === "program.ll") {
       linked.push(source);
       continue;
     }
@@ -349,6 +353,15 @@ export const BACKENDS = {
     prepare: linkC,
     run: (out) => [join(out, "program"), []],
   },
+  // `emit-llvm --out --main` writes C's files with `program.ll` in
+  // `program.c`'s place and prints the link line naming it, so the link is
+  // C's, through the same object cache -- with clang, the compiler that reads
+  // LLVM IR. `NTS_LLVM_CC` names another.
+  llvm: {
+    emit: (tsconfig, out) => ["emit-llvm", tsconfig, "--out", out, "--main"],
+    prepare: (stdout, out, tools) => linkC(stdout, out, { ...tools, cc: process.env.NTS_LLVM_CC ?? "clang" }),
+    run: (out) => [join(out, "program"), []],
+  },
   // `emit-jvm` writes `nts/gen/*.class` and `nts-runtime.jar`, nothing to
   // link; `nts.rt.NtsMain` runs `Program.module$init()`, drains the loop and
   // exits with C's statuses (the JVM lane, measured on openjdk 21). Its heap
@@ -477,45 +490,12 @@ export function attempt(dir, body, tools, origin?) {
     // cause; the first census of the whole of `test/language` scored 12 of them
     // as "exited non-zero with no diagnostic" because only the exit-0 branch
     // below read NTS lines. A refusal, then, with its diagnostics.
-    if (/NTS\d{4}/.test(diagnostics)) {
-      return { bucket: "unsupported", why: "backend", diagnostics: parseDiagnostics(diagnostics) };
-    }
+    if (/NTS\d{4}/.test(diagnostics)) return refusal(diagnostics);
     return { bucket: "unsupported", why: "emit" };
   }
   // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
   // status -- and *both* streams are the diagnostics.
-  if (/NTS\d{4}/.test(diagnostics)) {
-    // **Which refusal, not merely that there was one.** A run that records
-    // only the bucket can say 413 files are blocked in lowering and nothing
-    // about what to fix; the census records its first diagnostic for exactly
-    // this reason and the runner did not, so the two instruments answered
-    // different halves of one question.
-    //
-    // The first, because the compiler reports one blocker at a time -- so this
-    // ranks reach rather than causes, the same caveat the census carries.
-    // Identifiers are redacted to `X` so that a hundred files naming a hundred
-    // different names rank as one shape.
-    const first = FIRST_REFUSAL.exec(diagnostics);
-    return {
-      bucket: "unsupported",
-      why: "lowering",
-      diagnostics: parseDiagnostics(diagnostics),
-      first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
-      // **The redaction that makes a row rankable destroys the work list.**
-      // The largest actionable row is 147 files of ``\`X\`, a builtin this
-      // compiler does not provide``, and *which* builtin is the entire content
-      // of that row: `Proxy` and `String.raw` rank as one line and are two
-      // different days of work. Ranking wants the shape and acting wants the
-      // names, so both are recorded rather than one derived from the other.
-      //
-      // The names as the compiler quoted them, in order, deduplicated -- a file
-      // naming the same builtin twice is one entry, so a tally over this field
-      // counts files rather than mentions.
-      named: first
-        ? [...new Set(first[1].match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1))
-        : undefined,
-    };
-  }
+  if (/NTS\d{4}/.test(diagnostics)) return refusal(diagnostics);
 
   const prepared = backend.prepare(stdout, out, tools);
   if (prepared.bucket) return prepared;
@@ -633,5 +613,47 @@ export function selfChecks(scratch, tools, cannotMeasure) {
     sabotage: `${sabotage.bucket} ${sabotage.thrown}`,
     refused: `${refused.bucket}/${refused.why}`,
     async: `${done.bucket}, ${failed.bucket} ${failed.thrown}, ${silent.bucket} ${silent.thrown}`,
+  };
+}
+
+/**
+ * A refusal, from the diagnostics: which one, and whose.
+ *
+ * **Whose is the code's family, never the exit status.** `emit-c` refuses and
+ * exits 0; a C decline exits 1; `emit-wasm` exits 1 on *any* refusal,
+ * lowering's included. Reading the status made every Wasm lowering refusal a
+ * backend one, and the `refused` self-check failed on Wasm for that alone.
+ * NTS1xxx is lowering; NTS2xxx and NTS5xxx are a backend.
+ */
+function refusal(diagnostics) {
+  // **Which refusal, not merely that there was one.** A run that records
+  // only the bucket can say 413 files are blocked in lowering and nothing
+  // about what to fix; the census records its first diagnostic for exactly
+  // this reason and the runner did not, so the two instruments answered
+  // different halves of one question.
+  //
+  // The first, because the compiler reports one blocker at a time -- so this
+  // ranks reach rather than causes, the same caveat the census carries.
+  // Identifiers are redacted to `X` so that a hundred files naming a hundred
+  // different names rank as one shape.
+  const first = FIRST_REFUSAL.exec(diagnostics);
+  return {
+    bucket: "unsupported",
+    why: /^NTS1/.test(FIRST_CODE.exec(diagnostics)?.[0] ?? "") ? "lowering" : "backend",
+    diagnostics: parseDiagnostics(diagnostics),
+    first: first ? first[1].replace(/`[^`]*`/g, "`X`").trim() : undefined,
+    // **The redaction that makes a row rankable destroys the work list.**
+    // The largest actionable row is 147 files of ``\`X\`, a builtin this
+    // compiler does not provide``, and *which* builtin is the entire content
+    // of that row: `Proxy` and `String.raw` rank as one line and are two
+    // different days of work. Ranking wants the shape and acting wants the
+    // names, so both are recorded rather than one derived from the other.
+    //
+    // The names as the compiler quoted them, in order, deduplicated -- a file
+    // naming the same builtin twice is one entry, so a tally over this field
+    // counts files rather than mentions.
+    named: first
+      ? [...new Set(first[1].match(/`[^`]*`/g) ?? [])].map((quoted) => quoted.slice(1, -1))
+      : undefined,
   };
 }
