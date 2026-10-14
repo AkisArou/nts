@@ -761,7 +761,7 @@ class Generator:
         offered only where the dictionary has some."""
         out = []
         for arm in arms:
-            dictionary = self.presence_dictionary(idl_type, arm)
+            dictionary = None if isinstance(arm, tuple) else self.presence_dictionary(idl_type, arm)
             if dictionary is None:
                 out.append(arm)
                 continue
@@ -802,6 +802,105 @@ class Generator:
             return (f"spread onto parameters, {len(varying)} members given or not, more than overloads spell "
                     f"({SPREAD_PRESENCE})")
         return None
+
+    @staticmethod
+    def reads_a_dictionary(idl_type):
+        """Whether an argument is a dictionary, or a union with one."""
+        if idl_type.does_include_nullable_type:
+            return False
+        unwrapped = idl_type.unwrap(typedef=True)
+        if unwrapped.is_dictionary:
+            return True
+        return unwrapped.is_union and any(t.unwrap(typedef=True).is_dictionary for t in members_of(unwrapped))
+
+    def object_arms(self, idl_type, arms):
+        """An argument's arms, with each dictionary it is (or a union's arm
+        names) also offered as an object of an interface that has the
+        dictionary's every member (object_interfaces): ("object",
+        interface, dictionary, arm)."""
+        out = list(arms)
+        for arm in arms:
+            dictionary = None
+            if arm is None and not idl_type.does_include_nullable_type:
+                unwrapped = idl_type.unwrap(typedef=True)
+                dictionary = unwrapped.type_definition_object if unwrapped.is_dictionary else None
+            elif isinstance(arm, str):
+                members = [t.unwrap(typedef=True) for t in members_of(idl_type.unwrap(typedef=True))]
+                dictionary = next((t.type_definition_object for t in members
+                                   if t.is_dictionary and t.type_definition_object.identifier == arm), None)
+            if dictionary is not None:
+                out += [("object", interface, dictionary.identifier, arm)
+                        for interface in self.object_interfaces(dictionary)]
+        return out
+
+    def object_interfaces(self, dictionary):
+        """The bound interfaces whose objects page script may pass where a
+        dictionary is read, and a program here too: each of the
+        dictionary's members is an attribute of the interface, of the same
+        kind (a number, or a boolean). WebIDL reads such an object as the
+        dictionary through its getters -- every member given -- so
+        `a.multiply(b)` with `b` a DOMMatrix is `b`'s a..f, m11..m44 and is2D
+        read into a DOMMatrixInit (object_parameter). The least derived such
+        interface: DOMMatrixReadOnly, not DOMMatrix as well."""
+        found = []
+        for interface in self.interfaces:
+            if isinstance(interface, MixinView) or set(self.ancestors(interface)) & set(found):
+                continue
+            if all(self.attribute_like(interface, member) is not None for member in dictionary.members):
+                found.append(interface.identifier)
+        return found
+
+    def attribute_like(self, interface, member):
+        """The attribute of `interface` (or an ancestor) a dictionary member
+        reads as: of the member's name, bound, and of its kind; else None."""
+        kind = lambda idl_type: ("boolean" if idl_type.keyword_typename == "boolean"  # noqa: E731
+                                 else "number" if idl_type.keyword_typename in NUMERIC else None)
+        want = kind(member.idl_type.unwrap(typedef=True))
+        if want is None or member.idl_type.does_include_nullable_type:
+            return None
+        current = interface
+        while current is not None:
+            for attribute in current.attributes:
+                if attribute.identifier == member.identifier:
+                    try:
+                        self.check_member(attribute)
+                    except Skip:
+                        return None
+                    have = attribute.idl_type.unwrap(typedef=True)
+                    return attribute if kind(have) == want and not attribute.idl_type.does_include_nullable_type else None
+            current = current.inherited
+        return None
+
+    def object_parameter(self, argument, arm):
+        """An object passed where a dictionary is read (object_interfaces):
+        Blink's dictionary made with each member read through the object's
+        getter, as WebIDL's conversion reads it from page script's object."""
+        _, interface_id, identifier, union_arm = arm
+        interface = self.database.find(interface_id)
+        dictionary = self.database.find(identifier)
+        name = self.safe(argument.identifier)
+        sets = []
+        for member in dictionary.members:
+            attribute = self.attribute_like(interface, member)
+            owner = attribute.owner
+            context = CodeGenContext(interface=owner, class_name="V8" + owner.identifier).make_copy(
+                attribute=attribute, attribute_get=True)
+            value = self.call(context, {"blink_receiver": f"{name}_object"})
+            self.include(attribute)
+            implemented = member.extended_attributes.value_of("ImplementedAs") or member.identifier
+            sets.append(f"{name}_converted->set{implemented[0].upper()}{implemented[1:]}({value});")
+        self.headers.add(PathManager(dictionary).api_path(ext="h"))
+        prelude = (f"auto* {name}_object = {self.node(interface, name)}; "
+                   f"auto* {name}_converted = blink::{identifier}::Create(context.v8_isolate.get()); " + " ".join(sets))
+        expr = f"{name}_converted"
+        if union_arm is not None:
+            unwrapped = argument.idl_type.unwrap(typedef=True)
+            self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
+            expr = f"blink::MakeGarbageCollected<blink::{blink_type_info(unwrapped).typename}>({expr})"
+        param = Param(name, f"{self.handle_tag(interface_id)}* {name}", f"{name}: {interface_id}", expr, True,
+                      prelude=prelude)
+        param.arm = interface_id
+        return param
 
     def spread_parameter(self, argument, arm, arguments):
         """A dictionary whose members' presence matters, as the call's last
@@ -1416,25 +1515,48 @@ class Generator:
                     # variant per bound member: the arm is the argument's
                     # type, so a caller's static type picks it.
                     choices = [self.union_arms(argument.idl_type) or [None] for argument in arguments[:count]]
+                    # An object read as a dictionary (object_arms), where the
+                    # call reads one dictionary: `new DOMQuad(p1, ..., p4)`
+                    # would be every mix of points and literals.
+                    dictionaries = [index for index, argument in enumerate(arguments[:count])
+                                    if self.reads_a_dictionary(argument.idl_type)]
+                    if len(dictionaries) == 1:
+                        at = dictionaries[0]
+                        choices[at] = self.object_arms(arguments[at].idl_type, choices[at])
                     if count:
                         choices[-1] = self.spread_arms(arguments[count - 1].idl_type, choices[-1])
                     truncate = next((index for index in range(count, len(arguments))
                                      if arguments[index].default_value is None), None)
                     filled = [(argument.identifier, self.default_value(argument))
                               for argument in arguments[count:truncate]]
-                    for arms in itertools.product(*choices):
+                except Skip as why:
+                    self.skip(interface, f"{label}/{count}", str(why))
+                    continue
+                # Each mix of arms binds or not on its own: a dictionary
+                # whose struct cannot bind still takes an object. Recorded
+                # only where none at this arity binds.
+                failed = None
+                bound = False
+                for arms in itertools.product(*choices):
+                    try:
                         params = []
                         for argument, arm in zip(arguments[:count], arms):
-                            if isinstance(arm, tuple):
+                            if isinstance(arm, tuple) and arm[0] == "object":
+                                param = self.object_parameter(argument, arm)
+                            elif isinstance(arm, tuple):
                                 param = self.spread_parameter(argument, arm, arguments[:count])
                             else:
                                 param = (self.arm_parameter(argument.idl_type, argument.identifier, arm) if arm
                                          else self.parameter(argument.idl_type, argument.identifier))
                             param.idl_name = argument.identifier
                             params.append(param)
-                        variants.append((overload, params, result, truncate, filled, None))
-                except Skip as why:
-                    self.skip(interface, f"{label}/{count}", str(why))
+                    except Skip as why:
+                        failed = failed or why
+                        continue
+                    variants.append((overload, params, result, truncate, filled, None))
+                    bound = True
+                if failed is not None and not bound:
+                    self.skip(interface, f"{label}/{count}", str(failed))
         return variants
 
     @staticmethod

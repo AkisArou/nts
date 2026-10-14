@@ -378,6 +378,10 @@ declare module "nts:dom" {
      */
     getRootNode(this: Node, options: ByValue<GetRootNodeOptions> | Fields<GetRootNodeOptions>): Node;
     /**
+     * @ntsSymbol nts_dom_Node_getRootNode_1_Event
+     */
+    getRootNode(this: Node, options: Event): Node;
+    /**
      * @ntsSymbol nts_dom_Node_getRootNode_0
      */
     getRootNode(this: Node): Node;
@@ -1786,6 +1790,24 @@ declare module "nts:dom" {
      */
     convertPointFromNode(this: Element, point: ByValue<DOMPointInit> | Fields<DOMPointInit>, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
     /**
+     * @ntsSymbol nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Document
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Element, point: DOMPointReadOnly, from: Document, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Element
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Element, point: DOMPointReadOnly, from: Element, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Text
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Element, point: DOMPointReadOnly, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
      * @ntsSymbol nts_dom_Element_convertRectFromNode_3_Document
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -2944,6 +2966,24 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     convertPointFromNode(this: Text, point: ByValue<DOMPointInit> | Fields<DOMPointInit>, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Document
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Text, point: DOMPointReadOnly, from: Document, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Element
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Text, point: DOMPointReadOnly, from: Element, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Text
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Text, point: DOMPointReadOnly, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
     /**
      * @ntsSymbol nts_dom_Text_convertRectFromNode_3_Document
      * @ntsThrows error nts_dom_exception_take_message
@@ -5819,6 +5859,24 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     convertPointFromNode(this: Document, point: ByValue<DOMPointInit> | Fields<DOMPointInit>, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Document
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Document, point: DOMPointReadOnly, from: Document, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Element
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Document, point: DOMPointReadOnly, from: Element, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
+     * @ntsSymbol nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Text
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    convertPointFromNode(this: Document, point: DOMPointReadOnly, from: Text, error?: Ptr<DOMException | null>): DOMPoint;
     /**
      * @ntsSymbol nts_dom_Document_convertRectFromNode_3_Document
      * @ntsThrows error nts_dom_exception_take_message
@@ -10347,6 +10405,10 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_Event_2
    */
   export function newEvent(type: StringView, eventInitDict: ByValue<EventInit> | Fields<EventInit>): Event;
+  /**
+   * @ntsSymbol nts_dom_new_Event_2_Event
+   */
+  export function newEvent(type: StringView, eventInitDict: Event): Event;
   /**
    * @ntsSymbol nts_dom_new_Event_1
    */
@@ -19133,6 +19195,18 @@ declare module "nts:dom" {
    */
   export function DOMRectReadOnly_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMRectReadOnly;
   /**
+   * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_1_DOMRectReadOnly
+   */
+  export function DOMRectReadOnly_fromRect(other: DOMRectReadOnly): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_1_HTMLImageElement
+   */
+  export function DOMRectReadOnly_fromRect(other: HTMLImageElement): DOMRectReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_1_PointerEvent
+   */
+  export function DOMRectReadOnly_fromRect(other: PointerEvent): DOMRectReadOnly;
+  /**
    * @ntsSymbol nts_dom_DOMRectReadOnly_fromRect_0
    */
   export function DOMRectReadOnly_fromRect(): DOMRectReadOnly;
@@ -19218,6 +19292,18 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_DOMRect_fromRect_1
    */
   export function DOMRect_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_DOMRect_fromRect_1_DOMRectReadOnly
+   */
+  export function DOMRect_fromRect(other: DOMRectReadOnly): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_DOMRect_fromRect_1_HTMLImageElement
+   */
+  export function DOMRect_fromRect(other: HTMLImageElement): DOMRect;
+  /**
+   * @ntsSymbol nts_dom_DOMRect_fromRect_1_PointerEvent
+   */
+  export function DOMRect_fromRect(other: PointerEvent): DOMRect;
   /**
    * @ntsSymbol nts_dom_DOMRect_fromRect_0
    */
@@ -26540,6 +26626,12 @@ declare module "nts:dom" {
      */
     setTransform(this: CanvasRenderingContext2D, a: Float64, b: Float64, c: Float64, d: Float64, e: Float64, f: Float64): void;
     /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setTransform(this: CanvasRenderingContext2D, transform: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -26587,6 +26679,12 @@ declare module "nts:dom" {
   export type CanvasGradientMethods = CanvasGradientOwnMethods;
   export type CanvasGradient = HostClass<"NtsDomCanvasGradient", null, "nts_dom_retain", "nts_dom_release"> & CanvasGradientMethods;
   export interface Path2DOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_Path2D_addPath_2_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    addPath(this: Path2D, path: Path2D, transform: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_addPath_1
      * @ntsThrows error nts_dom_exception_take_message
@@ -28153,6 +28251,12 @@ declare module "nts:dom" {
      */
     readonly w: Float64;
     /**
+     * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    matrixTransform(this: DOMPointReadOnly, matrix: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMPoint;
+    /**
      * @ntsSymbol nts_dom_DOMPointReadOnly_matrixTransform_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -28165,6 +28269,10 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_DOMPointReadOnly_fromPoint_1
    */
   export function DOMPointReadOnly_fromPoint(other: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPointReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMPointReadOnly_fromPoint_1_DOMPointReadOnly
+   */
+  export function DOMPointReadOnly_fromPoint(other: DOMPointReadOnly): DOMPointReadOnly;
   /**
    * @ntsSymbol nts_dom_DOMPointReadOnly_fromPoint_0
    */
@@ -28252,6 +28360,10 @@ declare module "nts:dom" {
    */
   export function DOMPoint_fromPoint(other: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPoint;
   /**
+   * @ntsSymbol nts_dom_DOMPoint_fromPoint_1_DOMPointReadOnly
+   */
+  export function DOMPoint_fromPoint(other: DOMPointReadOnly): DOMPoint;
+  /**
    * @ntsSymbol nts_dom_DOMPoint_fromPoint_0
    */
   export function DOMPoint_fromPoint(): DOMPoint;
@@ -28324,6 +28436,18 @@ declare module "nts:dom" {
    */
   export function DOMQuad_fromRect(other: ByValue<DOMRectInit> | Fields<DOMRectInit>): DOMQuad;
   /**
+   * @ntsSymbol nts_dom_DOMQuad_fromRect_1_DOMRectReadOnly
+   */
+  export function DOMQuad_fromRect(other: DOMRectReadOnly): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_DOMQuad_fromRect_1_HTMLImageElement
+   */
+  export function DOMQuad_fromRect(other: HTMLImageElement): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_DOMQuad_fromRect_1_PointerEvent
+   */
+  export function DOMQuad_fromRect(other: PointerEvent): DOMQuad;
+  /**
    * @ntsSymbol nts_dom_DOMQuad_fromRect_0
    */
   export function DOMQuad_fromRect(): DOMQuad;
@@ -28343,6 +28467,10 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_DOMQuad_1
    */
   export function newDOMQuad(p1: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMQuad;
+  /**
+   * @ntsSymbol nts_dom_new_DOMQuad_1_DOMPointReadOnly
+   */
+  export function newDOMQuad(p1: DOMPointReadOnly): DOMQuad;
   /**
    * @ntsSymbol nts_dom_new_DOMQuad_0
    */
@@ -29564,6 +29692,10 @@ declare module "nts:dom" {
    */
   export function newPageTransitionEvent(type: StringView, persisted: boolean, bubbles?: boolean, cancelable?: boolean, composed?: boolean): PageTransitionEvent;
   /**
+   * @ntsSymbol nts_dom_new_PageTransitionEvent_2_PageTransitionEvent
+   */
+  export function newPageTransitionEvent(type: StringView, eventInitDict: PageTransitionEvent): PageTransitionEvent;
+  /**
    * @ntsSymbol nts_dom_new_PageTransitionEvent_1
    */
   export function newPageTransitionEvent(type: StringView): PageTransitionEvent;
@@ -29609,6 +29741,10 @@ declare module "nts:dom" {
    * @ntsSymbol nts_dom_new_ProgressEvent_2
    */
   export function newProgressEvent(type: StringView, eventInitDict: ByValue<ProgressEventInit> | Fields<ProgressEventInit>): ProgressEvent;
+  /**
+   * @ntsSymbol nts_dom_new_ProgressEvent_2_ProgressEvent
+   */
+  export function newProgressEvent(type: StringView, eventInitDict: ProgressEvent): ProgressEvent;
   /**
    * @ntsSymbol nts_dom_new_ProgressEvent_1
    */
@@ -32531,6 +32667,12 @@ declare module "nts:dom" {
   /** @ntsSymbol nts_dom_as_Clipboard */
   export function asClipboard(target: EventTarget): Clipboard | null;
   export interface CanvasPatternOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_CanvasPattern_setTransform_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    setTransform(this: CanvasPattern, transform: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_CanvasPattern_setTransform_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -35794,6 +35936,12 @@ declare module "nts:dom" {
      */
     inverse(this: DOMMatrixReadOnly): DOMMatrix;
     /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiply(this: DOMMatrixReadOnly, other: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
      * @ntsSymbol nts_dom_DOMMatrixReadOnly_multiply_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -35928,6 +36076,10 @@ declare module "nts:dom" {
      */
     transformPoint(this: DOMMatrixReadOnly, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): DOMPoint;
     /**
+     * @ntsSymbol nts_dom_DOMMatrixReadOnly_transformPoint_1_DOMPointReadOnly
+     */
+    transformPoint(this: DOMMatrixReadOnly, point: DOMPointReadOnly): DOMPoint;
+    /**
      * @ntsSymbol nts_dom_DOMMatrixReadOnly_transformPoint_0
      */
     transformPoint(this: DOMMatrixReadOnly): DOMPoint;
@@ -35956,6 +36108,12 @@ declare module "nts:dom" {
   }
   export type DOMMatrixReadOnlyMethods = DOMMatrixReadOnlyOwnMethods;
   export type DOMMatrixReadOnly = HostClass<"NtsDomDOMMatrixReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMMatrixReadOnlyMethods;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_1_DOMMatrixReadOnly
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrixReadOnly_fromMatrix(other: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
   /**
    * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_0
    * @ntsThrows error nts_dom_exception_take_message
@@ -36266,11 +36424,23 @@ declare module "nts:dom" {
      */
     invertSelf(this: DOMMatrix): DOMMatrix;
     /**
+     * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    multiplySelf(this: DOMMatrix, other: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
      * @ntsSymbol nts_dom_DOMMatrix_multiplySelf_0
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     multiplySelf(this: DOMMatrix, error?: Ptr<DOMException | null>): DOMMatrix;
+    /**
+     * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_1_DOMMatrixReadOnly
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    preMultiplySelf(this: DOMMatrix, other: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrix;
     /**
      * @ntsSymbol nts_dom_DOMMatrix_preMultiplySelf_0
      * @ntsThrows error nts_dom_exception_take_message
@@ -36416,6 +36586,12 @@ declare module "nts:dom" {
   export type DOMMatrix = HostClass<"NtsDomDOMMatrix", DOMMatrixReadOnly> & DOMMatrixMethods;
   /** @ntsSymbol nts_dom_as_DOMMatrix */
   export function asDOMMatrix(object: DOMMatrixReadOnly): DOMMatrix | null;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_1_DOMMatrixReadOnly
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrix_fromMatrix(other: DOMMatrixReadOnly, error?: Ptr<DOMException | null>): DOMMatrix;
   /**
    * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_0
    * @ntsThrows error nts_dom_exception_take_message
@@ -38423,6 +38599,10 @@ declare module "nts:dom" {
      */
     isPointInFill(this: SVGGeometryElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): boolean;
     /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInFill_1_DOMPointReadOnly
+     */
+    isPointInFill(this: SVGGeometryElement, point: DOMPointReadOnly): boolean;
+    /**
      * @ntsSymbol nts_dom_SVGGeometryElement_isPointInFill_0
      */
     isPointInFill(this: SVGGeometryElement): boolean;
@@ -38430,6 +38610,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_SVGGeometryElement_isPointInStroke_1
      */
     isPointInStroke(this: SVGGeometryElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): boolean;
+    /**
+     * @ntsSymbol nts_dom_SVGGeometryElement_isPointInStroke_1_DOMPointReadOnly
+     */
+    isPointInStroke(this: SVGGeometryElement, point: DOMPointReadOnly): boolean;
     /**
      * @ntsSymbol nts_dom_SVGGeometryElement_isPointInStroke_0
      */
@@ -38460,6 +38644,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_SVGTextContentElement_getCharNumAtPosition_1
      */
     getCharNumAtPosition(this: SVGTextContentElement, point: ByValue<DOMPointInit> | Fields<DOMPointInit>): Float64;
+    /**
+     * @ntsSymbol nts_dom_SVGTextContentElement_getCharNumAtPosition_1_DOMPointReadOnly
+     */
+    getCharNumAtPosition(this: SVGTextContentElement, point: DOMPointReadOnly): Float64;
     /**
      * @ntsSymbol nts_dom_SVGTextContentElement_getCharNumAtPosition_0
      */

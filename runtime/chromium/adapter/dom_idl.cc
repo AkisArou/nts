@@ -6869,6 +6869,14 @@ NtsDomNode* nts_dom_Node_getRootNode_1(NtsDomNode* self, NtsDomGetRootNodeOption
   return HandleOf<NtsDomNode>(receiver->getRootNode(options_converted));
 }
 
+NtsDomNode* nts_dom_Node_getRootNode_1_Event(NtsDomNode* self, NtsDomEvent* options) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::Node>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* options_object = ObjectOf<blink::Event>(options); auto* options_converted = blink::GetRootNodeOptions::Create(context.v8_isolate.get()); options_converted->setComposed(options_object->composed());
+  return HandleOf<NtsDomNode>(receiver->getRootNode(options_converted));
+}
+
 NtsDomNode* nts_dom_Node_getRootNode_0(NtsDomNode* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::Node>(self);
@@ -8552,6 +8560,33 @@ NtsDomDOMPoint* nts_dom_Element_convertPointFromNode_2_Text(NtsDomElement* self,
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Element>(self);
   auto* point_converted = NtsDomToDOMPointInit(context, point, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Document(NtsDomElement* self, NtsDomDOMPointReadOnly* point, NtsDomDocument* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Document>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Element(NtsDomElement* self, NtsDomDOMPointReadOnly* point, NtsDomElement* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Element>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Element_convertPointFromNode_2_DOMPointReadOnly_Text(NtsDomElement* self, NtsDomDOMPointReadOnly* point, NtsDomText* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Element>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
 }
@@ -10322,6 +10357,33 @@ NtsDomDOMPoint* nts_dom_Text_convertPointFromNode_2_Text(NtsDomText* self, NtsDo
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Text>(self);
   auto* point_converted = NtsDomToDOMPointInit(context, point, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Document(NtsDomText* self, NtsDomDOMPointReadOnly* point, NtsDomDocument* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Text>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Document>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Element(NtsDomText* self, NtsDomDOMPointReadOnly* point, NtsDomElement* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Text>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Element>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Text_convertPointFromNode_2_DOMPointReadOnly_Text(NtsDomText* self, NtsDomDOMPointReadOnly* point, NtsDomText* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Text>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
 }
@@ -15037,6 +15099,33 @@ NtsDomDOMPoint* nts_dom_Document_convertPointFromNode_2_Text(NtsDomDocument* sel
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   auto* point_converted = NtsDomToDOMPointInit(context, point, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Document(NtsDomDocument* self, NtsDomDOMPointReadOnly* point, NtsDomDocument* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Document>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Element(NtsDomDocument* self, NtsDomDOMPointReadOnly* point, NtsDomElement* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Element>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMPoint* nts_dom_Document_convertPointFromNode_2_DOMPointReadOnly_Text(NtsDomDocument* self, NtsDomDOMPointReadOnly* point, NtsDomText* from, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomDOMPoint>(receiver->convertPointFromNode(point_converted, blink::MakeGarbageCollected<blink::V8UnionCSSPseudoElementOrDocumentOrElementOrText>(ObjectOf<blink::Text>(from)), blink::ConvertCoordinateOptions::Create(context.v8_isolate.get()), exception_state));
 }
@@ -21405,6 +21494,13 @@ NtsDomEvent* nts_dom_new_Event_2(const NtsBorrowedString* type, NtsDomEventInit 
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_converted = NtsDomToEventInit(context, eventInitDict, conversion);
+  return HandleOf<NtsDomEvent>(Event::Create(NtsText(context, type), eventInitDict_converted));
+}
+
+NtsDomEvent* nts_dom_new_Event_2_Event(const NtsBorrowedString* type, NtsDomEvent* eventInitDict) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* eventInitDict_object = ObjectOf<blink::Event>(eventInitDict); auto* eventInitDict_converted = blink::EventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed());
   return HandleOf<NtsDomEvent>(Event::Create(NtsText(context, type), eventInitDict_converted));
 }
 
@@ -29971,6 +30067,27 @@ NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1(NtsDomDOMRectInit othe
   return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
 }
 
+NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
+}
+
+NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(other_converted));
+}
+
 NtsDomDOMRectReadOnly* nts_dom_DOMRectReadOnly_fromRect_0() {
   NtsDomContext& context = nts_dom::Current();
   return HandleOf<NtsDomDOMRectReadOnly>(DOMRectReadOnly::fromRect(blink::DOMRectInit::Create(context.v8_isolate.get())));
@@ -30058,6 +30175,27 @@ NtsDomDOMRect* nts_dom_DOMRect_fromRect_1(NtsDomDOMRectInit other) {
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* other_converted = NtsDomToDOMRectInit(context, other, conversion);
+  return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
+}
+
+NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
+}
+
+NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
+}
+
+NtsDomDOMRect* nts_dom_DOMRect_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMRect>(DOMRect::fromRect(other_converted));
 }
 
@@ -39636,6 +39774,15 @@ void nts_dom_CanvasRenderingContext2D_setTransform_6(NtsDomCanvasRenderingContex
   receiver->setTransform(a, b, c, d, e, f);
 }
 
+void nts_dom_CanvasRenderingContext2D_setTransform_1_DOMMatrixReadOnly(NtsDomCanvasRenderingContext2D* self, NtsDomDOMMatrixReadOnly* transform, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  auto* transform_object = ObjectOf<blink::DOMMatrixReadOnly>(transform); auto* transform_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); transform_converted->setA(transform_object->a()); transform_converted->setB(transform_object->b()); transform_converted->setC(transform_object->c()); transform_converted->setD(transform_object->d()); transform_converted->setE(transform_object->e()); transform_converted->setF(transform_object->f()); transform_converted->setM11(transform_object->m11()); transform_converted->setM12(transform_object->m12()); transform_converted->setM21(transform_object->m21()); transform_converted->setM22(transform_object->m22()); transform_converted->setM41(transform_object->m41()); transform_converted->setM42(transform_object->m42()); transform_converted->setIs2D(transform_object->is2D()); transform_converted->setM13(transform_object->m13()); transform_converted->setM14(transform_object->m14()); transform_converted->setM23(transform_object->m23()); transform_converted->setM24(transform_object->m24()); transform_converted->setM31(transform_object->m31()); transform_converted->setM32(transform_object->m32()); transform_converted->setM33(transform_object->m33()); transform_converted->setM34(transform_object->m34()); transform_converted->setM43(transform_object->m43()); transform_converted->setM44(transform_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setTransform(transform_converted, exception_state);
+}
+
 void nts_dom_CanvasRenderingContext2D_setTransform_0(NtsDomCanvasRenderingContext2D* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -39706,6 +39853,15 @@ NtsDomPath2D* nts_dom_new_Path2D_0() {
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return HandleOf<NtsDomPath2D>(Path2D::Create(script_state));
+}
+
+void nts_dom_Path2D_addPath_2_DOMMatrixReadOnly(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomDOMMatrixReadOnly* transform, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Path2D>(self);
+  auto* transform_object = ObjectOf<blink::DOMMatrixReadOnly>(transform); auto* transform_converted = blink::DOMMatrix2DInit::Create(context.v8_isolate.get()); transform_converted->setA(transform_object->a()); transform_converted->setB(transform_object->b()); transform_converted->setC(transform_object->c()); transform_converted->setD(transform_object->d()); transform_converted->setE(transform_object->e()); transform_converted->setF(transform_object->f()); transform_converted->setM11(transform_object->m11()); transform_converted->setM12(transform_object->m12()); transform_converted->setM21(transform_object->m21()); transform_converted->setM22(transform_object->m22()); transform_converted->setM41(transform_object->m41()); transform_converted->setM42(transform_object->m42());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->addPath(ObjectOf<blink::Path2D>(path), transform_converted, exception_state);
 }
 
 void nts_dom_Path2D_addPath_1(NtsDomPath2D* self, NtsDomPath2D* path, NtsDomException** error) {
@@ -41292,6 +41448,15 @@ double nts_dom_DOMPointReadOnly_get_w(NtsDomDOMPointReadOnly* self) {
   return static_cast<double>(receiver->w());
 }
 
+NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_1_DOMMatrixReadOnly(NtsDomDOMPointReadOnly* self, NtsDomDOMMatrixReadOnly* matrix, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMPointReadOnly>(self);
+  auto* matrix_object = ObjectOf<blink::DOMMatrixReadOnly>(matrix); auto* matrix_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); matrix_converted->setA(matrix_object->a()); matrix_converted->setB(matrix_object->b()); matrix_converted->setC(matrix_object->c()); matrix_converted->setD(matrix_object->d()); matrix_converted->setE(matrix_object->e()); matrix_converted->setF(matrix_object->f()); matrix_converted->setM11(matrix_object->m11()); matrix_converted->setM12(matrix_object->m12()); matrix_converted->setM21(matrix_object->m21()); matrix_converted->setM22(matrix_object->m22()); matrix_converted->setM41(matrix_object->m41()); matrix_converted->setM42(matrix_object->m42()); matrix_converted->setIs2D(matrix_object->is2D()); matrix_converted->setM13(matrix_object->m13()); matrix_converted->setM14(matrix_object->m14()); matrix_converted->setM23(matrix_object->m23()); matrix_converted->setM24(matrix_object->m24()); matrix_converted->setM31(matrix_object->m31()); matrix_converted->setM32(matrix_object->m32()); matrix_converted->setM33(matrix_object->m33()); matrix_converted->setM34(matrix_object->m34()); matrix_converted->setM43(matrix_object->m43()); matrix_converted->setM44(matrix_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMPoint>(receiver->matrixTransform(matrix_converted, exception_state));
+}
+
 NtsDomDOMPoint* nts_dom_DOMPointReadOnly_matrixTransform_0(NtsDomDOMPointReadOnly* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -41303,6 +41468,13 @@ NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1(NtsDomDOMPointInit 
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* other_converted = NtsDomToDOMPointInit(context, other, conversion);
+  return HandleOf<NtsDomDOMPointReadOnly>(DOMPointReadOnly::fromPoint(other_converted));
+}
+
+NtsDomDOMPointReadOnly* nts_dom_DOMPointReadOnly_fromPoint_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::DOMPointReadOnly>(other); auto* other_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); other_converted->setW(other_object->w()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y()); other_converted->setZ(other_object->z());
   return HandleOf<NtsDomDOMPointReadOnly>(DOMPointReadOnly::fromPoint(other_converted));
 }
 
@@ -41396,6 +41568,13 @@ NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_1(NtsDomDOMPointInit other) {
   return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(other_converted));
 }
 
+NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::DOMPointReadOnly>(other); auto* other_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); other_converted->setW(other_object->w()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y()); other_converted->setZ(other_object->z());
+  return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(other_converted));
+}
+
 NtsDomDOMPoint* nts_dom_DOMPoint_fromPoint_0() {
   NtsDomContext& context = nts_dom::Current();
   return HandleOf<NtsDomDOMPoint>(DOMPoint::fromPoint(blink::DOMPointInit::Create(context.v8_isolate.get())));
@@ -41432,6 +41611,13 @@ NtsDomDOMQuad* nts_dom_new_DOMQuad_1(NtsDomDOMPointInit p1) {
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* p1_converted = NtsDomToDOMPointInit(context, p1, conversion);
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::Create(p1_converted, blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get())));
+}
+
+NtsDomDOMQuad* nts_dom_new_DOMQuad_1_DOMPointReadOnly(NtsDomDOMPointReadOnly* p1) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* p1_object = ObjectOf<blink::DOMPointReadOnly>(p1); auto* p1_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); p1_converted->setW(p1_object->w()); p1_converted->setX(p1_object->x()); p1_converted->setY(p1_object->y()); p1_converted->setZ(p1_object->z());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::Create(p1_converted, blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get()), blink::DOMPointInit::Create(context.v8_isolate.get())));
 }
 
@@ -41479,6 +41665,27 @@ NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1(NtsDomDOMRectInit other) {
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* other_converted = NtsDomToDOMRectInit(context, other, conversion);
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_DOMRectReadOnly(NtsDomDOMRectReadOnly* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::DOMRectReadOnly>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_HTMLImageElement(NtsDomHTMLImageElement* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::HTMLImageElement>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
+  return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
+}
+
+NtsDomDOMQuad* nts_dom_DOMQuad_fromRect_1_PointerEvent(NtsDomPointerEvent* other) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* other_object = ObjectOf<blink::PointerEvent>(other); auto* other_converted = blink::DOMRectInit::Create(context.v8_isolate.get()); other_converted->setHeight(other_object->height()); other_converted->setWidth(other_object->width()); other_converted->setX(other_object->x()); other_converted->setY(other_object->y());
   return HandleOf<NtsDomDOMQuad>(DOMQuad::fromRect(other_converted));
 }
 
@@ -42636,6 +42843,13 @@ NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEvent
   return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), eventInitDict_converted));
 }
 
+NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_2_PageTransitionEvent(const NtsBorrowedString* type, NtsDomPageTransitionEvent* eventInitDict) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* eventInitDict_object = ObjectOf<blink::PageTransitionEvent>(eventInitDict); auto* eventInitDict_converted = blink::PageTransitionEventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed()); eventInitDict_converted->setPersisted(eventInitDict_object->persisted());
+  return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), eventInitDict_converted));
+}
+
 NtsDomPageTransitionEvent* nts_dom_new_PageTransitionEvent_1(const NtsBorrowedString* type) {
   NtsDomContext& context = nts_dom::Current();
   return HandleOf<NtsDomPageTransitionEvent>(PageTransitionEvent::Create(NtsText(context, type), blink::PageTransitionEventInit::Create(context.v8_isolate.get())));
@@ -42662,6 +42876,13 @@ NtsDomProgressEvent* nts_dom_new_ProgressEvent_2(const NtsBorrowedString* type, 
   NtsDomContext& context = nts_dom::Current();
   blink::DummyExceptionStateForTesting conversion;
   auto* eventInitDict_converted = NtsDomToProgressEventInit(context, eventInitDict, conversion);
+  return HandleOf<NtsDomProgressEvent>(ProgressEvent::Create(NtsText(context, type), eventInitDict_converted));
+}
+
+NtsDomProgressEvent* nts_dom_new_ProgressEvent_2_ProgressEvent(const NtsBorrowedString* type, NtsDomProgressEvent* eventInitDict) {
+  NtsDomContext& context = nts_dom::Current();
+  blink::DummyExceptionStateForTesting conversion;
+  auto* eventInitDict_object = ObjectOf<blink::ProgressEvent>(eventInitDict); auto* eventInitDict_converted = blink::ProgressEventInit::Create(context.v8_isolate.get()); eventInitDict_converted->setBubbles(eventInitDict_object->bubbles()); eventInitDict_converted->setCancelable(eventInitDict_object->cancelable()); eventInitDict_converted->setComposed(eventInitDict_object->composed()); eventInitDict_converted->setLengthComputable(eventInitDict_object->lengthComputable()); eventInitDict_converted->setLoaded(eventInitDict_object->loaded()); eventInitDict_converted->setTotal(eventInitDict_object->total());
   return HandleOf<NtsDomProgressEvent>(ProgressEvent::Create(NtsText(context, type), eventInitDict_converted));
 }
 
@@ -45760,6 +45981,15 @@ struct NtsPromise* nts_dom_Clipboard_writeText(NtsDomClipboard* self, const NtsB
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->writeText(script_state, NtsText(context, data), exception_state));
+}
+
+void nts_dom_CanvasPattern_setTransform_1_DOMMatrixReadOnly(NtsDomCanvasPattern* self, NtsDomDOMMatrixReadOnly* transform, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasPattern>(self);
+  auto* transform_object = ObjectOf<blink::DOMMatrixReadOnly>(transform); auto* transform_converted = blink::DOMMatrix2DInit::Create(context.v8_isolate.get()); transform_converted->setA(transform_object->a()); transform_converted->setB(transform_object->b()); transform_converted->setC(transform_object->c()); transform_converted->setD(transform_object->d()); transform_converted->setE(transform_object->e()); transform_converted->setF(transform_object->f()); transform_converted->setM11(transform_object->m11()); transform_converted->setM12(transform_object->m12()); transform_converted->setM21(transform_object->m21()); transform_converted->setM22(transform_object->m22()); transform_converted->setM41(transform_object->m41()); transform_converted->setM42(transform_object->m42());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->setTransform(transform_converted, exception_state);
 }
 
 void nts_dom_CanvasPattern_setTransform_0(NtsDomCanvasPattern* self, NtsDomException** error) {
@@ -49557,6 +49787,15 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_inverse(NtsDomDOMMatrixReadOnly* self
   return HandleOf<NtsDomDOMMatrix>(receiver->inverse());
 }
 
+NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_1_DOMMatrixReadOnly(NtsDomDOMMatrixReadOnly* self, NtsDomDOMMatrixReadOnly* other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  auto* other_object = ObjectOf<blink::DOMMatrixReadOnly>(other); auto* other_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); other_converted->setA(other_object->a()); other_converted->setB(other_object->b()); other_converted->setC(other_object->c()); other_converted->setD(other_object->d()); other_converted->setE(other_object->e()); other_converted->setF(other_object->f()); other_converted->setM11(other_object->m11()); other_converted->setM12(other_object->m12()); other_converted->setM21(other_object->m21()); other_converted->setM22(other_object->m22()); other_converted->setM41(other_object->m41()); other_converted->setM42(other_object->m42()); other_converted->setIs2D(other_object->is2D()); other_converted->setM13(other_object->m13()); other_converted->setM14(other_object->m14()); other_converted->setM23(other_object->m23()); other_converted->setM24(other_object->m24()); other_converted->setM31(other_object->m31()); other_converted->setM32(other_object->m32()); other_converted->setM33(other_object->m33()); other_converted->setM34(other_object->m34()); other_converted->setM43(other_object->m43()); other_converted->setM44(other_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiply(other_converted, exception_state));
+}
+
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_multiply_0(NtsDomDOMMatrixReadOnly* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -49758,6 +49997,14 @@ NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_1(NtsDomDOMMatrixReadOn
   return HandleOf<NtsDomDOMPoint>(receiver->transformPoint(point_converted));
 }
 
+NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_1_DOMPointReadOnly(NtsDomDOMMatrixReadOnly* self, NtsDomDOMPointReadOnly* point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  return HandleOf<NtsDomDOMPoint>(receiver->transformPoint(point_converted));
+}
+
 NtsDomDOMPoint* nts_dom_DOMMatrixReadOnly_transformPoint_0(NtsDomDOMMatrixReadOnly* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
@@ -49786,6 +50033,14 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* 
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMMatrixReadOnly>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->translate(0, 0, 0));
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1_DOMMatrixReadOnly(NtsDomDOMMatrixReadOnly* other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* other_object = ObjectOf<blink::DOMMatrixReadOnly>(other); auto* other_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); other_converted->setA(other_object->a()); other_converted->setB(other_object->b()); other_converted->setC(other_object->c()); other_converted->setD(other_object->d()); other_converted->setE(other_object->e()); other_converted->setF(other_object->f()); other_converted->setM11(other_object->m11()); other_converted->setM12(other_object->m12()); other_converted->setM21(other_object->m21()); other_converted->setM22(other_object->m22()); other_converted->setM41(other_object->m41()); other_converted->setM42(other_object->m42()); other_converted->setIs2D(other_object->is2D()); other_converted->setM13(other_object->m13()); other_converted->setM14(other_object->m14()); other_converted->setM23(other_object->m23()); other_converted->setM24(other_object->m24()); other_converted->setM31(other_object->m31()); other_converted->setM32(other_object->m32()); other_converted->setM33(other_object->m33()); other_converted->setM34(other_object->m34()); other_converted->setM43(other_object->m43()); other_converted->setM44(other_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromMatrix(other_converted, exception_state));
 }
 
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_0(NtsDomException** error) {
@@ -50088,11 +50343,29 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_invertSelf(NtsDomDOMMatrix* self) {
   return HandleOf<NtsDomDOMMatrix>(receiver->invertSelf());
 }
 
+NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_1_DOMMatrixReadOnly(NtsDomDOMMatrix* self, NtsDomDOMMatrixReadOnly* other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  auto* other_object = ObjectOf<blink::DOMMatrixReadOnly>(other); auto* other_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); other_converted->setA(other_object->a()); other_converted->setB(other_object->b()); other_converted->setC(other_object->c()); other_converted->setD(other_object->d()); other_converted->setE(other_object->e()); other_converted->setF(other_object->f()); other_converted->setM11(other_object->m11()); other_converted->setM12(other_object->m12()); other_converted->setM21(other_object->m21()); other_converted->setM22(other_object->m22()); other_converted->setM41(other_object->m41()); other_converted->setM42(other_object->m42()); other_converted->setIs2D(other_object->is2D()); other_converted->setM13(other_object->m13()); other_converted->setM14(other_object->m14()); other_converted->setM23(other_object->m23()); other_converted->setM24(other_object->m24()); other_converted->setM31(other_object->m31()); other_converted->setM32(other_object->m32()); other_converted->setM33(other_object->m33()); other_converted->setM34(other_object->m34()); other_converted->setM43(other_object->m43()); other_converted->setM44(other_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(other_converted, exception_state));
+}
+
 NtsDomDOMMatrix* nts_dom_DOMMatrix_multiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::DOMMatrix>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->multiplySelf(blink::DOMMatrixInit::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_1_DOMMatrixReadOnly(NtsDomDOMMatrix* self, NtsDomDOMMatrixReadOnly* other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::DOMMatrix>(self);
+  auto* other_object = ObjectOf<blink::DOMMatrixReadOnly>(other); auto* other_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); other_converted->setA(other_object->a()); other_converted->setB(other_object->b()); other_converted->setC(other_object->c()); other_converted->setD(other_object->d()); other_converted->setE(other_object->e()); other_converted->setF(other_object->f()); other_converted->setM11(other_object->m11()); other_converted->setM12(other_object->m12()); other_converted->setM21(other_object->m21()); other_converted->setM22(other_object->m22()); other_converted->setM41(other_object->m41()); other_converted->setM42(other_object->m42()); other_converted->setIs2D(other_object->is2D()); other_converted->setM13(other_object->m13()); other_converted->setM14(other_object->m14()); other_converted->setM23(other_object->m23()); other_converted->setM24(other_object->m24()); other_converted->setM31(other_object->m31()); other_converted->setM32(other_object->m32()); other_converted->setM33(other_object->m33()); other_converted->setM34(other_object->m34()); other_converted->setM43(other_object->m43()); other_converted->setM44(other_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(receiver->preMultiplySelf(other_converted, exception_state));
 }
 
 NtsDomDOMMatrix* nts_dom_DOMMatrix_preMultiplySelf_0(NtsDomDOMMatrix* self, NtsDomException** error) {
@@ -50299,6 +50572,14 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMMatrix>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1_DOMMatrixReadOnly(NtsDomDOMMatrixReadOnly* other, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* other_object = ObjectOf<blink::DOMMatrixReadOnly>(other); auto* other_converted = blink::DOMMatrixInit::Create(context.v8_isolate.get()); other_converted->setA(other_object->a()); other_converted->setB(other_object->b()); other_converted->setC(other_object->c()); other_converted->setD(other_object->d()); other_converted->setE(other_object->e()); other_converted->setF(other_object->f()); other_converted->setM11(other_object->m11()); other_converted->setM12(other_object->m12()); other_converted->setM21(other_object->m21()); other_converted->setM22(other_object->m22()); other_converted->setM41(other_object->m41()); other_converted->setM42(other_object->m42()); other_converted->setIs2D(other_object->is2D()); other_converted->setM13(other_object->m13()); other_converted->setM14(other_object->m14()); other_converted->setM23(other_object->m23()); other_converted->setM24(other_object->m24()); other_converted->setM31(other_object->m31()); other_converted->setM32(other_object->m32()); other_converted->setM33(other_object->m33()); other_converted->setM34(other_object->m34()); other_converted->setM43(other_object->m43()); other_converted->setM44(other_object->m44());
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromMatrix(other_converted, exception_state));
 }
 
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_0(NtsDomException** error) {
@@ -53891,6 +54172,14 @@ bool nts_dom_SVGGeometryElement_isPointInFill_1(NtsDomSVGGeometryElement* self, 
   return static_cast<bool>(receiver->isPointInFill(point_converted));
 }
 
+bool nts_dom_SVGGeometryElement_isPointInFill_1_DOMPointReadOnly(NtsDomSVGGeometryElement* self, NtsDomDOMPointReadOnly* point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
+  return static_cast<bool>(receiver->isPointInFill(point_converted));
+}
+
 bool nts_dom_SVGGeometryElement_isPointInFill_0(NtsDomSVGGeometryElement* self) {
   NtsDomContext& context = nts_dom::Current();
   auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
@@ -53902,6 +54191,14 @@ bool nts_dom_SVGGeometryElement_isPointInStroke_1(NtsDomSVGGeometryElement* self
   auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return static_cast<bool>(receiver->isPointInStroke(point_converted));
+}
+
+bool nts_dom_SVGGeometryElement_isPointInStroke_1_DOMPointReadOnly(NtsDomSVGGeometryElement* self, NtsDomDOMPointReadOnly* point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGGeometryElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return static_cast<bool>(receiver->isPointInStroke(point_converted));
 }
 
@@ -53933,6 +54230,14 @@ double nts_dom_SVGTextContentElement_getCharNumAtPosition_1(NtsDomSVGTextContent
   auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
   blink::DummyExceptionStateForTesting conversion;
   auto* point_converted = NtsDomToDOMPointInit(context, point, conversion);
+  return static_cast<double>(receiver->getCharNumAtPosition(point_converted));
+}
+
+double nts_dom_SVGTextContentElement_getCharNumAtPosition_1_DOMPointReadOnly(NtsDomSVGTextContentElement* self, NtsDomDOMPointReadOnly* point) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::SVGTextContentElement>(self);
+  blink::DummyExceptionStateForTesting conversion;
+  auto* point_object = ObjectOf<blink::DOMPointReadOnly>(point); auto* point_converted = blink::DOMPointInit::Create(context.v8_isolate.get()); point_converted->setW(point_object->w()); point_converted->setX(point_object->x()); point_converted->setY(point_object->y()); point_converted->setZ(point_object->z());
   return static_cast<double>(receiver->getCharNumAtPosition(point_converted));
 }
 

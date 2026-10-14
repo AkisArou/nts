@@ -526,6 +526,26 @@ export function libDomTranscript(): string {
     log("domMatrix", matrix.a + "," + matrix.e + "," + matrix.f + "|" + inverse.e + "," + inverse.a + "|" + doubled.a + "," +
       doubled.e + "|" + point.x + "," + point.y + "," + point.w + "|" + matrix.is2D + "," + matrix.isIdentity + "|" +
       matrix.toString() + "|" + new DOMMatrix().isIdentity);
+
+    // Objects where a dictionary is read: WebIDL reads each member through
+    // the object's getter, so a matrix multiplies a matrix, a point is
+    // carried through one, a canvas takes back the transform it answered,
+    // and a rect is copied from a rect.
+    const rotate = new DOMMatrix("rotate(90deg)");
+    const product = matrix.multiply(rotate);
+    const copied = DOMMatrix.fromMatrix(rotate);
+    const moved = new DOMPoint(1, 0).matrixTransform(rotate);
+    const context = document.createElement("canvas").getContext("2d");
+    let taken = "none";
+    if (context !== null) {
+      context.translate(3, 4);
+      context.setTransform(context.getTransform().scale(2));
+      const back = context.getTransform();
+      taken = back.a + "," + back.e + "," + back.f;
+    }
+    const rect = DOMRect.fromRect(new DOMRect(1, 2, 3, 4));
+    log("domObjects", product.a + "," + product.b + "," + product.e + "|" + copied.b + "," + copied.is2D + "|" +
+      Math.round(moved.x) + "," + Math.round(moved.y) + "|" + taken + "|" + rect.right + "," + rect.bottom);
   }
 
   // A form's controls and a select's options, as collections of their own:

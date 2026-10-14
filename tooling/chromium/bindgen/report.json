@@ -1,5 +1,5 @@
 {
-  "bound": 7044,
+  "bound": 7082,
   "skipped": [
     {
       "interface": "AddEventListenerOptions",
@@ -2453,11 +2453,6 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
-      "member": "setTransform/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
       "member": "strokeTextCluster/3",
       "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
@@ -2495,11 +2490,6 @@
       "interface": "CanvasGradient",
       "member": "set premultipliedAlpha",
       "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
-    },
-    {
-      "interface": "Path2D",
-      "member": "addPath/2",
-      "why": "dictionary DOMMatrix2DInit has 12 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "Path2D",
@@ -3065,11 +3055,6 @@
       "interface": "CSSStyleRule",
       "member": "get styleMap",
       "why": "interface StylePropertyMap is not bound"
-    },
-    {
-      "interface": "DOMPointReadOnly",
-      "member": "matrixTransform/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "DOMPointReadOnly",
@@ -3932,11 +3917,6 @@
       "why": "parameter type sequence<ClipboardItem>"
     },
     {
-      "interface": "CanvasPattern",
-      "member": "setTransform/1",
-      "why": "dictionary DOMMatrix2DInit has 12 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
       "interface": "HTMLAreaElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
@@ -4393,11 +4373,6 @@
     },
     {
       "interface": "DOMMatrixReadOnly",
-      "member": "multiply/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
-      "interface": "DOMMatrixReadOnly",
       "member": "toFloat32Array/0",
       "why": "result type Float32Array"
     },
@@ -4422,21 +4397,6 @@
       "why": "parameter type Float64Array"
     },
     {
-      "interface": "DOMMatrixReadOnly",
-      "member": "fromMatrix/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
-      "interface": "DOMMatrix",
-      "member": "multiplySelf/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
-      "interface": "DOMMatrix",
-      "member": "preMultiplySelf/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
-    },
-    {
       "interface": "DOMMatrix",
       "member": "fromFloat32Array/1",
       "why": "parameter type Float32Array"
@@ -4445,11 +4405,6 @@
       "interface": "DOMMatrix",
       "member": "fromFloat64Array/1",
       "why": "parameter type Float64Array"
-    },
-    {
-      "interface": "DOMMatrix",
-      "member": "fromMatrix/1",
-      "why": "dictionary DOMMatrixInit has 13 members whose presence Blink asks, more than overloads spell (4)"
     },
     {
       "interface": "SVGElement",
