@@ -202,7 +202,16 @@ builds at one program-wide width.
     `array.elementOf`: one type test per array storage, then that storage's
     read, with the same answers past the end and the same null-slot refusal.
     A value of no array storage refuses by name. array-element pins it
-    (`openAt`, every element storage at every kind of index).
+    (`openAt`, every element storage at every kind of index). Each array of
+    bigints plans the erased bigint's box with it, since this read boxes its
+    element.
+- **The length of an open value** (`Length` of an `Erased` operand, which
+  lowering emits where `Array.isArray` proved an array; C's
+  `nts_array_length`): an operand erased from an array the read can see reads
+  that array's length; any other goes through `array.lengthOf`, one type test
+  per array storage (a tagged template's among them), then its live length. A
+  value of no array storage (a tuple has no indexed count) refuses by name.
+  array-element pins it (`openLength`, `knownLength`).
   - A null reference slot is refused by name: one storage holds `null` for
     `(T | null)[]` and `undefined` for a JS array. C answers `undefined`,
     which is wrong for the first

@@ -21,4 +21,6 @@ for (const at of indices) {
     named_declines++;
   } else same('nullSlot', at);
 }
+for (let kind = 0; kind <= 10; kind++) same('openLength', kind);
+for (const n of numbers) same('knownLength', n);
 console.log(JSON.stringify({ cases, named_declines }));

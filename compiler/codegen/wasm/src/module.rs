@@ -100,6 +100,9 @@ pub(crate) enum FuncKey {
     /// An element of an open value, read through whichever array storage it
     /// has.
     OpenElement,
+    /// The length of an open value, read through whichever array storage it
+    /// has.
+    OpenLength,
     /// An export taking or answering open values, around its target.
     Boundary(Func),
     /// A JS primitive made an open value.

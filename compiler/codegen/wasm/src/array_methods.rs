@@ -356,6 +356,60 @@ fn open_element_body(m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.instruction(&I::End);
     Ok(f)
 }
+const NO_LENGTH: &str = "the length of an open value that is not an array";
+
+/// The length of an open value, which lowering reads only where
+/// `Array.isArray` proved it an array, as C asks `nts_array_length`. Where the
+/// operand was erased from an array the read can see, that array's length;
+/// otherwise one type test per array storage (a tagged template's among them),
+/// then that storage's live length. A value of no array storage (a tuple has
+/// no indexed count) refuses by name.
+pub(crate) fn open_length(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    value: ValueId,
+) -> Result<(), Failure> {
+    if let Some(array) = erased_from(b, value) {
+        return arrays::length(b, result, array);
+    }
+    let target = b.m.helper(
+        FuncKey::OpenLength,
+        "array.lengthOf",
+        vec![Physical::Reference(RefType::ANYREF), strings::STRING],
+        Some(Physical::Scalar(crate::types::Slot::I32)),
+        open_length_body,
+    )?;
+    b.load(value)?;
+    strings::constant(b, &b.func.name.clone());
+    b.call(target);
+    numeric::convert(b, &U32, &b.ty(result).clone())
+}
+
+/// Params: value, caller's name.
+fn open_length_body(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let types = m.types;
+    let mut f = Function::new([]);
+    for shape in types.arrays.values() {
+        let wrapper = HeapType::Concrete(shape.wrapper);
+        f.instructions(&[
+            I::LocalGet(0),
+            I::RefTestNonNull(wrapper),
+            I::If(BlockType::Empty),
+            I::LocalGet(0),
+            I::RefCastNonNull(wrapper),
+            I::StructGet {
+                struct_type_index: shape.wrapper,
+                field_index: gc::ARRAY_LENGTH,
+            },
+            I::Return,
+            I::End,
+        ]);
+    }
+    contract::refuse_in(&mut f, m, 1, NO_LENGTH)?;
+    f.instruction(&I::End);
+    Ok(f)
+}
+
 /// `nts_array_element`: an element read that answers `undefined` for an index
 /// naming no element, as node does, where a typed read traps.
 ///

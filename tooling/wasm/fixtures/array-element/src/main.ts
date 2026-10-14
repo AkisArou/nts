@@ -51,3 +51,36 @@ export function openAt(kind: number, at: number): string {
   if (v === null) return "null";
   return typeof v === "object" ? "object" : `${typeof v}:${String(v)}`;
 }
+
+function tagged(strings: TemplateStringsArray, ..._values: number[]): TemplateStringsArray {
+  return strings;
+}
+function lengthOf(kind: number): unknown {
+  if (kind === 8) return tagged`a${kind}b${kind}c`;
+  if (kind === 9) {
+    const empty: number[] = [];
+    return empty;
+  }
+  if (kind === 10) {
+    const grown: number[] = [];
+    for (let i = 0; i < 5; i++) grown.push(i);
+    grown.pop();
+    return grown;
+  }
+  return openArray(kind);
+}
+// The length of an open array, whose storage the read cannot see: one type
+// test per array storage, a tagged template's among them, as C asks
+// `nts_array_length`.
+export function openLength(kind: number): number {
+  const value = lengthOf(kind);
+  return Array.isArray(value) ? value.length : -1;
+}
+// Arrays made open where the read can see them, on a straight line and chosen
+// on a branch: each erases a typed array, whose own length is read.
+export function knownLength(n: number): number {
+  const xs: number[] = [n, n + 1, n + 2];
+  const open: unknown = xs;
+  const chosen: unknown = n > 0 ? xs : [n];
+  return (Array.isArray(open) ? open.length : -1) * 10 + (Array.isArray(chosen) ? chosen.length : -1);
+}

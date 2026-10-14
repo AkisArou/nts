@@ -605,6 +605,8 @@ impl<'b, 'p> Body<'b, 'p> {
             crate::arrays::length(self, result, value)
         } else if crate::collections::is_collection(ty) {
             crate::collections::size(self, result, value)
+        } else if ty == &HirType::Erased {
+            crate::array_methods::open_length(self, result, value)
         } else {
             Err(format!("the length of a {ty:?}").into())
         }
