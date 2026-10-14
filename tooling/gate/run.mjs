@@ -143,6 +143,7 @@ const STEPS = [
   { name: "llvm", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on LLVM" },
   { name: "llvm-rc", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on LLVM under RC" },
   { name: "jvm", elastic: true, slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "every example agrees with node on the JVM" },
+  { name: "wasm", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on Wasm" },
   { name: "dex", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, host: "an Android SDK with build-tools", doc: "d8 accepts emitted classes" },
   { name: "on-device", slots: 1, mem: 1, nts: true, fe: true, host: "an Android device on adb", doc: "bench cases agree on java and dalvikvm" },
   { name: "bench-agree", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "bench cases agree with node" },

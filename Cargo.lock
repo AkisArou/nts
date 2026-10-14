@@ -325,6 +325,7 @@ dependencies = [
  "nts-codegen-common",
  "nts-codegen-jvm",
  "nts-codegen-llvm",
+ "nts-codegen-wasm",
  "nts-core",
  "nts-diagnostics",
  "nts-frontend-ts",

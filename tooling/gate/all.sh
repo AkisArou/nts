@@ -1617,6 +1617,22 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   #
   # 322 -> 323, the same example.
   backend_examples 393 "through the JVM backend" exact 10 ); }
+# The programs through the WebAssembly backend, by the same `nts check` as
+# every other backend: the module the WasmGC backend emits, run by node through
+# its generated glue, against node running the source -- one pool, one order,
+# one comparison. Only the functions the check calls cross to JavaScript, and
+# every function is still compiled, so a body Wasm declines fails its program
+# as a C decline does (`tests/wasm/check-compiles-every-body`).
+#
+# **517 of 518, exact, and the one is named.** `an-optional-method-called-
+# optionally` is the parity gap: lowering refuses a method without a body and C
+# cuts it, while Wasm declines allocating the abstract closure that is left
+# (`Corkable#note`), so it emits nothing. Sixteen programs compare only part
+# of their cases: a case Wasm refuses by name where node answers -- a read
+# past the end, a parameter outside its declared facts, a `string | undefined`
+# result -- each one the parity list's work, and the ceiling holds them.
+wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
+  backend_examples 517 "through the Wasm backend" exact 16 "an-optional-method-called-optionally" ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
@@ -2621,6 +2637,7 @@ step "sweep" sweep
 step "llvm" llvm
 step "llvm-rc" llvm_rc
 step "jvm" jvm
+step "wasm" wasm
 # `dex` asks whether `d8` will accept what this backend emits; `on-device` asks
 # whether the accepted thing then *answers the same*. Nothing else in this
 # repository can: the `jvm` step runs on HotSpot and the differential's oracle

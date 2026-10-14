@@ -385,21 +385,20 @@ pub fn check(
     configure: impl FnOnce(TsgoApi) -> Result<TsgoApi>,
 ) -> Result<Report> {
     let backend = Backend::from_environment()?;
-    let provider = match backend {
-        Backend::Jvm => {
-            nts_codegen_common::provider::host_gc("jvm", counting()).map_err(anyhow::Error::msg)?
-        }
-        Backend::C | Backend::Llvm => {
-            if counting() {
-                hir::Provider::ReferenceCounting
-            } else {
-                hir::Provider::NoGc
+    let provider =
+        match backend {
+            Backend::Jvm => nts_codegen_common::provider::host_gc("jvm", counting())
+                .map_err(anyhow::Error::msg)?,
+            Backend::C | Backend::Llvm => {
+                if counting() {
+                    hir::Provider::ReferenceCounting
+                } else {
+                    hir::Provider::NoGc
+                }
             }
-        }
-        Backend::Wasm => bail!(
-            "NTS5001: wasm declines the existing check runner during bring-up; use emit-wasm and its generated program.mjs"
-        ),
-    };
+            Backend::Wasm => nts_codegen_common::provider::host_gc("wasm", counting())
+                .map_err(anyhow::Error::msg)?,
+        };
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name through `PATH`.
     //
@@ -547,8 +546,8 @@ pub fn check(
     // `render`, because a JVM program is a directory of classes driven by
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
-    let native = if Backend::from_environment()? == Backend::Jvm {
-        run_jvm(
+    let native = match backend {
+        Backend::Jvm => run_jvm(
             dir,
             &prepared.program,
             &snapshot.sources,
@@ -556,9 +555,15 @@ pub fn check(
             &mut refused,
             &mut aborts,
             &mut timeouts,
-        )?
-    } else {
-        run_native(
+        )?,
+        Backend::Wasm => run_wasm(
+            dir,
+            &prepared.program,
+            &snapshot.sources,
+            &testable,
+            &mut refused,
+        )?,
+        Backend::C | Backend::Llvm => run_native(
             dir,
             &prepared.program,
             &snapshot.sources,
@@ -566,7 +571,7 @@ pub fn check(
             &mut refused,
             &mut aborts,
             &mut timeouts,
-        )?
+        )?,
     };
     let engine = run_node(dir, &entry, &testable)?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
@@ -2169,11 +2174,26 @@ fn growth(complaint: &str) -> Option<String> {
     })
 }
 
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
-    let absolute = entry
-        .canonicalize_utf8()
-        .with_context(|| format!("locating {entry}"))?;
+/// The node-side driver: one line per case into `NTS_DIFF_RESULTS`, importing
+/// `import` -- the program's source for node, the module's generated glue for
+/// the Wasm backend -- so both runs ask the same questions in the same order.
+///
+/// A case that throws is `threw` (or `rejected`), whatever was thrown: neither
+/// side's value is compared. Under Wasm a case the module *declines* by name
+/// (NTS5001) is `refused` instead, as a native stop on that case is; an
+/// uncaught object the program made carries `uncaught` and is its own throw.
+fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
+    let stopped = match engine {
+        Engine::Node => {
+            "function stopped(name, at, error, word) { emit(`${name} ${at} ${word}\\n`); }\n"
+        }
+        Engine::Wasm => {
+            "function stopped(name, at, error, word) {\n\
+             \x20 const declined = error?.code === \"NTS5001\" && !error.uncaught;\n\
+             \x20 emit(`${name} ${at} ${declined ? \"refused\" : word}\\n`);\n\
+             }\n"
+        }
+    };
     let mut driver = format!(
         "import {{ openSync, writeSync, closeSync }} from \"node:fs\";\n\
          // Results to their own file, as on the compiled side: stdout is the\n\
@@ -2203,8 +2223,9 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
          \x20 const bits = view.getBigUint64(0).toString(16).padStart(16, \"0\");\n\
          \x20 emit(`${{name}} ${{at}} ${{bits}}\\n`);\n\
          }}\n",
-        format!("file://{absolute}")
+        import.to_owned()
     );
+    driver.push_str(stopped);
     for (one, at, tuple) in interleaved(testable) {
         // A method lowers to `Class#method`, which is not an export.
         let exported = one.name.replace('#', "__");
@@ -2250,13 +2271,13 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
                 Some(HirType::Void) => writeln!(
                     driver,
                     "try {{ await {call}; emit(`{} {at} undefined\n`); }} \
-                     catch {{ emit(`{} {at} rejected\n`); }}",
+                     catch (error) {{ stopped({:?}, {at}, error, \"rejected\"); }}",
                     one.name, one.name
                 ),
                 Some(_) => writeln!(
                     driver,
                     "try {{ {show}({:?}, {at}, await {call}); }} \
-                     catch {{ emit(`{} {at} rejected\n`); }}",
+                     catch (error) {{ stopped({:?}, {at}, error, \"rejected\"); }}",
                     one.name, one.name
                 ),
                 // The same guard the two arms above have, for the same
@@ -2282,7 +2303,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
                 None => writeln!(
                     driver,
                     "try {{ {show}({:?}, {at}, {call}); }} \
-                     catch {{ emit(`{} {at} threw\n`); }}",
+                     catch (error) {{ stopped({:?}, {at}, error, \"threw\"); }}",
                     one.name, one.name
                 ),
             };
@@ -2295,6 +2316,101 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
         "emit(\"done {}\\n\"); closeSync(resultsFd);",
         interleaved(testable).len()
     );
+    driver
+}
+
+/// The program as a WebAssembly module, run by node with [`run_node`]'s driver.
+///
+/// The driver imports the module's generated glue instead of the source, so
+/// the pool, the order and every line are node's own and the two runs compare
+/// as any backend's do. A module declines a case by name without ending the
+/// process, so nothing restarts: a declined case's line says `refused`, and
+/// its index joins `refused` as a native stop on that case does.
+///
+/// **Only the testable functions cross to JavaScript; every function is still
+/// compiled.** The emitter lowers every body, published or not, so a decline
+/// in any of them -- a non-scalar export's included -- fails the program as a
+/// C decline does. Publishing an export this check never calls would only
+/// decline the program over a boundary nothing crosses here, which the census
+/// and the boundary work measure.
+fn run_wasm(
+    dir: &Utf8Path,
+    program: &hir::Program,
+    sources: &[nts_diagnostics::SourceFile],
+    testable: &[Testable],
+    refused: &mut Vec<usize>,
+) -> Result<Run> {
+    let mut program = program.clone();
+    let called: std::collections::HashSet<&str> =
+        testable.iter().map(|one| one.name.as_str()).collect();
+    program
+        .public_api
+        .retain(|(emitted, _)| called.contains(emitted.as_str()));
+    program.public_namespaces.clear();
+    let emitted = match nts_codegen_wasm::emit(&program) {
+        Ok(emitted) => emitted,
+        Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => {
+            for diagnostic in &diagnostics {
+                eprintln!(
+                    "  not emitted: {}",
+                    nts_diagnostics::diagnostic_line(sources, diagnostic)
+                );
+            }
+            bail!(
+                "the Wasm backend declined {} shape(s), listed above; nothing can be \
+                 checked until they are removed or supported",
+                diagnostics.len()
+            );
+        }
+        Err(error) => return Err(error.into()),
+    };
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node)
+        .map_err(anyhow::Error::msg)?;
+    let module = dir.join("wasm");
+    std::fs::create_dir_all(&module)?;
+    std::fs::write(module.join("program.wasm"), &emitted.bytes)?;
+    std::fs::write(module.join(nts_codegen_wasm::PROGRAM_FILE), glue.program)?;
+    std::fs::write(module.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;
+    let import = format!("file://{}", module.join(nts_codegen_wasm::PROGRAM_FILE));
+    let path = dir.join("wasm_driver.mjs");
+    std::fs::write(&path, driver(&import, testable, Engine::Wasm))?;
+    let results_path = dir.join("results-wasm.txt");
+    let _ = std::fs::remove_file(&results_path);
+    let run = without_colour(bounded("node"))
+        .env("NTS_DIFF_RESULTS", results_path.as_str())
+        .arg(&path)
+        .output()
+        .context("running the Wasm module under node")?;
+    let mut results = Vec::new();
+    for (at, line) in node_results("wasm", &results_path, &run)?
+        .into_iter()
+        .enumerate()
+    {
+        if line.ends_with(" refused") {
+            refused.push(at);
+        } else {
+            results.push(line);
+        }
+    }
+    Ok(Run {
+        results,
+        output: lines(&run.stdout),
+        thrown: Vec::new(),
+    })
+}
+
+/// Which engine a driver's import is run on.
+#[derive(Clone, Copy)]
+enum Engine {
+    Node,
+    Wasm,
+}
+
+fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
+    let absolute = entry
+        .canonicalize_utf8()
+        .with_context(|| format!("locating {entry}"))?;
+    let driver = driver(&format!("file://{absolute}"), testable, Engine::Node);
     let path = dir.join("check_driver.mjs");
     std::fs::write(&path, driver)?;
     let hook = dir.join("resolve_ts.mjs");
@@ -2327,7 +2443,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
         .arg(&path)
         .output()
         .context("running node")?;
-    let results = node_results(&results_path, &run)?;
+    let results = node_results("node", &results_path, &run)?;
     Ok(Run {
         results,
         output: lines(&run.stdout),
@@ -2355,7 +2471,11 @@ fn without_colour(mut command: std::process::Command) -> std::process::Command {
 /// Node's results file, judged: the `done` line stripped, and its absence
 /// split by how node ended. Apart from `run_node` so the rules about a
 /// truncated file sit in one place.
-fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<Vec<String>> {
+fn node_results(
+    engine: &str,
+    results_path: &Utf8Path,
+    run: &std::process::Output,
+) -> Result<Vec<String>> {
     let mut results = std::fs::read(results_path)
         .map(|bytes| lines(&bytes))
         .unwrap_or_default();
@@ -2370,7 +2490,7 @@ fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<V
         // so it is printed here; turning it into an error lost three examples'
         // worth of answered cases on its first corpus run.
         if results.is_empty() && !run.status.success() {
-            bail!("node: {}", String::from_utf8_lossy(&run.stderr));
+            bail!("{engine}: {}", String::from_utf8_lossy(&run.stderr));
         }
         // Split by how it ended. Non-zero or a signal: the run died, which its
         // status already says, and the answered cases are kept. **Exit 0 with no
@@ -2378,10 +2498,12 @@ fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<V
         // off by something that still exited zero -- nothing legitimate does
         // that, so it is not a notice.
         if run.status.success() {
-            bail!("node exited 0 without writing its `done` line: the results file is truncated");
+            bail!(
+                "{engine} exited 0 without writing its `done` line: the results file is truncated"
+            );
         }
         eprintln!(
-            "  node stopped part-way: {} result(s), no `done` line ({})",
+            "  {engine} stopped part-way: {} result(s), no `done` line ({})",
             results.len(),
             String::from_utf8_lossy(&run.stderr)
                 .lines()

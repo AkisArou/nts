@@ -75,14 +75,32 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
         .unwrap();
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("requires --out"));
+    // `check` drives the module as it drives every backend's program.
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["check", "--no-acquire"])
         .arg(&supported)
         .env("NTS_BACKEND", "wasm")
         .output()
         .unwrap();
-    assert!(!result.status.success());
-    assert!(String::from_utf8_lossy(&result.stderr).contains("NTS5001: wasm declines"));
+    let said = String::from_utf8_lossy(&result.stdout);
+    assert!(
+        result.status.success() && said.contains("agreed on every case"),
+        "{said}{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    // It publishes only what it calls and compiles every body, so a body Wasm
+    // declines in an export it never calls still fails the check, by name.
+    let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["check", "--no-acquire"])
+        .arg(root.join("tests/wasm/check-compiles-every-body"))
+        .env("NTS_BACKEND", "wasm")
+        .output()
+        .unwrap();
+    let said = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        !result.status.success() && said.contains("NTS5001 wasm declines `keyed`"),
+        "{said}"
+    );
     std::fs::remove_dir_all(scratch).unwrap();
 }
 

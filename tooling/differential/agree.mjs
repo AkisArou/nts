@@ -174,7 +174,9 @@ export function classify(status, out) {
     if (/disagree between the compiled program and node/.test(out)) return Outcome.DISAGREES;
     if (/the compiled program aborted \d+ time/.test(out)) return Outcome.ABORTED;
     if (/no case was checked: all \d+ declined/.test(out)) return Outcome.ALL_DECLINED;
-    if (/the (?:LLVM )?backend declined \d+ function/.test(out)) return Outcome.BACKEND_DECLINED;
+    // The Wasm backend counts the shapes it declined: a function, or a public
+    // surface it cannot publish.
+    if (/the (?:LLVM |Wasm )?backend declined \d+ (?:function|shape)/.test(out)) return Outcome.BACKEND_DECLINED;
     if (/invalid HIR/.test(out)) return Outcome.INVALID_HIR;
     // A workspace dependency that will not resolve is not a typecheck
     // regression: `tests/programs/library` in a worktree. Same keys as the gate.

@@ -57,8 +57,9 @@ test("a crate no rule names owes what the crates that use it owe", () => {
 });
 
 test("a backend the CLI selects owes the steps that select it, not everything the CLI owes", () => {
-  // No gate step runs the Wasm backend through the CLI: only its own tests.
-  owes("compiler/codegen/wasm/src/lib.rs", ["tests"], { not: ["interop", "examples", "profile", "test262-cases", "outcomes"] });
+  // Only its own tests and the `wasm` step run the Wasm backend, through the
+  // CLI or the differential's NTS_BACKEND=wasm: none of the C steps.
+  owes("compiler/codegen/wasm/src/lib.rs", ["tests", "wasm"], { not: ["interop", "examples", "profile", "test262-cases", "outcomes", "blockers"] });
   owes("compiler/codegen/napi/src/lib.rs", ["addons", "profile", "divergence"], { not: ["interop", "examples"] });
   // The JVM and LLVM backends build interop projects and pinned outcomes
   // through the CLI, so their own rules owe those.
