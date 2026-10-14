@@ -22,7 +22,8 @@ sessionStorage, the clipboard, crypto's random values and UUIDs,
 the mutation, resize and intersection observers, timers and
 `queueMicrotask`, parsing and serializing, drag data, the 2D canvas,
 scrolling, promise results (`await video.play()`, `image.decode()`,
-fullscreen), and IDL enums as literal unions. About 7,000 functions bind;
+fullscreen, a body's or a file's bytes: `await file.arrayBuffer()`,
+`response.bytes()`), and IDL enums as literal unions. About 7,000 functions bind;
 what does not yet is listed with its reason in
 `tooling/chromium/bindgen/report.json`, and every workaround in
 [contracts/workarounds.md](contracts/workarounds.md).

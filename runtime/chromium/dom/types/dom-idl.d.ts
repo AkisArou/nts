@@ -31738,6 +31738,14 @@ declare module "nts:dom" {
      */
     readonly type: StringView;
     /**
+     * @ntsSymbol nts_dom_Blob_arrayBuffer
+     */
+    arrayBuffer(this: Blob): Promise<ArrayBuffer>;
+    /**
+     * @ntsSymbol nts_dom_Blob_bytes
+     */
+    bytes(this: Blob): Promise<Uint8Array<ArrayBuffer>>;
+    /**
      * @ntsSymbol nts_dom_Blob_slice_3
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -32387,9 +32395,17 @@ declare module "nts:dom" {
      */
     readonly bodyUsed: boolean;
     /**
+     * @ntsSymbol nts_dom_Response_arrayBuffer
+     */
+    arrayBuffer(this: Response): Promise<ArrayBuffer>;
+    /**
      * @ntsSymbol nts_dom_Response_blob
      */
     blob(this: Response): Promise<Blob>;
+    /**
+     * @ntsSymbol nts_dom_Response_bytes
+     */
+    bytes(this: Response): Promise<Uint8Array<ArrayBuffer>>;
     /**
      * @ntsSymbol nts_dom_Response_clone
      * @ntsThrows error nts_dom_exception_take_message
@@ -32567,9 +32583,17 @@ declare module "nts:dom" {
      */
     readonly bodyUsed: boolean;
     /**
+     * @ntsSymbol nts_dom_Request_arrayBuffer
+     */
+    arrayBuffer(this: Request): Promise<ArrayBuffer>;
+    /**
      * @ntsSymbol nts_dom_Request_blob
      */
     blob(this: Request): Promise<Blob>;
+    /**
+     * @ntsSymbol nts_dom_Request_bytes
+     */
+    bytes(this: Request): Promise<Uint8Array<ArrayBuffer>>;
     /**
      * @ntsSymbol nts_dom_Request_clone
      * @ntsThrows error nts_dom_exception_take_message

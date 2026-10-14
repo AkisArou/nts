@@ -40,6 +40,12 @@ typedef struct NtsDomPromiseOps {
   // Fulfilled with a Blink object, as a DOM handle the promise holds
   // (`animation.finished`).
   void (*fulfil_handle)(void* state, NtsPromise* promise, void* handle);
+  // Fulfilled with bytes, which the host copies into a Uint8Array of the
+  // program's (`blob.bytes()`), or into an ArrayBuffer (`blob.arrayBuffer()`).
+  void (*fulfil_bytes)(void* state, NtsPromise* promise, const uint8_t* bytes,
+                       size_t length);
+  void (*fulfil_buffer)(void* state, NtsPromise* promise,
+                        const uint8_t* bytes, size_t length);
   void (*reject)(void* state, NtsPromise* promise, const char* name,
                  const char* message);
   void (*drop)(void* state, NtsPromise* promise);

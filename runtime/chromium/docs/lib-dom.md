@@ -81,13 +81,13 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-14, 293 interfaces, 7088 functions):
+  2026-10-14, 293 interfaces, 7094 functions):
   - lib.dom.d.ts declares 3621 members on the bound interfaces.
-  - 3140 are bound, the CSS properties among them. Blink serves those
+  - 3146 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 244 are in Blink's IDL but skipped, and `report.json` says why. The
-    largest groups: 70 result types (`any`, frozen arrays, promises,
+  - 238 are in Blink's IDL but skipped, and `report.json` says why. The
+    largest groups: 64 result types (`any`, frozen arrays, promises,
     sequences, `object`), 62 naming an interface not bound, 60 defined in
     Blink's modules component on an interface the allowlist does not take
     from there, 16 touch-event members Blink enables per platform, and 15
@@ -230,6 +230,7 @@ generated, and checked against page script by the differential vectors.
 | `ctx.fill("evenodd")`, `history.scrollRestoration = "manual"` (an IDL enum) | the enum is its literal union (`type SelectionMode = "select" \| ...`), crossing as a C string matched against Blink's enum class; outside it, an argument throws the binding's TypeError and an attribute keeps its value with a console warning. A value read (`document.readyState`) is the union too, answered as Blink's own static literal | an enum-typed argument or attribute |
 | `requestIdleCallback(f, { timeout: 500 })` | `requestIdleCallback(f, 500)`; `f(deadline)` gets the IdleDeadline (`timeRemaining()`, `didTimeout`) | an options argument |
 | `new Image(w, h)`, `new Audio(src)`, `new Option(text, value)` (a [LegacyFactoryFunction]) | `newImage(w, h)`, named for the factory, calling `CreateForJSConstructor` as V8's binding does | `new` of the factory, once the delegation names the function for the `new` expression's callee (blockers/lib-dom-new-of-a-legacy-factory-function) |
+| `await blob.bytes()`, `await response.arrayBuffer()` (a `Promise<Uint8Array>` or `Promise<ArrayBuffer>`) | `bytes(): Promise<Uint8Array<ArrayBuffer>>`, `arrayBuffer(): Promise<ArrayBuffer>`: the program's promise, fulfilled with its own copy of the bytes Blink answered (the host's `fulfil_bytes`, `fulfil_buffer`), where page script is handed Blink's | a promise result |
 | `queueMicrotask(f)` | `queueMicrotask(f)`: `f` runs once as a microtask in Blink's queue, the one the program's promise jobs (the host owns the checkpoints) and page script's share, so their order is page script's | a global function |
 | `AbortSignal.any([a, b])` (a `sequence<T>` argument of objects) | `AbortSignal_any(signals: Counted<CHandles<AbortSignal>, c_size_t>)`: the program's array lent for the call (`@ntsNoEscape`), its element block C's array of handles beside its count, made into Blink's vector as V8's conversion makes it (nts_dom::ObjectsOf) | an array argument. A list of strings waits on a lent array of views (compiler request 17), one of numbers on the compiler lending a `number[]`'s doubles (blockers/lib-dom-a-number-array-for-a-typed-array-parameter), and Blob's parts on overload choice by element (blockers/lib-dom-an-array-overload-chosen-by-its-elements) |
 | `fetch(request)`, `new Request(request, init)`, `new Path2D(path)` (an interface beside a string: `(Request or USVString)`) | one overload per bound interface, its symbol naming the arm (`fetch_2_Request`), beside the string's, which keeps the name it had while the string was all that bound (`fetch_2`) | the argument's static type |

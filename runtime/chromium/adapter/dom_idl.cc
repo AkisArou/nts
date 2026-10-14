@@ -44975,6 +44975,24 @@ const NtsStringView* nts_dom_Blob_get_type(NtsDomBlob* self) {
   return context.Lend(nts_dom::AsString(receiver->type()), false);
 }
 
+struct NtsPromise* nts_dom_Blob_arrayBuffer(NtsDomBlob* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Blob>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->arrayBuffer(script_state));
+}
+
+struct NtsPromise* nts_dom_Blob_bytes(NtsDomBlob* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Blob>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->bytes(script_state));
+}
+
 NtsDomBlob* nts_dom_Blob_slice_3(NtsDomBlob* self, double start, double end, const NtsBorrowedString* contentType, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -45644,6 +45662,15 @@ bool nts_dom_Response_get_bodyUsed(NtsDomResponse* self) {
   return static_cast<bool>(receiver->bodyUsed());
 }
 
+struct NtsPromise* nts_dom_Response_arrayBuffer(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->arrayBuffer(script_state, exception_state));
+}
+
 struct NtsPromise* nts_dom_Response_blob(NtsDomResponse* self) {
   NtsDomContext& context = nts_dom::Current();
   nts_dom::Rejections exception_state;
@@ -45651,6 +45678,15 @@ struct NtsPromise* nts_dom_Response_blob(NtsDomResponse* self) {
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->blob(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Response_bytes(NtsDomResponse* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Response>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->bytes(script_state, exception_state));
 }
 
 NtsDomResponse* nts_dom_Response_clone(NtsDomResponse* self, NtsDomException** error) {
@@ -45843,6 +45879,15 @@ bool nts_dom_Request_get_bodyUsed(NtsDomRequest* self) {
   return static_cast<bool>(receiver->bodyUsed());
 }
 
+struct NtsPromise* nts_dom_Request_arrayBuffer(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->arrayBuffer(script_state, exception_state));
+}
+
 struct NtsPromise* nts_dom_Request_blob(NtsDomRequest* self) {
   NtsDomContext& context = nts_dom::Current();
   nts_dom::Rejections exception_state;
@@ -45850,6 +45895,15 @@ struct NtsPromise* nts_dom_Request_blob(NtsDomRequest* self) {
   blink::ScriptState* script_state = context.MainWorld();
   blink::ScriptState::Scope script_scope(script_state);
   return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->blob(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_Request_bytes(NtsDomRequest* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::Request>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->bytes(script_state, exception_state));
 }
 
 NtsDomRequest* nts_dom_Request_clone(NtsDomRequest* self, NtsDomException** error) {

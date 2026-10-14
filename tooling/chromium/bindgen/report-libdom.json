@@ -1,15 +1,15 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3140,
-    "skipped": 244,
+    "bound": 3146,
+    "skipped": 238,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
     "absent: other": 33
   },
   "skippedBy": {
-    "result type": 70,
+    "result type": 64,
     "defined in": 60,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
     "parameter type": 15,
@@ -3426,14 +3426,14 @@
     },
     "Blob": {
       "bound": [
+        "arrayBuffer",
+        "bytes",
         "size",
         "slice",
         "text",
         "type"
       ],
       "skipped": {
-        "arrayBuffer": "result type Promise<ArrayBuffer>",
-        "bytes": "result type Promise<Uint8Array>",
         "stream": "interface ReadableStream is not bound"
       },
       "absent": {}
@@ -3593,8 +3593,10 @@
     },
     "Response": {
       "bound": [
+        "arrayBuffer",
         "blob",
         "bodyUsed",
+        "bytes",
         "clone",
         "formData",
         "headers",
@@ -3607,17 +3609,17 @@
         "url"
       ],
       "skipped": {
-        "arrayBuffer": "result type Promise<ArrayBuffer>",
         "body": "interface ReadableStream is not bound",
-        "bytes": "result type Promise<Uint8Array>",
         "json": "result type Promise<any>"
       },
       "absent": {}
     },
     "Request": {
       "bound": [
+        "arrayBuffer",
         "blob",
         "bodyUsed",
+        "bytes",
         "cache",
         "clone",
         "credentials",
@@ -3636,9 +3638,7 @@
         "url"
       ],
       "skipped": {
-        "arrayBuffer": "result type Promise<ArrayBuffer>",
         "body": "interface ReadableStream is not bound",
-        "bytes": "result type Promise<Uint8Array>",
         "json": "result type Promise<any>"
       },
       "absent": {}

@@ -1,5 +1,5 @@
 {
-  "bound": 7088,
+  "bound": 7094,
   "skipped": [
     {
       "interface": "AddEventListenerOptions",
@@ -3558,16 +3558,6 @@
     },
     {
       "interface": "Blob",
-      "member": "arrayBuffer/0",
-      "why": "result type Promise<ArrayBuffer>"
-    },
-    {
-      "interface": "Blob",
-      "member": "bytes/0",
-      "why": "result type Promise<Uint8Array>"
-    },
-    {
-      "interface": "Blob",
       "member": "slice/1",
       "why": "default `0x7FFFFFFFFFFFFFFF` of argument end"
     },
@@ -3818,16 +3808,6 @@
     },
     {
       "interface": "Response",
-      "member": "arrayBuffer/0",
-      "why": "result type Promise<ArrayBuffer>"
-    },
-    {
-      "interface": "Response",
-      "member": "bytes/0",
-      "why": "result type Promise<Uint8Array>"
-    },
-    {
-      "interface": "Response",
       "member": "json/0",
       "why": "result type Promise<any>"
     },
@@ -3855,16 +3835,6 @@
       "interface": "Request",
       "member": "get body",
       "why": "interface ReadableStream is not bound"
-    },
-    {
-      "interface": "Request",
-      "member": "arrayBuffer/0",
-      "why": "result type Promise<ArrayBuffer>"
-    },
-    {
-      "interface": "Request",
-      "member": "bytes/0",
-      "why": "result type Promise<Uint8Array>"
     },
     {
       "interface": "Request",

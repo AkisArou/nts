@@ -149,6 +149,30 @@ static void promise_fulfil_handle(void *state, NtsPromise *promise,
                             nts_value_of_handle(handle, NTS_TAG_HANDLE_HOST));
   nts_release((NtsHeader *)promise);
 }
+/* Bytes Blink answered, copied into a Uint8Array of the program's: the one
+   copy a native buffer costs, where page script is handed Blink's. */
+static NtsView *promise_bytes(const uint8_t *bytes, size_t length) {
+  return nts_view_from_bytes(bytes, (double)length);
+}
+static void promise_fulfil_bytes(void *state, NtsPromise *promise,
+                                 const uint8_t *bytes, size_t length) {
+  request_checkpoint_end(state);
+  NtsView *value = promise_bytes(bytes, length);
+  nts_promise_fulfill_reference(promise, (NtsHeader *)value);
+  nts_release((NtsHeader *)value);
+  nts_release((NtsHeader *)promise);
+}
+/* The same, as the ArrayBuffer under that Uint8Array. */
+static void promise_fulfil_buffer(void *state, NtsPromise *promise,
+                                  const uint8_t *bytes, size_t length) {
+  request_checkpoint_end(state);
+  NtsView *view = promise_bytes(bytes, length);
+  NtsBuffer *value = nts_view_buffer(view); /* owned: it retains */
+  nts_promise_fulfill_reference(promise, (NtsHeader *)value);
+  nts_release((NtsHeader *)value);
+  nts_release((NtsHeader *)view);
+  nts_release((NtsHeader *)promise);
+}
 static void promise_reject(void *state, NtsPromise *promise, const char *name,
                            const char *message) {
   request_checkpoint_end(state);
@@ -160,8 +184,9 @@ static void promise_drop(void *state, NtsPromise *promise) {
   nts_release((NtsHeader *)promise);
 }
 static const NtsDomPromiseOps promise_ops = {
-    promise_make,   promise_fulfil, promise_fulfil_string,
-    promise_fulfil_handle, promise_reject, promise_drop};
+    promise_make,          promise_fulfil,        promise_fulfil_string,
+    promise_fulfil_handle, promise_fulfil_bytes,  promise_fulfil_buffer,
+    promise_reject,        promise_drop};
 
 /* DOM handles as the runtime counts a host class's erased values (a promise
    settled with one, an `unknown` holding one): nts_dom_retain roots the

@@ -54,6 +54,26 @@ async function settleFetch(label: string): Promise<void> {
   document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
 }
 
+// Promises fulfilled with bytes, each the program's own copy: a response's
+// body as a Uint8Array and as an ArrayBuffer, a blob's (the response's, as
+// a Blob) as a Uint8Array, and an empty blob's as an ArrayBuffer.
+async function settleBytes(label: string): Promise<void> {
+  let outcome = "";
+  try {
+    const bytes = await (await fetch("data:text/plain,hi%21")).bytes();
+    const buffer = await (await fetch("data:text/plain,hey")).arrayBuffer();
+    const blob = await (await fetch("data:text/plain,ab")).blob();
+    const fromBlob = await blob.bytes();
+    const empty = await new Blob().arrayBuffer();
+    const first = new Uint8Array(buffer);
+    outcome = "fulfilled " + bytes.length + ":" + bytes[0] + "," + bytes[2] + "|" + buffer.byteLength + ":" + first[0] +
+      "," + first[2] + "|" + fromBlob.length + ":" + fromBlob[1] + "|" + empty.byteLength;
+  } catch (error) {
+    outcome = "rejected " + (error as Error).name;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
 // The same for a promise fulfilled with a DOM object: the stylesheet
 // replace() settles with is the one it was called on, holding the new rule.
 async function settleSheet(label: string): Promise<void> {
@@ -787,7 +807,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -801,6 +821,7 @@ export function startLibDomPromises(): void {
     // (blockers/lib-dom-new-that-fits-no-constructor).
     settleText("text", (): Promise<string> => new Blob().text());
     settleSheet("sheet");
+    settleBytes("bytes");
     // Rejected here, before any permission is asked: the harness's page is
     // not focused, which the Clipboard API requires. The rejection is
     // Blink's, carried through the promise bridge. (An app's round trip is

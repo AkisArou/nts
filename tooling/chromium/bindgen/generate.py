@@ -241,7 +241,8 @@ class Function:
         self.receiver = True  # false for a constructor or a downcast: no `self`
 
     def needs_context(self):
-        return (self.reactions or self.result.kind in ("string", "promise", "promise_string", "promise_handle") or any(p.context for p in self.params)
+        return (self.reactions or self.result.kind == "string" or self.result.kind.startswith("promise")
+                or any(p.context for p in self.params)
                 or "context." in self.expression or any("context." in s for s in self.statements))
 
 
@@ -1084,6 +1085,13 @@ class Generator:
             # (NTS_TAG_HANDLE_HOST; nts_dom::AnswerWrappable).
             if settled.is_interface and settled.identifier in self.bound:
                 return Result("struct NtsPromise*", f"Promise<{settled.identifier}>", "promise_handle")
+            # `Promise<Uint8Array>`, `Promise<ArrayBuffer>` (`blob.bytes()`,
+            # `blob.arrayBuffer()`): settled with the program's own copy of
+            # the bytes (nts_dom::Answer, the host's fulfil_bytes).
+            if settled.is_array_buffer:
+                return Result("struct NtsPromise*", "Promise<ArrayBuffer>", "promise_bytes")
+            if settled.is_typed_array_type and settled.keyword_typename == "Uint8Array":
+                return Result("struct NtsPromise*", "Promise<Uint8Array<ArrayBuffer>>", "promise_bytes")
             raise Skip(f"result type {idl_type.syntactic_form}")
         keyword = unwrapped.keyword_typename
         if keyword in STRINGS or keyword == BYTE_STRING:

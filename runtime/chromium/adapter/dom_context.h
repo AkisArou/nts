@@ -40,6 +40,9 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
+#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
+#include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
@@ -642,6 +645,16 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLString> promise);
+// The same, fulfilled with Blink's bytes, which the program's promise holds
+// as its own: a Uint8Array (`blob.bytes()`), an ArrayBuffer
+// (`blob.arrayBuffer()`).
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::NotShared<blink::DOMUint8Array>>
+                       promise);
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::DOMArrayBuffer> promise);
 // The same, fulfilled with a Blink object: the program's promise holds it as
 // a DOM handle (`animation.finished` answers the Animation).
 NtsPromise *AnswerWrappable(NtsDomContext &context,
