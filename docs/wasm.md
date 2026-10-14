@@ -159,6 +159,16 @@ them only as quoted export names, and every local it declares is the glue's.
   display, root first, so an ancestor's position is its depth. Where a class
   sits at one depth in every display that holds it, `instanceof` checks the
   display's length and reads that slot; a class at two depths keeps the scan.
+- **A class test names whatever types the core lists**, each tested by the
+  identity it carries, once: a class's, or a structural type's (an
+  interface, a literal type) record shape, one per layout, as C compares
+  descriptors. `instanceof` lists classes; `in` over a union lists every type
+  that declares the name; a `function`'s `this:` (`InstanceOf { by_layout }`)
+  lists every identity laid out at the storage its body reads, a literal's
+  and a same-shaped class's among them (`expand_layout_tests`). layout-tests
+  (51 cases): an interface `this:` given a literal, an instance and a
+  same-shaped class; a class `this:` given an instance and a literal; `in`
+  over a union of two interfaces.
 
 ### Function values (1c)
 

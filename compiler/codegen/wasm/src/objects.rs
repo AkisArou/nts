@@ -515,13 +515,17 @@ pub(crate) fn instance(
         return Err("instanceof without a class".into());
     }
     let objects = &b.types().objects;
-    let tests = classes
-        .iter()
-        .map(|ty| {
-            let identity = objects.class(*ty)?;
-            Ok((identity, objects.depth(identity)))
-        })
-        .collect::<Result<Vec<_>, Failure>>()?;
+    // Each listed type's identity, once: a class's, or a structural type's
+    // record shape's. `instanceof` lists classes; `in`, a narrowing and a
+    // `this:` layout test list whatever the core admits, as C reads them.
+    let mut identities = std::collections::BTreeSet::new();
+    for ty in classes {
+        identities.insert(objects.identity(*ty)?);
+    }
+    let tests: Vec<(u32, Option<u32>)> = identities
+        .into_iter()
+        .map(|identity| (identity, objects.depth(identity)))
+        .collect();
     if b.ty(value) != &HirType::Erased && !is_reference(b.ty(value)) {
         b.instruction(&I::I32Const(0));
         return Ok(());

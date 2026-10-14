@@ -177,6 +177,25 @@ fn source_filled_arrays_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A `function`'s `this:` read at its type's storage after a layout test,
+/// which an instance, a literal typed as the class and a same-shaped class all
+/// pass: the test lists each identity laid out there, a class's or not.
+#[test]
+fn source_layout_tests_agree_with_node() {
+    let fixture = common::repository().join("tooling/wasm/fixtures/layout-tests");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "layout-tests",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 #[test]
 fn source_array_helpers_agree_with_node() {
     let fixture = common::repository().join("tooling/wasm/fixtures/array-methods");

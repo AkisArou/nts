@@ -27,7 +27,6 @@ pub(crate) struct Object {
     /// storage records them.
     pub(crate) presence: Option<u32>,
     identity: u32,
-    nominal: bool,
 }
 #[derive(Debug)]
 pub(crate) struct Descriptor {
@@ -135,7 +134,6 @@ impl Plan {
                     virtual_: None,
                     presence: None,
                     identity: identities[&key],
-                    nominal: matches!(key, Identity::Class(_)),
                 },
             );
             if let Some(base) = layout.base {
@@ -173,14 +171,14 @@ impl Plan {
     pub(crate) fn depth(&self, identity: u32) -> Option<u32> {
         self.depths.get(&identity).copied().flatten()
     }
-    pub(crate) fn class(&self, id: ClassId) -> Result<u32, Failure> {
-        let object = self.object(&HirType::Managed(ManagedType::Object(id)))?;
-        if !object.nominal {
-            return Err(
-                format!("class `{}` has no declared semantic identity", object.name).into(),
-            );
-        }
-        Ok(object.identity)
+    /// The identity an object of type `id` carries: its class's, or, for a
+    /// structural type (an interface, a literal type), its layout's record
+    /// shape's. A class test names these, as C compares descriptors; which
+    /// types a test admits is the core's list to say.
+    pub(crate) fn identity(&self, id: ClassId) -> Result<u32, Failure> {
+        Ok(self
+            .object(&HirType::Managed(ManagedType::Object(id)))?
+            .identity)
     }
     /// A function value's typed-entry group, if it has one, and where its
     /// fields start: after the header, the uniform entries and that group.
