@@ -4049,7 +4049,21 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
                 targets.join(", ")
             )
         };
-        let header = package.join(entry.header.as_deref().unwrap_or_default());
+        // **As the program's C includes it, not where this machine keeps it.**
+        // Every compile that reads a package's header -- the program, its
+        // native witness, the package's own C -- has the package's native
+        // directory on its include path (`program_includes`, `check_witness`),
+        // so the binding names the header relative to that directory, quoted,
+        // as every hand-written package binding does (`@ntsHeader "report.h"`).
+        // It named the absolute path once, and the binding is checked in: the
+        // workspace fixture then compiled against the shared checkout's header
+        // from every other tree, and stopped compiling at all when the corpora
+        // moved under `tests/`.
+        let sources = package.join(&entry.dir);
+        let header = header_as_included(
+            &sources,
+            &package.join(entry.header.as_deref().unwrap_or_default()),
+        )?;
         let (values, types) = imported_names(file, module)?;
         // **Into the project being built, not into the package.** The binding
         // is an artifact of *this* build: writing it under a dependency would
@@ -4064,7 +4078,8 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
             .with_context(|| format!("creating {out}"))?;
         let mut command = std::process::Command::new(std::env::current_exe()?);
         command.arg("bind-c").arg("--module").arg(module);
-        command.arg("--header").arg(header.as_str());
+        command.arg("--header").arg(&header);
+        command.arg("--clang").arg(format!("-I{sources}"));
         for name in &values {
             command.arg("--fn").arg(name);
         }
@@ -4100,6 +4115,34 @@ fn bind_one(module: &str, file: &Utf8Path, targets: &[String], into: &Utf8Path) 
         );
     }
     Ok(())
+}
+
+/// A package's header as a program's C includes it: quoted, and relative to the
+/// package's native directory, which every compile of such a program has on its
+/// include path. A header outside that directory is reached with `..` from it.
+fn header_as_included(sources: &Utf8Path, header: &Utf8Path) -> Result<String> {
+    let parts = |path: &Utf8Path| -> Result<Vec<String>> {
+        let path = std::path::absolute(path).with_context(|| format!("resolving {path}"))?;
+        let mut parts: Vec<String> = Vec::new();
+        for component in path.components() {
+            match component {
+                std::path::Component::ParentDir => {
+                    parts.pop();
+                }
+                std::path::Component::Normal(name) => {
+                    parts.push(name.to_string_lossy().into_owned());
+                }
+                _ => {}
+            }
+        }
+        Ok(parts)
+    };
+    let from = parts(sources)?;
+    let to = parts(header)?;
+    let shared = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut spelled: Vec<&str> = vec![".."; from.len() - shared];
+    spelled.extend(to[shared..].iter().map(String::as_str));
+    Ok(format!("\"{}\"", spelled.join("/")))
 }
 
 /// Every native source a program's packages contribute, for one target.
@@ -9095,4 +9138,33 @@ fn bridging_note(bridging: &nts_core::hir::Bridging) -> String {
         );
     }
     note
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod header_spelling_tests {
+    use super::header_as_included;
+    use camino::Utf8Path;
+
+    /// A generated binding names its header as the program's C includes it,
+    /// never by where this checkout keeps it: the binding is checked in, and an
+    /// absolute path compiled every other tree against the shared checkout's
+    /// header until a move left nothing there.
+    #[test]
+    fn a_package_header_is_named_from_its_native_directory() {
+        let package = Utf8Path::new("/work/packages/crypto-core");
+        let named = |dir: &str, header: &str| {
+            header_as_included(&package.join(dir), &package.join(header)).unwrap()
+        };
+        assert_eq!(named("native", "native/digest.h"), "\"digest.h\"");
+        assert_eq!(
+            named("native/linux", "native/linux/scheduler.h"),
+            "\"scheduler.h\""
+        );
+        assert_eq!(
+            named("./native", "native/./include/../digest.h"),
+            "\"digest.h\""
+        );
+        assert_eq!(named("src", "include/digest.h"), "\"../include/digest.h\"");
+    }
 }

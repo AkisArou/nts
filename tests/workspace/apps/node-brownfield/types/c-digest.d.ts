@@ -4,7 +4,7 @@
 // which makes it a claim like any hand-written binding. `native_witness.c`
 // is what proves it against the headers a consumer actually compiles with.
 /**
- * @ntsHeader /home/akisarou/Projects/nts/tests/workspace/packages/crypto-core/native/digest.h
+ * @ntsHeader "digest.h"
  */
 declare module "c:digest" {
   import type { Uint32 } from "@nts/scalars";
