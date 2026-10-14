@@ -27268,6 +27268,25 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(self.native_record_from_object(id, value, want.clone()));
         }
+        // **`{}` where C takes a record**: a literal that writes no member,
+        // which is built as an empty object and erased
+        // (blockers/an-empty-object-literal), so it arrives here as no object
+        // a field can be read from -- `new CustomEvent("x", {})`, `new
+        // Request(url, {})`, an options bag with nothing in it, refused as a
+        // managed value (the Chromium lane's
+        // lib-dom-an-empty-literal-for-a-dictionary). Copied, every field is
+        // the zero it was left out as, so it is the record's zeroed storage.
+        // Only the literal: an erased value from anywhere else may hold
+        // members, which zeroes would drop.
+        if matches!(want, HirType::NativePointer(view) if matches!(view.viewed(), super::native::Pointee::Record(_)))
+            && *have == HirType::Erased
+            && self.kind_of(id) == Some(syntax::OBJECT_LITERAL_EXPRESSION)
+            && self.syntax_children_of(id).is_empty()
+        {
+            let origin = self.origin(id);
+            let storage = self.push(OpKind::NativeLocal { count: 1 }, want.clone(), origin);
+            return Some(Ok(storage));
+        }
         None
     }
 
@@ -66024,6 +66043,10 @@ impl<'a> FuncBuilder<'a> {
                         return false;
                     };
                     match (&native.ty, self.snapshot.node_types.get(&value)) {
+                        // A `Given<T>` pair is written from the member's value
+                        // -- its `T`, or `undefined` -- not from a literal of
+                        // the pair's own fields (`write_given`).
+                        (super::native::Pointee::Record(inner), _) if inner.given => true,
                         (super::native::Pointee::Record(inner), Some(&ty)) => {
                             self.record_holds(inner, value, ty)
                         }

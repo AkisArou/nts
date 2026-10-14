@@ -1716,6 +1716,12 @@ pub struct Record {
     /// 12 bytes packed where the natural layout is 16 -- and getting it wrong
     /// puts every member of an array at the wrong address.
     pub packed: bool,
+    /// A `Given<T>` pair (`c:types`): `given` says whether the member it
+    /// holds was present -- `WebIDL`'s "present", its value not `undefined` --
+    /// and `value` holds it. Laid out as the struct it is; what the flag
+    /// changes is how the record copy writes it, computing `given` where it
+    /// would otherwise have copied a member's value.
+    pub given: bool,
 }
 
 /// How this program came to know a record's type.

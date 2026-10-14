@@ -28,6 +28,7 @@ fn record(fields: &[(&str, Pointee)]) -> Record {
             from_header: Some(nts_semantic_schema::NodeId(0)),
         },
         packed: false,
+        given: false,
     }
 }
 

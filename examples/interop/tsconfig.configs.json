@@ -22,6 +22,7 @@
     "native-callback/nts.config.ts",
     "native-copy/nts.config.ts",
     "native-byvalue/nts.config.ts",
+    "native-given/nts.config.ts",
     "native-epoll/nts.config.ts",
     "native-fd/nts.config.ts",
     "native-inet/nts.config.ts",

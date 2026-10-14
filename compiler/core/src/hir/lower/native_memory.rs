@@ -1,11 +1,11 @@
 //! Native places are addresses. Member access and addrOf share this path so
 //! evaluating a receiver never performs an accidental aggregate copy/load.
 use super::{
-    ArrayFill, Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind, Place,
-    ValueId,
+    ArrayFill, BinOp, Branch, Diagnostic, FuncBuilder, HirType, Lent, ManagedType, NodeId, OpKind,
+    Place, Terminator, ValueId,
 };
 use crate::hir::native::{Encoding, Handle, Pointee, Referenced, Scalar, Type, Written};
-use nts_semantic_schema::{LiteralValue, TypeKind, syntax};
+use nts_semantic_schema::{LiteralValue, TypeId, TypeKind, syntax};
 
 impl FuncBuilder<'_> {
     pub(super) fn native_member_key(&self, access: NodeId, key: NodeId) -> Option<String> {
@@ -1091,12 +1091,39 @@ impl FuncBuilder<'_> {
                     continue;
                 }
             }
+            // A `Given<T>` member written `undefined` is not given, and is
+            // evaluated for its effects alone: lowered as the member's `T`,
+            // it would be refused as `undefined` where a boolean is wanted.
+            let given = self.holds_a_given(pointer, &key);
+            let ty = self
+                .snapshot
+                .node_types
+                .get(&value.unwrap_or(name))
+                .copied();
+            if given && self.is_undefined_type(ty) {
+                if let Some(value) = value {
+                    self.lower_for_its_effects(value)?;
+                }
+                self.write_given(property, pointer, &key, None, ty, lent.as_deref_mut())?;
+                continue;
+            }
             let written = if let Some(value) = value {
                 self.lower_expression(value)?
             } else {
                 let symbol = self.shorthand_value_symbol(name, &key)?;
                 self.lower_named_value(name, symbol)?
             };
+            if given {
+                self.write_given(
+                    property,
+                    pointer,
+                    &key,
+                    Some(written),
+                    ty,
+                    lent.as_deref_mut(),
+                )?;
+                continue;
+            }
             self.write_native_field(property, pointer, &key, written, lent.as_deref_mut())?;
         }
         Ok(())
@@ -1202,6 +1229,24 @@ impl FuncBuilder<'_> {
                 ty.clone(),
                 self.origin(id),
             );
+            if matches!(&native.ty, Pointee::Record(pair) if pair.given) {
+                let member = match self.snapshot.types.get(type_id.0 as usize).map(|r| &r.kind) {
+                    Some(TypeKind::Object { properties }) => properties
+                        .iter()
+                        .find(|p| p.name == native.name)
+                        .map(|p| p.ty),
+                    _ => None,
+                };
+                self.write_given(
+                    id,
+                    pointer,
+                    &native.name,
+                    Some(value),
+                    member,
+                    lent.as_deref_mut(),
+                )?;
+                continue;
+            }
             if matches!(ty, HirType::Managed(ManagedType::Object(_)))
                 && matches!(native.ty, Pointee::Record(_))
             {
@@ -1212,6 +1257,138 @@ impl FuncBuilder<'_> {
             self.write_native_field(id, pointer, &native.name, value, lent.as_deref_mut())?;
         }
         Ok(())
+    }
+
+    /// Whether the field `key` of the record at `pointer` is a `Given<T>`
+    /// pair (`Record::given`).
+    fn holds_a_given(&self, pointer: ValueId, key: &str) -> bool {
+        let HirType::NativePointer(view) = &self.values[pointer.0 as usize].ty else {
+            return false;
+        };
+        let Pointee::Record(record) = view.viewed() else {
+            return false;
+        };
+        record.fields.iter().any(|field| {
+            field.name == key && matches!(&field.ty, Pointee::Record(pair) if pair.given)
+        })
+    }
+
+    /// A `Given<T>` member (`Record::given`), the field `key` of the record
+    /// at `pointer`, written from `value`, the member's value or `undefined`,
+    /// whose type is `ty` -- `None` for one written `undefined`, which the
+    /// caller evaluated for its effects: `given` is whether it is not
+    /// `undefined` -- `WebIDL`'s "present" -- and `value` is it.
+    ///
+    /// **Decided at run time** where the value is erased, since `{ keepalive:
+    /// undefined }` is not given while `{ keepalive: false }` is: `given` is
+    /// its tag against `undefined`'s, and `value` the value read back as its
+    /// one other type, or that type's zero -- what C's zeroed storage held --
+    /// when not given. Merged before either field is written, so a string the
+    /// call is lent is lent on every path, as its release after the call needs.
+    /// A member typed `undefined` alone is never given, and one that cannot be
+    /// `undefined` always is.
+    fn write_given(
+        &mut self,
+        id: NodeId,
+        pointer: ValueId,
+        key: &str,
+        value: Option<ValueId>,
+        ty: Option<TypeId>,
+        mut lent: Option<&mut Vec<Lent>>,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let pair = self.native_field_address(id, pointer, key)?;
+        let Some(value) = value.filter(|_| !self.is_undefined_type(ty)) else {
+            let no = self.push(OpKind::ConstBool(false), HirType::Bool, origin);
+            return self.write_native_field(id, pair, "given", no, lent);
+        };
+        let (given, present) = if self.values[value.0 as usize].ty == HirType::Erased {
+            let Some(want) = ty.and_then(|ty| self.given_representation(ty)) else {
+                return Err(self.unsupported(
+                    id,
+                    &format!(
+                        "`{key}`, a `Given` member whose value is not one type or `undefined`"
+                    ),
+                ));
+            };
+            let unsigned = HirType::Int {
+                bits: 32,
+                signed: false,
+            };
+            let tag = self.push(OpKind::TagOf { value }, unsigned.clone(), origin.clone());
+            let undefined = self.push(
+                OpKind::ConstInt(i128::from(super::super::tags::UNDEFINED)),
+                unsigned,
+                origin.clone(),
+            );
+            let given = self.push(
+                OpKind::Binary {
+                    op: BinOp::Ne,
+                    lhs: tag,
+                    rhs: undefined,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let zero = self.zero_of(id, want.clone(), "a `Given` member")?;
+            let read = self.new_block();
+            let merge = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: given,
+                then_target: read,
+                then_args: Vec::new(),
+                else_target: merge,
+                else_args: vec![zero],
+            });
+            let present = self.push_block_param(merge, want.clone(), origin.clone());
+            self.switch_to(read);
+            self.materialize(id, &want)?;
+            let read_back = self.push(OpKind::Unerase { value }, want, origin);
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args: vec![read_back],
+            });
+            self.switch_to(merge);
+            (given, present)
+        } else {
+            (
+                self.push(OpKind::ConstBool(true), HirType::Bool, origin),
+                value,
+            )
+        };
+        self.write_native_field(id, pair, "given", given, lent.as_deref_mut())?;
+        self.write_native_field(id, pair, "value", present, lent)
+    }
+
+    /// Whether `ty` is `undefined` and nothing else.
+    fn is_undefined_type(&self, ty: Option<TypeId>) -> bool {
+        ty.is_some_and(|ty| {
+            matches!(
+                self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Undefined)
+            )
+        })
+    }
+
+    /// The one representation `ty` has where it is not `undefined`: `Bool` of
+    /// `boolean | undefined`, which the checker spells `true | false |
+    /// undefined`. `None` where what is left has several, or none.
+    fn given_representation(&self, ty: TypeId) -> Option<HirType> {
+        let Some(TypeKind::Union(members)) =
+            self.snapshot.types.get(ty.0 as usize).map(|r| &r.kind)
+        else {
+            return self.represent(ty);
+        };
+        let mut present = members.iter().filter(|member| {
+            !matches!(
+                self.snapshot.types.get(member.0 as usize).map(|r| &r.kind),
+                Some(TypeKind::Undefined)
+            )
+        });
+        let first = self.represent(*present.next()?)?;
+        present
+            .all(|member| self.represent(*member).as_ref() == Some(&first))
+            .then_some(first)
     }
 
     pub(super) fn native_element_place(

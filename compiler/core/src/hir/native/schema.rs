@@ -1022,6 +1022,18 @@ fn structure(
     } else {
         format!("NtsNative_Type{}", shape.0)
     };
+    // `Given<T>` intersects a marker into `Struct<{ given; value }>`: the
+    // pair, in that order, or not a `Given` at all.
+    let given = marker(snapshot, ty, "__c_given").is_some();
+    if given
+        && !matches!(
+            fields.as_slice(),
+            [Field { name: flag, ty: Pointee::Scalar(super::Scalar::Bool8) }, Field { name: value, .. }]
+                if flag == "given" && value == "value"
+        )
+    {
+        return None;
+    }
     // An anonymous record is the header's, so nothing about it is this
     // program's to define -- but it has no tag either, so `foreign` cannot
     // carry that. The two facts are separate and both are recorded.
@@ -1031,6 +1043,7 @@ fn structure(
         kind,
         naming,
         packed,
+        given,
     })
 }
 

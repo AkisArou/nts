@@ -98,7 +98,9 @@ impl FuncBuilder<'_> {
             // `readonly isbn = property<string>()`, which a construction must
             // give: its type's zero until it does. And a signal's field, which
             // holds nothing at all.
-            (GObjectIntrinsic::Property | GObjectIntrinsic::Signal, []) => self.zero_of(id, want),
+            (GObjectIntrinsic::Property | GObjectIntrinsic::Signal, []) => {
+                self.zero_of(id, want, "a `GObject` declaration")
+            }
             (GObjectIntrinsic::Property, _) => Err(self.unsupported(
                 id,
                 "a `property` given options, which this compiler does not read yet",
@@ -111,17 +113,21 @@ impl FuncBuilder<'_> {
     }
 
     /// The value a field of type `want` holds before anything is written to
-    /// it.
-    fn zero_of(&mut self, id: NodeId, want: HirType) -> Result<ValueId, Diagnostic> {
+    /// it. `what` names the subject of the refusal where `want` has none.
+    pub(super) fn zero_of(
+        &mut self,
+        id: NodeId,
+        want: HirType,
+        what: &str,
+    ) -> Result<ValueId, Diagnostic> {
         let zero = match &want {
             HirType::Float { .. } => OpKind::ConstFloat(0.0),
+            HirType::Int { .. } => OpKind::ConstInt(0),
             HirType::Bool => OpKind::ConstBool(false),
             HirType::Managed(ManagedType::String) => OpKind::ConstString(String::new()),
             HirType::NativePointer(_) | HirType::Managed(_) => OpKind::ConstNull,
             _ => {
-                return Err(
-                    self.unsupported(id, "a `GObject` declaration of a type with no zero here")
-                );
+                return Err(self.unsupported(id, &format!("{what} of a type with no zero here")));
             }
         };
         let origin = self.origin(id);

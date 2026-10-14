@@ -10,7 +10,7 @@
  * happens wherever a *binding* uses one of these to describe a real function.
  */
 declare module "c:types" {
-  import type { AsNumber, c_int, c_uint, c_ulong, Float64 } from "@nts/scalars";
+  import type { AsNumber, c_int, c_uint, c_ulong, Float64, Uint8 } from "@nts/scalars";
   // A pointer to a C struct tag, with no managed header or implicit lifetime.
   // Construct and destroy it through the library's functions. `| null` admits
   // a null pointer. The phantom field is never readable or constructible.
@@ -183,8 +183,25 @@ declare module "c:types" {
     readonly __c_fields?: T;
   };
   // A number field keeps its C type as `Slot` does (`__c_of`): a plain number
-  // is assignable, and the field is written as the C type.
-  type FieldOf<V> = [V] extends [number] ? number & { readonly __c_of?: V } : [V] extends [Struct<any, string>] ? Fields<V> : V;
+  // is assignable, and the field is written as the C type. A `Given<T>` field
+  // is written as its `T`, or left out, or `undefined`.
+  type FieldOf<V> = [V] extends [Given<infer T>]
+    ? FieldOf<T> | undefined
+    : [V] extends [number]
+      ? number & { readonly __c_of?: V }
+      : [V] extends [Struct<any, string>]
+        ? Fields<V>
+        : V;
+  // A member C is told was given or not, as WebIDL tells an implementation
+  // whether a dictionary member is present: C's `struct { bool given; T
+  // value; }`, untagged, inside the record that holds it. Written from an
+  // object or a literal as `given = value !== undefined` -- WebIDL's present,
+  // decided at run time, so `{ keepalive: undefined }` is not given -- and,
+  // when given, `value`; a member left out is not given, and its value stays
+  // zero. Where zero is a value C must tell from "left out" (`keepalive:
+  // false` against no `keepalive`), the binding says `Given<CBool<Uint8>>`
+  // rather than `CBool<Uint8>`.
+  export type Given<T> = Struct<{ given: CBool<Uint8>; value: T }> & { readonly __c_given: true };
   // A `GObject`: `Class<Tag, Parent>` for an object GLib counts. Under the
   // reference-counting provider the compiler takes a reference where a
   // second one is kept -- `g_object_ref_sink`, which also takes the floating
