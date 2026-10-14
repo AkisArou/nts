@@ -3820,6 +3820,8 @@ fn reached_by_name(
 /// Initialization analysis can prove some lexical readers ready and omit
 /// their flag; a remaining forward var keeps the named stop for now.
 fn guarded_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
+    #[cfg(test)]
+    collection_tests::note(|counts| counts.derived_elements += closures.len());
     let mut found: Vec<u32> = closures
         .iter()
         .filter(|closure| closure.refusal.is_none())
@@ -3835,6 +3837,8 @@ fn guarded_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
 /// The symbols a program captures by reference, in a stable order.
 /// Each position is a cell's type identity, so two compiler runs must agree.
 fn boxed_symbols(closures: &[ClosureInfo]) -> Vec<u32> {
+    #[cfg(test)]
+    collection_tests::note(|counts| counts.derived_elements += closures.len());
     let mut found: Vec<u32> = closures
         .iter()
         .filter(|closure| closure.refusal.is_none())
@@ -12809,6 +12813,8 @@ impl Shared {
         foreign: &'a super::runtime::ForeignTable,
         copy: Copy,
     ) -> FuncBuilder<'a> {
+        #[cfg(test)]
+        collection_tests::note(|counts| counts.closure_copies += self.closures.len());
         let mut builder = FuncBuilder::instantiating(
             snapshot,
             foreign,
@@ -16379,6 +16385,8 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
     let mut disputed: Vec<super::DisputedLayout> = Vec::new();
     for layout in layouts {
         if let Some(existing) = program.layouts.iter_mut().find(|known| {
+            #[cfg(test)]
+            collection_tests::note(|counts| counts.layout_candidates += 1);
             // The same type, however the two were built. A layout is named
             // after its type, so two of them for one type emit two `struct`s
             // of the same name -- which is what happened once the module scope
@@ -16509,9 +16517,11 @@ fn unshared_layout_name(existing: &[Layout], mut layout: Layout) -> Layout {
 /// A layout that *is* the holder -- its first type id is `own` -- keeps the
 /// name; anything else sharing it is the collision this exists for.
 fn unshared_layout_name_for(existing: &[Layout], name: &str, own: Option<TypeId>) -> String {
-    let held_elsewhere = existing
-        .iter()
-        .any(|known| known.name == name && known.types.first().copied() != own);
+    let held_elsewhere = existing.iter().any(|known| {
+        #[cfg(test)]
+        collection_tests::note(|counts| counts.name_candidates += 1);
+        known.name == name && known.types.first().copied() != own
+    });
     match (held_elsewhere, own) {
         (true, Some(ty)) => format!("{name}{}", ty.0),
         _ => name.to_owned(),
@@ -82251,6 +82261,9 @@ fn is_override_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod implementation_tests;
+
+#[cfg(test)]
+mod collection_tests;
 
 #[cfg(test)]
 mod tests {
