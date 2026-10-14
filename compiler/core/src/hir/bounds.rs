@@ -39,10 +39,19 @@ pub fn eliminate_checks(
 ) -> usize {
     let mut removed = 0;
     let blocks = std::mem::take(&mut func.blocks);
+    let growable = analysis.growable();
 
     for (index, block) in blocks.iter().enumerate() {
         let at = BlockId(u32::try_from(index).unwrap_or(0));
+        // Whether anything since the top of this block may have changed an
+        // array's length, and with it what the guard that let control in
+        // proved. See [`may_move_a_length`].
+        let mut moved = false;
         for value in &block.ops {
+            if growable && may_move_a_length(&func.values[value.0 as usize].kind) {
+                moved = true;
+                continue;
+            }
             let (OpKind::ArrayGet {
                 array,
                 index: index_value,
@@ -62,7 +71,15 @@ pub fn eliminate_checks(
             else {
                 continue;
             };
-            if !provably_in_bounds(func, analysis, field_lengths, at, array, index_value) {
+            if !provably_in_bounds(
+                func,
+                analysis,
+                field_lengths,
+                at,
+                array,
+                index_value,
+                !moved,
+            ) {
                 continue;
             }
             match &mut func.values[value.0 as usize].kind {
@@ -111,6 +128,7 @@ fn provably_in_bounds(
     at: BlockId,
     array: ValueId,
     index: ValueId,
+    guards_hold: bool,
 ) -> bool {
     // Asked *at this block*, since what proves an index in bounds is usually
     // the guard that let control in rather than anything about its definition.
@@ -142,11 +160,54 @@ fn provably_in_bounds(
 
     // Otherwise the index must be guarded by this array's own length. The
     // interval domain cannot see that -- both are unknown numbers -- but the
-    // comparison that guards the block relates them.
+    // comparison that guards the block relates them, while nothing since the
+    // block's top has moved a length.
     let growable = analysis.growable();
-    analysis.guarded_by(at, index, |candidate| {
-        names_the_length_of(func, growable, array, candidate)
-    })
+    guards_hold
+        && analysis.guarded_by(at, index, |candidate| {
+            names_the_length_of(func, growable, array, candidate)
+        })
+}
+
+/// Whether an op may change an array's length: what a guard at the top of its
+/// block compared an index against.
+///
+/// **A guard proves `i < xs.length` of a length read before it.** The relation
+/// holds at the top of the block the guard lets control into (`flow.rs`
+/// `relations`) and was trusted for every read in that block, so
+///
+/// ```text
+/// for (let i = 0; i < xs.length; i++) { xs.pop(); s += xs[i]; }
+/// ```
+///
+/// read past the end, unchecked, whenever `i` was the length the pop left: the
+/// slot `pop` had just emptied, released under reference counting, where node
+/// answers `undefined` (outcomes/a-read-guarded-by-a-length-a-pop-then-shrinks).
+///
+/// So the relation holds only up to the first op that may move a length: a
+/// runtime helper that changes one ([`super::changes_array_length`]), and any
+/// call that can run code -- the program's own, a closure's, a method's, the
+/// host's, or a runtime helper not known to run none. A helper that stores
+/// nothing ([`super::runtime::stores_nothing`]), and an array helper that runs
+/// no other code ([`super::keeps_field_borrows`]) and changes no length, leave
+/// it. Asked only where some array in the program can change length at all
+/// ([`super::arrays_can_grow`]); where none can, a length read anywhere is the
+/// length everywhere.
+fn may_move_a_length(kind: &OpKind) -> bool {
+    match kind {
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            ..
+        } => {
+            super::changes_array_length(name)
+                || !(super::runtime::stores_nothing(name) || super::keeps_field_borrows(name))
+        }
+        OpKind::Call { .. }
+        | OpKind::Await { .. }
+        | OpKind::Yield { .. }
+        | OpKind::Suspend { .. } => true,
+        _ => false,
+    }
 }
 
 /// Whether a value *is* this array's length, however it is spelled.
