@@ -40,8 +40,12 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
         }
         std::fs::write(dir.join("caller.c"), CALLER).unwrap();
         let binary = dir.join("caller");
-        let built = Command::new("clang")
-            .args(["-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"])
+        let mut cc = Command::new("clang");
+        cc.args(["-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"]);
+        if provider == hir::Provider::ReferenceCounting {
+            cc.arg("-DNTS_PROVIDER_RC");
+        }
+        let built = cc
             .arg("-I")
             .arg(dir.as_std_path())
             .args(sources)
@@ -56,27 +60,39 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
             String::from_utf8_lossy(&built.stderr)
         );
         let result = Command::new(binary).output().unwrap();
-        assert!(result.status.success(), "{provider:?}: {result:?}");
+        assert!(
+            result.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
 }
 
 const CALLER: &str = r#"
 #include "nts_runtime.h"
 #include <string.h>
+#include <stdio.h>
 NtsHeader *nts_construct_NtsObj_Shared(void);
 NtsHeader *nts_construct_NtsObj_Twin(void);
 NtsHeader *nts_construct_NtsObj_Unique(void);
+NtsHeader *nts_construct_NtsObj_Solo(void);
 int main(void) {
     NtsHeader *shared = nts_construct_NtsObj_Shared();
     NtsHeader *twin = nts_construct_NtsObj_Twin();
     NtsHeader *unique = nts_construct_NtsObj_Unique();
+    NtsHeader *solo = nts_construct_NtsObj_Solo();
     if (strcmp(shared->descriptor->name, "Shared") != 0) return 1;
     if (strcmp(twin->descriptor->name, "Twin") != 0) return 2;
     if (strcmp(unique->descriptor->name, "Unique") != 0) return 3;
     if (shared->descriptor == twin->descriptor) return 4;
+    if (strcmp(solo->descriptor->name, "Solo") != 0) {
+        fprintf(stderr, "Solo's descriptor: %s\n", solo->descriptor->name);
+        return 5;
+    }
     nts_release(shared);
     nts_release(twin);
     nts_release(unique);
+    nts_release(solo);
     return 0;
 }
 "#;

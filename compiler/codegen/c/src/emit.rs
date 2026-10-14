@@ -3845,15 +3845,14 @@ fn instance_of(
     format!("{name} = ({});", tests.join(" || "))
 }
 
-/// **One constant per class that shares this shape.**
+/// **One constant per class needing its own identity or reported name.**
 ///
 /// Identical in every field a descriptor holds -- kind, size, references,
 /// offsets, cyclic, table -- and differing in their **address**, which is what
 /// `nts_is_class` compares, and in the name each reports as its own.
 ///
-/// Emitted only where something actually shares, so a program of ordinary
-/// classes gains nothing and pays nothing. Twelve classes in five groups across
-/// all 22 `runtime/node` modules is the whole of it.
+/// An ordinary class whose layout already has its name needs no extra constant.
+/// A lone class on an interface-named layout still needs its declared name.
 fn emit_layout_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
@@ -3863,16 +3862,18 @@ fn emit_layout_descriptors(
     body: (&str, &str),
 ) {
     let (shared, tail) = body;
-    // The shape's own, which every type in the layout that is not a class
-    // answers to.
-    writer.line(
-        origin,
-        format!(
-            "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {tail} }};",
-            layout.name
-        ),
-    );
     let sharing = program.distinct_identities(layout);
+    // The shape has a constant only while something can use its identity.
+    // A named class alone on it does not keep an unread static alive.
+    if program.uses_layout_identity(layout) {
+        writer.line(
+            origin,
+            format!(
+                "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {tail} }};",
+                layout.name
+            ),
+        );
+    }
     if sharing.is_empty() {
         return;
     }

@@ -3185,9 +3185,8 @@ pub struct Program {
     /// type ids for one class share a symbol and are one entry -- that case is
     /// what [`Layout::types`] being a list is for, and it is not this.
     ///
-    /// Empty for a program with no classes, and an entry whose layout holds
-    /// only it needs no separate descriptor: the cost is one constant per class
-    /// that actually shares.
+    /// Empty for a program with no classes. An entry whose layout holds only
+    /// it and has its declared name needs no separate descriptor.
     pub classes: Vec<ClassIdentity>,
     /// Object types allocated in a class's layout without being the class: an
     /// object literal typed by a field-only class, or by an interface whose
@@ -3390,17 +3389,32 @@ impl Program {
     pub fn published_classes(&self) -> impl Iterator<Item = PublishedClass<'_>> {
         let mut seen = rustc_hash::FxHashSet::default();
         self.public_api.iter().filter_map(move |(emitted, _)| {
-            if !seen.insert(emitted.as_str()) {
+            if !seen.insert(emitted.as_str()) || self.funcs.iter().any(|func| &func.name == emitted)
+            {
                 return None;
             }
             let constructor = format!("{emitted}#constructor");
-            let receiver = &self
+            let prefix = format!("{emitted}#");
+            // An implicit constructor need not have a lowered body. Any
+            // ordinary instance member still names the class through `this`.
+            // A plain function's specialization is neither such a member nor
+            // a class, even if its name contains the same separator.
+            let owner = self
                 .funcs
                 .iter()
-                .find(|func| func.name == constructor)?
-                .params
-                .first()?
-                .ty;
+                .find(|func| func.name == constructor)
+                .or_else(|| {
+                    self.funcs.iter().find(|func| {
+                        func.name
+                            .strip_prefix(&prefix)
+                            .is_some_and(|member| !member.contains('#'))
+                            && func
+                                .params
+                                .first()
+                                .is_some_and(|param| param.name == "this")
+                    })
+                })?;
+            let receiver = &owner.params.first()?.ty;
             let HirType::Managed(ManagedType::Object(receiver)) = receiver else {
                 return None;
             };
@@ -3417,11 +3431,12 @@ impl Program {
     }
 
     /// The classes of `layout` that need an identity of their own -- a C
-    /// descriptor, a JVM class -- for `instanceof` to tell them apart: every
-    /// class sharing the layout where two or more do, or its one class where an
-    /// object that is not the class is allocated in it too
-    /// ([`Program::plain_records`]). Empty where the layout's own identity
-    /// answers for its one class, which is nearly always.
+    /// descriptor, a JVM class -- for `instanceof` and its reported name:
+    /// every class sharing the layout where two or more do, or its one class
+    /// where a plain object is allocated in it too ([`Program::plain_records`])
+    /// or the layout has another name. Even a private class must report its
+    /// declared name when thrown. Empty where the layout's own identity and
+    /// name answer for its one class.
     ///
     /// One per declaration: a class laid out through two paths carries one
     /// symbol in two entries, and two of them would be one constant defined
@@ -3434,11 +3449,47 @@ impl Program {
             .types
             .iter()
             .any(|ty| self.plain_records.contains(ty));
-        if found.len() >= 2 || (found.len() == 1 && plain) {
+        if found.len() >= 2 || (found.len() == 1 && (plain || found[0].name != layout.name)) {
             found
         } else {
             Vec::new()
         }
+    }
+
+    /// Whether anything uses the layout's own identity rather than a class's.
+    /// Allocations and descriptor tests choose through the same class types as
+    /// `distinct_identities`; an interface cast can still name the shape even
+    /// when no plain record is allocated. Inspect live ops, since dead arena
+    /// entries cannot keep a descriptor in the emitted program.
+    #[must_use]
+    pub fn uses_layout_identity(&self, layout: &Layout) -> bool {
+        let classes = self.distinct_identities(layout);
+        if classes.is_empty()
+            || layout
+                .types
+                .iter()
+                .any(|ty| self.plain_records.contains(ty))
+        {
+            return true;
+        }
+        let uses_shape = |ty: &TypeId| {
+            layout.types.contains(ty) && !classes.iter().any(|class| class.types.contains(ty))
+        };
+        self.native_funcs().any(|func| {
+            func.blocks.iter().flat_map(|block| &block.ops).any(|value| {
+                let op = &func.values[value.0 as usize];
+                match &op.kind {
+                    OpKind::InstanceOf { classes, .. } => classes.iter().any(uses_shape),
+                    OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => {
+                        arms.iter().any(|arm| uses_shape(&arm.ty))
+                    }
+                    OpKind::ObjectNew { .. } | OpKind::ClosureStatic => {
+                        matches!(&op.ty, HirType::Managed(ManagedType::Object(ty)) if uses_shape(ty))
+                    }
+                    _ => false,
+                }
+            })
+        })
     }
 
     /// Every class laid out as `layout`, one per declaration, in declaration

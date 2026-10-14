@@ -26,6 +26,26 @@ fn shared_and_unique_layout_classes_keep_their_public_members() {
         .unwrap();
     assert!(program.layouts.iter().any(|layout| layout.name == "Earlier"
         && shared.types.iter().any(|ty| layout.types.contains(ty))));
+    let solo = program
+        .classes
+        .iter()
+        .find(|class| class.name == "Solo")
+        .unwrap();
+    let layout = program
+        .layouts
+        .iter()
+        .find(|layout| solo.types.iter().any(|ty| layout.types.contains(ty)))
+        .unwrap();
+    assert_eq!(layout.name, "EarlierNumber");
+    assert!(
+        !layout
+            .types
+            .iter()
+            .any(|ty| program.plain_records.contains(ty))
+    );
+    assert_eq!(program.distinct_identities(layout).len(), 1);
+    assert_eq!(program.distinct_identities(layout)[0].name, "Solo");
+    assert!(!program.uses_layout_identity(layout));
     hir::reachable::prune(&mut program, Roots::EntrySurface);
     let names: Vec<_> = program
         .funcs
@@ -77,4 +97,52 @@ fn same_display_names_resolve_to_their_own_semantic_declarations() {
             "missing {name}"
         );
     }
+}
+
+#[test]
+fn a_live_layout_test_keeps_the_shape_but_a_dead_test_does_not() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../tooling/conformance/blockers/an-exported-class-with-a-shared-layout/tsconfig.json",
+    );
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    let mut program = hir::lower::lower(&snapshot).program;
+    let layout = program
+        .layouts
+        .iter()
+        .find(|layout| layout.name == "EarlierNumber")
+        .unwrap()
+        .clone();
+    assert!(!program.uses_layout_identity(&layout));
+    let reader = program
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == "readEarlierNumber")
+        .unwrap();
+    let hir::HirType::Managed(hir::ManagedType::Object(ty)) = reader.params[0].ty else {
+        panic!("the reader takes an interface");
+    };
+    let test = hir::ValueId(u32::try_from(reader.values.len()).unwrap());
+    reader.values.push(hir::Op {
+        kind: hir::OpKind::InstanceOf {
+            value: hir::ValueId(0),
+            classes: vec![ty],
+            by_layout: true,
+        },
+        ty: hir::HirType::Bool,
+        origin: reader.origin.clone(),
+    });
+    reader.blocks[0].ops.push(test);
+    assert!(program.uses_layout_identity(&layout));
+    program
+        .funcs
+        .iter_mut()
+        .find(|func| func.name == "readEarlierNumber")
+        .unwrap()
+        .blocks[0]
+        .ops
+        .pop();
+    assert!(!program.uses_layout_identity(&layout));
 }

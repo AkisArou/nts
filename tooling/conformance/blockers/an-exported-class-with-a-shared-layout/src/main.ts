@@ -28,3 +28,13 @@ export class Twin {
   constructor(flag: boolean) { this.flag = !flag; }
   get(): boolean { return this.flag; }
 }
+
+// This layout has only one class and no plain-record allocation. Its native
+// descriptor must still say Solo, rather than its interface's canonical name.
+interface EarlierNumber { amount: number }
+export function readEarlierNumber(value: EarlierNumber): number { return value.amount; }
+export class Solo {
+  amount: number;
+  constructor(amount: number) { this.amount = amount; }
+  get(): number { return this.amount; }
+}

@@ -46,7 +46,14 @@ fn shared_storage_keeps_each_exported_constructor_and_its_members() {
         let program = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
         assert!(program.is_complete(), "{:?}", program.diagnostics);
         let addon = nts_codegen_napi::emit(&prepared.program);
-        assert!(addon.skipped.is_empty(), "{:?}", addon.skipped);
+        assert!(
+            addon
+                .skipped
+                .iter()
+                .all(|skipped| skipped.function == "readEarlierNumber"),
+            "{:?}",
+            addon.skipped
+        );
         let dir = scratch::ScratchDir::new(&root.join("target/class-export-tests"), first);
         std::fs::write(dir.join("program.c"), program.writer.text()).unwrap();
         std::fs::write(dir.join("addon.c"), addon.source).unwrap();
@@ -81,6 +88,7 @@ fn shared_storage_keeps_each_exported_constructor_and_its_members() {
             .args(["-e", CLIENT])
             .arg(&binary)
             .args([first, second, control])
+            .arg(root.join(fixture).join("src/main.ts"))
             .output()
             .unwrap();
         assert!(
@@ -97,6 +105,13 @@ const m = {exports:{}};
 process.dlopen(m, process.argv[1], require('node:os').constants.dlopen.RTLD_NOW);
 const a = m.exports;
 const First = a[process.argv[2]], Second = a[process.argv[3]], Control = a[process.argv[4]];
+import(require('node:url').pathToFileURL(process.argv[5]).href).then(oracle => {
+assert.equal(First.name, oracle[process.argv[2]].name);
+assert.equal(Second.name, oracle[process.argv[3]].name);
+if (oracle.Solo) {
+  assert.equal(a.Solo.name, oracle.Solo.name);
+  assert.equal(new a.Solo(37).get(), new oracle.Solo(37).get());
+}
 for (const flag of [false, true]) {
   const first = new First(flag), second = new Second(flag);
   assert.equal(first.get(), flag);
@@ -107,4 +122,5 @@ for (const flag of [false, true]) {
   assert.ok(!(first instanceof Second));
   assert.equal(new Control(flag).get(), flag);
 }
+}).catch(error => { console.error(error); process.exitCode = 1; });
 ";

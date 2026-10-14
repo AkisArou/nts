@@ -2184,14 +2184,16 @@ fn class_definition(
         descriptors.extend(fields);
     }
 
+    // A re-export changes the property key, never the constructor's name.
+    let constructor_name = c_string_literal(&identity.identity.name);
     let property = c_string_literal(publish);
     let init = if descriptors.is_empty() {
         format!(
-            "    {{\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, 0, NULL, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n"
+            "    {{\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {constructor_name}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, 0, NULL, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n"
         )
     } else {
         format!(
-            "    {{\n        /* ONE CLASS'S MEMBERS, for `napi_define_class` -- not the\n         * module's exports either. See the note on `own[]`: counting\n         * `napi_property_descriptor` entries by shape finds a class\n         * before it finds the module. */\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {property}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, sizeof(members) / sizeof(members[0]), members, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n",
+            "    {{\n        /* ONE CLASS'S MEMBERS, for `napi_define_class` -- not the\n         * module's exports either. See the note on `own[]`: counting\n         * `napi_property_descriptor` entries by shape finds a class\n         * before it finds the module. */\n        napi_property_descriptor members[] = {{\n            {}\n        }};\n        napi_value ctor;\n        if (!nts_napi_check(env, napi_define_class(env, {constructor_name}, NAPI_AUTO_LENGTH, nts_napi_new_{instance}, NULL, sizeof(members) / sizeof(members[0]), members, &ctor), \"could not define a class\")) return NULL;\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, ctor), \"could not export a class\")) return NULL;\n    }}\n",
             descriptors.join(",\n            ")
         )
     };
