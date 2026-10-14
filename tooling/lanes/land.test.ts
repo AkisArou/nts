@@ -149,6 +149,19 @@ test("one gate lands every landing queued behind the lock", async () => {
   assert.match(readFileSync(join(s.home, ".cache/nts-land/trains.tsv"), "utf8"), /\t3\tlanded\t/);
 });
 
+test("every member of a train carries the land note, not only its tip", async () => {
+  const s = scratch();
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const b = lane(s, "b", { "b.txt": "b\n" });
+  const [ra, rb] = await landTogether(s, [a, b]);
+  const landed = (r: Landed) => /as ([0-9a-f]{12}): main is ([0-9a-f]{12})/.exec(r.out);
+  const [first, second] = [landed(ra), landed(rb)];
+  assert.ok(first && second, `${ra.out}\n${rb.out}`);
+  const note = (sha: string) => run(s, s.root, ["notes", "--ref=land", "show", sha]);
+  assert.match(note(second![1]), /train: /);
+  assert.match(note(first![1]), new RegExp(`gated as part of: ${first![2]}`));
+});
+
 test("a red train is halved until the red landing is alone, and only it is refused", async () => {
   const s = scratch();
   const a = lane(s, "a", { "a.txt": "a\n" });

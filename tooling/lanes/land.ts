@@ -473,8 +473,14 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
     fail("main moved while the gate ran, under the landing lock: someone moved it by hand");
   }
   execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+  // Every member's own commit carries the note, not only the tip: a lane asks
+  // `git notes --ref=land show` of the commit it landed, and a member before
+  // the tip was gated as part of the tip.
   const note = members.length > 1 ? `${gated.note}\ntrain: ${shas.join(" ")}` : gated.note;
-  spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", note, tip], { cwd: root });
+  for (const { landing } of members) {
+    const own = landing === tip ? note : `${note}\ngated as part of: ${tip}`;
+    spawnSync("git", ["notes", "--ref=land", "add", "-f", "-m", own, landing], { cwd: root });
+  }
   record("landed");
   status({ state: "landed", commit: tip, base, run: gated.run, train: shas });
   for (const { entry, landing } of members) {
