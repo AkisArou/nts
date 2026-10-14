@@ -98,27 +98,20 @@ done
 # `ERR_MODULE_NOT_FOUND`, and the gate blamed `interop` for a change in the C
 # emitter. A fixed enumeration that was complete when it was written.
 #
-# Derived now, from the only thing that knows which directories are workspace
-# packages: a **tracked** directory whose `node_modules` holds an `@nts` link.
-# Tracked is doing real work -- a bare `find` for `node_modules/@nts` returns
-# forty-odd `target/tmp` build fixtures with exactly that shape, none of which
-# belongs in a pinned tree. That was measured before this rule was chosen.
-workspace_modules=$(
-  git -C "$root" ls-files --directory |
-    awk -F/ 'NF > 1 { print $1 "/" $2 }' |
-    sort -u |
-    while read -r package; do
-      # `if` rather than `[ ... ] && printf`: the `&&` form leaves the loop's
-      # exit status at 1 whenever the *last* package has no link, which under
-      # `set -e` kills the assignment and the script with it -- silently, since
-      # nothing has been printed yet. The gate then exits 1 with an empty log,
-      # which reads as "queued behind a lock" and is not.
-      if [ -d "$root/$package/node_modules/@nts" ]; then
-        printf '%s/node_modules\n' "$package"
-      fi
-    done
-)
-for modules in node_modules runtime/node/node_modules $workspace_modules; do
+# **Derived from the lockfile of the tree being prepared**, by
+# `workspace-links.ts`: each workspace package's `link:` dependencies, made as
+# the relative links pnpm makes. These were copied from the checkout this runs
+# from, which holds only while the commit has its packages where the checkout
+# does: a commit that moves a package (the corpora move puts the library
+# program one level deeper) found nothing at the new path, and a copied
+# relative link resolved outside the tree. Run from this script's own
+# directory, so a pin of an older commit is linked by its own lockfile too.
+node "$(dirname -- "$0")/workspace-links.ts" "$tree" | while IFS="$(printf '\t')" read -r link target; do
+  rm -rf "${tree:?}/$link"
+  mkdir -p "$(dirname "$tree/$link")"
+  ln -s "$target" "$tree/$link"
+done
+for modules in node_modules runtime/node/node_modules; do
   [ -d "$root/$modules" ] || continue
   # **Copied rather than linked where a workspace link lives inside it.**
   #
