@@ -4813,6 +4813,25 @@ fn reconcile(program: &mut Program) -> usize {
         .sum()
 }
 
+/// Whether evaluating `op` may stop the program, so that it must be evaluated
+/// where it stands even when nothing reads its value.
+///
+/// A checked element read is the one such operation that otherwise looks like
+/// a computation: out of range it refuses at run time (C's `nts_check` and
+/// `nts_view_check`, Wasm's named decline) rather than answering `undefined`,
+/// and when it returns, its value is an element. So its value facts are the
+/// element's, and the read itself is what stands for the out-of-range path: a
+/// fold may drop its consumer (`xs[i] * 0`) but not the read, and dead-code
+/// removal keeps it. A bounds proof clears `checked`, and with it this.
+///
+/// Marking the read's *value* as maybe-`NaN` instead kept the fold sound and
+/// cost every integer read its integer arithmetic: `total + xs[k]` added in
+/// doubles, 6.3x slower in Wasm's typed-array bench (2026-10-14).
+#[must_use]
+pub fn may_stop(kind: &OpKind) -> bool {
+    matches!(kind, OpKind::ArrayGet { checked: true, .. })
+}
+
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
     prepare_with(snapshot, &Options::new(InterfaceAccess::Materialize))
 }

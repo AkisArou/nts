@@ -37,6 +37,11 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         ) {
             continue;
         }
+        // A read that may stop the program is not its value: an all-zero array
+        // read at an unproven index is `0` only when it returns.
+        if super::may_stop(&func.values[index].kind) {
+            continue;
+        }
 
         let facts = analysis.get(id);
         if !exactly_one_value(facts) {

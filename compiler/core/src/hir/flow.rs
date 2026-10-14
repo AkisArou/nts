@@ -1096,7 +1096,7 @@ fn transfer_op(
     if matches!(op.ty, super::HirType::BigInt) {
         return Facts::TOP;
     }
-    let mut result = match &op.kind {
+    let result = match &op.kind {
         OpKind::ConstFloat(v) => Facts::constant(*v),
         #[allow(clippy::cast_precision_loss)]
         OpKind::ConstInt(v) => Facts::constant(*v as f64),
@@ -1300,14 +1300,7 @@ fn transfer_op(
         OpKind::Convert(operand) => {
             let incoming = lookup(refinements, values, *operand);
             match held_by(&op.ty) {
-                Some(width) => {
-                    let mut narrowed = incoming.narrow(width);
-                    // A representation conversion is not JavaScript's ToInt32.
-                    // Preserve a checked read's missing-value qualification;
-                    // its normal-path width cannot prove the index in range.
-                    narrowed.maybe_nan = incoming.maybe_nan;
-                    narrowed
-                }
+                Some(width) => incoming.narrow(width),
                 None => incoming,
             }
         }
@@ -1317,13 +1310,9 @@ fn transfer_op(
         // DispatchSlot belongs here: its native value is decided after analysis.
         _ => Facts::TOP,
     };
-    // Storage widths describe only the in-range path. A checked read may
-    // instead produce undefined in JavaScript, which becomes NaN numerically.
-    // Set this after every width clamp, including tuple and narrowed-array
-    // facts, so folding a consumer cannot erase an unproven read's boundary.
-    if matches!(op.kind, OpKind::ArrayGet { checked: true, .. }) {
-        result.maybe_nan = true;
-    }
+    // A checked read's value is an element: out of range it stops the program
+    // instead of answering `undefined` (`super::may_stop`), and dead-code
+    // removal and folding keep it for that.
     result
 }
 
@@ -1776,11 +1765,13 @@ mod tests {
                 );
                 body.params[0].ty = array_type;
                 let facts = analyze(&body);
+                // Checked or not, the read's value is an element: out of range
+                // a checked read stops instead of answering (`may_stop`).
                 for id in [ValueId(2), ValueId(3)] {
                     let known = facts.get(id);
                     assert_eq!((known.lo, known.hi), (0.0, 255.0));
                     assert!(known.whole);
-                    assert_eq!(known.maybe_nan, checked, "{container:?}, {id:?}");
+                    assert!(!known.maybe_nan, "{container:?}, {checked}, {id:?}");
                 }
             }
         }
@@ -1818,7 +1809,10 @@ mod tests {
             0,
         );
         let before = analyze(&body);
-        assert!(before.get(ValueId(3)).maybe_nan);
+        // An element before the proof too: a checked read stops rather than
+        // answers out of range (`may_stop`). The proof is what removes the
+        // check, not what makes the value finite.
+        assert!(!before.get(ValueId(3)).maybe_nan);
         assert_eq!(
             super::super::bounds::eliminate_checks(&mut body, &before, &FxHashMap::default()),
             1

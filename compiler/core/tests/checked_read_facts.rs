@@ -1,4 +1,9 @@
-//! Checked reads carry the missing-value possibility until bounds prove them.
+//! A checked read stands for its out-of-range path until bounds prove it.
+//!
+//! Out of range, a checked read stops the program rather than answering
+//! `undefined`, so its value facts are the element's and the read itself
+//! survives a fold that drops its consumer (`hir::may_stop`). A read the
+//! program discards is not evaluated at all, as in JavaScript.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
@@ -31,6 +36,7 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         "boundedArray",
         "ordinaryArray",
         "unusedRead",
+        "allZero",
     ] {
         let (index, body) = prepared
             .program
@@ -66,10 +72,13 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
             OpKind::ArrayGet { checked, .. } if checked == expected_checked),
             "{name}: {body:#?}"
         );
-        if expected_checked {
+        // An element, whenever the read returns: a byte is never NaN, which
+        // is what keeps `total + xs[k]` in integers. (A `number[]` element can
+        // be NaN in its own right, so the two arrays are not asked.)
+        if matches!(name, "unboundedByte" | "allZero") {
             assert!(
-                analysis.get(id).maybe_nan,
-                "{name}: a checked read may be missing"
+                !analysis.get(id).maybe_nan,
+                "{name}: a checked read's value is an element"
             );
         }
     }

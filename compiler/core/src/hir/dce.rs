@@ -15,7 +15,7 @@
 
 use rustc_hash::FxHashSet;
 
-use super::{BlockId, Func, HirType, ManagedType, Op, OpKind, Terminator, ValueId};
+use super::{BlockId, Func, Op, OpKind, Terminator, ValueId};
 
 /// Drop operations whose results nothing reads, and report how many.
 pub fn eliminate(func: &mut Func) -> usize {
@@ -28,7 +28,7 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            if has_effects(&func.values[value.0 as usize], &func.values) {
+            if has_effects(&func.values[value.0 as usize]) {
                 live.insert(*value);
             }
         }
@@ -112,14 +112,12 @@ const PURE_RUNTIME_CALLS: &[&str] = &[
 // they would be a list rather than a set of decisions, and the next operation
 // to arrive would join the list instead of being thought about.
 #[allow(clippy::match_same_arms)]
-fn has_effects(op: &Op, values: &[Op]) -> bool {
+fn has_effects(op: &Op) -> bool {
     match &op.kind {
-        // Cooked-only reads cannot return undefined. The checked read is the
-        // runtime boundary, even when a type-based comparison drops its result.
-        // A bounds proof makes it unchecked and therefore removable again.
-        OpKind::ArrayGet { array, checked, .. } => {
-            *checked && values[array.0 as usize].ty == HirType::Managed(ManagedType::Template)
-        }
+        // A checked read may stop the program out of range, which is the whole
+        // of what stands for that path once a consumer has been folded away
+        // (`super::may_stop`). A bounds proof makes it unchecked and removable.
+        OpKind::ArrayGet { .. } => super::may_stop(&op.kind),
         // A copy writes memory, which is the whole of what it does: nothing
         // reads its result, so without this it would be dropped as unused.
         OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } | OpKind::NativeCopy { .. } => true,

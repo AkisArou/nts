@@ -49630,6 +49630,31 @@ impl<'a> FuncBuilder<'a> {
                     return self.chain_for_effect(expression);
                 }
                 let value = self.lower_expression(expression)?;
+                // `bytes[i];`: an element read whose value the program throws
+                // away. Reading an array's or a typed array's element has no
+                // effect JavaScript can observe, so the read is not evaluated --
+                // its object and index were, as operations of their own. A read
+                // whose value *is* used stays, and may stop the program out of
+                // range (`hir::may_stop`); this one would only have stopped a
+                // program node runs to the end.
+                // The read, or the read converted to the expression's type
+                // (`convert` of a byte to a number), as the last operations.
+                let read = match self.values[value.0 as usize].kind {
+                    OpKind::Convert(inner) => inner,
+                    _ => value,
+                };
+                let block = &mut self.blocks[self.current.0 as usize].ops;
+                let tail: &[ValueId] = if read == value {
+                    &[value]
+                } else {
+                    &[read, value]
+                };
+                if block.ends_with(tail)
+                    && matches!(self.values[read.0 as usize].kind, OpKind::ArrayGet { .. })
+                {
+                    block.truncate(block.len() - tail.len());
+                    return Ok(());
+                }
                 // A call to something declared `never` does not come back, and
                 // saying so is what makes the rest of the block dead rather
                 // than merely unreached. `boundsError(offset, last)` is the

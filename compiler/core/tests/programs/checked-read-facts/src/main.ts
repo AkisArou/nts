@@ -20,3 +20,10 @@ export function unusedRead(index: number): number {
   bytes[index | 0];
   return 7;
 }
+
+// Every element is zero, so the read's value is a single constant: folding it
+// to `0` would drop the read, and with it the refusal an unproven index owes.
+export function allZero(index: number): number {
+  const zeros = new Uint8Array(4);
+  return zeros[index | 0]!;
+}
