@@ -20,7 +20,9 @@
 
 export function go(n: number): string {
   const xs: string[] = [];
-  for (let k = 0; k < n; k++) xs.push("v" + k);
+  // Bounded, so a pool value in the loop bound finishes: the subject is the
+  // shrinking read, not the count.
+  for (let k = 0; k < (n & 15); k++) xs.push("v" + k);
   let s = "";
   for (let i = 0; i < xs.length; i++) {
     xs.pop();
