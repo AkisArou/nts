@@ -132,6 +132,41 @@ fn bounded(program: &str) -> std::process::Command {
     command
 }
 
+/// Whether the compiled program is built under `AddressSanitizer`:
+/// `NTS_SANITIZE=address`, which `outcomes/` asks for with `// sanitizer:
+/// address`.
+///
+/// It is what turns a reference released once too often into a report rather
+/// than a value read back by luck. Under counting the runtime recycles a freed
+/// block (`NTS_RECYCLES` in `nts_runtime.c`), so a read through a dangling
+/// pointer usually finds what was there, and nothing disagrees. Under the
+/// sanitizer every block comes from `malloc` and goes back to it, so the read
+/// is caught: a thrown object released once too many after `nts_raise` read as
+/// itself here until the sanitizer said `heap-use-after-free`. Build mode had
+/// this already. A check reaches what build mode cannot, a raising copy among
+/// them, so it needs it too.
+fn address_sanitized() -> bool {
+    std::env::var("NTS_SANITIZE").is_ok_and(|value| value == "address")
+}
+
+/// The compiled program, bounded as [`bounded`] bounds it, except in address
+/// space under the sanitizer: `AddressSanitizer` reserves terabytes of shadow
+/// memory up front, which a two-gigabyte `--as` refuses before `main` runs.
+/// Time still bounds it, and its own leak report is off -- what a counted
+/// program still holds is this harness's question (`growth`), asked the same
+/// way with or without the sanitizer.
+fn bounded_native(program: &str) -> std::process::Command {
+    if !address_sanitized() {
+        return bounded(program);
+    }
+    let mut command = std::process::Command::new("timeout");
+    command
+        .arg(TIMEOUT)
+        .arg(program)
+        .env("ASAN_OPTIONS", "detect_leaks=0");
+    command
+}
+
 /// A working directory that removes itself.
 ///
 /// # Why this is a guard rather than a call at the end
@@ -1360,6 +1395,16 @@ fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stop
     if code == Some(TIMED_OUT) {
         return Stopped::TimedOut;
     }
+    // A sanitizer's report, which is never the program declining its input:
+    // the memory it names was used wrongly, whatever the program printed or
+    // was about to. Named by kind (`heap-use-after-free`), as a build-mode
+    // outcome names it, because the address beside it differs on every run.
+    if let Some(kind) = complaint.lines().find_map(|line| {
+        line.split_once("ERROR: AddressSanitizer: ")
+            .and_then(|(_, rest)| rest.split_whitespace().next())
+    }) {
+        return Stopped::Defect(format!("AddressSanitizer: {kind}"));
+    }
     if let Some(line) = complaint.lines().find(|line| {
         line.starts_with("nts:")
             && !line.starts_with(REFUSED)
@@ -1652,6 +1697,11 @@ fn run_native(
     if counted {
         defines.push("-DNTS_PROVIDER_RC");
     }
+    // See `address_sanitized`. The runtime's objects are cached under their
+    // flags, so a sanitized check never links an unsanitized runtime.
+    if address_sanitized() {
+        defines.extend(["-fsanitize=address", "-fno-omit-frame-pointer", "-g"]);
+    }
     // The runtime and the host are the same bytes in nearly every check, and
     // compiling them was nearly all of one: see `objects`. The program and its
     // driver are compiled here, every time.
@@ -1692,7 +1742,7 @@ fn run_native(
         aborts,
         timeouts,
         |from, path| {
-            bounded(binary.as_str())
+            bounded_native(binary.as_str())
                 .env("NTS_DIFF_RESULTS", path.as_str())
                 .arg(from.to_string())
                 .output()
@@ -2636,6 +2686,22 @@ mod tests {
             stopped_with(None, None, "nts: `x` was read before its declaration ran\n"),
             Stopped::Defect(_)
         ));
+    }
+
+    /// A sanitizer's report is a defect, named by its kind and not by the
+    /// address, which differs on every run -- and it wins over a refusal line
+    /// printed before it, because the memory was used wrongly whatever the
+    /// program said first.
+    #[test]
+    fn an_address_sanitizer_report_is_a_defect_by_its_kind() {
+        let report = "nts: refused: index 9 is outside [0, 3)\n\
+             ==3978772==ERROR: AddressSanitizer: heap-use-after-free on address \
+             0x7bd702de0060 at pc 0x563a768bd5ba\n\
+             READ of size 8 at 0x7bd702de0060 thread T0\n";
+        assert_eq!(
+            stopped_with(Some(1), None, report),
+            Stopped::Defect("AddressSanitizer: heap-use-after-free".to_owned()),
+        );
     }
 
     /// A program that *threw* is a defect, and this is the gap it closes.

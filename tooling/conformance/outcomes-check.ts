@@ -29,9 +29,11 @@
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
 //     src/main.ts     the program; `// run: build` (default) or `// run: check`,
 //                     and with `check`, optionally `// backend: jvm` (or `llvm`)
-//                     `// provider: rc` selects reference counting; in build
-//                     mode `// sanitizer: address` enables Clang ASan and
-//                     detect_stack_use_after_return (no virtual-address cap).
+//                     `// provider: rc` selects reference counting, and
+//                     `// sanitizer: address` enables Clang ASan with no
+//                     virtual-address cap: in build mode with
+//                     detect_stack_use_after_return, in check mode (C only) as
+//                     `NTS_SANITIZE=address`, a report stopping it by kind.
 //     outcome.json    what it did, written by --record, compared by default
 //
 // **`// backend:` is for a defect only one backend has.** `build` is `emit-c`
@@ -317,9 +319,16 @@ const backendOf = (name) =>
 
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
 function runCheck(dir, backend, options) {
-  const { NTS_BACKEND: _ambient, NTS_RC: _rc, ...rest } = env();
+  const { NTS_BACKEND: _ambient, NTS_RC: _rc, NTS_SANITIZE: _sanitize, ...rest } = env();
   if (options.rc) rest.NTS_RC = "1";
-  const ran = spawnSync("sh", capped(TOOLS, NTS, ["check", dir]), {
+  // The check builds its program under AddressSanitizer and runs it without an
+  // address-space cap, which the sanitizer's shadow memory cannot start under
+  // (`address_sanitized` in tooling/differential). A cap on `nts` would be
+  // inherited by that program, so `nts` runs uncapped too, as build mode runs
+  // its sanitized executable.
+  if (options.address) rest.NTS_SANITIZE = "address";
+  const tools = options.address ? { ...TOOLS, memoryCapKb: 0 } : TOOLS;
+  const ran = spawnSync("sh", capped(tools, NTS, ["check", dir]), {
     encoding: "utf8",
     timeout: 300_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -363,7 +372,10 @@ function memoryOptions(name) {
 function measure(name) {
   const mode = runMode(name);
   const options = memoryOptions(name);
-  if (mode === "check" && options.address) return { run: mode, category: "not-measured", nts: "the address sanitizer requires build mode", node: null };
+  // A check reaches what build mode cannot -- a raising copy, which only a
+  // caller of the exported function exercises -- so it takes the sanitizer
+  // too; on the C backend, where the check links a native program.
+  if (mode === "check" && options.address && backendOf(name) !== null) return { run: mode, category: "not-measured", nts: "the address sanitizer checks the C backend only", node: null };
   const dir = materialise(name, join(FIXTURES, name, "src"), mode);
   if (mode === "check") return { run: "check", ...runCheck(dir, backendOf(name), options), node: null };
   const nts = runBuild(dir, options);
