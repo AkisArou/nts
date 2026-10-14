@@ -4,7 +4,7 @@
 // which makes it a claim like any hand-written binding. `native_witness.c`
 // is what proves it against the headers a consumer actually compiles with.
 /**
- * @ntsHeader /home/akisarou/Projects/nts/examples/workspace/packages/notifications/native/linux/scheduler.h
+ * @ntsHeader /home/akisarou/Projects/nts/tests/workspace/packages/notifications/native/linux/scheduler.h
  */
 declare module "c:notifications" {
   import type { Float64, Int32 } from "@nts/scalars";
