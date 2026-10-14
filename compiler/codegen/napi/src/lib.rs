@@ -2113,12 +2113,19 @@ fn class_definition(
     let identity = program
         .published_classes()
         .find(|identity| identity.emitted == class)?;
-    let instance = nts_codegen_c::class_instance_name(identity);
+    let layout = program.layout(identity.receiver)?;
+    let instance = nts_codegen_c::class_instance_name(program, layout, identity);
 
     // The field definer is emitted below the constructor and called from it, so
     // its prototype goes here with the other two.
-    let mut out = format!(
-        "typedef struct {physical} {instance};\nNtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
+    let mut out = if physical == instance {
+        format!("typedef struct {physical} {instance};\n")
+    } else {
+        format!("typedef {physical} {instance};\n")
+    };
+    let _ = write!(
+        out,
+        "NtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
     );
 
     // The finalizer, which is the whole of the ownership story: the instance is
@@ -2174,15 +2181,9 @@ fn class_definition(
     // The data, which is not in `program.funcs` and so was never reached by the
     // loop above. Appended after the methods so a class reads the way it is
     // declared: behaviour first, then state.
-    if let Some(at) = layouts
-        .iter()
-        .position(|candidate| c_type_is(candidate, &physical))
-    {
-        let (bodies, fields) =
-            field_accessors(&layouts[at], &instance, class, layouts, classes, skipped);
-        out.push_str(&bodies);
-        descriptors.extend(fields);
-    }
+    let (bodies, fields) = field_accessors(layout, &instance, class, layouts, classes, skipped);
+    out.push_str(&bodies);
+    descriptors.extend(fields);
 
     // A re-export changes the property key, never the constructor's name.
     let constructor_name = c_string_literal(&identity.identity.name);
@@ -3735,17 +3736,6 @@ fn declare_value_exports(
     out
 }
 
-/// Whether this layout is the one whose C struct is named `instance`.
-///
-/// By the emitted spelling rather than by the layout's own name, because the
-/// class emitter takes `instance` from the *constructor's receiver type* --
-/// deliberately, so the struct the factory allocates and the struct the wrapper
-/// unwraps cannot disagree about spelling. Matching on `layout.name` would
-/// reintroduce exactly the disagreement that was designed out.
-fn c_type_is(layout: &hir::Layout, instance: &str) -> bool {
-    nts_codegen_c::object_type_name(layout) == instance
-}
-
 /// A getter per instance field, and the descriptors that publish them.
 ///
 /// A class crossed with its prototype methods and **none of its data**:
@@ -3793,8 +3783,10 @@ fn field_accessors(
             continue;
         };
         let member = c_member(&field.name);
-        // Mangle the complete symbol, including its non-keyword prefix.
-        let symbol = c_identifier(&format!("nts_napi_get_{class}_{}", field.name));
+        // Keep the physical prefix for an ordinary class, and the semantic
+        // suffix for another class sharing its storage. Mangle the full name.
+        let stem = instance.strip_prefix("NtsObj_").unwrap_or(instance);
+        let symbol = c_identifier(&format!("nts_napi_get_{stem}_{}", field.name));
         let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
             continue;
         };

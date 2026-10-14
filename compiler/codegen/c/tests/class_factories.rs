@@ -38,7 +38,19 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
                 sources.push(path);
             }
         }
-        std::fs::write(dir.join("caller.c"), CALLER).unwrap();
+        check_factory_name_collisions(&prepared.program);
+        let mut caller = CALLER.to_owned();
+        for class in prepared.program.published_classes() {
+            let layout = prepared.program.layout(class.receiver).unwrap();
+            caller = caller.replace(
+                &format!("nts_construct_NtsObj_{}", class.emitted),
+                &format!(
+                    "nts_construct_{}",
+                    nts_codegen_c::class_instance_name(&prepared.program, layout, class)
+                ),
+            );
+        }
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
         let binary = dir.join("caller");
         let mut cc = Command::new("clang");
         cc.args(["-std=c11", "-O1", "-Wall", "-Wextra", "-Werror"]);
@@ -65,6 +77,44 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
             "{provider:?}: {}",
             String::from_utf8_lossy(&result.stderr)
         );
+    }
+}
+
+fn check_factory_name_collisions(program: &hir::Program) {
+    let class = program
+        .published_classes()
+        .find(|class| class.emitted == "Unique")
+        .unwrap();
+    let layout = program.layout(class.receiver).unwrap();
+    let factory = format!(
+        "nts_construct_{}",
+        nts_codegen_c::class_instance_name(program, layout, class)
+    );
+    for (name, collides) in [
+        (factory.clone(), true),
+        (format!("{factory}_distinct"), false),
+    ] {
+        let mut probe = program.clone();
+        let mut function = probe
+            .funcs
+            .iter()
+            .find(|func| func.name == "earlierControl")
+            .unwrap()
+            .clone();
+        function.name = name;
+        probe.funcs.push(function);
+        let emitted = nts_codegen_c::emit(&probe, hir::native::NativeAbi::LP64);
+        let collision = emitted
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == "NTS2004");
+        assert_eq!(collision.is_some(), collides, "{:?}", emitted.diagnostics);
+        if let Some(collision) = collision {
+            assert!(collision.message.contains(&factory));
+            assert!(nts_codegen_c::leaves_the_program_inconsistent(collision));
+        } else {
+            assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        }
     }
 }
 

@@ -953,10 +953,10 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // Two different TypeScript names can mangle to one C name — `double` and
     // `double_` both become `double_`. Emitting both would produce a redefinition
     // error far from its cause, so it is caught here where the cause is known.
-    let mut claimed: rustc_hash::FxHashMap<String, &str> = rustc_hash::FxHashMap::default();
+    let mut claimed: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
     for func in program.native_funcs() {
         let c_name = c_identifier(&func.name);
-        if let Some(previous) = claimed.insert(c_name.clone(), &func.name)
+        if let Some(previous) = claimed.insert(c_name.clone(), func.name.clone())
             && previous != func.name
         {
             diagnostics.push(Diagnostic::error(
@@ -966,6 +966,26 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
                     func.name
                 ),
                 func.origin.location,
+            ));
+        }
+    }
+
+    // Factories share C's ordinary identifier namespace with native functions.
+    // Check complete emitted names, including every prefix and identity suffix.
+    for class in program.published_classes() {
+        let Some(layout) = program.layout(class.receiver) else {
+            continue;
+        };
+        let c_name = format!(
+            "nts_construct_{}",
+            class_instance_name(program, layout, class)
+        );
+        let owner = format!("the constructor factory for {}", class.emitted);
+        if let Some(previous) = claimed.insert(c_name.clone(), owner.clone()) {
+            diagnostics.push(Diagnostic::error(
+                "NTS2004",
+                format!("`{owner}` and `{previous}` both need the C name `{c_name}`"),
+                origin.location,
             ));
         }
     }
@@ -1378,21 +1398,23 @@ fn native_parameters(target: &nts_core::hir::native::Function, spelling: Spellin
 /// program that tree builds and runs. Those behave like a lowering refusal --
 /// something is missing, and what remains is consistent.
 ///
-/// `NTS2007` is the other kind, and every case of it is the same shape: a
+/// `NTS2004` names two definitions needing the same C identifier. Neither can
+/// be silently merged or dropped, so the emitted program must not be built.
+/// `NTS2007` is the foreign-declaration kind, and every case has the same shape: a
 /// foreign symbol this program *calls* is not correctly declared. The call
 /// stays in the body either way, so the emitted C either declares that symbol
 /// wrongly or not at all. A conflicting pair of declarations is the worst of
 /// them -- one prototype wins, and the other function calls through it.
 ///
-/// A code and not a severity, because both are errors and only one of them
-/// makes the output unusable. The first version of this check was `any error
-/// at all` and it turned sixteen node modules from building into regressed --
+/// Codes and not severity, because declines are errors too and these codes
+/// identify the ones that make the output unusable. The first version checked
+/// `any error at all` and turned sixteen node modules into regressed builds --
 /// measured on `tests/programs/`, which was the wrong population: the modules are
 /// built through `tooling/conformance/build.sh`, and every one of them reports
 /// declines.
 #[must_use]
 pub fn leaves_the_program_inconsistent(diagnostic: &Diagnostic) -> bool {
-    diagnostic.code == "NTS2007"
+    matches!(diagnostic.code.as_str(), "NTS2004" | "NTS2007")
 }
 
 /// The C data model this program was emitted for, asserted where the C
@@ -2018,10 +2040,25 @@ fn published_class_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
         .collect()
 }
 
-/// The class-specific factory and wrapper prefix, independent of its storage.
+/// A factory and wrapper prefix over C's already-unique physical type name.
+/// The first semantic identity keeps the original prefix. Other identities on
+/// that storage get their declaration symbol, never a separately mangled name.
 #[must_use]
-pub fn class_instance_name(class: nts_core::hir::PublishedClass<'_>) -> String {
-    format!("NtsObj_{}", c_identifier(class.emitted))
+pub fn class_instance_name(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    class: nts_core::hir::PublishedClass<'_>,
+) -> String {
+    let physical = object_type_name(layout);
+    if program
+        .classes_laid_out_as(layout)
+        .first()
+        .is_some_and(|first| first.symbol == class.identity.symbol)
+    {
+        physical
+    } else {
+        format!("{physical}__Class{}", class.identity.symbol)
+    }
 }
 
 /// Layouts allocated, published for construction, or named by a descriptor test.
@@ -3572,7 +3609,10 @@ fn emit_object_descriptors(
                     let descriptor = descriptor_for(program, layout, Some(class.receiver));
                     writer.line(
                         origin,
-                        construction_hole(&class_instance_name(class), &descriptor),
+                        construction_hole(
+                            &class_instance_name(program, layout, class),
+                            &descriptor,
+                        ),
                     );
                 }
             }
