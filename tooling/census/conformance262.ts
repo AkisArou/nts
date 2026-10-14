@@ -100,7 +100,7 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import { selfChecks } from "./attempt262.ts";
+import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, HARNESS_HASH, pinCompiler } from "./project.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
 
@@ -256,7 +256,14 @@ let lowestAvailableGb = machineAtStart.available_gb;
 const describeMachine = (m) =>
   `${m.available_gb} GB available, swap ${m.swap_used_gb}/${m.swap_total_gb} GB, load ${m.load[0]}/${m.load[1]} (1m/5m), ${m.cores} cores`;
 
-const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE };
+// Which backend compiles and runs each case (`attempt262.ts` `BACKENDS`): `c`,
+// `jvm` or `wasm`. test262 runs on every backend; each records its own outcomes.
+const BACKEND = flag("--backend", "c");
+if (!(BACKEND in BACKENDS)) {
+  process.stderr.write(`conformance262: --backend ${BACKEND} is none of ${Object.keys(BACKENDS).join(", ")}\n`);
+  process.exit(2);
+}
+const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND };
 
 // --- the population --------------------------------------------------------
 
@@ -441,7 +448,7 @@ async function runAll(all) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE],
+        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       const feed = () => {

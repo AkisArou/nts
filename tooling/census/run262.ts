@@ -52,7 +52,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { attempt, selfChecks } from "./attempt262.ts";
+import { BACKENDS, attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
 import { frontendFor } from "../conformance/pin.ts";
 
@@ -149,7 +149,14 @@ if (limit > 0) chosen = chosen.slice(0, limit);
 // `attempt` and the self-checks live in `attempt262.ts`, shared with
 // `conformance262.ts`: one derivation of what a file did, not two.
 
-const TOOLS = { nts: PINNED, cc: CC };
+// Which backend compiles and runs each case: `c`, `jvm` or `wasm`
+// (`attempt262.ts` `BACKENDS`).
+const BACKEND = flag("--backend", "c");
+if (!(BACKEND in BACKENDS)) {
+  process.stderr.write(`run262: --backend ${BACKEND} is none of ${Object.keys(BACKENDS).join(", ")}\n`);
+  process.exit(2);
+}
+const TOOLS = { nts: PINNED, cc: CC, backend: BACKEND };
 
 const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
 

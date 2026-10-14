@@ -1,7 +1,7 @@
 // One worker of `conformance262.ts`: reads a Test262 path per stdin line,
 // writes one JSON outcome per stdout line, in order.
 //
-//   node tooling/census/attempt262-worker.ts <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache]
+//   node tooling/census/attempt262-worker.ts <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache] [backend]
 //
 // **One workspace per worker, never shared.** `attempt` writes `src/main.js`
 // and then compiles it, so two attempts in one directory race on that file and
@@ -20,9 +20,9 @@ import { createInterface } from "node:readline";
 import { attempt } from "./attempt262.ts";
 import { workspace } from "./project.ts";
 
-const [scratch, nts, cc, suite, memoryCapKb, objectCache] = process.argv.slice(2);
+const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend] = process.argv.slice(2);
 const dir = workspace(scratch);
-const tools = { nts, cc, memoryCapKb: Number(memoryCapKb ?? 0), objectCache };
+const tools = { nts, cc, memoryCapKb: Number(memoryCapKb ?? 0), objectCache, backend: backend ?? "c" };
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const path of lines) {

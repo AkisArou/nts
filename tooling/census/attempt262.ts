@@ -266,9 +266,124 @@ export function asyncVerdict(printed, objects) {
   return { bucket: "threw", thrown: "$DONE", message: "an async test that exited without calling $DONE" };
 }
 
+/**
+ * The C backend's preparation: link what `emit-c` emitted with the exact `cc`
+ * line it printed, through the object cache. `{ objects }` when it linked, an
+ * outcome when it did not.
+ */
+function linkC(stdout, out, tools) {
+  const { cc } = tools;
+  const printed = linkCommand(stdout);
+  if (!printed) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
+  let args = printed;
+  let objects;
+  try {
+    ({ args, objects } = withCachedObjects(printed, out, tools));
+    execFileSync(cc, args, {
+      cwd: out,
+      encoding: "utf8",
+      timeout: 180_000,
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    // A backend declining a function, or C the compiler will not take. Both are
+    // `unsupported`, and this is exactly the gap the census could not see: it
+    // measured lowering, and lowering is not building.
+    //
+    // **A refusal and an unmeasurable run must not look alike**, which is the
+    // rule `tooling/differential` already states for its own timeouts and which
+    // this `catch` broke by discarding the error. Two censuses reported exactly
+    // one `link` failure each, on two different files, and **neither
+    // reproduced** -- three runs apiece in isolation, all `strict-pass`. Both
+    // full runs overlapped a gate, so `cc` was competing for the machine and the
+    // timeout here is 180s. A row that reads `link` both for "the toolchain
+    // refused this C" and for "the toolchain did not finish" is one nobody can
+    // act on, and it cost two investigations that ended in "does not reproduce".
+    const timedOut = error?.signal === "SIGTERM" || error?.code === "ETIMEDOUT";
+    if (timedOut) return { bucket: "timeout", why: "link" };
+    const said = `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
+    // **The toolchain crashing is not the program's fault**, and the third
+    // unexplained `link` row in as many censuses is what named it:
+    //
+    //     quickjs/dtoa.c:1353:8: internal compiler error: Segmentation fault
+    //
+    // `cc` segfaulted on a *runtime* source the program does not contain, under
+    // a census sharing the machine with a gate. The file passes on its own, and
+    // so did the two before it -- which is all anyone could say until the
+    // message was kept. `infrastructure-error` is the bucket the runner already
+    // has for "this run could not measure anything", and it belongs here rather
+    // than in `unsupported`, where it reads as a refusal the compiler made.
+    if (/internal compiler error|Segmentation fault|Killed|out of memory/i.test(said)) {
+      return { bucket: "infrastructure-error", why: "the toolchain did not survive the link" };
+    }
+    // The first line the toolchain said, so the next one is diagnosable from the
+    // rows rather than from a re-run that may not reproduce it. Paths are
+    // stripped: they name a per-process scratch directory, which would make
+    // every row unique and unrankable.
+    const line = said
+      .split("\n")
+      .find((text) => /error|undefined reference|cannot find/i.test(text));
+    return {
+      bucket: "unsupported",
+      why: "link",
+      first: line?.replace(/\/\S*\//g, "").trim().slice(0, 160),
+    };
+  }
+  return { objects };
+}
+
+/**
+ * How each backend turns a materialised program into one run. test262 runs on
+ * every backend (the user, 2026-10-14), and what makes a verdict is the same
+ * for all of them -- which diagnostics are a refusal, what the run printed,
+ * which throw escaped -- so only three things differ: the command that emits,
+ * what readies its output to run, and the command that runs it. A backend
+ * whose run adapter is not written yet fails the self-checks by name rather
+ * than reporting verdicts it cannot reach.
+ */
+export const BACKENDS = {
+  c: {
+    emit: (tsconfig, out) => ["emit-c", tsconfig, "--out", out, "--main"],
+    prepare: linkC,
+    run: (out) => [join(out, "program"), []],
+  },
+  // `emit-jvm` writes `nts/gen/*.class` and `nts-runtime.jar`, nothing to
+  // link; `nts.rt.NtsMain` runs `Program.module$init()`, drains the loop and
+  // exits with C's statuses (the JVM lane, measured on openjdk 21). Its heap
+  // is capped by `-Xmx`, never `ulimit -v`, which the JVM's reservations
+  // exceed at start-up; a deep test262 recursion needs more than the default
+  // 1 MB stack to reach the answer C's stack does; and the flags after that
+  // keep a JVM start per test cheap without changing an answer.
+  jvm: {
+    emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out],
+    prepare: () => ({ objects: undefined }),
+    run: (out, tools) => [
+      "java",
+      [
+        ...(tools.memoryCapKb ? [`-Xmx${Math.floor(Number(tools.memoryCapKb) / 2)}k`] : []),
+        "-Xss512m",
+        "-XX:TieredStopAtLevel=1",
+        "-XX:+UseSerialGC",
+        "-Xshare:auto",
+        "-cp",
+        `${out}:${join(out, "nts-runtime.jar")}`,
+        "nts.rt.NtsMain",
+        "nts.gen.Program",
+      ],
+    ],
+    capsItself: true,
+  },
+  wasm: {
+    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--main"],
+    prepare: () => ({ bucket: "infrastructure-error", why: "no Wasm run adapter yet" }),
+    run: () => ["false", []],
+  },
+};
+
 /** Compile, link and run one program body. Never reads an exit status alone. */
 export function attempt(dir, body, tools, origin?) {
-  const { nts, cc } = tools;
+  const { nts } = tools;
   materialise(dir, body, origin);
   const out = join(dir, "out");
 
@@ -293,7 +408,9 @@ export function attempt(dir, body, tools, origin?) {
   //
   // The two self-checks below could not see it: neither program has a refusal
   // in it, so the arm that would have fired never ran. `refused()` is that arm.
-  const emit = spawnSync("sh", capped(tools, nts, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main"]), {
+  const backend = BACKENDS[tools.backend ?? "c"];
+  if (!backend) return { bucket: "infrastructure-error", why: `no backend \`${tools.backend}\`` };
+  const emit = spawnSync("sh", capped(tools, nts, backend.emit(join(dir, "tsconfig.json"), out)), {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
@@ -383,66 +500,14 @@ export function attempt(dir, body, tools, origin?) {
     };
   }
 
-  const printed = linkCommand(stdout);
-  if (!printed) return { bucket: "infrastructure-error", why: "no link command in the emit output" };
-  let args = printed;
-  let objects;
-  try {
-    ({ args, objects } = withCachedObjects(printed, out, tools));
-    execFileSync(cc, args, {
-      cwd: out,
-      encoding: "utf8",
-      timeout: 180_000,
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (error) {
-    // A backend declining a function, or C the compiler will not take. Both are
-    // `unsupported`, and this is exactly the gap the census could not see: it
-    // measured lowering, and lowering is not building.
-    //
-    // **A refusal and an unmeasurable run must not look alike**, which is the
-    // rule `tooling/differential` already states for its own timeouts and which
-    // this `catch` broke by discarding the error. Two censuses reported exactly
-    // one `link` failure each, on two different files, and **neither
-    // reproduced** -- three runs apiece in isolation, all `strict-pass`. Both
-    // full runs overlapped a gate, so `cc` was competing for the machine and the
-    // timeout here is 180s. A row that reads `link` both for "the toolchain
-    // refused this C" and for "the toolchain did not finish" is one nobody can
-    // act on, and it cost two investigations that ended in "does not reproduce".
-    const timedOut = error?.signal === "SIGTERM" || error?.code === "ETIMEDOUT";
-    if (timedOut) return { bucket: "timeout", why: "link" };
-    const said = `${error?.stdout ?? ""}${error?.stderr ?? ""}`;
-    // **The toolchain crashing is not the program's fault**, and the third
-    // unexplained `link` row in as many censuses is what named it:
-    //
-    //     quickjs/dtoa.c:1353:8: internal compiler error: Segmentation fault
-    //
-    // `cc` segfaulted on a *runtime* source the program does not contain, under
-    // a census sharing the machine with a gate. The file passes on its own, and
-    // so did the two before it -- which is all anyone could say until the
-    // message was kept. `infrastructure-error` is the bucket the runner already
-    // has for "this run could not measure anything", and it belongs here rather
-    // than in `unsupported`, where it reads as a refusal the compiler made.
-    if (/internal compiler error|Segmentation fault|Killed|out of memory/i.test(said)) {
-      return { bucket: "infrastructure-error", why: "the toolchain did not survive the link" };
-    }
-    // The first line the toolchain said, so the next one is diagnosable from the
-    // rows rather than from a re-run that may not reproduce it. Paths are
-    // stripped: they name a per-process scratch directory, which would make
-    // every row unique and unrankable.
-    const line = said
-      .split("\n")
-      .find((text) => /error|undefined reference|cannot find/i.test(text));
-    return {
-      bucket: "unsupported",
-      why: "link",
-      first: line?.replace(/\/\S*\//g, "").trim().slice(0, 160),
-    };
-  }
+  const prepared = backend.prepare(stdout, out, tools);
+  if (prepared.bucket) return prepared;
+  const { objects } = prepared;
 
   try {
-    const printed = execFileSync("sh", capped(tools, join(out, "program"), []), {
+    const [program, programArgs] = backend.run(out, tools);
+    const runTools = backend.capsItself ? { ...tools, memoryCapKb: 0 } : tools;
+    const printed = execFileSync("sh", capped(runTools, program, programArgs), {
       encoding: "utf8",
       timeout: 30_000,
       maxBuffer: 16 * 1024 * 1024,
@@ -465,6 +530,12 @@ export function attempt(dir, body, tools, origin?) {
     // The program's last word, kept: a runtime refusal prints
     // `nts: refused: index 1 is outside [0, 1)` and aborts, and a row that says
     // only SIGABRT sends the next reader to reproduce what was already said.
+    // A host exception no runtime refusal raised -- the JVM's
+    // `Exception in thread "main" java.lang.ClassCastException` -- is a
+    // defect of the program's translation, named by its class, never a
+    // TypeScript throw (both exit 1; stderr tells them apart).
+    const host = /^Exception in thread "[^"]*" ([\w.$]+)/m.exec(String(error.stderr ?? ""));
+    if (host) return { bucket: "crash", why: "host exception", first: host[1] };
     const said = String(error.stderr ?? "").split("\n").find((text) => text.startsWith("nts: "));
     return {
       bucket: "crash",
