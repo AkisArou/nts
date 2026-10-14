@@ -513,7 +513,7 @@ fn explicit_casts_and_erased_container_pairs_keep_the_scan_answers() {
                 });
             }
             let ops = (0..values.len())
-                .map(|at| ValueId(u32::try_from(at).unwrap()))
+                .map(|at| ValueId(u32::try_from(at).expect("small fixture value id")))
                 .collect();
             let program = Program {
                 layouts: vec![
