@@ -11,7 +11,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -28,8 +28,10 @@ fi
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
-printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s"}],"identities":{"commit":"%s"}}' \\
-  "$verdict" "$step" "$sha" > "$NTS_GATE_RUN_DIR/summary.json"
+# A platform whose programs never ran, as interop's log says it.
+echo "  windows-hello    skipped: SKIP windows-x86_64 (hello): not run" > "$NTS_GATE_RUN_DIR/interop.log"
+printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s","log":"%s"}],"identities":{"commit":"%s"}}' \\
+  "$verdict" "$step" "$NTS_GATE_RUN_DIR/interop.log" "$sha" > "$NTS_GATE_RUN_DIR/summary.json"
 `;
 
 type Scratch = { root: string; home: string; gates: string; env: NodeJS.ProcessEnv };
@@ -80,7 +82,10 @@ function run(s: Scratch, cwd: string, args: string[]): string {
 function lane(s: Scratch, name: string, files: Record<string, string>): string {
   const tree = join(s.root, "..", name);
   run(s, s.root, ["worktree", "add", "-q", "-b", name, tree, "main"]);
-  for (const [path, text] of Object.entries(files)) writeFileSync(join(tree, path), text);
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(tree, path)), { recursive: true });
+    writeFileSync(join(tree, path), text);
+  }
   run(s, tree, ["add", "-A"]);
   run(s, tree, ["commit", "-q", "-m", name]);
   return tree;
@@ -259,4 +264,16 @@ test("commits that landed as replayed copies are not replayed again", async () =
   assert.equal(rf.status, 0, rf.out);
   assert.ok(onMain(s, "fix.txt"));
   assert.equal(run(s, s.root, ["show", "main:subject.txt"]), "one, revised");
+});
+
+test("a platform that never ran refuses what runs there, not its tests or documents", async () => {
+  // The Windows lane's paths, with no Windows reachable (the stand-in's log).
+  const s = scratch();
+  const test = lane(s, "test", { "compiler/codegen/c/tests/com.rs": "// a host test\n", "docs/windows-lane-goal.md": "notes\n" });
+  const [rt] = await landTogether(s, [test]);
+  assert.equal(rt.status, 0, rt.out);
+  const runtime = lane(s, "runtime", { "runtime/winrt/x.c": "/* runs on Windows */\n" });
+  const [rr] = await landTogether(s, [runtime]);
+  assert.equal(rr.status, 1, rr.out);
+  assert.match(rr.out, /a platform this range touches never ran it/);
 });

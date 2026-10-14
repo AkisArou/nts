@@ -126,11 +126,22 @@ function owns(lane: Lane, path: string): boolean {
  * so `interop` is PASS and a change to that platform lands having never run
  * there. Each such lane says in `lanes.json` (`not_run`) which lines mean
  * that; a range that touches its paths and finds one is not landed.
+ *
+ * **Only paths that can change what runs there.** A lane's paths include
+ * documents and the cargo tests of its emitters, and neither reaches the VM:
+ * an integration test is compiled and run by `tests`, on this host. Counted,
+ * a change to `compiler/codegen/c/tests/com.rs` -- a test-scratch cleanup,
+ * green on every step -- was refused because no Windows was reachable
+ * (2026-10-14), and with the Windows lane closed it never would be.
  */
+function reachesThePlatform(path: string): boolean {
+  return !path.endsWith(".md") && !/(^|\/)tests\/[^/]+\.rs$/.test(path);
+}
+
 function unrun(steps: { log?: string }[], touched: string[]): string[] {
   const found: string[] = [];
   for (const [name, lane] of Object.entries(LANES)) {
-    if (!lane.not_run || !touched.some((path) => owns(lane, path))) continue;
+    if (!lane.not_run || !touched.some((path) => reachesThePlatform(path) && owns(lane, path))) continue;
     const pattern = new RegExp(lane.not_run);
     for (const step of steps) {
       if (!step.log || !existsSync(step.log)) continue;
