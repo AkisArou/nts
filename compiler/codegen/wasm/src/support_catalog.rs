@@ -132,14 +132,8 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_bigint_box", Support::Intrinsic),
     ("nts_bigint_compare_string", Support::WasmHelper),
     ("nts_bigint_from_number", Support::WasmHelper),
-    (
-        "nts_bigint_overflow",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
-    (
-        "nts_bigint_pow",
-        Support::Decline("bigint/symbol/date/promise family"),
-    ),
+    ("nts_bigint_overflow", Support::Intrinsic),
+    ("nts_bigint_pow", Support::WasmHelper),
     ("nts_bigint_shl", Support::WasmHelper),
     ("nts_bigint_shr", Support::WasmHelper),
     ("nts_bigint_to_string", Support::WasmHelper),

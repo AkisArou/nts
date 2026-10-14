@@ -28,6 +28,7 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, ValType};
 pub(crate) const PAST: &str = "a bigint past 128 bits, which this runtime does not hold";
 const BY_ZERO: &str = "a bigint divided by zero, where node throws a RangeError";
 const NOT_INTEGRAL: &str = "a number that is not an integer, which has no bigint";
+const NEGATIVE_EXPONENT: &str = "a negative bigint exponent, where node throws a RangeError";
 const BAD_WIDTH: &str =
     "a bit width that is not a safe integer index, where node throws a RangeError";
 
@@ -47,6 +48,10 @@ pub(crate) enum Op {
     AsUintN,
     Shl,
     Shr,
+    /// `base ** exponent`, the exponent checked not negative by the core.
+    Pow,
+    /// The shared refusal of a bigint past 128 bits.
+    Overflow,
 }
 
 pub(crate) fn external(name: &str) -> Option<Op> {
@@ -60,6 +65,8 @@ pub(crate) fn external(name: &str) -> Option<Op> {
         "nts_bigint_as_uintn" => Op::AsUintN,
         "nts_bigint_shl" => Op::Shl,
         "nts_bigint_shr" => Op::Shr,
+        "nts_bigint_pow" => Op::Pow,
+        "nts_bigint_overflow" => Op::Overflow,
         _ => return None,
     })
 }
@@ -69,7 +76,7 @@ impl Op {
     /// the support catalog's routing test checks against its rows.
     #[cfg(test)]
     pub(crate) const fn inline(self) -> bool {
-        matches!(self, Self::Box | Self::Unbox)
+        matches!(self, Self::Box | Self::Unbox | Self::Overflow)
     }
 }
 
@@ -89,6 +96,8 @@ pub(crate) enum Helper {
     /// of a small remainder's cost. `b` is passed and not read.
     DivBy(i64),
     RemBy(i64),
+    /// `(base, exponent, name) -> base ** exponent`.
+    Pow,
     /// `(value, count, name)`: a bigint count, negative reversing it.
     Shl,
     Shr,
@@ -130,6 +139,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
         | Helper::Rem
         | Helper::DivBy(_)
         | Helper::RemBy(_)
+        | Helper::Pow
         | Helper::Shl
         | Helper::Shr => (vec![V128, V128, name], Some(V128)),
         Helper::Compare => (vec![V128, V128], Some(I32)),
@@ -169,6 +179,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Helper::Rem => divide(m, true, None),
             Helper::DivBy(divisor) => divide(m, false, Some(divisor)),
             Helper::RemBy(divisor) => divide(m, true, Some(divisor)),
+            Helper::Pow => pow(m),
             Helper::Shl => shift(m, true),
             Helper::Shr => shift(m, false),
             Helper::Compare => Ok(compare()),
@@ -396,13 +407,15 @@ pub(crate) fn call(
     args: &[ValueId],
 ) -> Result<(), Failure> {
     let arity = match op {
+        Op::Overflow => 0,
         Op::Box | Op::Unbox | Op::FromNumber | Op::Text => 1,
-        Op::CompareString | Op::AsIntN | Op::AsUintN | Op::Shl | Op::Shr => 2,
+        Op::CompareString | Op::AsIntN | Op::AsUintN | Op::Shl | Op::Shr | Op::Pow => 2,
     };
     if args.len() != arity {
         return Err(format!("bigint helper {op:?} arity mismatch").into());
     }
     match op {
+        Op::Overflow => contract::refuse(b, PAST),
         Op::Box => {
             let boxed = boxed(b)?;
             b.instruction(&I::I32Const(erased::BIGINT));
@@ -460,16 +473,16 @@ pub(crate) fn call(
                 },
             )
         }
-        Op::Shl | Op::Shr => {
+        Op::Shl | Op::Shr | Op::Pow => {
             b.load(args[0])?;
             b.load(args[1])?;
             name(b);
             call_helper(
                 b,
-                if op == Op::Shl {
-                    Helper::Shl
-                } else {
-                    Helper::Shr
+                match op {
+                    Op::Shl => Helper::Shl,
+                    Op::Shr => Helper::Shr,
+                    _ => Helper::Pow,
                 },
             )
         }
@@ -709,6 +722,81 @@ fn mul_high() -> Function {
 ///
 /// Params: a, b, name. Locals: a lo, a hi, b lo, b hi, negative, low word,
 /// high word, the high word of the high product.
+/// `base ** exponent`, as C's `nts_bigint_pow`: square-and-multiply through
+/// the checked product, so a power past 128 bits refuses by name as a product
+/// does, and no square after the exponent's last bit, so `(-2n) ** 127n`, the
+/// exact minimum, is answered. `0n ** 0n` is `1n`. The core raises the
+/// `RangeError` of a negative exponent before the call; one that arrives anyway
+/// refuses by name rather than reading as a huge unsigned one.
+///
+/// Params: base, exponent, name. Locals: the product, the square, the
+/// exponent's words.
+fn pow(m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let product = callee(m, Helper::Mul)?;
+    let (result, square, lo, hi) = (3, 4, 5, 6);
+    let mut f = Function::new([ValType::V128, ValType::V128, ValType::I64, ValType::I64]);
+    split(&mut f, 1, lo, hi);
+    f.instructions(&[I::LocalGet(hi), I::I64Const(0), I::I64LtS]);
+    refuse_if(&mut f, m, 2, NEGATIVE_EXPONENT)?;
+    f.instructions(&[
+        I::V128Const(1),
+        I::LocalSet(result),
+        I::LocalGet(0),
+        I::LocalSet(square),
+        I::Block(BlockType::Empty),
+        I::LocalGet(lo),
+        I::LocalGet(hi),
+        I::I64Or,
+        I::I64Eqz,
+        I::BrIf(0),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(lo),
+        I::I32WrapI64,
+        I::I32Const(1),
+        I::I32And,
+        I::If(BlockType::Empty),
+        I::LocalGet(result),
+        I::LocalGet(square),
+        I::LocalGet(2),
+    ]);
+    f.call(product);
+    f.instructions(&[
+        I::LocalSet(result),
+        I::End,
+        // The exponent down one bit, across its words.
+        I::LocalGet(lo),
+        I::I64Const(1),
+        I::I64ShrU,
+        I::LocalGet(hi),
+        I::I64Const(63),
+        I::I64Shl,
+        I::I64Or,
+        I::LocalSet(lo),
+        I::LocalGet(hi),
+        I::I64Const(1),
+        I::I64ShrU,
+        I::LocalSet(hi),
+        I::LocalGet(lo),
+        I::LocalGet(hi),
+        I::I64Or,
+        I::I64Eqz,
+        I::BrIf(1),
+        I::LocalGet(square),
+        I::LocalGet(square),
+        I::LocalGet(2),
+    ]);
+    f.call(product);
+    f.instructions(&[
+        I::LocalSet(square),
+        I::Br(0),
+        I::End,
+        I::End,
+        I::LocalGet(result),
+        I::End,
+    ]);
+    Ok(f)
+}
+
 fn mul(m: &mut Builder<'_>) -> Result<Function, Failure> {
     let high = callee(m, Helper::MulHigh)?;
     let (alo, ahi, blo, bhi, negative, word, top, spill) = (3, 4, 5, 6, 7, 8, 9, 10);
