@@ -20,7 +20,9 @@ use super::{
     HirType, Layout, ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, UnOp,
     ValueId,
 };
+use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
+use layout_collection::{BuilderLayouts, LayoutCollector};
 
 /// Closures crossing the type they were written at, recorded where that is known.
 ///
@@ -2768,7 +2770,8 @@ fn member_dispatch_key(probe: &FuncBuilder, member: NodeId) -> Option<String> {
 /// The class is the compiler's own -- the checker has a type for the
 /// *signature*, which is what a value holding the closure is declared as, but
 /// nothing for the thing that carries the captures.
-#[derive(Clone, Debug)]
+#[cfg_attr(not(test), derive(Clone))]
+#[derive(Debug)]
 struct ClosureInfo {
     /// The arrow function node; for any other [`ClosureSource`], the
     /// declaration it was made from, which that variant names.
@@ -2812,6 +2815,25 @@ struct ClosureInfo {
     /// and its written `#call` is a wrapper passing `undefined`, for the
     /// callers that have no `this` to give (`docs/function-receivers.md`).
     reads_this: bool,
+}
+
+// Observe actual element clones, so the guard also detects a clone introduced
+// at a different builder call site. Production keeps the derived implementation.
+#[cfg(test)]
+impl Clone for ClosureInfo {
+    fn clone(&self) -> Self {
+        collection_tests::note(|counts| counts.closure_copies += 1);
+        Self {
+            node: self.node,
+            captures: self.captures.clone(),
+            refusal: self.refusal,
+            source: self.source,
+            within: self.within.clone(),
+            within_copy: self.within_copy.clone(),
+            retyped_captures: self.retyped_captures.clone(),
+            reads_this: self.reads_this,
+        }
+    }
 }
 
 /// Where a closure came from, which decides what its body is.
@@ -7918,7 +7940,7 @@ fn naming(
     probe.hierarchy = hierarchy.clone();
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
-    probe.closures = closures.to_vec();
+    probe.closures = closures.to_vec().into();
     probe.module.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     let class_tokens = class_token_indices(snapshot);
@@ -8763,7 +8785,7 @@ fn collect_module_scope(
     add_initialized_flags(&probe, &mut scope);
     // What materializing the globals' types produced. Nothing else collects
     // from this walk, which is why they were missing.
-    scope.layouts = probe.layouts;
+    scope.layouts = probe.layouts.into_layouts();
     // Which modules run at startup and which only when `import()` reaches them,
     // and the globals each lazy one keeps: part of the scope, because every
     // builder reads it and a global must exist before a function names it.
@@ -11080,7 +11102,12 @@ fn members_of(
 /// One function rather than two branches in the driver because "which nodes own
 /// members" is one fact, and the driver's job is dispatch rather than knowing
 /// it.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit layout owner during collection"
+)]
 fn lower_members_of(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     id: NodeId,
@@ -11091,11 +11118,28 @@ fn lower_members_of(
 ) -> bool {
     match snapshot.nodes.get(id.0 as usize).map(|node| node.kind) {
         Some(NodeKind::Syntax(kind)) if declares_a_class(kind) => {
-            lower_class(snapshot, foreign, id, generic, shared, lowered, wanted);
+            lower_class(
+                layout_collector,
+                snapshot,
+                foreign,
+                id,
+                generic,
+                shared,
+                lowered,
+                wanted,
+            );
             true
         }
         Some(NodeKind::Syntax(syntax::OBJECT_LITERAL_EXPRESSION)) => {
-            lower_object_literal_members(snapshot, foreign, id, shared, lowered, wanted);
+            lower_object_literal_members(
+                layout_collector,
+                snapshot,
+                foreign,
+                id,
+                shared,
+                lowered,
+                wanted,
+            );
             false
         }
         _ => false,
@@ -11121,6 +11165,7 @@ fn member_name_of(snapshot: &SemanticSnapshot, member: NodeId) -> Option<String>
 }
 
 fn lower_object_literal_members(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     literal: NodeId,
@@ -11228,7 +11273,7 @@ fn lower_object_literal_members(
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
-        collect_layouts(&mut lowered.program, builder.layouts);
+        layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
     }
 }
 
@@ -11454,7 +11499,12 @@ fn raising_method(
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit layout owner during collection"
+)]
 fn lower_class(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
@@ -11501,6 +11551,7 @@ fn lower_class(
             if gobject.is_some() && !is_static_member(snapshot, member) {
                 let lowered_member = builder.lower_gobject_member(class, member, instance);
                 let lowered_member = with_vfunc_slot(
+                    layout_collector,
                     snapshot,
                     foreign,
                     shared,
@@ -11515,7 +11566,7 @@ fn lower_class(
                     lowered,
                 );
                 builder.harvest(wanted, &mut lowered.arrivals);
-                collect_layouts(&mut lowered.program, builder.layouts);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
             }
             // A class the program writes over a composable Windows Runtime
@@ -11527,7 +11578,7 @@ fn lower_class(
                 let lowered_member = builder.lower_com_member(class, member, instance);
                 keep_foreign_member(snapshot, member, lowered_member, &mut com_methods, lowered);
                 builder.harvest(wanted, &mut lowered.arrivals);
-                collect_layouts(&mut lowered.program, builder.layouts);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
             }
             // A class the program writes over an Objective-C class is an
@@ -11546,7 +11597,7 @@ fn lower_class(
                     }
                 }
                 builder.harvest(wanted, &mut lowered.arrivals);
-                collect_layouts(&mut lowered.program, builder.layouts);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
             }
             // A `static` member is the program's alone -- a function and a
@@ -11564,7 +11615,7 @@ fn lower_class(
                     }
                 }
                 builder.harvest(wanted, &mut lowered.arrivals);
-                collect_layouts(&mut lowered.program, builder.layouts);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
             }
             // **Attempted whether or not the ordinary body compiles**, because the two
@@ -11613,19 +11664,27 @@ fn lower_class(
                 }
             }
             builder.harvest(wanted, &mut lowered.arrivals);
-            collect_layouts(&mut lowered.program, builder.layouts);
+            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
         }
     }
     if super::native::extends_objc(snapshot, class) {
         objc_methods.extend(objc_field_properties(
-            snapshot, foreign, class, shared, lowered,
+            layout_collector,
+            snapshot,
+            foreign,
+            class,
+            shared,
+            lowered,
         ));
-        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
+        let state =
+            objc_state_function(layout_collector, snapshot, foreign, class, shared, lowered);
         register_objc_class(snapshot, class, objc_methods, state, lowered);
     }
     if let Some(parent) = gobject {
-        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
-        let properties = gobject_properties(snapshot, foreign, class, shared, lowered);
+        let state =
+            objc_state_function(layout_collector, snapshot, foreign, class, shared, lowered);
+        let properties =
+            gobject_properties(layout_collector, snapshot, foreign, class, shared, lowered);
         if template_reader(snapshot, foreign, class, shared, lowered) {
             register_gobject_class(
                 snapshot,
@@ -11638,7 +11697,8 @@ fn lower_class(
         }
     }
     if let Some(composition) = super::native::composable_base(snapshot, class) {
-        let state = objc_state_function(snapshot, foreign, class, shared, lowered);
+        let state =
+            objc_state_function(layout_collector, snapshot, foreign, class, shared, lowered);
         register_com_class(snapshot, class, composition, com_methods, state, lowered);
     }
 }
@@ -12104,6 +12164,7 @@ fn fields_index(snapshot: &SemanticSnapshot, class: NodeId, property: &str) -> u
 /// backend's registration hands `get_property` and `set_property`. Empty for a
 /// class with none; a refusal is reported, and the class registers without.
 fn gobject_properties(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
@@ -12145,7 +12206,7 @@ fn gobject_properties(
                 Ok(func) => {
                     accessors.push(func.name.clone());
                     lowered.program.funcs.push(func);
-                    collect_layouts(&mut lowered.program, builder.layouts);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 }
                 Err(diagnostic) => {
                     refuse(lowered, diagnostic);
@@ -12173,6 +12234,7 @@ fn gobject_properties(
 /// A field no protocol asks for is the program's alone, as Swift's
 /// non-`@objc` one is.
 fn objc_field_properties(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
@@ -12221,7 +12283,7 @@ fn objc_field_properties(
                         signature: std::sync::Arc::new(imp),
                     });
                     lowered.program.funcs.push(func);
-                    collect_layouts(&mut lowered.program, builder.layouts);
+                    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 }
                 Err(diagnostic) => {
                     note_uncompiled(snapshot, &mut lowered.program, field, None, &diagnostic);
@@ -12338,6 +12400,7 @@ fn signals_of_type(
 /// (`VfuncSlot`), which is lowered here and kept beside it -- or refuses the
 /// member where the wrapper cannot be made.
 fn with_vfunc_slot(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
@@ -12350,7 +12413,7 @@ fn with_vfunc_slot(
     let (func, method) = lowered_member?;
     let mut wrapper = shared.builder(snapshot, foreign, Copy::default());
     let built = wrapper.lower_vfunc_slot(&slot, &func);
-    collect_layouts(&mut lowered.program, wrapper.layouts);
+    layout_collector.collect(&mut lowered.program, wrapper.layouts.into_layouts());
     lowered.program.funcs.push(built?);
     Ok((func, method))
 }
@@ -12475,6 +12538,7 @@ fn register_com_class(
 /// fields, the function making the object that holds them; `None` for one
 /// without fields, or whose function is refused (and reported).
 fn objc_state_function(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     class: NodeId,
@@ -12488,7 +12552,7 @@ fn objc_state_function(
         Ok(func) => {
             let made = func.name.clone();
             lowered.program.funcs.push(func);
-            collect_layouts(&mut lowered.program, builder.layouts);
+            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
             Some(made)
         }
         Err(diagnostic) => {
@@ -12717,7 +12781,7 @@ impl ClassCopy {
 struct Shared {
     module: ModuleScope,
     hierarchy: Hierarchy,
-    closures: Vec<ClosureInfo>,
+    closures: SharedClosures,
     naming: Naming,
     generics: super::generics::GenericFunctions,
     /// Copies of ordinary functions specialised to a concrete argument type.
@@ -12797,7 +12861,7 @@ impl Shared {
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
-            closures,
+            closures: closures.into(),
             naming,
             generics,
             structural,
@@ -12813,8 +12877,6 @@ impl Shared {
         foreign: &'a super::runtime::ForeignTable,
         copy: Copy,
     ) -> FuncBuilder<'a> {
-        #[cfg(test)]
-        collection_tests::note(|counts| counts.closure_copies += self.closures.len());
         let mut builder = FuncBuilder::instantiating(
             snapshot,
             foreign,
@@ -13653,6 +13715,7 @@ fn refused_initializers(
 }
 
 fn lower_module_initializer(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
@@ -13725,7 +13788,7 @@ fn lower_module_initializer(
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
-        collect_layouts(&mut lowered.program, builder.layouts);
+        layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
     }
 
     // Each lazy module's evaluation, as a function of its own: see
@@ -13750,7 +13813,7 @@ fn lower_module_initializer(
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
-        collect_layouts(&mut lowered.program, builder.layouts);
+        layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
     }
 }
 
@@ -13758,6 +13821,7 @@ fn lower_module_initializer(
 /// ([`Conversion`]), one per name. One that does not lower is uncompiled, and
 /// `bridges::check` refuses each bridge that would call it.
 fn lower_conversions(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
@@ -13784,7 +13848,7 @@ fn lower_conversions(
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
-        collect_layouts(&mut lowered.program, builder.layouts);
+        layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
     }
 }
 
@@ -13797,6 +13861,7 @@ pub(crate) const REJECT_ERROR: &str = "nts_promise_reject_error";
 /// member it binds, so every program typed against that surface defines it,
 /// and no other program does.
 fn lower_reject_error(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     shared: &Shared,
     lowered: &mut Lowered,
@@ -13815,7 +13880,7 @@ fn lower_reject_error(
         Err(diagnostic) => lowered.diagnostics.push(diagnostic),
     }
     builder.harvest(wanted, &mut lowered.arrivals);
-    collect_layouts(&mut lowered.program, builder.layouts);
+    layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
 }
 
 /// A foreign function a program declares -- a function or method signature
@@ -15000,6 +15065,7 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// to take two of its four fields, see `wire_naming`, which `Shared::builder`
 /// calls.
 fn lower_wanted_closures(
+    layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
     shared: &Shared,
@@ -15088,7 +15154,7 @@ fn lower_wanted_closures(
                     &lowered.program.funcs,
                     copy_for(true),
                 );
-                collect_layouts(&mut lowered.program, layouts);
+                layout_collector.collect(&mut lowered.program, layouts);
                 // **Pushed before the ordinary body, as they always were.** The
                 // raising entry is built with the body last in `kernels`, and
                 // then they go in front of it: a generator closure's two copies
@@ -15148,13 +15214,13 @@ fn lower_wanted_closures(
             }
         }
         builder.harvest(wanted, &mut lowered.arrivals);
-        collect_layouts(&mut lowered.program, builder.layouts);
+        layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
     }
     // And the functions bridges call to make an array of a sequence, which
     // a closure lowered just above may have asked for; and what a host
     // rejects a promise with.
-    lower_conversions(snapshot, shared, lowered, wanted);
-    lower_reject_error(snapshot, shared, lowered, wanted);
+    lower_conversions(layout_collector, snapshot, shared, lowered, wanted);
+    lower_reject_error(layout_collector, snapshot, shared, lowered, wanted);
 }
 
 /// The `const` aliases a closure's body reads, which both of its builders need.
@@ -15276,7 +15342,7 @@ fn raising_closure(
             .into_iter()
             .collect::<Vec<Func>>();
             produced.push(raising);
-            (produced, std::mem::take(&mut second.layouts))
+            (produced, std::mem::take(&mut second.layouts).into_layouts())
         }
         // **Refused where the ordinary body was not**, which reading the raising arm
         // says cannot happen: it is tested *before* every fallible arm of
@@ -15345,7 +15411,7 @@ fn field_aliases(
     }
     let mut probe = FuncBuilder::new(snapshot, foreign);
     probe.hierarchy = hierarchy.clone();
-    probe.closures = closures.to_vec();
+    probe.closures = closures.to_vec().into();
     wire_naming(&mut probe, naming);
     let targets: std::collections::BTreeSet<_> = hierarchy
         .faces
@@ -15372,6 +15438,7 @@ fn field_aliases(
     }
     probe
         .layouts
+        .into_layouts()
         .into_iter()
         .filter(|layout| layout.types.iter().any(|ty| targets.contains(ty)))
         .collect()
@@ -15417,6 +15484,7 @@ pub fn lower_with_access(
     let indexed = LoweringSnapshot::new(materialised.as_ref().unwrap_or(snapshot));
     let snapshot = &indexed;
     let mut lowered = Lowered::default();
+    let mut layout_collector = LayoutCollector::default();
     // Closures first, because a module-scope `const f = () => ...` is typed by
     // the *closure* the arrow becomes rather than by its function type, and the
     // closure's layout is decided here. `collect_closures` reads only the
@@ -15443,7 +15511,7 @@ pub fn lower_with_access(
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
     hierarchy.publish_uniform_slots(&mut lowered.program);
-    collect_layouts(&mut lowered.program, module.layouts.clone());
+    layout_collector.collect(&mut lowered.program, module.layouts.clone());
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
@@ -15474,6 +15542,7 @@ pub fn lower_with_access(
         // arrange: the checker resolved every call site, so a method call is a
         // static call and `this` is an ordinary argument.
         if lower_members_of(
+            &mut layout_collector,
             snapshot,
             foreign,
             id,
@@ -15609,11 +15678,18 @@ pub fn lower_with_access(
                 }
             }
             builder.harvest(&mut wanted, &mut lowered.arrivals);
-            collect_layouts(&mut lowered.program, builder.layouts);
+            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
         }
     }
 
-    lower_module_initializer(snapshot, &shared, &mut lowered, &mut wanted, &refused);
+    lower_module_initializer(
+        &mut layout_collector,
+        snapshot,
+        &shared,
+        &mut lowered,
+        &mut wanted,
+        &refused,
+    );
 
     // Each closure something allocated, and each as a function of its own.
     // Nothing about it depends on the function that allocates it -- that is the
@@ -15624,6 +15700,7 @@ pub fn lower_with_access(
     // another one. Taken in index order, so one compiler on one input emits its
     // functions in one order.
     lower_wanted_closures(
+        &mut layout_collector,
         snapshot,
         foreign,
         &shared,
@@ -15632,14 +15709,24 @@ pub fn lower_with_access(
         &mut wanted,
     );
 
-    literal_methods::declare(snapshot, foreign, &shared, &mut lowered);
-    access_family_functions::declare(snapshot, &hierarchy, &shared.naming, &mut lowered.program);
+    literal_methods::declare(
+        snapshot,
+        foreign,
+        &shared,
+        &mut lowered,
+        &mut layout_collector,
+    );
+    (layout_collector, ()) = layout_collector.with_program(&mut lowered.program, |program| {
+        access_family_functions::declare(snapshot, &hierarchy, &shared.naming, program);
+    });
     declare_interface_methods(
+        &mut layout_collector,
         &hierarchy,
         &mut shared.builder(snapshot, foreign, Copy::default()),
         &mut lowered.program,
     );
-    lay_out_held_signatures(snapshot, &mut lowered.program);
+    lay_out_held_signatures(&mut layout_collector, snapshot, &mut lowered.program);
+    lowered.program.layouts = layout_collector.into_layouts();
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
 
@@ -16378,103 +16465,11 @@ fn one_type_two_orders(kept: &[Field], incoming: &[Field]) -> Option<(Vec<String
     (left == right).then_some((kept, incoming))
 }
 
+#[cfg(test)]
 fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
-    // Collected rather than pushed inside the loop: `existing` borrows
-    // `program.layouts` for the whole merge arm, and the record lives on
-    // `program` too.
-    let mut disputed: Vec<super::DisputedLayout> = Vec::new();
-    for layout in layouts {
-        if let Some(existing) = program.layouts.iter_mut().find(|known| {
-            #[cfg(test)]
-            collection_tests::note(|counts| counts.layout_candidates += 1);
-            // The same type, however the two were built. A layout is named
-            // after its type, so two of them for one type emit two `struct`s
-            // of the same name -- which is what happened once the module scope
-            // started contributing layouts as well as the functions, and it
-            // was `redefinition of NtsObj_A` rather than anything the merge
-            // below would have noticed: it compares *shape*, and the two
-            // disagreed about their method tables while describing one type.
-            // Shape is the right test almost everywhere, and it is what makes
-            // TypeScript's structural typing work: `Point` and the `{ x, y }` of
-            // a literal are one type, and two interfaces of one shape are
-            // interchangeable, so they must share a struct or a call cannot pass
-            // one where the other is declared. Widening this guard beyond the
-            // case below broke `function-values` and `readonly` for exactly that
-            // reason.
-            //
-            // The provided error classes are the exception, because they are the
-            // one family this compiler asks a *nominal* question about. All four
-            // hold a `message` and a `name` and nothing else, so shape merged
-            // them into one layout with one descriptor -- and `e instanceof
-            // TypeError` was then true of a `RangeError`, and an uncaught
-            // `TypeError` printed whichever of the four had been laid out first.
-            // Nothing could see either until `instanceof` existed, and two
-            // function types were one layout until a closure declared its
-            // `call` in one: `tests/programs/function-values` collapsed
-            // `(number) => number`, `(number) => void` and
-            // `(number, number) => number` into a single layout holding eight
-            // type ids, and every closure then declared it overrode a signature
-            // two thirds of them do not have. The JVM said so --
-            // `Closure9.call is (D)V where the method it overrides is (D)D` --
-            // and nothing on a lane with pointers could.
-            //
-            // These were three separate tests, one per family, and each asked
-            // whether BOTH sides were in that family. See `nominal_name` for
-            // what that missed and what node's `path` did with it. The names
-            // are structural, so this still merges two ids for one written
-            // signature and separates two signatures.
-            known.types.iter().any(|ty| layout.types.contains(ty))
-                || (may_merge(&known.name, &layout.name)
-                    && known.same_shape(&layout.fields, &layout.methods, layout.base))
-        }) {
-            // **Before the merge takes the incoming layout's type ids and drops
-            // the rest of it.** Both orders are visible here and nowhere else:
-            // afterwards there is one layout, its fields are whichever arrived
-            // first, and every function that indexed the other is already wrong
-            // by a slot. `verify` reports it; this only has to not throw the
-            // evidence away.
-            if let Some((kept, discarded)) = one_type_two_orders(&existing.fields, &layout.fields) {
-                disputed.push(super::DisputedLayout {
-                    name: existing.name.clone(),
-                    kept,
-                    discarded,
-                });
-            }
-            for ty in layout.types {
-                if !existing.types.contains(&ty) {
-                    existing.types.push(ty);
-                }
-            }
-            // A declared name beats a generated one, and the two functions that
-            // mention a type may be discovered in either order.
-            //
-            // **Through the same uniqueness rule as a push.** This rename
-            // used to adopt the declared name unasked, and a second
-            // `TransformOptions` -- `stream/iter/pull.ts` declares one beside
-            // `stream/transform.ts`'s -- reached it by merging into an
-            // anonymous `{ signal }` layout that had been pushed first: the
-            // merged layout took the name the other `TransformOptions` already
-            // held, and the program verified as `DuplicateLayout` with nothing
-            // emitted. The push path had been suffixing for a year; this path
-            // was the one that could still produce the name twice.
-            if generated_name(&existing.name) && !generated_name(&layout.name) {
-                let taken = existing.types.first().copied();
-                let renamed = unshared_layout_name_for(&program.layouts, &layout.name, taken);
-                let index = program
-                    .layouts
-                    .iter()
-                    .position(|known| known.types.first().copied() == taken);
-                if let Some(index) = index {
-                    program.layouts[index].name = renamed;
-                }
-            }
-        } else {
-            program
-                .layouts
-                .push(unshared_layout_name(&program.layouts, layout));
-        }
-    }
-    program.disputed_layouts.extend(disputed);
+    let mut collector = LayoutCollector::new(std::mem::take(&mut program.layouts));
+    collector.collect(program, layouts);
+    program.layouts = collector.into_layouts();
 }
 
 /// A layout name no other layout in this program already has.
@@ -16505,17 +16500,13 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
 ///
 /// The JVM backend takes its class names from this field, so a rename is
 /// visible there; it was named to that session before it landed.
-fn unshared_layout_name(existing: &[Layout], mut layout: Layout) -> Layout {
-    layout.name = unshared_layout_name_for(existing, &layout.name, layout.types.first().copied());
-    layout
-}
-
 /// `name`, or `name{id}` where another layout already holds it.
 ///
 /// The one rule behind both ways a layout comes to be named: pushed under its
 /// own name, or renamed on merge when a declared name beats a generated one.
 /// A layout that *is* the holder -- its first type id is `own` -- keeps the
 /// name; anything else sharing it is the collision this exists for.
+#[cfg(test)]
 fn unshared_layout_name_for(existing: &[Layout], name: &str, own: Option<TypeId>) -> String {
     let held_elsewhere = existing.iter().any(|known| {
         #[cfg(test)]
@@ -16602,6 +16593,7 @@ fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>
 /// entries are completed. Existing rest/generic declarations retain their
 /// previous shell path; those contracts never enable structural inference.
 fn declare_interface_methods(
+    layout_collector: &mut LayoutCollector,
     hierarchy: &Hierarchy,
     builder: &mut FuncBuilder,
     program: &mut Program,
@@ -16615,7 +16607,7 @@ fn declare_interface_methods(
         .map(|(at, func)| (func.name.as_str(), at))
         .collect();
     let mut bodies = rustc_hash::FxHashMap::default();
-    for layout in &program.layouts {
+    for layout in layout_collector.layouts() {
         for (slot, entry) in layout.methods.iter().enumerate() {
             if let Some(at) = entry.as_deref().and_then(|name| by_name.get(name))
                 && !program.funcs[*at].abstract_declaration
@@ -16624,8 +16616,8 @@ fn declare_interface_methods(
             }
         }
     }
-    let existing_layouts = program.layouts.len();
-    builder.layouts = std::mem::take(&mut program.layouts);
+    let existing_layouts = layout_collector.layouts().len();
+    builder.layouts = BuilderLayouts::Collected(std::mem::take(layout_collector));
     let mut declare: Vec<Func> = Vec::new();
     let mut slots: Vec<_> = hierarchy.slots.iter().collect();
     slots.sort_unstable_by_key(|(_, slot)| **slot);
@@ -16684,9 +16676,11 @@ fn declare_interface_methods(
     declare.sort_by(|a, b| a.name.cmp(&b.name));
     program.funcs.extend(declare);
     let added = builder.layouts.split_off(existing_layouts);
-    program.layouts = std::mem::take(&mut builder.layouts);
-    collect_layouts(program, added);
-    record_unimplemented_interfaces(hierarchy, program);
+    *layout_collector = std::mem::take(&mut builder.layouts).into_collector();
+    layout_collector.collect(program, added);
+    (*layout_collector, ()) = std::mem::take(layout_collector).with_program(program, |program| {
+        record_unimplemented_interfaces(hierarchy, program);
+    });
 }
 
 /// A method's declaration made from one of its bodies: its signature, named
@@ -17856,9 +17850,13 @@ fn relate_closures_to_signatures(
 /// merges it into the layout already holding that signature -- they are named
 /// by `signature_key` -- or adds it. Before `relate_closures_to_signatures`,
 /// which then makes every closure of the signature extend it.
-fn lay_out_held_signatures(snapshot: &SemanticSnapshot, program: &mut Program) {
-    let laid: rustc_hash::FxHashSet<TypeId> = program
-        .layouts
+fn lay_out_held_signatures(
+    layout_collector: &mut LayoutCollector,
+    snapshot: &SemanticSnapshot,
+    program: &mut Program,
+) {
+    let laid: rustc_hash::FxHashSet<TypeId> = layout_collector
+        .layouts()
         .iter()
         .flat_map(|layout| layout.types.iter().copied())
         .collect();
@@ -17869,7 +17867,7 @@ fn lay_out_held_signatures(snapshot: &SemanticSnapshot, program: &mut Program) {
         func.params.iter().for_each(|param| note(&param.ty));
         func.values.iter().for_each(|value| note(&value.ty));
     }
-    for layout in &program.layouts {
+    for layout in layout_collector.layouts() {
         layout.fields.iter().for_each(|field| note(&field.ty));
     }
     held.sort_by_key(|ty| ty.0);
@@ -17879,7 +17877,7 @@ fn lay_out_held_signatures(snapshot: &SemanticSnapshot, program: &mut Program) {
         .filter(|ty| !laid.contains(ty) && signature_key(snapshot, *ty).is_some())
         .map(|ty| signature_layout(snapshot, ty))
         .collect();
-    collect_layouts(program, unlaid);
+    layout_collector.collect(program, unlaid);
 }
 
 /// A function type's layout: no fields, and no methods until a closure
@@ -20667,7 +20665,7 @@ struct FuncBuilder<'a> {
     /// called and not where it is written.
     exits: Vec<Exit>,
     /// Layouts discovered while lowering this function.
-    layouts: Vec<Layout>,
+    layouts: BuilderLayouts,
     /// Whose signature a particular call's arguments answer to, where the call
     /// node's own resolved target names something else.
     ///
@@ -20792,12 +20790,12 @@ struct FuncBuilder<'a> {
     base: Option<String>,
     /// Every arrow function in the program, so that one written here can be
     /// matched to the class that was collected for it.
-    closures: Vec<ClosureInfo>,
+    closures: SharedClosures,
     /// The symbols whose cell needs a `ready` flag, sorted.
     ///
     /// A subset of `boxed`: only a name declared below the closure that reads
     /// it has a window in which the cell exists and holds nothing.
-    guarded: Vec<u32>,
+    guarded: std::rc::Rc<[u32]>,
     /// Whether the body being lowered is a closure's.
     ///
     /// The guard above is needed there and nowhere else: a direct read before a
@@ -20809,7 +20807,7 @@ struct FuncBuilder<'a> {
     /// Derived from `closures` rather than passed alongside it, so the two
     /// cannot disagree. A symbol's position here is its cell's identity, and
     /// every function that mentions the variable resolves to the same one.
-    boxed: Vec<u32>,
+    boxed: std::rc::Rc<[u32]>,
     /// What each type parameter stands for, while lowering one instantiation of
     /// a generic class. Empty everywhere else, which is every function that is
     /// not one of those copies.
@@ -21081,8 +21079,8 @@ impl<'a> FuncBuilder<'a> {
             withheld: rustc_hash::FxHashMap::default(),
             raising_calls: rustc_hash::FxHashSet::default(),
             raising_specializations: rustc_hash::FxHashSet::default(),
-            boxed: Vec::new(),
-            guarded: Vec::new(),
+            boxed: std::rc::Rc::default(),
+            guarded: std::rc::Rc::default(),
             in_closure: false,
             values: Vec::new(),
             blocks: vec![PartialBlock {
@@ -21102,7 +21100,7 @@ impl<'a> FuncBuilder<'a> {
             pending_label: None,
             exits: Vec::new(),
             returns: HirType::Void,
-            layouts: Vec::new(),
+            layouts: BuilderLayouts::default(),
             callee_signature: None,
             delegated_signature: None,
             dictionary_slots: None,
@@ -21129,7 +21127,7 @@ impl<'a> FuncBuilder<'a> {
             hierarchy: Hierarchy::default(),
             base: None,
             module: ModuleScope::default(),
-            closures: Vec::new(),
+            closures: SharedClosures::default(),
             expecting: None,
             synthetic: 0,
             breakables: Vec::new(),
@@ -21167,13 +21165,13 @@ impl<'a> FuncBuilder<'a> {
         foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
-        closures: Vec<ClosureInfo>,
+        closures: SharedClosures,
     ) -> Self {
         Self {
             module,
             hierarchy,
-            boxed: boxed_symbols(&closures),
-            guarded: guarded_symbols(&closures),
+            boxed: closures.boxed(),
+            guarded: closures.guarded(),
             closures,
             ..Self::new(snapshot, foreign)
         }
@@ -21185,7 +21183,7 @@ impl<'a> FuncBuilder<'a> {
         foreign: &'a super::runtime::ForeignTable,
         module: ModuleScope,
         hierarchy: Hierarchy,
-        closures: Vec<ClosureInfo>,
+        closures: SharedClosures,
         substitution: Substitution,
         suffix: String,
     ) -> Self {
@@ -50691,12 +50689,12 @@ impl<'a> FuncBuilder<'a> {
         }
         self.layout_of(id, context)?;
         let class = self.class_behind(context);
-        if let Some(layout) = self
+        if let Some(at) = self
             .layouts
-            .iter_mut()
-            .find(|layout| layout.types.contains(&class))
+            .iter()
+            .position(|layout| layout.types.contains(&class))
         {
-            layout.types.push(own);
+            self.layouts.add_type(at, own);
         }
         Ok(own)
     }
@@ -53704,9 +53702,7 @@ impl<'a> FuncBuilder<'a> {
         // layout rather than getting one of its own. The first name wins, which
         // is usually the declared one -- an anonymous literal type tends to be
         // discovered second.
-        if let Some(existing) = self.layouts.iter_mut().find(|layout| {
-            may_merge(&layout.name, &name) && layout.same_shape(&fields, &methods, base)
-        }) {
+        if let Some(at) = self.layouts.find_shape(&name, &fields, &methods, base) {
             // **A generic declaration joins nothing.** `Box<T>` with `T`
             // unbound has no values: everything at run time is some
             // `Box<number>`, and a copy asks for the declaration's layout only
@@ -53726,16 +53722,16 @@ impl<'a> FuncBuilder<'a> {
             // can only hold one of the four field types, and `zlib` emitted
             // `v5 = v2->stream` between two unrelated structs.
             if !is_a_generic_declaration(self.snapshot, ty) {
-                existing.types.push(ty);
+                self.layouts.add_type(at, ty);
             }
             // A declared name beats a generated one, whichever was seen first.
             // The anonymous type of a literal is usually discovered before the
             // interface it is assigned to, and `NtsObj_Point` reads better than
             // `NtsObj_Type5`.
-            if existing.name.starts_with("Type") && !name.starts_with("Type") {
-                existing.name = name;
+            if self.layouts[at].name.starts_with("Type") && !name.starts_with("Type") {
+                self.layouts.rename(at, name);
             }
-            return Ok(existing.clone());
+            return Ok(self.layouts[at].clone());
         }
 
         // Transitively closed and sorted -- see `Layout::interfaces`. Each one
@@ -82394,7 +82390,7 @@ mod tests {
         for reversed in [false, true] {
             let mut probe = super::FuncBuilder::new(&snapshot, foreign);
             probe.hierarchy = hierarchy.clone();
-            probe.closures = closures.clone();
+            probe.closures = closures.clone().into();
             super::wire_naming(&mut probe, &naming);
             let mut schemas = schemas.clone();
             if reversed {
@@ -82469,7 +82465,7 @@ mod tests {
         for anonymous_first in [true, false] {
             let mut probe = super::FuncBuilder::new(&snapshot, foreign);
             probe.hierarchy = hierarchy.clone();
-            probe.closures = closures.clone();
+            probe.closures = closures.clone().into();
             super::wire_naming(&mut probe, &naming);
             let (first, second) = if anonymous_first {
                 (&anonymous, &faces)
@@ -82702,11 +82698,14 @@ mod tests {
         });
         let snapshot = nts_semantic_schema::SemanticSnapshot::default();
         let snapshot = super::LoweringSnapshot::new(&snapshot);
+        let mut collector = super::LayoutCollector::new(std::mem::take(&mut program.layouts));
         super::declare_interface_methods(
+            &mut collector,
             &hierarchy,
             &mut super::FuncBuilder::probe(&snapshot),
             &mut program,
         );
+        program.layouts = collector.into_layouts();
         let shells = program
             .funcs
             .iter()
@@ -82930,12 +82929,14 @@ mod access_family_functions;
 mod access_family_sites;
 mod assertions;
 mod bigint;
+mod closure_context;
 mod field_initialization;
 mod function_names;
 mod gobject;
 mod implementations;
 mod initialization;
 mod interfaces;
+mod layout_collection;
 mod literal_methods;
 mod native_memory;
 mod printed;

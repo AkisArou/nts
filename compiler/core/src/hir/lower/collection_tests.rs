@@ -12,13 +12,16 @@ pub(super) struct Counts {
     pub derived_elements: usize,
     pub layout_candidates: usize,
     pub name_candidates: usize,
+    pub full_rebuilds: usize,
+    pub adapter_contracts: usize,
 }
 
 thread_local! {
-    static COUNTS: Cell<Counts> = Cell::new(Counts {
+    static COUNTS: Cell<Counts> = const { Cell::new(Counts {
         closure_copies: 0, derived_elements: 0,
         layout_candidates: 0, name_candidates: 0,
-    });
+        full_rebuilds: 0, adapter_contracts: 0,
+    }) };
 }
 
 pub(super) fn note(change: impl FnOnce(&mut Counts)) {
@@ -227,11 +230,23 @@ fn randomized_aliases_shapes_and_rename_sequences_match_the_old_scan() {
             layouts: initial,
             ..Program::default()
         };
+        let mut collector = super::LayoutCollector::new(std::mem::take(&mut actual.layouts));
         for _ in 0..24 {
             let incoming = random.layout();
+            assert_eq!(
+                collector.find(&incoming),
+                old_find(&expected.layouts, &incoming)
+            );
             old_collect(&mut expected, vec![incoming.clone()]);
-            super::collect_layouts(&mut actual, vec![incoming]);
-            assert_programs_equal(&expected, &actual);
+            collector.collect(&mut actual, vec![incoming]);
+            assert_eq!(
+                format!("{:?}", expected.layouts),
+                format!("{:?}", collector.layouts())
+            );
+            assert_eq!(
+                format!("{:?}", expected.disputed_layouts),
+                format!("{:?}", actual.disputed_layouts)
+            );
         }
     }
 }
@@ -241,14 +256,16 @@ fn layout_match_candidates_are_linear_for_distinct_layouts() {
     for n in [64_u32, 128, 256] {
         let mut program = Program::default();
         reset();
+        let mut collector = super::LayoutCollector::default();
         for ty in 0..n {
-            super::collect_layouts(
+            collector.collect(
                 &mut program,
                 vec![layout(&format!("Frame{ty}"), ty, &format!("field{ty}"))],
             );
         }
-        assert_eq!(program.layouts.len(), usize::try_from(n).unwrap());
+        assert_eq!(collector.layouts().len(), usize::try_from(n).unwrap());
         let visits = counts().layout_candidates;
+        println!("COLLECTION N={n} layout_candidates={visits}");
         assert!(
             visits <= 3 * usize::try_from(n).unwrap(),
             "N={n}: {visits} candidates"
@@ -261,13 +278,15 @@ fn name_candidates_are_linear_for_distinct_layouts() {
     for n in [64_u32, 128, 256] {
         let mut program = Program::default();
         reset();
+        let mut collector = super::LayoutCollector::default();
         for ty in 0..n {
-            super::collect_layouts(
+            collector.collect(
                 &mut program,
                 vec![layout(&format!("Frame{ty}"), ty, &format!("field{ty}"))],
             );
         }
         let visits = counts().name_candidates;
+        println!("COLLECTION N={n} name_candidates={visits}");
         assert!(
             visits <= 3 * usize::try_from(n).unwrap(),
             "N={n}: {visits} candidates"
@@ -320,11 +339,15 @@ fn builders_do_not_copy_the_closure_table() {
             let builder = shared.builder(&snapshot, foreign, super::Copy::default());
             assert_eq!(builder.closures.len(), usize::try_from(n).unwrap());
             assert!(
-                std::ptr::eq(&builder.closures[0], &shared.closures[0]),
+                builder.closures.as_ptr() == shared.closures.as_ptr(),
                 "builders must read the same allocated table"
             );
         }
         assert_eq!(counts().closure_copies, 0, "N={n}: whole-table copies");
+        println!(
+            "COLLECTION N={n} closure_copies={}",
+            counts().closure_copies
+        );
     }
 }
 
@@ -354,9 +377,99 @@ fn builders_derive_capture_views_once() {
             );
         }
         let visited = counts().derived_elements;
+        println!("COLLECTION N={n} derived_elements={visited}");
         assert!(
             visited <= 2 * usize::try_from(n).unwrap(),
             "N={n}: {visited} derived elements"
         );
     }
+}
+
+#[test]
+fn refinements_update_every_affected_key_without_rebuilding_the_table() {
+    for seed in 0..32 {
+        let mut random = Random(seed);
+        let mut rows: Vec<_> = (0..8).map(|_| random.layout()).collect();
+        reset();
+        let mut collector = super::LayoutCollector::new(rows.clone());
+        for _ in 0..24 {
+            let at = usize::try_from(random.next(8)).unwrap();
+            let updated = random.layout();
+            rows[at] = updated.clone();
+            collector.refine(at, |row| *row = updated);
+            for incoming in rows.iter().cloned().chain((0..8).map(|_| random.layout())) {
+                assert_eq!(collector.find(&incoming), old_find(&rows, &incoming));
+                for own in [None, incoming.types.first().copied(), Some(TypeId(99))] {
+                    assert_eq!(
+                        collector.unique_name(&incoming.name, own),
+                        old_name(&rows, &incoming.name, own)
+                    );
+                }
+            }
+        }
+        assert_eq!(counts().full_rebuilds, 1, "only the initial construction");
+    }
+}
+
+#[test]
+fn adapter_handoffs_keep_indexes_and_remerge_only_the_new_tail() {
+    for n in [64_u32, 128, 256] {
+        let mut expected = Program {
+            layouts: (0..n)
+                .map(|ty| layout(&format!("Frame{ty}"), ty, &format!("f{ty}")))
+                .collect(),
+            ..Program::default()
+        };
+        let mut actual = Program::default();
+        reset();
+        let mut collector = super::LayoutCollector::new(expected.layouts.clone());
+        for ty in 0..n {
+            let at = usize::try_from(ty).unwrap();
+            // A refinement of the already collected layout, followed by a
+            // fresh discovery that merges back into an earlier shape.
+            let own = TypeId(ty + n);
+            expected.layouts[at].types.push(own);
+            let mut builder = super::BuilderLayouts::Collected(std::mem::take(&mut collector));
+            builder.add_type(at, own);
+            let incoming = layout("Anonymous", ty + 2 * n, &format!("f{ty}"));
+            builder.push(incoming.clone());
+            let added = builder.split_off(usize::try_from(n).unwrap());
+            collector = builder.into_collector();
+            old_collect(&mut expected, vec![incoming]);
+            collector.collect(&mut actual, added);
+            assert_eq!(
+                collector.find(&expected.layouts[at]),
+                old_find(&expected.layouts, &expected.layouts[at])
+            );
+            assert_eq!(
+                format!("{:?}", collector.layouts()),
+                format!("{:?}", expected.layouts)
+            );
+        }
+        assert_eq!(counts().full_rebuilds, 1, "N={n}: no rebuild per contract");
+        println!(
+            "COLLECTION N={n} adapter_full_rebuilds={}",
+            counts().full_rebuilds
+        );
+    }
+}
+
+#[test]
+fn raw_ownership_transfer_rebuilds_after_all_mutations() {
+    let mut program = Program::default();
+    let collector = super::LayoutCollector::new(vec![layout("Before", 1, "x")]);
+    let (collector, ()) = collector.with_program(&mut program, |program| {
+        program.layouts[0] = layout("java/After", 2, "y");
+    });
+    assert!(
+        program.layouts.is_empty(),
+        "the collector takes ownership back"
+    );
+    assert_eq!(collector.find(&layout("java/After", 2, "y")), Some(0));
+    assert_eq!(collector.find(&layout("Before", 1, "x")), None);
+    assert_eq!(collector.unique_name("Before", Some(TypeId(9))), "Before");
+    assert_eq!(
+        collector.unique_name("java/After", Some(TypeId(9))),
+        "java/After9"
+    );
 }

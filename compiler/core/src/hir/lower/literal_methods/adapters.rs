@@ -28,10 +28,11 @@ pub(in crate::hir::lower) fn declare(
     foreign: &crate::hir::runtime::ForeignTable,
     shared: &Shared,
     lowered: &mut Lowered,
+    layout_collector: &mut super::super::LayoutCollector,
 ) {
     let asking = shared.builder(snapshot, foreign, Copy::default());
     let mut pending = BTreeMap::new();
-    collect_requests(&asking, &lowered.program.layouts, &mut pending);
+    collect_requests(&asking, layout_collector.layouts(), &mut pending);
     let mut renamed = FxHashMap::default();
     let mut interned: FxHashMap<Key, usize> = FxHashMap::default();
     let mut failed = FxHashMap::default();
@@ -39,14 +40,20 @@ pub(in crate::hir::lower) fn declare(
         if renamed.contains_key(&name) {
             continue;
         }
+        #[cfg(test)]
+        super::super::collection_tests::note(|counts| counts.adapter_contracts += 1);
         let mut builder = shared.builder(snapshot, foreign, Copy::default());
-        let existing = lowered.program.layouts.len();
-        builder.layouts = std::mem::take(&mut lowered.program.layouts);
+        let existing = layout_collector.layouts().len();
+        builder.layouts = super::super::BuilderLayouts::Collected(std::mem::take(layout_collector));
         let built = build(&mut builder, &target);
         let demanded = builder.layouts.split_off(existing);
-        lowered.program.layouts = std::mem::take(&mut builder.layouts);
-        super::super::collect_layouts(&mut lowered.program, demanded);
-        collect_requests(&asking, &lowered.program.layouts[existing..], &mut pending);
+        *layout_collector = std::mem::take(&mut builder.layouts).into_collector();
+        layout_collector.collect(&mut lowered.program, demanded);
+        collect_requests(
+            &asking,
+            &layout_collector.layouts()[existing..],
+            &mut pending,
+        );
         if let Some((key, mut func)) = built {
             if let Some(&at) = interned.get(&key) {
                 let existing = &mut lowered.program.funcs[at];
@@ -68,7 +75,7 @@ pub(in crate::hir::lower) fn declare(
                 "a stored literal method whose forwarding contract could not be materialized"
                     .to_owned(),
             ));
-            for layout in &lowered.program.layouts {
+            for layout in layout_collector.layouts() {
                 for (slot, entry) in layout.methods.iter().enumerate() {
                     if entry.as_ref() == Some(&name) {
                         failed.insert(u32::try_from(slot).unwrap_or(u32::MAX), name.clone());
@@ -78,11 +85,20 @@ pub(in crate::hir::lower) fn declare(
             renamed.insert(name.clone(), name);
         }
     }
-    for layout in &mut lowered.program.layouts {
-        for entry in layout.methods.iter_mut().flatten() {
-            if let Some(name) = renamed.get(entry) {
-                entry.clone_from(name);
-            }
+    for at in 0..layout_collector.layouts().len() {
+        if layout_collector.layouts()[at]
+            .methods
+            .iter()
+            .flatten()
+            .any(|entry| renamed.get(entry).is_some_and(|name| name != entry))
+        {
+            layout_collector.refine(at, |layout| {
+                for entry in layout.methods.iter_mut().flatten() {
+                    if let Some(name) = renamed.get(entry) {
+                        entry.clone_from(name);
+                    }
+                }
+            });
         }
     }
     // An incomplete row cannot license a call. Naming its missing body lets
