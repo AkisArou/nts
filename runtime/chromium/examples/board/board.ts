@@ -89,11 +89,8 @@ export function createBoard(document: Document): void {
     }
   }
 
-  // A loop, not `cards.find(...)`: returned from a function, the element
-  // find answers leaks (workarounds.md, 29).
   function find(id: number): Card | undefined {
-    for (const card of cards) if (card.id === id) return card;
-    return undefined;
+    return cards.find((card) => card.id === id);
   }
 
   // The card an event happened in, if any: the target's closest card.
