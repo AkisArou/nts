@@ -228,7 +228,7 @@ console.log(`  ${cascadeThings} further things refuse only because something the
 // different words reads as absent here, so `filed` is trustworthy and blank is
 // not. It saves re-deriving `??` twice, which is what it was written after.
 const filings = [];
-const fixtures = join(ROOT, "tooling/conformance/blockers");
+const fixtures = join(ROOT, "tests/refusals");
 if (existsSync(fixtures)) {
   for (const d of readdirSync(fixtures).sort()) {
     const src = join(fixtures, d, "src", "main.ts");

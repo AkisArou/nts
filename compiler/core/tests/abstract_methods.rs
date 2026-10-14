@@ -18,11 +18,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -155,7 +155,7 @@ fn the_overrides_have_bodies() {
 ///
 /// The fixture that used to be here was an overloaded method with its
 /// implementation, refused as a set. It landed, and moved to
-/// `examples/overloads`; the test moved with it.
+/// `tests/programs/overloads`; the test moved with it.
 #[test]
 fn a_bodiless_method_with_no_implementation_is_refused() {
     let Some(lowered) = lowered("unsupported") else {

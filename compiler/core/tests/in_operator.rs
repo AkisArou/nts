@@ -18,11 +18,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -36,7 +36,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/in-operator"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/in-operator"))
 }
 
 fn class_tests(func: &hir::Func) -> Vec<usize> {
@@ -91,7 +91,7 @@ fn tested_layouts(lowered: &hir::lower::Lowered, func: &hir::Func) -> Vec<Vec<Ve
 /// so the arms' own members decide only the `true` direction. Asked of the
 /// arms, `"extra" in value` with `value: Short` holding a wider literal folded
 /// to `false`, 8 of 29 cases against node
-/// (`tooling/conformance/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
+/// (`tests/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
 /// This test once asserted one candidate per test, the arm that declared it;
 /// the honest number is every object type with the key, here the arm and the
 /// literals laid out as it.
@@ -181,7 +181,7 @@ fn a_decided_answer_is_a_constant_and_not_a_test() {
 ///
 /// `in` has no short circuit. `"nope" in look(n)` is false whatever `look`
 /// returns, and `look` still has to run — it increments a module-scope counter
-/// here, and `examples/in-operator` compares the count against node.
+/// here, and `tests/programs/in-operator` compares the count against node.
 #[test]
 fn a_constant_answer_still_evaluates_its_operand() {
     let Some(lowered) = lowered("in-operator") else {
@@ -205,8 +205,8 @@ fn a_constant_answer_still_evaluates_its_operand() {
 ///
 /// Both halves. The first is the feature; the second is what it must not cost,
 /// because answering every `in` at run time would be a correct implementation
-/// that gave back what the closed world buys. `examples/in-operator` and
-/// `examples/an-optional-property` are compared against node by the gate, so
+/// that gave back what the closed world buys. `tests/programs/in-operator` and
+/// `tests/programs/an-optional-property` are compared against node by the gate, so
 /// what is asserted here is the shape rather than the answer.
 ///
 /// This test read the other way until 2026-09-12 — it asserted the *refusal*,

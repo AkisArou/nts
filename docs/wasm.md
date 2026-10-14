@@ -211,7 +211,7 @@ builds at one program-wide width.
   construction (an erased slot starts as the undefined singleton), so no test
   reaches it. The nullable test is defensive: a would-be null still reaches
   the cast that traps, rather than reading as a string.
-- **Speed is unchanged** on `tooling/wasm/bench/erased` (exploratory, load 5):
+- **Speed is unchanged** on `benchmarks/wasm/erased` (exploratory, load 5):
   eraseStrings 1.42 ns both ways, eraseNumbers 2.32 both. Every erased kernel
   is 2.7–7.5x behind node. V8 inlines all of the loop's helper calls (traced
   with `--trace-wasm-inlining`) but does not fold box → tag → unbox, which C
@@ -300,9 +300,9 @@ Stage B's facts decide everything here, not shapes.
   - A `FieldView` is the object itself, under Materialize only.
 - **Reads, exploratory, ns per iteration (two reads):** positional 1.43 against
   node 2.18; family-dispatched 6.16 against node 2.17
-  (`tooling/wasm/bench/interface-fields`).
+  (`benchmarks/wasm/interface-fields`).
 - **Calls, exploratory, ns per call:** row 2.00/2.05, typed vtable 1.75/1.83,
-  node 0.53/1.17 (one class / four), from `tooling/wasm/bench/interface`.
+  node 0.53/1.17 (one class / four), from `benchmarks/wasm/interface`.
 
 ### Type identity: one rec group (2c)
 
@@ -329,7 +329,7 @@ tell them apart.
 - **Cost, exploratory (load ~36):** module bytes over the 284 emitted examples
   fell 0.4% (fewer group headers). Cold compile and instantiate of the largest
   module (`callbacks`, 40 KB) is unchanged within noise: node 5.0 against 5.1 ms,
-  Chromium 12.8 against 10.9 ms (`tooling/wasm/bench/startup.mjs`). A
+  Chromium 12.8 against 10.9 ms (`benchmarks/wasm/startup.mjs`). A
   generated program of 400 classes, 408 types in one group where there were
   408 groups, is unchanged too: node 118.2 against 118.5 ms, Chromium 174
   against 175 ms at the minimum, and emit 0.47 s either way.
@@ -418,7 +418,7 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   (110 cases) agrees.
 - **Refused by name:** a key the storage cannot hold. A date keys by
   identity, as an object does.
-- **Measured, exploratory, ns per iteration** (tooling/wasm/bench/collections):
+- **Measured, exploratory, ns per iteration** (benchmarks/wasm/collections):
   - Map counting (get, then set): 27.5 against node's 13.5;
   - a Set of numbers: 17.8 against 16.5;
   - record reads: 13.6 against 5.1.
@@ -566,7 +566,7 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   - `BigInt64Array` and the BigInt `DataView` accesses, with bigint.
   - 3e-4: a typed backing for every kind whose views own their buffers,
     from MainClaude's per-kind fact `hir::views::owned_view_kinds`.
-- **Measured, exploratory** (load ~23-31; tooling/wasm/bench/typed-arrays),
+- **Measured, exploratory** (load ~23-31; benchmarks/wasm/typed-arrays),
   ns per element, node beside:
   - byte reads 0.69 (0.59);
   - byte writes 0.55 (0.35);
@@ -618,7 +618,7 @@ assembly:
 - **A second net.** An owned view and a byte-backed one are unrelated struct
   types, so a flow the core's rule missed is refused by `transfer` rather
   than read wrongly.
-- **Kernels** (tooling/wasm/bench/typed-arrays; exploratory), ns per
+- **Kernels** (benchmarks/wasm/typed-arrays; exploratory), ns per
   element, node / bytes / owned:
   - Float64Array reads 0.56 / 3.53 / 0.65;
   - writes 0.66 / 3.42 / 0.68;
@@ -702,7 +702,7 @@ HIR value, with no allocation (`Slot::V128`).
   node's formatting and parsing exactly.
 - **An erased bigint** is a box `{tag BIGINT, v128}`: `typeof` answers
   "bigint", `===` compares values, and String() prints it.
-- **Measured, exploratory** (tooling/wasm/bench/bigints), ns per iteration,
+- **Measured, exploratory** (benchmarks/wasm/bigints), ns per iteration,
   node beside:
   - adds 4.1 (20.5);
   - `x * 48271n % m` 12.7 (11.8);
@@ -946,7 +946,7 @@ function.
   causes A and B, fixed by 1b and 1c), 0 wrong.
   - 0 of 519 rows differ in outcome, case count or input refusals from the
     rebased M1b baseline f091a36cb.
-- **Boundary**, `tooling/wasm/bench/boundary.mjs`, monomorphic call sites, ns
+- **Boundary**, `benchmarks/wasm/boundary.mjs`, monomorphic call sites, ns
   per call:
   - generated wrapper over raw export: `add` 2.94 vs 1.53, `both` 2.33 vs
     2.03, `join` 6.57 vs 5.96, `nothing` 1.16 vs 1.15;
@@ -959,8 +959,8 @@ function.
   loader, both emitted by pinned binaries and gzipped by node's zlib at its
   default level), raw/gzip:
   - scalars fixture: 16,130/3,950 against 35,181/6,809;
-  - `examples/loops`: 5,961/2,122 against 20,729/5,809;
-  - `examples/bitwise`: 3,948/1,617 against 18,595/5,239.
+  - `tests/programs/loops`: 5,961/2,122 against 20,729/5,809;
+  - `tests/programs/bitwise`: 3,948/1,617 against 18,595/5,239.
 - **Compile time:** emitting all examples is unchanged by the restructure
   (paired, warm: 4.77–4.94 s against 4.79–5.49 s).
 - **Found for M2:** string concatenation called from JS costs about 6 ns per
@@ -1091,9 +1091,9 @@ display paths. Debug names are included in the module sizes below.
 Run the experimental command and inspect its output:
 
 ```sh
-cargo run -p nts-cli -- emit-wasm tooling/wasm/fixtures/scalars --no-acquire --out /tmp/nts-wasm
+cargo run -p nts-cli -- emit-wasm tests/wasm/scalars --no-acquire --out /tmp/nts-wasm
 node tooling/wasm/inspect.mjs /tmp/nts-wasm
-node tooling/wasm/check-scalars.mjs /tmp/nts-wasm tooling/wasm/fixtures/scalars/src/main.ts
+node tooling/wasm/check-scalars.mjs /tmp/nts-wasm tests/wasm/scalars/src/main.ts
 ```
 
 The loader exports `instantiate(bytes, manifest)` and `load(moduleUrl,
@@ -1119,12 +1119,12 @@ Execution evidence on Node 24.20.0, using the landed HostGc core:
 | Saved full `triangle__resume` CFG and cyclic phi swap | 20,514 exact comparisons; all 16 original generator graph blocks and 18 edges; 4,835 cyclic paths, maximum 39 visits; generator graph dispatches, phi swap is structured |
 | Typed numeric HIR fixture | 188 exact cases for unsigned widening/comparison/min/max, i32-min absolute value, negation retaining `-0`, safe i64 carriers, proven signed/unsigned integer div/rem and float-to-integer storage; no imports |
 | Public boundary fixture | 164 checks including void/undefined, scalar widths, aliases, declared facts, explicit infinite bounds, wrong arity, unsafe 64-bit results and five malformed manifests |
-| Existing `examples/loops` and `examples/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
+| Existing `tests/programs/loops` and `tests/programs/bitwise` | 102 and 136 bounded scalar comparisons respectively; zero input declines, no dispatch, no imports; loops includes three nested labels and a break through `finally` |
 | Structurer integrity | A corrupted enclosing-loop scope plan produces a named internal compiler error; no source decline or dispatcher fallback |
 | Integrity/refusal tests | Seven tests distinguish named helper/optional/public-shape/provider declines from unresolved direct callees, invalid mixed bool/number equality HIR, invalid stack typing and unapproved GC features |
 | All discovered examples | 518 projects accounted for: 40 emitted, validated/linked and bounded-agree; 478 named project declines (including one intentional frontend TS2322 fixture); 2,061 compared cases and 18 named input declines; 0 observed wrong answers, integrity failures, unmeasured projects or timeouts |
 | Actual `emit-wasm` CLI | Executes the same scalar source population; writes source Origins; required `--out`, named `--rc` and `nts_math_cos` refusals precede output mutation; existing check runner refuses wasm |
-| Existing C / LLVM / JVM / RC check runners | Each agrees with Node on all 232 `examples/bitwise` cases; this is a selection smoke check, not the full regression gate |
+| Existing C / LLVM / JVM / RC check runners | Each agrees with Node on all 232 `tests/programs/bitwise` cases; this is a selection smoke check, not the full regression gate |
 
 The saved generator fixture preserves the complete original CFG but substitutes
 scalar operations for frame access. It establishes structuring and branch-copy
@@ -1145,8 +1145,8 @@ compressed files summed, no startup/throughput claim):
 | Artifact | Wasm raw / gzip | Manifest raw / gzip | Loader raw / gzip | Production total raw / gzip |
 | --- | --- | --- | --- | --- |
 | Scalar fixture | 3,818 / 1,842 B | 17,195 / 803 B | 4,993 / 1,760 B | 26,006 / 4,405 B |
-| `examples/loops` | 3,718 / 1,332 B | 3,095 / 391 B | 4,993 / 1,760 B | 11,806 / 3,483 B |
-| `examples/bitwise` | 1,484 / 791 B | 3,195 / 364 B | 4,993 / 1,760 B | 9,672 / 2,915 B |
+| `tests/programs/loops` | 3,718 / 1,332 B | 3,095 / 391 B | 4,993 / 1,760 B | 11,806 / 3,483 B |
+| `tests/programs/bitwise` | 1,484 / 791 B | 3,195 / 364 B | 4,993 / 1,760 B | 9,672 / 2,915 B |
 
 The scalar total, including the loader and manifest, is below the provisional
 32 KiB raw smoke budget. The optional Origins sidecar is 88,113 raw / 2,663 gzip bytes;
@@ -1273,8 +1273,8 @@ New shared CLI/gate/differential edits require a separate scoped announcement.
 ### Literal fidelity: core/front-end request before safe string landing
 
 The existing
-[isolating blocker](../tooling/conformance/blockers/a-lone-surrogate-in-a-string-literal/src/main.ts)
-and [comparison outcome](../tooling/conformance/outcomes/lone-surrogates-compare-as-one-character/src/main.ts)
+[isolating blocker](../tests/refusals/a-lone-surrogate-in-a-string-literal/src/main.ts)
+and [comparison outcome](../tests/outcomes/lone-surrogates-compare-as-one-character/src/main.ts)
 record corruption of unpaired surrogate literals before prepared HIR. The
 current code confirms the transport limitation: semantic
 `LiteralValue::String(String)` becomes `OpKind::ConstString(String)`;
@@ -1566,12 +1566,12 @@ invalid prepared program; the new backend must call `prepare_with`, never
 Population: 321 functions and 1,519 blocks; 39 distinct external helper names.
 A separate `two-classes-one-descriptor` inspection checked semantic identity
 versus equal storage. No all-example agreement count exists for wasm at M0.
-There are 518 immediate `examples/*/tsconfig.json` files at this revision;
+There are 518 immediate `tests/programs/*/tsconfig.json` files at this revision;
 future reports must use the instrument's actual discovery count.
 
 The CFG audit computes dominators, removes edges to dominating headers, and
 checks the remaining reachable graph for cycles. `triangle__resume` in
-`examples/generators` is irreducible: initial state enters through `b3 → … → b7`
+`tests/programs/generators` is irreducible: initial state enters through `b3 → … → b7`
 while resumed state enters through `b13 → b14 → b11`. The cycle
 `b7 → b8 → b11 → b15 → b9 → b7` therefore has multiple entries.
 This is an observed counterexample to assuming that TypeScript syntax implies
@@ -1858,7 +1858,7 @@ first prove the reachable graph has an irreducible cycle; then use an i32
 program counter, an outer loop, nested case blocks and `br_table`; each original
 terminator performs edge copies, sets the next case, and branches to the loop.
 Return/unreachable exit normally. No local reassignment or side effect is cloned.
-The full observed `examples/generators` `triangle__resume` graph is its required
+The full observed `tests/programs/generators` `triangle__resume` graph is its required
 fixture; scalar-only versions of its edge topology can exercise M1a before the
 generator runtime is supported. Later use per-SCC dispatch or node splitting only if
 measurement pays for its extra code and proof surface. Reject a “loop syntax only”

@@ -5699,7 +5699,7 @@ knowing rather than assuming — and `punycode` has moved from
 `built-exports-nothing` to `built-exports-partial`, the only cell on this axis
 that changed today.
 
-**Every blocker is a fixture now**, in `tooling/conformance/blockers/`, with
+**Every blocker is a fixture now**, in `tests/refusals/`, with
 `blockers-check.mjs` re-measuring them against whatever compiler is current and
 reporting `FIXED` loudly rather than as a pass. Two of the five are invisible to
 `nts hir` — `f64[]` lowers cleanly and fails at the wrapper — so the runner
@@ -14892,7 +14892,7 @@ has exactly one, and it belongs to `objectUrlStore` in `buffer/src/blob.ts`. So
 the four `Record<string, number>` fields of `OsConstants` are never given a
 table, and the first write goes through whatever the struct held.
 
-The shape that escaped the compiler lane's `examples/string-keyed-table` is
+The shape that escaped the compiler lane's `tests/programs/string-keyed-table` is
 likely **a record that is a field of an object literal** rather than one bound
 to a name: a named table gets its `nts_map_new`, a field of a returned object
 literal does not.
@@ -18311,7 +18311,7 @@ wrong answer, on exactly the files the fix was worth.
 **The four candidates each miss it for a different reason.** `blockers/` asserts
 a refusal and this is not one. `differential-ts.mjs` runs the TypeScript on
 node, so both sides are node. `differential-addon.mjs` needs a whole module and
-its node counterpart. And an `examples/` case is written because it *agrees*
+its node counterpart. And an `tests/programs/` case is written because it *agrees*
 with node, so a disagreeing one is never written at all.
 
 `agreement.mjs` compiles a fixture-sized program to an addon, calls each named
@@ -18482,7 +18482,7 @@ harness reported **"agreed on every case"** -- over 16 of 145 cases, with **17
 declined because the program aborted**. The declines were the finding.
 
 That is the shape this whole directory is built against, arriving in the one
-place it had not been looked for. `examples/` requires a case to agree with
+place it had not been looked for. `tests/programs/` requires a case to agree with
 node, so it cannot express a case that does not; `agreement.mjs` counts a
 crash, a refusal and a wrong answer apart and prints all three. The argument for
 the suite stopped being an argument at that point.

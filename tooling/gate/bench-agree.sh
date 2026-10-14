@@ -11,7 +11,7 @@
 # `nts-bench` runs each case with **one seed** and compares a checksum. So
 # nothing ever ran a benchmark case against the oracle on the hostile pool.
 #
-# On 2026-09-06 that gap held a wrong answer. `benches/cases/absences` answered
+# On 2026-09-06 that gap held a wrong answer. `benchmarks/cases/absences` answered
 # 2,046,179,082 where node answers 2,046,179,137, for pool value 2147483647:
 # the loop counter passes 2^31, the remainder is typed `u32`, and a `u32` lives
 # in an `int` slot on the JVM, so `irem` took the sign of a dividend that has
@@ -76,7 +76,7 @@ crowded=8
 cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
 jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$crowded" )}
 
-for case in benches/cases/*/; do
+for case in benchmarks/cases/*/; do
   name=$(basename "$case")
   [ -n "$only" ] && [ "$only" != "$name" ] && continue
   [ -f "$case/case.ts" ] || continue

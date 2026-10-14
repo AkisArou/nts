@@ -3,7 +3,7 @@
 Every place where the lane's code is shaped around something that should not
 have to be there: a compiler defect, a missing compiler feature, or a tooling
 gap. Each row says where the workaround lives, its cause (a gated fixture
-under `tooling/conformance/blockers/`, or a request in
+under `tests/refusals/`, or a request in
 [compiler-requests.md](compiler-requests.md)), and what removes it. When the
 cause is fixed, remove the workaround and delete the row in the same commit.
 

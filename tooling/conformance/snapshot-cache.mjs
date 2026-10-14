@@ -33,7 +33,7 @@
 //    `nts frontend` stores its narrower snapshot, `emit-c` still compiles what
 //    it compiles with the cache off. Until the key held the request's options
 //    (decomposition, call resolution), it served that snapshot as a hit, and
-//    `examples/math` compiled 16 functions of 40 -- through the default cache,
+//    `tests/programs/math` compiled 16 functions of 40 -- through the default cache,
 //    shared by every lane on the box. That is the direction that
 //    matters: an unstable digest over an identical compilation is an
 //    instrument lying, an identical digest over a different compilation is
@@ -233,7 +233,7 @@ async function check(project, slot) {
     // (4) A snapshot of another shape must not be served to a compilation.
     // Bare `frontend` asks for less than `emit-c` does, and until the key held
     // the request's options it stored under the same entry: `emit-c` loaded
-    // it as a hit and compiled 16 functions of `examples/math`'s 40.
+    // it as a hit and compiled 16 functions of `tests/programs/math`'s 40.
     const narrow = join(scratch, `cache-narrow-${slot}`);
     const narrowC = join(scratch, `c-narrow-${slot}`);
     rmSync(narrow, { recursive: true, force: true });

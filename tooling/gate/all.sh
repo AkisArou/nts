@@ -318,7 +318,7 @@ profile() {
   # A discovery loop that finds nothing reports it as success. `benches.sh`
   # did exactly that when the per-case `tsconfig.json` files were deleted: it
   # skipped all fifty cases and exited green in zero seconds, while being the
-  # only step that compiles `benches/cases` at all. The pattern is the same
+  # only step that compiles `benchmarks/cases` at all. The pattern is the same
   # here -- collect the *bad* ones, and an empty glob yields none.
   modules=$(ls -d "$root"/runtime/node/*/tsconfig.json 2>/dev/null | wc -l)
   if [ "$modules" -eq 0 ]; then
@@ -824,7 +824,7 @@ profile() {
   # A discovery loop that finds nothing reports it as success. `benches.sh`
   # did exactly that when the per-case `tsconfig.json` files were deleted: it
   # skipped all fifty cases and exited green in zero seconds, while being the
-  # only step that compiles `benches/cases` at all. The pattern is the same
+  # only step that compiles `benchmarks/cases` at all. The pattern is the same
   # here -- collect the *bad* ones, and an empty glob yields none.
   modules=$(ls -d "$root"/runtime/node/*/tsconfig.json 2>/dev/null | wc -l)
   if [ "$modules" -eq 0 ]; then
@@ -921,7 +921,7 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 # that survived -- so `backend_examples` below counts such an example as `ok` and
 # the floor reads the same either way.
 #
-# That is not hypothetical. While `examples/in-on-a-native-receiver` was being
+# That is not hypothetical. While `tests/programs/in-on-a-native-receiver` was being
 # written, disabling the change under test refused seven of its nine functions
 # and `nts check` answered "checked 58 cases across 2 function(s), agreed on every
 # case", exit 0. The fixture could not fail at the thing it was written for, and
@@ -938,7 +938,7 @@ jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$
 example_refusals() {
   table="$root/tooling/gate/example-refusals"
   results=$(mktemp)
-  ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
+  ls tests/programs/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
     d=$1
     n=$(basename "$(dirname "$d")")
     case "$n" in invalid|unsupported) exit 0 ;; esac
@@ -1030,20 +1030,20 @@ backend_examples() {
   allowed=${5:-}
 
   # **A count from this glob is a fact about the working tree, not about a
-  # commit.** `ls examples/*/tsconfig.json` sees another session's *untracked*
+  # commit.** `ls tests/programs/*/tsconfig.json` sees another session's *untracked*
   # directory, so a floor set from such a run trips the moment that session
   # reverts -- and it trips in the direction nobody watches, because the number
   # went up first and that looked like progress.
   #
   # 2026-09-13: the jvm floor went 203 -> 204 on a run that counted an untracked
-  # `examples/a-promise-with-resolvers`, then went red when its author reverted.
+  # `tests/programs/a-promise-with-resolvers`, then went red when its author reverted.
   # The hazard had been described in a message an hour earlier and the floor was
   # still set from one of those instants.
   #
   # So say so at the moment the count is taken. Not fatal -- the count is still
   # correct *about that tree*, and a session iterating on a new example needs it
   # to run -- but a floor must never be raised off a run that printed this.
-  untracked=$(for d in examples/*/tsconfig.json; do
+  untracked=$(for d in tests/programs/*/tsconfig.json; do
                 git ls-files --error-unmatch "$d" >/dev/null 2>&1 || echo "$d"
               done)
   if [ -n "$untracked" ]; then
@@ -1093,7 +1093,7 @@ backend_examples() {
   # never generated, which no count over run cases can see. Map the input onto
   # the corners you mean to test; do not hope the pool visits them.
   #
-  # **An unresolvable workspace is `unmeasured`, not `no`**: `examples/library`
+  # **An unresolvable workspace is `unmeasured`, not `no`**: `tests/programs/library`
   # needs its ignored `node_modules`, so a worktree cannot build it (TS2307, or
   # TS6059 if the directory is symlinked back). As `no` it cost three lanes an
   # evening blaming two commits for an example never measurable there.
@@ -1143,7 +1143,7 @@ backend_examples() {
   # The floor answers "did we regress"; the names answer "against what", and
   # those are different questions. A run sitting exactly *on* its floor printed
   # nothing at all, so one example failing for an unrelated reason -- a missing
-  # `node_modules` in a fresh worktree, which makes `examples/library` fail to
+  # `node_modules` in a fresh worktree, which makes `tests/programs/library` fail to
   # typecheck -- was indistinguishable from a clean run unless you read the
   # `of N`. That cost three runs to find once and would have cost one.
   [ -n "$behind" ] && printf '  not agreeing:%s\n' "$behind"
@@ -1439,16 +1439,16 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # through what javac makes of the same shape written as Java. **A
   # transcription of a bytecode shape into source is not that bytecode.**
   #
-  # So the row's cause is unfound, and `benches/jvm-rows.md` holds what has
+  # So the row's cause is unfound, and `benchmarks/jvm-rows.md` holds what has
   # been ruled out rather than a diagnosis.
   #
   # 125, level with the LLVM lane. The per-lane gap this paragraph used to
-  # record -- `examples/open-typed-values`, which needs `instanceof` against a
+  # record -- `tests/programs/open-typed-values`, which needs `instanceof` against a
   # typed array, and on a lane with no descriptors is a different mechanism --
   # no longer shows in the count.
   #
   # **The two lanes are one apart, and the gap is named rather than absorbed.**
-  # `examples/a-structural-cast-that-is-a-prefix` passes a class where a
+  # `tests/programs/a-structural-cast-that-is-a-prefix` passes a class where a
   # structural type is wanted, which on C and LLVM is a free pointer cast
   # whenever the target's fields are the source's first fields -- and is not
   # expressible here at all.
@@ -1470,7 +1470,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # tried on that example to make it expressible and made it worse.
   #
   # **Two apart now**, and the second gap is the opposite asymmetry.
-  # `examples/two-private-names-that-collide` is a base and a derived class
+  # `tests/programs/two-private-names-that-collide` is a base and a derived class
   # declaring the same `#name`, which C and LLVM answer by giving the inherited
   # copy a qualified name and addressing both by *index*. The JVM addresses a
   # field by name and class, so it reports
@@ -1994,7 +1994,7 @@ test262_rest_cases() {
     "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
 }
 
-# Defects pinned to what they do: `tooling/conformance/outcomes/`, where a wrong
+# Defects pinned to what they do: `tests/outcomes/`, where a wrong
 # answer, invalid HIR, uncompilable C or a runtime abort lives when it refuses
 # nothing and so has no `blockers/` expect line to write.
 #
@@ -2012,7 +2012,7 @@ outcomes() {
 }
 
 # Is what the backend receives the program the source says? Seven rules over
-# `hir --prepared`, `hir`, `layouts` and `refusals` of examples/ and every
+# `hir --prepared`, `hir`, `layouts` and `refusals` of tests/programs/ and every
 # conformance blocker, each one a defect that shipped silently on 2026-09-27:
 # a call or method-table entry that resolves to no definition or two; an
 # instance method whose class has no layout, or that overrides a dispatched
@@ -2066,7 +2066,7 @@ integrity_runtime() {
 # check is the one that found a cross-lane bug on its first run: the key did
 # not carry which questions a snapshot answered, so after anyone ran `nts
 # frontend` on a project, its next build loaded that snapshot as a hit and
-# `examples/math` compiled 16 functions of 40 -- through the default cache,
+# `tests/programs/math` compiled 16 functions of 40 -- through the default cache,
 # shared by every lane (fixed in 90aa37954). The 15 runtime programs that
 # include web-platform, where maps collide, plus a sample of examples. See
 # tooling/conformance/snapshot-cache.mjs. About 4 min.
@@ -2178,8 +2178,8 @@ step "clippy"  lint
 # into Rust tests, which compile and run the program -- but they reconstruct
 # the build in Rust, so a `build.sh` that has drifted from them is a README
 # that lies with every test green. `ts-from-c` is in no test at all. And the
-# example globs elsewhere in this file are `examples/*/tsconfig.json`, depth
-# one, so `examples/interop/<name>/` has never been in the 205.
+# example globs elsewhere in this file are `tests/programs/*/tsconfig.json`, depth
+# one, so `tests/interop/<name>/` has never been in the 205.
 #
 # What that cost, before this existed: `new Catalog("widgets")` -- the first
 # line of `java-from-ts`, under a comment reading "This file compiles, and
@@ -2259,7 +2259,7 @@ interop() {
   }
   if [ -n "$selected" ]; then
     for project in $selected; do
-      if [ ! -f "examples/interop/$project/build.sh" ]; then
+      if [ ! -f "tests/interop/$project/build.sh" ]; then
         echo "  NTS_INTEROP_PROJECTS names $project, which has no build.sh"
         return 1
       fi
@@ -2267,7 +2267,7 @@ interop() {
     echo "  the projects this range owes: $selected"
   fi
   locals=""
-  for script in examples/interop/*/build.sh; do
+  for script in tests/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
     owed_project "$project" || continue
     case $project in
@@ -2281,7 +2281,7 @@ interop() {
   # (tooling/gate/costs.mjs). Dealt round-robin, one lane drew the projects
   # with the most builds in them and ran ten minutes after the others had
   # finished (2026-10-07). `flock` hands each project to exactly one lane.
-  node --input-type=module -e 'import { longestFirst } from "./tooling/gate/costs.mjs"; console.log(longestFirst("interop", process.argv.slice(1), (p) => `examples/interop/${p}`).join("\n"))' $locals \
+  node --input-type=module -e 'import { longestFirst } from "./tooling/gate/costs.mjs"; console.log(longestFirst("interop", process.argv.slice(1), (p) => `tests/interop/${p}`).join("\n"))' $locals \
     | sed 's|^\(.*\)$|examples/interop/\1/build.sh|' > "$lanes/local.queue"
   echo 0 > "$lanes/local.next"
   take() {
@@ -2325,7 +2325,7 @@ interop() {
   # What each project took, for the next run's order. Order only.
   node --input-type=module -e 'import { recordCosts } from "./tooling/gate/costs.mjs"; import { readFileSync } from "node:fs"; const [dir, ...ps] = process.argv.slice(1); const t = {}; for (const p of ps) { try { t[p] = Number(readFileSync(`${dir}/${p}.secs`, "utf8")); } catch {} } recordCosts("interop", t);' "$lanes" $locals 2>/dev/null || true
   failed=0
-  for script in examples/interop/*/build.sh; do
+  for script in tests/interop/*/build.sh; do
     project=$(basename "$(dirname "$script")")
     owed_project "$project" || continue
     output=$(cat "$lanes/$project.out" 2>/dev/null)
@@ -2400,7 +2400,7 @@ interop() {
   #
   # Counted from `git ls-files`, not from the directory: three lanes share this
   # working tree and an untracked example is not in the pinned tree the gate
-  # builds. `ls examples/interop/*/build.sh` said 21 while the answer was 20.
+  # builds. `ls tests/interop/*/build.sh` said 21 while the answer was 20.
   #
   # 21: `native-closure` (`580e25bb`), a capturing closure handed to C.
   # 22: `gtk-loop` (`9055d56b`), libuv driven from a GLib main loop.
@@ -2494,7 +2494,7 @@ step "tests"   tests
 step "corpus"  corpus
 # Every benchmark case, compiled by both backends and not run. `corpus` proves
 # arbitrary input compiles and `examples` proves the examples agree with node;
-# nothing covered `benches/cases`, so a code generation bug that only showed up
+# nothing covered `benchmarks/cases`, so a code generation bug that only showed up
 # there arrived through a twenty-five minute benchmark run instead of here. One
 # did: see the header of the script.
 step "benches"  ./tooling/gate/benches.sh
@@ -2504,7 +2504,7 @@ step "example-refusals" example_refusals
 # own program.
 #
 # **Nothing checked either.** The configs typecheck under
-# `examples/workspace/tsconfig.configs.json`, which catches a wrong field name
+# `tests/workspace/tsconfig.configs.json`, which catches a wrong field name
 # and nothing else -- not a target id that two files spell differently, not a
 # constructor the package exports and nothing calls, not a `lockfile` path that
 # is not there. All three were live when this step was written.
@@ -2532,7 +2532,7 @@ react_sources() {
 }
 step "react-sources" react_sources
 
-# The 152 fixtures in `tooling/conformance/blockers`, which nothing ran.
+# The 152 fixtures in `tests/refusals`, which nothing ran.
 #
 # `blockers-check.mjs` sets `process.exitCode = 0` on purpose -- "a blocker being
 # fixed is the outcome this lane wants, and it should be loud rather than red" --

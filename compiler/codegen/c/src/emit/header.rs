@@ -290,7 +290,7 @@ fn emit_next(
 /// constant is that something outside this translation unit names it". Then
 /// the header that consumer includes did not name it, so naming it meant
 /// writing the `extern` by hand. The build lane's test for
-/// `examples/library` does exactly that, which is how this surfaced -- a
+/// `tests/programs/library` does exactly that, which is how this surfaced -- a
 /// consumer working around the header rather than a compiler error.
 ///
 /// **After `module__init`'s declaration, deliberately.** A module-level

@@ -227,7 +227,7 @@ pub const DTOA_SOURCE: &str = include_str!("../../../../runtime/c/quickjs/dtoa.c
 ///
 /// `dtoa` is: `String(x)` is in nearly every program and it is 12 KB with no
 /// tables. These are 63 KB of tables that most programs never read, and linking
-/// them takes `examples/hello` from 81 KB to 162 KB -- so they are emitted only
+/// them takes `tests/programs/hello` from 81 KB to 162 KB -- so they are emitted only
 /// for a program that calls one of the methods, the same way the libuv host is
 /// written only when a loop is asked for. `needs_unicode` says which.
 pub const UNICODE_HEADER_NAME: &str = "nts_unicode.h";
@@ -1378,7 +1378,7 @@ fn native_parameters(target: &nts_core::hir::native::Function, spelling: Spellin
 /// A code and not a severity, because both are errors and only one of them
 /// makes the output unusable. The first version of this check was `any error
 /// at all` and it turned sixteen node modules from building into regressed --
-/// measured on `examples/`, which was the wrong population: the modules are
+/// measured on `tests/programs/`, which was the wrong population: the modules are
 /// built through `tooling/conformance/build.sh`, and every one of them reports
 /// declines.
 #[must_use]
@@ -1629,8 +1629,8 @@ fn emit_bodies<'a>(
         // it; nothing calls it and no vtable names it, because an abstract
         // class is never instantiated. Emitting the stub gave clang an
         // `unused function 'Shape__area'` under `-Werror`, which only the
-        // benchmark build turns on -- so `examples/abstract-methods` passed and
-        // `benches/cases/upcast` did not.
+        // benchmark build turns on -- so `tests/programs/abstract-methods` passed and
+        // `benchmarks/cases/upcast` did not.
         if func.abstract_declaration {
             continue;
         }
@@ -3253,8 +3253,8 @@ fn emit_object_types(
 /// stopping.
 ///
 /// Deliberately *not* a store. A store is not a call, and reading one as an
-/// escape refused two examples that are right: `examples/absent` builds five
-/// closures purely to ask `typeof` of them, and `examples/library` puts seven
+/// escape refused two examples that are right: `tests/programs/absent` builds five
+/// closures purely to ask `typeof` of them, and `tests/programs/library` puts seven
 /// exported `const` arrows into globals. Neither calls one, the pruner
 /// correctly drops each `#call` as unreachable, and a descriptor nothing reads
 /// is a static struct. The narrower rule is also the honest one -- what makes
@@ -5075,7 +5075,7 @@ fn shift_text(
 /// promise the program does not keep.
 ///
 /// Wrapped through the unsigned counterpart, which is defined, and cast back --
-/// exactly the spelling `benches/cases/accumulate`'s hand-written reference
+/// exactly the spelling `benchmarks/cases/accumulate`'s hand-written reference
 /// uses, with a comment there saying the wrapping *is* the semantics. The C
 /// emitted here is now held to the standard the reference is held to.
 ///
@@ -6497,8 +6497,8 @@ mod tests {
     ///
     /// Both halves matter and the second is the one that cost three rounds. The
     /// first version of this guard refused any *live* closure without a method,
-    /// and `examples/absent` builds five purely to ask `typeof` of them. The
-    /// second added stores, and `examples/library` puts seven exported `const`
+    /// and `tests/programs/absent` builds five purely to ask `typeof` of them. The
+    /// second added stores, and `tests/programs/library` puts seven exported `const`
     /// arrows into globals. Neither calls one; the pruner drops each `#call` as
     /// unreachable and is right to. What makes the native case different is not
     /// that the value moved -- it is that the caller is on the other side of the

@@ -20,11 +20,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -145,7 +145,7 @@ fn two_tokens_do_not_merge() {
 /// It is emitted rather than built — static, immortal, nothing in it but the
 /// header — so there is no `ObjectNew` anywhere for one. A lowering that
 /// allocated a fresh token per mention would break identity *and* allocate, and
-/// `tooling/memory/cases/class-value` is the other half of this.
+/// `tests/memory/class-value` is the other half of this.
 #[test]
 fn a_class_value_allocates_nothing() {
     let Some(lowered) = lowered("class-values") else {

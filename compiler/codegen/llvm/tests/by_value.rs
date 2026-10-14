@@ -10,8 +10,8 @@
 //! as a pointer to it, so without the refusal it would pass every check a
 //! pointer passes and hand C an address where C reads bytes.
 //!
-//! Running one is `examples/interop/native-byvalue`'s job, against the same
-//! program in C, and `examples/interop/macos-geometry`'s on the lane's Mac.
+//! Running one is `tests/interop/native-byvalue`'s job, against the same
+//! program in C, and `tests/interop/macos-geometry`'s on the lane's Mac.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 #[path = "../../../test-support/scratch.rs"]

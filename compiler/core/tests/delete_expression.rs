@@ -17,11 +17,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -34,7 +34,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/delete"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/delete"))
 }
 
 /// A deletion is a field store of `undefined` and a presence clear, and nothing
@@ -55,7 +55,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
 /// bag`**.
 ///
 /// So this is the pay-for-what-you-use gate rather than an absence of the
-/// feature, and the two are told apart by `examples/an-optional-property`,
+/// feature, and the two are told apart by `tests/programs/an-optional-property`,
 /// which does ask and does get its bit. Without that fixture beside it this
 /// assertion would pass just as well on a compiler where presence was never
 /// implemented.

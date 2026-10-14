@@ -24,10 +24,10 @@ use nts_frontend_ts::SemanticSource;
 fn prepared() -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/two-private-names-that-collide")
+        .join("../../tests/programs/two-private-names-that-collide")
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/two-private-names-that-collide is checked in");
+        .expect("tests/programs/two-private-names-that-collide is checked in");
     let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");

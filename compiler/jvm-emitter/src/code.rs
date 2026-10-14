@@ -381,7 +381,7 @@ impl Code {
     /// than merely intended: the frame declares a type for every slot, and the
     /// verifier will not accept a frame naming a slot nothing has assigned. The
     /// stores cost a handful of bytes and are dead by the time C2 sees them --
-    /// which is a claim to measure rather than to trust, and `benches/cases/fib`
+    /// which is a claim to measure rather than to trust, and `benchmarks/cases/fib`
     /// is where.
     ///
     /// `from_slot` is one past the last parameter: parameters arrive assigned

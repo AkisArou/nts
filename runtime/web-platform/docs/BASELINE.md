@@ -4993,7 +4993,7 @@ The compiled axis reports agreement between a compiled program and node, on thre
 backends. The JVM lane found the case that qualifies what that sentence is worth, from
 the other end of the same problem.
 
-Their `examples/declared-wider` returns a two-field `Error` from a function declaring a
+Their `tests/programs/declared-wider` returns a two-field `Error` from a function declaring a
 three-field `Tagged`, and the caller writes field two. The JVM verifier refuses it. The
 pointer-cast backends write past the end of the allocation and **agree with node**.
 

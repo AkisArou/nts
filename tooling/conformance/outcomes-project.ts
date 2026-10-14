@@ -1,5 +1,5 @@
 // An outcomes fixture as a compilable project: the one definition of how
-// `tooling/conformance/outcomes/<name>` becomes something `nts` can read.
+// `tests/outcomes/<name>` becomes something `nts` can read.
 //
 // Shared by `outcomes-check.ts`, which builds and runs it, and
 // `integrity.ts`, which reads its listings. A fixture's `main.ts` calls

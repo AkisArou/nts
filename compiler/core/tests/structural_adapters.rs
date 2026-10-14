@@ -27,7 +27,7 @@ fn prepared(relative: &str) -> Option<hir::Program> {
 
 #[test]
 fn class_and_interface_return_bridges_share_the_conversion_plan() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };
@@ -93,7 +93,7 @@ fn class_and_interface_return_bridges_share_the_conversion_plan() {
 
 #[test]
 fn a_shared_projection_keeps_only_guarantees_from_both_faces() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };
@@ -138,7 +138,7 @@ fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
 
 #[test]
 fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };
@@ -173,7 +173,7 @@ fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() 
 
 #[test]
 fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };
@@ -242,7 +242,7 @@ fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
 
 #[test]
 fn equivalent_callable_faces_share_the_adapter() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };
@@ -268,7 +268,7 @@ fn equivalent_callable_faces_share_the_adapter() {
 
 #[test]
 fn specialization_narrows_the_body_and_preserves_the_table_signature() {
-    let Some(program) = prepared("../../examples/a-method-adapted-to-a-structural-interface")
+    let Some(program) = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface")
     else {
         return;
     };

@@ -573,7 +573,7 @@ pub struct Func {
     /// So a backend must **not** emit a body for one. The C backend emitted the
     /// `__builtin_unreachable()` stub and clang refused the translation unit
     /// under `-Werror`: `unused function 'Shape__area'`, found by
-    /// `benches/cases/upcast`, whose build is the only one that turns warnings
+    /// `benchmarks/cases/upcast`, whose build is the only one that turns warnings
     /// into errors. The JVM's answer is `ACC_ABSTRACT` with no `Code`
     /// attribute, which is the same statement in that file format.
     pub abstract_declaration: bool,
@@ -1798,7 +1798,7 @@ pub fn zero_of(ty: &HirType) -> OpKind {
 /// What it needs is a read that answers *nothing* out of range rather than
 /// faulting -- the semantics a detached view already has -- expressed as an op
 /// all three backends render, or a store that releases the old value inside the
-/// helper that resolves the slot. `examples/a-growing-write-of-a-counted-element`
+/// helper that resolves the slot. `tests/programs/a-growing-write-of-a-counted-element`
 /// carries the measurements and both designs.
 ///
 /// **`holds_a_pointer` would be the predicate, not `may_hold_a_reference`**,
@@ -3909,7 +3909,7 @@ pub fn operands_of(kind: &OpKind) -> Vec<ValueId> {
 /// initialisation as growth.
 ///
 /// What that costs is whole-program: `arrays_can_grow` is asked once and its
-/// answer disables length folding everywhere. `tooling/memory/cases/cyclic-array`
+/// answer disables length folding everywhere. `tests/memory/cyclic-array`
 /// contains no index write at all -- `const listA: Leaf[] = [first]` and two
 /// field stores -- and went from 8 operations and 0 collector candidates to 9
 /// and 1 the moment a counted element became growable, because one of its two
@@ -4425,7 +4425,7 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 /// **Undoing it is most of what the redirect is worth, which was measured the
 /// wrong way round first.** `retype_parameter` originally redirected such a call
 /// to the concrete class's *erased* entry -- direct, same ABI, no surgery -- on
-/// the argument that what a clone buys is the dispatch. `benches/cases/closures`
+/// the argument that what a clone buys is the dispatch. `benchmarks/cases/closures`
 /// refuted it: the hot loop paid one `nts_value_of_number`, **seven**
 /// `nts_value_of_undefined`, and a read-back per iteration, for a call the control
 /// made with a raw `double`. `devirtualize_closures` prices the same thing from
@@ -4549,7 +4549,7 @@ pub(super) fn call_directly(
     // in front of it. A second insertion at the old `at` -- the moved call below
     // -- landed *before* the receiver it reads: `call Closure2#call(%7, …)` then
     // `%7 = unerase …`, which C compiled (its declarations hoist) and LLVM and
-    // the JVM verifier rejected (`examples/a-call-on-a-cast-inside-a-closure`).
+    // the JVM verifier rejected (`tests/programs/a-call-on-a-cast-inside-a-closure`).
     let mut at = at;
     if let Some(op) = receiver {
         let pushed = id(func.values.len());
@@ -5525,7 +5525,7 @@ impl Field {
     /// are one `Layout` under the first one's name, so the record a derived
     /// class inherits names a class the shared layout does not, and every such
     /// class failed `check_layouts` with `BrokenBase`. Caught by
-    /// `examples/modifiers-on-a-field`, which is a fixture about something else
+    /// `tests/programs/modifiers-on-a-field`, which is a fixture about something else
     /// entirely and the only one in the tree with that shape.
     #[must_use]
     pub fn names_the_same_member(&self, other: &Self) -> bool {
@@ -5595,7 +5595,7 @@ enum Moved {
 ///
 /// Counted by instrumenting the permutation and asking how many layouts it
 /// actually moves: **zero** across `runtime/node`, zero across
-/// `runtime/web-platform`, and zero across every `examples/` project. The
+/// `runtime/web-platform`, and zero across every `tests/programs/` project. The
 /// checker already lists a class's inherited members before its own, so
 /// [`put_bases_first`] computes the identity permutation and this rewrites
 /// nothing.
@@ -6621,7 +6621,7 @@ fn uncuttable(
 /// Answering "cut" for it while the reason the caller came back for was
 /// something the seeds could not see made `nts hir` spin forever on a module
 /// that read a refused interface field
-/// (`tooling/conformance/outcomes/a-module-reading-an-interface-field-whose-getter-was-refused`).
+/// (`tests/outcomes/a-module-reading-an-interface-field-whose-getter-was-refused`).
 /// A round that cuts nothing declines, and the caller drops evaluation whole,
 /// loudly.
 fn cut(func: &mut Func, doomed: &rustc_hash::FxHashMap<ValueId, Doom>) -> bool {
@@ -7019,8 +7019,8 @@ fn simplify_all(program: &mut Program) -> usize {
 /// Run before `reshape_calls`, so a call this makes direct is a call the
 /// inliner can inline and the interprocedural analysis can read a callee's
 /// facts through. A dispatch is opaque to both, and that opacity is most of
-/// what it costs: `benches/cases/optional-chain` went 87.98 us to 35.17 us on
-/// this, and `tooling/memory/cases/callback-field` went from 35 counting
+/// what it costs: `benchmarks/cases/optional-chain` went 87.98 us to 35.17 us on
+/// this, and `tests/memory/callback-field` went from 35 counting
 /// operations to 1 — a reference cannot be borrowed across a call nothing can
 /// name, which is record 0091's shape.
 fn devirtualize_closures(program: &mut Program) -> usize {

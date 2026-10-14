@@ -32,7 +32,7 @@ use super::{Dependencies, NativeModule, Resolution};
 pub(super) fn resolve(dir: &Utf8Path, id: &str, claim: &Dependencies) -> Result<Resolution> {
     // Absolute, so every path this hands on is: a header an umbrella under
     // `.nts/` imports, or a module map names, is read from another directory
-    // than the one `nts build examples/app` was run in.
+    // than the one `nts build tests/programs/app` was run in.
     let dir = &super::absolute(dir)?;
     let Some(named) = &claim.lockfile else {
         bail!(

@@ -465,7 +465,7 @@ pub fn is_interface(program: &Program, layout: &Layout) -> bool {
     if !named {
         return false;
     }
-    // **Named is not sufficient, and `examples/declared-wider` is why.**
+    // **Named is not sufficient, and `tests/programs/declared-wider` is why.**
     // `interface Tagged extends Error` puts `Error` in `Tagged.interfaces`,
     // and `Error` is a class with a `message` field. A JVM interface has no
     // instance fields and no subclasses that reach it through `super_class`,
@@ -525,7 +525,7 @@ pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
 /// owner that does not extend the face is a value the cast cannot take.
 ///
 /// **A family lists who could, not who arrives**, so this is not a refusal.
-/// `examples/in-operator` narrows `Reader | Writer | Duplex` with `"duplex" in
+/// `tests/programs/in-operator` narrows `Reader | Writer | Duplex` with `"duplex" in
 /// s` before it reads `s.read`: `Duplex` fits `Reader` and owns a row in its
 /// family, and no `Duplex` ever reaches that read. Refusing every unerase to
 /// `Reader` declined a function that agreed on all 377 cases, so the caller

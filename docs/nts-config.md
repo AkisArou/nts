@@ -54,7 +54,7 @@ is where each claim below is asserted.
   each one message naming the thing and the fix.
 - A package's **Java is compiled into the artifact** -- a JVM target's `native:`
   roots are Java, and they are the half the program calls into.
-- All 16 `examples/interop/*/build.sh` build their product with one `nts build`.
+- All 16 `tests/interop/*/build.sh` build their product with one `nts build`.
   What toolchain invocations remain in them compile *consumers* -- a C caller, a
   Java driver -- or guard on a tool being installed.
 
@@ -71,7 +71,7 @@ Asked because assuming either way is expensive, and answered on **this
 compiler's generated C** rather than on zig's own claims -- which is not the
 same question, and is the one that decides anything.
 
-`zig cc` is a drop-in on the host: `examples/library` builds the same artifact
+`zig cc` is a drop-in on the host: `tests/programs/library` builds the same artifact
 through `CC=clang` and `CC="zig cc"`. Cross-compiling `program.c` and
 `nts_runtime.c`, with `file` reading the result:
 
@@ -95,7 +95,7 @@ macOS now builds from Linux with `clang -target <arch>-apple-macos<min>
 -isysroot <sdk> -fuse-ld=lld`, not zig, because zig does not honour the
 witness's `-fsyntax-only`. The sysroot is either a real SDK (`NTS_APPLE_SDK`) or
 zig's Darwin libc arranged as one (`tooling/apple/zig-sdk.sh`).
-`examples/interop/macos-hello` is the arm that proves it. iOS is still refused
+`tests/interop/macos-hello` is the arm that proves it. iOS is still refused
 by name, for its own reason: it has no bundle, signing or simulator path.
 
 **What this was hiding.** `link_c` never read `target.os` and `artifact_name`
@@ -160,7 +160,7 @@ bytecode**, so the test compiles and runs a Java consumer against the jar.
 **The default backend was the refusal.** `target.linux()` defaulted to `llvm`
 and `ios`, `macos` and `windows` were pinned to it, while `app.linux({ backend })`
 defaulted to `c` -- two answers to one question, disagreeing, and the one that
-lost cannot write a program. `examples/library` carried a comment about saying
+lost cannot write a program. `tests/programs/library` carried a comment about saying
 `backend: "c"` out loud, which is what a broken default looks like from inside a
 config: the workaround gets written down instead of the default getting fixed.
 All of them now read one `NATIVE_DEFAULT`, which is `c` because that is the
@@ -496,7 +496,7 @@ about which files are in the program. §34 already has `workspace.tsconfig`.
 Everything above is general. This section is the lane where it has been measured,
 and it is kept because the numbers are what made the general shape necessary.
 
-**The prelude today is curated and too small.** `examples/interop/java-from-ts/
+**The prelude today is curated and too small.** `tests/interop/java-from-ts/
 types/prelude.members` is 58 hand-curated lines covering `java.lang` and
 `java.util`. Binding one Android package against it:
 
@@ -525,7 +525,7 @@ target is ~**1.7 MB** (Android) to ~**2.4 MB** (JDK 21) of `.d.ts` -- which is a
 ordinary npm package, and another reason §3 publishes rather than generates them.
 
 **Local Java and Kotlin already work.** `bind --classes <dir>` takes a directory,
-and `examples/interop/java-from-ts/build.sh` is `javac` -> `bind` -> TypeScript
+and `tests/interop/java-from-ts/build.sh` is `javac` -> `bind` -> TypeScript
 end to end. Kotlin needs no new reader: verified on `kotlinc-jvm 2.4.20`, one
 defect found and fixed in `5eea691d` -- the binder matched `/NonNull` and Kotlin
 writes `org.jetbrains.annotations.NotNull`, so every non-null Kotlin return bound
@@ -534,14 +534,14 @@ as `T | null` and `fun greet(): String` was indistinguishable from
 
 **Ordering is a genuine cycle.** TS-calls-Java needs bindings before the
 TypeScript is checked; Java-calls-TS needs emitted classes before the Java
-compiles. `examples/interop/android-shape` does both and needs two passes. So a
+compiles. `tests/interop/android-shape` does both and needs two passes. So a
 mixed source root must declare its direction; it cannot be inferred from a path.
 
 ---
 
 ## 6a. Two fields that should not exist, and why
 
-`examples/workspace` was built to argue against, and it argued two fields out of
+`tests/workspace` was built to argue against, and it argued two fields out of
 the config on its first reading.
 
 **`language` on a source root is derivable** from the extension, and a directory
@@ -698,7 +698,7 @@ entry. That is clearest on a Node addon, where the artifact's surface is
 literally the module's exports and there is no visibility mechanism underneath
 for a config to select from.
 
-`examples/library`'s whole product is now
+`tests/programs/library`'s whole product is now
 `library.native({ targets: [target.linux()], entry })`.
 
 ### An XCFramework is not the Apple `.so`, and the artifact is chosen by consumption
@@ -785,7 +785,7 @@ floor.
 
 **That paragraph was true of the audit and false of the build for as long as it
 took to build an APK.** `NativeSources::covers` and `Manifest::covers` were both
-`it == id`, so `nts build examples/workspace/apps/android` produced two signed,
+`it == id`, so `nts build tests/workspace/apps/android` produced two signed,
 installable APKs carrying neither `notifications`' Java nor `biometrics`'
 `USE_BIOMETRIC` permission, and reported nothing about either -- while
 `apps/android-brownfield`, which differs in one word (no `compileSdk`, so its id
@@ -902,9 +902,9 @@ a configured host. Prose that claimed those things would be obviously
 aspirational. **In a type it reads as capability**, and it survived twenty days
 and one fixture written against it before anything checked.
 
-The check now exists: `examples/workspace/tsconfig.configs.json` typechecks 19
+The check now exists: `tests/workspace/tsconfig.configs.json` typechecks 19
 configs against the package, and it is the first thing in this repository to
-typecheck an `nts.config.ts` at all -- `examples/library`'s resolved to stale
+typecheck an `nts.config.ts` at all -- `tests/programs/library`'s resolved to stale
 built declarations and passed while describing an API that had changed.
 
 ## 6f. The first consumer, and the three defects found on the way to it
@@ -948,7 +948,7 @@ root in `sdk` and an inlined callee in `addon`, and a trivial function reached
 from the entry leaves no definition at all.
 
 **One bug the sweep caught and review would not have.** The first version of the
-variant omitted module initialization, and `examples/library` -- which exports
+variant omitted module initialization, and `tests/programs/library` -- which exports
 `add` and a module-level `const greeting` -- lost `module__init` and the string
 behind it. A two-name library publishing one of them as null: a wrong *answer*,
 not a missing symbol. It was found by diffing all 218 examples against a binary

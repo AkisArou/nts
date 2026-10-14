@@ -161,7 +161,7 @@ export function validateInteger(
  * `ERR_OUT_OF_RANGE` where node answers `ERR_INVALID_ARG_TYPE`, while the
  * interpreted lane, where the check still runs, passed throughout. A string
  * can arrive because an overloaded function's second argument is not checked
- * at the wrapper -- `tooling/conformance/blockers/`
+ * at the wrapper -- `tests/refusals/`
  * `an-overloads-second-argument-is-unchecked`.
  */
 export function validateInt32(

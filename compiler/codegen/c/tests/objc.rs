@@ -4,7 +4,7 @@
 //! Nothing here needs a Mac. The emitted program declares the three runtime
 //! entry points itself rather than including `<objc/runtime.h>`, so it
 //! compiles on any host; linking and running it is
-//! `examples/interop/macos-foundation`'s job, against a C oracle on the lane's
+//! `tests/interop/macos-foundation`'s job, against a C oracle on the lane's
 //! VM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

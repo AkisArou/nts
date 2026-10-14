@@ -5,7 +5,7 @@
 //!
 //! Every `check` built its program as one `clang` command over the generated C
 //! *and* the whole runtime, at `-O1`. The runtime is the same bytes in nearly
-//! every one of them, and it was the cost: in one `nts check examples/math`,
+//! every one of them, and it was the cost: in one `nts check tests/programs/math`,
 //! clang took 2.03 s of 2.06. The differential runs over every example on
 //! every backend in the gate, and `tooling/differential/agree.mjs` is only
 //! worth running before a commit if it is quick.

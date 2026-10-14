@@ -3,7 +3,7 @@
 //! Every `Fn` layout is empty — a function type is a signature, not a class —
 //! so `same_shape` says all of them are one. That was harmless while nothing
 //! dispatched through a function type, and wrong the moment a closure declared
-//! its `call` in one: `examples/function-values` collapsed three signatures
+//! its `call` in one: `tests/programs/function-values` collapsed three signatures
 //! into a single layout holding eight type ids.
 //!
 //! Skips only when `tsgo` is not built.
@@ -17,11 +17,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -39,7 +39,7 @@ fn signature_layouts(lowered: &hir::lower::Lowered) -> Vec<&Layout> {
 
 /// Two function types with different signatures get different layouts.
 ///
-/// `examples/function-values` declares `(x: number) => number`,
+/// `tests/programs/function-values` declares `(x: number) => number`,
 /// `(x: number) => void` and `(a: number, b: number) => number`. Before the
 /// names were structural these were one layout with eight type ids, and the
 /// only instrument that could see it was the JVM backend refusing
@@ -104,7 +104,7 @@ fn a_closure_extends_its_signature() {
         .iter()
         .filter(|layout| layout.name.starts_with("Closure"))
         .collect();
-    assert!(!closures.is_empty(), "examples/closures has closures");
+    assert!(!closures.is_empty(), "tests/programs/closures has closures");
 
     let based = closures
         .iter()

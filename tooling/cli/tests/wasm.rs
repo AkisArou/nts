@@ -11,7 +11,7 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
         .canonicalize()
         .unwrap();
     let scratch = std::env::temp_dir().join(format!("nts-wasm-cli-{}", std::process::id()));
-    let supported = root.join("tooling/wasm/fixtures/scalars");
+    let supported = root.join("tests/wasm/scalars");
     let out = scratch.join("supported");
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))
         .args(["emit-wasm", "--no-acquire", "--out"])
@@ -49,7 +49,7 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
         (
             "unsupported",
             vec![],
-            root.join("tooling/wasm/fixtures/declines"),
+            root.join("tests/wasm/declines"),
             "NTS5001",
             "unsupportedBigInt",
         ),
@@ -95,7 +95,7 @@ fn emit_wasm_reads_every_host_spelling_and_refuses_a_wrong_one() {
         .canonicalize()
         .unwrap();
     let scratch = std::env::temp_dir().join(format!("nts-wasm-host-{}", std::process::id()));
-    let project = root.join("tooling/wasm/fixtures/scalars");
+    let project = root.join("tests/wasm/scalars");
     let project = project.to_str().unwrap();
     let emit = |label: &str, args: &[&str]| {
         let out = scratch.join(label);

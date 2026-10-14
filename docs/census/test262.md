@@ -93,7 +93,7 @@ wrong about each.
 
 **An omitted expression** is an elision in an *array literal*: test262's
 `var array = [,,,,,]`. `typescript.md` had no row for it; it has one as of 2026-09-18. The corpus does cover
-elisions — `examples/a-hole-in-a-destructuring-pattern` — but every one of them
+elisions — `tests/programs/a-hole-in-a-destructuring-pattern` — but every one of them
 is a **destructuring pattern** (`const [, second] = pair`), which is a different
 production. 18 files separate the two.
 
@@ -117,7 +117,7 @@ The checker fills such a declaration's type in from the assignments that follow.
 `lower_variable_statement` reads that back with `evolved_type` and always has;
 `collect_module_scope` asked `type_of` alone, so the same three lines were an
 ordinary local inside a function and refused one scope out. Fixed 2026-09-18 —
-`examples/an-evolving-type-at-module-scope`, and 12 of 12 sampled files went
+`tests/programs/an-evolving-type-at-module-scope`, and 12 of 12 sampled files went
 from refused to `strict-pass`.
 
 It also ranked **twice**. The root, *a module-scope variable of unrepresentable
@@ -279,7 +279,7 @@ defect and none of them emits a diagnostic:
 - `multiplication/S11.5.1_A4_T7.js` — `1 / (-0.1 * Number.MIN_VALUE)` answered
   `+Infinity`. A zero made by **underflow** kept no sign: `facts::mul`'s rule
   asked only whether an *operand* was zero. **Fixed 2026-09-18**, with three
-  folded arms in `examples/negative-zero`.
+  folded arms in `tests/programs/negative-zero`.
 - `greater-than/S11.8.2_A4.12_T1.js` and `less-than/S11.8.1_A4.12_T1.js` — both
   are `"\uDC00" > "\uD800"`, and the cause is not comparison. An **unpaired
   surrogate does not survive the frontend**: `"\uD800"` arrives as *three*
@@ -637,7 +637,7 @@ Of what is left:
 
 - `applying-the-exp-operator_A4.js` -- **`1 ** NaN` answered 1**. C99 makes
   `pow(+1, y)` return 1 for any `y`, even a NaN, and the specification says NaN
-  before it looks at the base. Fixed; `examples/math` carries the arm.
+  before it looks at the base. Fixed; `tests/programs/math` carries the arm.
 - `less-than/S11.8.1_A4.12_T1.js` and `greater-than/S11.8.2_A4.12_T1.js` -- a
   matched pair, and both reduce to **lone surrogates**: `"\uD800" < "\uDC00"`.
   Every other case in both files agrees. This is the UTF-16 representation
@@ -1032,7 +1032,7 @@ stale claim here is a diff rather than a re-reading.
 
 `backend_examples` asserts *"at least N examples agree with node"*. Raising the
 floor proves the corpus grew; it cannot prove that nothing already in it moved,
-and it says nothing at all about programs outside `examples/`. The `blockers`
+and it says nothing at all about programs outside `tests/programs/`. The `blockers`
 step asserts refusals are *present*, which a new **over**-refusal satisfies. So
 a working program that starts refusing trips neither — unless an example
 happens to write exactly that shape.

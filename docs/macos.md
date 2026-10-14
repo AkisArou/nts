@@ -3,7 +3,7 @@
 nts compiles TypeScript to a native macOS executable or `.app`. The surface is
 the one Swift gives an AppKit programmer. Apple's own importer supplies every
 name, so the Swift documentation for a class is its documentation here too.
-Everything below is exercised by an `examples/interop/macos-*` fixture, run on
+Everything below is exercised by an `tests/interop/macos-*` fixture, run on
 a Mac against an Objective-C, C or Swift oracle, through both the C and the
 LLVM backend. [`apple-lane-goal.md`](apple-lane-goal.md) is the lab notebook:
 how each piece was built and measured, and what is refused.
@@ -176,7 +176,7 @@ greeter.greet({ withTimes: 2 });
 - **A `.m` compiles under ARC, with blocks**, beside the program, for macOS
   and iOS only; one in a directory compiled for another target is refused.
 
-`examples/interop/macos-native-objc` is the fixture: a class, a protocol a
+`tests/interop/macos-native-objc` is the fixture: a class, a protocol a
 TypeScript class adopts, and a completion handler, against the same program in
 Objective-C.
 
@@ -206,7 +206,7 @@ import { Greeter } from "objc:Greeter";
   protocol and member. Pure Swift -- a struct, a generic, SwiftUI -- needs an
   `@objc` wrapper written in Swift.
 
-`examples/interop/macos-swift` is the fixture, against the same program in
+`tests/interop/macos-swift` is the fixture, against the same program in
 Swift.
 
 ## A pod
@@ -287,11 +287,11 @@ import { Tally } from "objc:Tally";
   distribution's libraries (on Arch, `libxml2.so.2` is `libxml2-legacy`).
 - Not read yet: a registry dependency.
 
-`examples/interop/macos-spm` is the fixture: an Objective-C package, a Swift
+`tests/interop/macos-spm` is the fixture: an Objective-C package, a Swift
 one over two C targets of its own, and a binary one by `url:`, against the
 same program in Objective-C.
 
-`examples/interop/macos-pods` is the fixture: five development pods -- one
+`tests/interop/macos-pods` is the fixture: five development pods -- one
 Objective-C with a private class in a directory of its own, one Swift, one an
 `.xcframework` Xcode made, one of both languages, one Swift over the
 Objective-C one -- against the same program in Objective-C.
@@ -321,7 +321,7 @@ app.delegate = new AppDelegate(() => { /* what the application does once launche
 app.run();
 ```
 
-`examples/interop/macos-notes` is such an application, and
+`tests/interop/macos-notes` is such an application, and
 `reference/notes.swift` beside it is the same program in Swift. Its
 output is compared with the TypeScript program's, line for line.
 
@@ -342,7 +342,7 @@ draw(dirtyRect: ByValue<CGRect>): void {
 
 A Core Foundation object is counted like any other: a function Swift imports
 as an initializer hands over a reference, which the program releases once
-nothing holds it. `examples/interop/macos-draw` draws into a bitmap and
+nothing holds it. `tests/interop/macos-draw` draws into a bitmap and
 compares every pixel with the same drawing in C.
 
 ## Memory
@@ -385,10 +385,10 @@ product is an `.app` that `tooling/apple/run-ios.sh` installs and launches
 with `simctl`. The program starts UIKit as Swift's `main.swift` does,
 `UIApplicationMain(0, null, null, "AppDelegate")`: bound with `--function
 UIApplicationMain`, the delegate class given by name, and `exit` from
-`c:stdlib` to end it (see `examples/interop/ios-hello`, and
-`examples/interop/ios-list` for a table view's data source). Each has a Swift
+`c:stdlib` to end it (see `tests/interop/ios-hello`, and
+`tests/interop/ios-list` for a table view's data source). Each has a Swift
 twin in `reference/`, whose output is compared with the TypeScript program's.
-`examples/interop/ios-nav` is a navigation stack of view controllers the
+`tests/interop/ios-nav` is a navigation stack of view controllers the
 program writes, driven by UIKit's lifecycle. A device build needs signing, and
 is refused.
 

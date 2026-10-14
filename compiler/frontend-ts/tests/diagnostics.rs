@@ -13,11 +13,11 @@ use nts_semantic_schema::SemanticSnapshot;
 fn snapshot_of(fixture: &str) -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
     Some(
         TsgoApi::new(tsgo)
             .snapshot(&tsconfig)
@@ -153,7 +153,7 @@ fn diagnostics_cost_two_exchanges_a_file() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/types/tsconfig.json")
+        .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
         .unwrap();
     let mut source = TsgoApi::new(tsgo);

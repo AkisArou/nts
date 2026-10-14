@@ -212,7 +212,7 @@ Not yet, and refused rather than wrong:
   and so does a class the hierarchy relates. The fix is structural
   assignability, the decision `Wakeable#then` waits on too.
 
-`examples/a-function-that-reads-its-own-this` agrees with node on C, LLVM, the
+`tests/programs/a-function-that-reads-its-own-this` agrees with node on C, LLVM, the
 JVM and C under reference counting, 290 cases. Each control fails:
 - dropping every `this` stops at the test, by name;
 - `call_directly` dropping the `this` is invalid HIR;
@@ -224,7 +224,7 @@ Over all 471 examples, step 1 against step 2: 470 unchanged, 1 fixed.
 refused, on the premise that its frame had no place for it. It had one: the
 call's `this` is a parameter of the body, and the frame keeps it with the
 others. The test is in the resume function, so it runs at the first `next()`,
-where node would first read `this`. `examples/a-generator-that-reads-its-own-this`:
+where node would first read `this`. `tests/programs/a-generator-that-reads-its-own-this`:
 an expression, a declaration that reads `this` after a `yield`, and a generator
 method taken as a value. 87 cases on C, LLVM, the JVM and rc.
 
@@ -241,7 +241,7 @@ Where a subclass overrides it, the call's `this` must be the read object itself
 wrapper names the method's raising copy, direct or by its raising slot
 (`method_callee`, split from `callee_for` for want of a call node). A method
 value thrown through inside a `try` had aborted by name before this, bound or
-not. `examples/a-method-taken-as-a-value-that-reads-its-own-this`, 203 cases on
+not. `tests/programs/a-method-taken-as-a-value-that-reads-its-own-this`, 203 cases on
 C, LLVM, the JVM and rc. `blockers/a-call-with-a-receiver-that-is-read` held
 the last case and is gone.
 
@@ -257,7 +257,7 @@ nested declaration that captures and reads `this` is now a closure taking it,
 as a `function` expression is; one that captures nothing is a function of the
 program like a module-scope one. A generic one used as a value is refused by
 name, since the canonical generic value's kernels name the written entry.
-`examples/a-function-declaration-that-reads-its-own-this`: `.call`, `.apply`,
+`tests/programs/a-function-declaration-that-reads-its-own-this`: `.call`, `.apply`,
 a method through a field, `.bind`, a plain call's `undefined`, a body handing
 its `this` on, nested with and without captures, a `throw` caught around the
 call, and `async`. 290 cases on C, LLVM, the JVM and rc; on main it compiles
@@ -268,7 +268,7 @@ did not catch: the checker resolves the callee to `CallableFunction.call`,
 which has no body, so the raising analysis answered "cannot raise" and the
 `throw` ended the program. `FuncBuilder::through_call_or_apply` makes those
 questions ask about `f`. This dated from before receivers.
-`examples/a-throw-through-call-or-apply-inside-a-try`, 145 cases; a control
+`tests/programs/a-throw-through-call-or-apply-inside-a-try`, 145 cases; a control
 that drops the rule from `a_value_held_call` refuses the arm one call below
 the `try`. A bound function's raising variant also returned nothing where its
 result was due (invalid HIR on main), and it now sets its result type.
@@ -301,7 +301,7 @@ through `closure_callee`, the path every call of a function value takes, so `f`
 may be a declared function, a closure or a `function` that reads `this`.
 `bound_shape` derives the fields for both the site and the body. Refused for
 now: a rest on either side, and a `bind` inside a generic.
-`examples/a-bound-function` agrees on C, LLVM, the JVM and rc, 116 cases. The
+`tests/programs/a-bound-function` agrees on C, LLVM, the JVM and rc, 116 cases. The
 control that drops the bound `this` stops at the `this` test by name.
 
 Verified by:

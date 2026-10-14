@@ -475,7 +475,7 @@ fn width_of(
         // class with the length, and a class is only as good as its worst
         // member. The counter stayed a `double`, every index became an `fptoui`
         // of a floating-point induction variable, and LLVM's scalar evolution
-        // cannot model one, so `benches/cases/elementwise` never vectorized.
+        // cannot model one, so `benchmarks/cases/elementwise` never vectorized.
         | OpKind::Length(_)
         // A code unit proven inside its string is a `uint16`: integral, in
         // range, and not NaN. Leaving it a double drags whatever it is
@@ -532,7 +532,7 @@ fn width_of(
     // range `[0, 2^31]`, which fits `u32` -- and asking that here made the
     // result 32 bits while the emitter spelled it `int32_t`, so
     // `Math.abs(-2147483648)` negated in `int32_t` and became signed overflow.
-    // `examples/mathops` already carried a comment about that exact answer
+    // `tests/programs/mathops` already carried a comment about that exact answer
     // coming out negative once before, which is how the regression was
     // recognised rather than debugged.
     let width = |value: ValueId| -> Option<u8> {

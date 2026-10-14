@@ -261,7 +261,7 @@ pub struct Resolved {
     /// Where compiled objects are kept between builds.
     ///
     /// Root config only, and `§34` already reserved it. Read because 87% of a
-    /// build of `examples/library` was recompiling the runtime, which is the
+    /// build of `tests/programs/library` was recompiling the runtime, which is the
     /// same translation unit every time.
     /// Build-system hooks to emit for a brownfield consumer.
     ///
@@ -340,7 +340,7 @@ const fn on() -> bool {
 /// code to the monorepo root is a wrong answer.
 ///
 /// `generate_bindings` asks "which configs are in play for this program", and
-/// for *that* the root is a legitimate answer: `examples/workspace/packages/storage`
+/// for *that* the root is a legitimate answer: `tests/workspace/packages/storage`
 /// has no config of its own, so every source in it walks up to the root -- which
 /// is how a root-level `dependencies` or `manifests` reaches a build at all.
 /// Skipping roots here would silently drop them.
@@ -470,7 +470,7 @@ fn remember(absolute: &Utf8Path, resolved: &Resolved) {
 /// The one product a command should build, given an optional `--product` name.
 ///
 /// **A config with several products and no name is an error, not a guess.**
-/// `apps/react` is one product over four targets and `examples/workspace`'s
+/// `apps/react` is one product over four targets and `tests/workspace`'s
 /// brownfield apps are one each, but a shared library beside a static archive of
 /// the same code is two -- and picking either silently would emit an artifact
 /// nobody asked for under a name that says otherwise.

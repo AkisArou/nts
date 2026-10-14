@@ -1,7 +1,7 @@
 /**
  * Native sources a package contributes, and what it contributes besides code.
  *
- * **Two fields are deliberately absent**, and `examples/workspace` is where both
+ * **Two fields are deliberately absent**, and `tests/workspace` is where both
  * were argued out.
  *
  * `language` is derivable from the extension -- `.java`, `.kt`, `.swift`, `.cs`,

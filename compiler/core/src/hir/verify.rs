@@ -109,7 +109,7 @@ pub enum Invalid {
     /// upcast, which base-first layout makes a no-op pointer cast -- both are
     /// one pointer, and whether the upcast is legal was the typechecker's
     /// question, not this pass's. A first version compared types exactly and
-    /// reported five of those in `examples/inheritance` alone.
+    /// reported five of those in `tests/programs/inheritance` alone.
     ///
     /// What it does catch is a value reaching a parameter that cannot hold it:
     ///

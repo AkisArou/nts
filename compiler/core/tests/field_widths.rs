@@ -16,11 +16,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn prepared(fixture: &str) -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -34,7 +34,7 @@ fn width(prepared: &hir::Prepared, class: &str, field: &str) -> HirType {
         .layouts
         .iter()
         .find(|layout| layout.name == class)
-        .unwrap_or_else(|| panic!("`{class}` is a class in examples/field-widths"))
+        .unwrap_or_else(|| panic!("`{class}` is a class in tests/programs/field-widths"))
         .fields
         .iter()
         .find(|slot| slot.name == field)

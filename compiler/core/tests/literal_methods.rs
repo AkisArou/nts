@@ -20,7 +20,7 @@ fn snapshot(fixture: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
 #[test]
 fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
     let Some(snapshot) =
-        snapshot("examples/a-capturing-literal-dispatched-through-another-interface")
+        snapshot("tests/programs/a-capturing-literal-dispatched-through-another-interface")
     else {
         return;
     };
@@ -59,7 +59,7 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
 #[test]
 fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
     let Some(snapshot) = snapshot(
-        "tooling/conformance/blockers/a-literal-method-call-through-two-faces-loses-absence",
+        "tests/refusals/a-literal-method-call-through-two-faces-loses-absence",
     ) else {
         return;
     };
@@ -93,7 +93,7 @@ fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
 #[test]
 fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
     let Some(snapshot) =
-        snapshot("tooling/conformance/blockers/an-erased-alias-can-write-a-literal-method")
+        snapshot("tests/refusals/an-erased-alias-can-write-a-literal-method")
     else {
         return;
     };
@@ -115,7 +115,7 @@ fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
 #[test]
 fn a_private_helper_proves_every_incoming_replacement() {
     let Some(snapshot) =
-        snapshot("examples/a-literal-method-replacement-proved-through-a-private-helper")
+        snapshot("tests/programs/a-literal-method-replacement-proved-through-a-private-helper")
     else {
         return;
     };
@@ -146,7 +146,7 @@ fn a_private_helper_proves_every_incoming_replacement() {
 #[test]
 fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
     let Some(snapshot) =
-        snapshot("tooling/conformance/blockers/a-literal-method-helper-has-a-narrowing-caller")
+        snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller")
     else {
         return;
     };
@@ -175,7 +175,7 @@ fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
 #[test]
 fn method_identity_copies_cover_aliases_and_downstream_helpers() {
     let Some(snapshot) =
-        snapshot("examples/a-literal-method-identity-preserved-through-another-interface")
+        snapshot("tests/programs/a-literal-method-identity-preserved-through-another-interface")
     else {
         return;
     };
@@ -207,7 +207,7 @@ fn method_identity_copies_cover_aliases_and_downstream_helpers() {
 #[test]
 fn mixed_comparison_and_invocation_preserves_the_legacy_face_globally() {
     let Some(snapshot) =
-        snapshot("examples/a-literal-interface-comparison-and-call-keeps-its-source-path")
+        snapshot("tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path")
     else {
         return;
     };

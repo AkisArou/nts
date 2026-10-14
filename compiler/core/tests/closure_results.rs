@@ -7,7 +7,7 @@
 //! with `NTS2006 an object type with no layout`: a message about a type rather
 //! than about the call that made it.
 //!
-//! Asked here rather than through `examples/`, because an example is a claim on
+//! Asked here rather than through `tests/programs/`, because an example is a claim on
 //! every backend at once and the JVM lane cannot dispatch this shape yet. What
 //! is lane-independent is the question this file asks: after lowering, does the
 //! returned signature have a layout?

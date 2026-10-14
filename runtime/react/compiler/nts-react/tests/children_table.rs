@@ -63,7 +63,7 @@ fn check(relative: &str, at_least: usize) {
 
 #[test]
 fn the_jsx_example() {
-    check("../../../../examples/jsx", 40);
+    check("../../../../tests/programs/jsx", 40);
 }
 
 #[test]

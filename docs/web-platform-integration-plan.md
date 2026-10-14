@@ -247,7 +247,7 @@ claim**. Any before/after typed-array conclusion must move beyond the resolution
 the relevant row and be repeated in the same context.
 
 The protected current surface includes all eight ordinary numeric typed-array
-widths in `examples/typed-arrays`, typed-array subclass examples, and the `bytes`
+widths in `tests/programs/typed-arrays`, typed-array subclass examples, and the `bytes`
 and `node-utf8` benchmarks. `DataView` and `ArrayBuffer` have no passing example
 coverage yet even though `runtime/node` uses them extensively.
 

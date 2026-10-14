@@ -9,7 +9,7 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn snapshot() -> Option<nts_semantic_schema::SemanticSnapshot> {
     let frontend = nts_frontend_ts::tsgo::locate()?;
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-native-assertion-checks-its-representation/tsconfig.json");
+        .join("../../tests/programs/a-native-assertion-checks-its-representation/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(frontend)
         .snapshot(&config)
         .expect("snapshot");
@@ -134,7 +134,7 @@ fn a_provided_error_upcast_keeps_the_existing_representation() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json");
+        .join("../../tests/programs/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(frontend)
         .snapshot(&config)
         .expect("snapshot");

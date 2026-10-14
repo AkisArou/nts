@@ -35,12 +35,12 @@ fn tsgo_binary() -> Option<Utf8PathBuf> {
     None
 }
 
-/// Absolute path to the workspace's `examples/hello` fixture.
+/// Absolute path to the workspace's `tests/programs/hello` fixture.
 fn hello_tsconfig() -> Utf8PathBuf {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/hello/tsconfig.json")
+        .join("../../tests/programs/hello/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/hello fixture is checked in")
+        .expect("tests/programs/hello fixture is checked in")
 }
 
 #[test]

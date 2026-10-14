@@ -127,7 +127,7 @@ results=$(mktemp)
 trap 'rm -f "$results"' EXIT
 
 # Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-NTS_RC=1 ls examples/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 "$PWD/tooling/gate/token.sh" sh -c '
+NTS_RC=1 ls tests/programs/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 "$PWD/tooling/gate/token.sh" sh -c '
   d=$1
   n=$(basename "$(dirname "$d")")
   case "$n" in

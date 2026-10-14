@@ -72,7 +72,7 @@ if [ -e "$tree/.git" ]; then
   git -C "$tree" checkout --detach -q --force "$sha"
   # And what an earlier run left untracked is not part of this commit either:
   # an untracked example directory is one more program to every step that
-  # globs examples/. The inputs linked below are re-made after this.
+  # globs tests/programs/. The inputs linked below are re-made after this.
   git -C "$tree" clean -fdq -e third_party -e node_modules -e '**/node_modules'
 else
   # `worktree add` writes to `.git/worktrees/`, not to the shared index, so it

@@ -265,7 +265,7 @@ somebody repairs it.
 
 ### The blockers are fixtures, not sentences
 
-`tooling/conformance/blockers/` holds a minimal reproduction of every
+`tests/refusals/` holds a minimal reproduction of every
 compiled-axis blocker this lane has reported, and `blockers-check.mjs`
 re-measures them against whatever compiler is current:
 

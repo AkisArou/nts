@@ -66,7 +66,7 @@ fn emit_project(fixture: &Path) -> nts_codegen_wasm::Emitted {
 /// lowering admits -- tests/transfer.rs pins it on a method-less pair.
 #[test]
 fn a_class_from_an_unrelated_hierarchy_of_one_shape_is_refused() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/unrelated-hierarchies");
+    let fixture = common::repository().join("tests/wasm/unrelated-hierarchies");
     let program = prepared_project(&fixture);
     let refused = program
         .uncompiled
@@ -92,7 +92,7 @@ fn a_class_from_an_unrelated_hierarchy_of_one_shape_is_refused() {
 /// separates is refused by name; storage of one shape is one type and agrees.
 #[test]
 fn a_class_whose_storage_has_other_parents_is_refused() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/storage-of-other-parents");
+    let fixture = common::repository().join("tests/wasm/storage-of-other-parents");
     let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
         .map(|_| ())
         .unwrap_err()
@@ -106,7 +106,7 @@ fn a_class_whose_storage_has_other_parents_is_refused() {
 }
 #[test]
 fn same_shape_classes_without_parents_share_storage_and_agree() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/storage-of-one-shape");
+    let fixture = common::repository().join("tests/wasm/storage-of-one-shape");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "storage-of-one-shape",
@@ -122,7 +122,7 @@ fn same_shape_classes_without_parents_share_storage_and_agree() {
 
 #[test]
 fn source_typed_holes_decline_instead_of_returning_zero() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-holes");
+    let fixture = common::repository().join("tests/wasm/array-holes");
     let program = prepared_project(&fixture);
     let nts_codegen_wasm::EmitError::Declined(diagnostics) =
         nts_codegen_wasm::emit(&program).unwrap_err()
@@ -143,7 +143,7 @@ fn source_typed_holes_decline_instead_of_returning_zero() {
 /// there, so none of these declines as a hole.
 #[test]
 fn source_branching_array_literals_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-literals");
+    let fixture = common::repository().join("tests/wasm/array-literals");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-literals",
@@ -163,7 +163,7 @@ fn source_branching_array_literals_agree_with_node() {
 /// that stored it. None declines as a hole.
 #[test]
 fn source_filled_arrays_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-fills");
+    let fixture = common::repository().join("tests/wasm/array-fills");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-fills",
@@ -182,7 +182,7 @@ fn source_filled_arrays_agree_with_node() {
 /// pass: the test lists each identity laid out there, a class's or not.
 #[test]
 fn source_layout_tests_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/layout-tests");
+    let fixture = common::repository().join("tests/wasm/layout-tests");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "layout-tests",
@@ -198,7 +198,7 @@ fn source_layout_tests_agree_with_node() {
 
 #[test]
 fn source_array_helpers_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-methods");
+    let fixture = common::repository().join("tests/wasm/array-methods");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-methods-source",
@@ -212,7 +212,7 @@ fn source_array_helpers_agree_with_node() {
 
 #[test]
 fn source_array_lookup_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-lookup");
+    let fixture = common::repository().join("tests/wasm/array-lookup");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-lookup-source",
@@ -226,7 +226,7 @@ fn source_array_lookup_agrees_with_node() {
 
 #[test]
 fn source_array_element_reads_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-element");
+    let fixture = common::repository().join("tests/wasm/array-element");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-element-source",
@@ -241,7 +241,7 @@ fn source_array_element_reads_agree_with_node() {
 
 #[test]
 fn source_array_joins_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-join");
+    let fixture = common::repository().join("tests/wasm/array-join");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-join-source",
@@ -255,7 +255,7 @@ fn source_array_joins_agree_with_node() {
 
 #[test]
 fn source_array_sorts_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-sort");
+    let fixture = common::repository().join("tests/wasm/array-sort");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-sort-source",
@@ -271,7 +271,7 @@ fn source_array_sorts_agree_with_node() {
 /// A run-time refusal names its function and its cause.
 #[test]
 fn source_refusals_name_their_cause() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/refusal-causes");
+    let fixture = common::repository().join("tests/wasm/refusal-causes");
     let emitted = emit_project(&fixture);
     let output = common::run(
         "refusal-causes",
@@ -286,7 +286,7 @@ fn source_refusals_name_their_cause() {
 
 #[test]
 fn source_erased_integers_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/erased-integers");
+    let fixture = common::repository().join("tests/wasm/erased-integers");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "erased-integers-source",
@@ -303,7 +303,7 @@ fn source_erased_integers_agree_with_node() {
 /// method, a string argument.
 #[test]
 fn source_interface_calls_through_rows_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-rows");
+    let fixture = common::repository().join("tests/wasm/interface-rows");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "interface-rows",
@@ -322,7 +322,7 @@ fn source_interface_calls_through_rows_agree_with_node() {
 /// class through a base that holds the interface's fields.
 #[test]
 fn source_interface_fields_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-fields");
+    let fixture = common::repository().join("tests/wasm/interface-fields");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "interface-fields",
@@ -341,7 +341,7 @@ fn source_interface_fields_agree_with_node() {
 /// whose descriptor is its own vtable type, it is refused by name.
 #[test]
 fn an_interface_between_a_class_and_its_base() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-fields-shorter-base");
+    let fixture = common::repository().join("tests/wasm/interface-fields-shorter-base");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "interface-fields-shorter-base",
@@ -353,7 +353,7 @@ fn an_interface_between_a_class_and_its_base() {
     assert_eq!(output["cases"], 17, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-below-a-vtable");
+    let fixture = common::repository().join("tests/wasm/interface-below-a-vtable");
     let error = nts_codegen_wasm::emit(&prepared_project(&fixture))
         .map(|_| ())
         .unwrap_err()
@@ -369,7 +369,7 @@ fn an_interface_between_a_class_and_its_base() {
 /// receiver takes the default, and the owner's view is the object itself.
 #[test]
 fn source_interface_views_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-views");
+    let fixture = common::repository().join("tests/wasm/interface-views");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "interface-views",
@@ -388,7 +388,7 @@ fn source_interface_views_agree_with_node() {
 /// copies, and `instanceof Map` and `Set` of an open record, Map and Set.
 #[test]
 fn source_collection_tables_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/collection-tables");
+    let fixture = common::repository().join("tests/wasm/collection-tables");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "collection-tables",
@@ -405,7 +405,7 @@ fn source_collection_tables_agree_with_node() {
 /// hash the same way.
 #[test]
 fn source_object_keys_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/object-keys");
+    let fixture = common::repository().join("tests/wasm/object-keys");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "object-keys",
@@ -423,7 +423,7 @@ fn source_object_keys_agree_with_node() {
 /// that cut, copy and convert, overlapping and across kinds; and `DataView`.
 #[test]
 fn source_buffer_views_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/buffer-views");
+    let fixture = common::repository().join("tests/wasm/buffer-views");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "buffer-views",
@@ -442,7 +442,7 @@ fn source_buffer_views_agree_with_node() {
 /// and an open value compared with a typed object is that object or not.
 #[test]
 fn source_class_tokens_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/class-tokens");
+    let fixture = common::repository().join("tests/wasm/class-tokens");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "class-tokens",
@@ -460,7 +460,7 @@ fn source_class_tokens_agree_with_node() {
 /// path the core proved no run takes: it compiles, and every read agrees.
 #[test]
 fn source_absent_scalars_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/absent-scalars");
+    let fixture = common::repository().join("tests/wasm/absent-scalars");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "absent-scalars",
@@ -479,7 +479,7 @@ fn source_absent_scalars_agree_with_node() {
 /// text, and symbols as Map keys.
 #[test]
 fn source_symbols_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/symbols");
+    let fixture = common::repository().join("tests/wasm/symbols");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "symbols",
@@ -498,7 +498,7 @@ fn source_symbols_agree_with_node() {
 /// keys by identity.
 #[test]
 fn source_dates_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/dates");
+    let fixture = common::repository().join("tests/wasm/dates");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "dates",
@@ -538,7 +538,7 @@ fn a_whole_program_ends_as_the_c_runtime_ends_one() {
     ];
     let root = common::repository();
     for (name, status, stdout, stderr) in cases {
-        let fixture = root.join("tooling/wasm/fixtures/whole-program").join(name);
+        let fixture = root.join("tests/wasm/whole-program").join(name);
         let emitted = emit_project(&fixture);
         let artifact = common::write_artifact(
             &format!("whole-program-{name}"),
@@ -572,7 +572,7 @@ fn a_whole_program_ends_as_the_c_runtime_ends_one() {
 #[test]
 fn an_engine_without_a_needed_capability_is_named() {
     let root = common::repository();
-    let fixture = root.join("tooling/wasm/fixtures/whole-program/throws-an-object");
+    let fixture = root.join("tests/wasm/whole-program/throws-an-object");
     let emitted = emit_project(&fixture);
     let artifact = common::write_artifact(
         "engine-capabilities",
@@ -617,7 +617,7 @@ fn an_engine_without_a_needed_capability_is_named() {
 /// families or of none, and the high bits.
 #[test]
 fn source_presence_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/presence");
+    let fixture = common::repository().join("tests/wasm/presence");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "presence",
@@ -636,7 +636,7 @@ fn source_presence_agrees_with_node() {
 /// through an open value.
 #[test]
 fn source_templates_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/templates");
+    let fixture = common::repository().join("tests/wasm/templates");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "templates",
@@ -656,7 +656,7 @@ fn source_templates_agree_with_node() {
 /// by name.
 #[test]
 fn source_open_boundary_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/open-boundary");
+    let fixture = common::repository().join("tests/wasm/open-boundary");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "open-boundary",
@@ -684,7 +684,7 @@ fn source_open_boundary_agrees_with_node() {
 /// past the width or a throw, and none a different number.
 #[test]
 fn source_bigints_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/bigints");
+    let fixture = common::repository().join("tests/wasm/bigints");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "bigints",
@@ -707,7 +707,7 @@ fn source_bigints_agree_with_node() {
 /// answers with node's own methods.
 #[test]
 fn source_conversions_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/conversions");
+    let fixture = common::repository().join("tests/wasm/conversions");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "conversions",
@@ -726,7 +726,7 @@ fn source_conversions_agree_with_node() {
 /// raising override caught at the call.
 #[test]
 fn source_narrower_overrides_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/narrower-overrides");
+    let fixture = common::repository().join("tests/wasm/narrower-overrides");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "narrower-overrides",
@@ -745,7 +745,7 @@ fn source_narrower_overrides_agree_with_node() {
 /// plain object and the error family.
 #[test]
 fn source_function_text_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/function-text");
+    let fixture = common::repository().join("tests/wasm/function-text");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "function-text",
@@ -764,7 +764,7 @@ fn source_function_text_agrees_with_node() {
 /// arm never allocated.
 #[test]
 fn source_open_members_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/open-members");
+    let fixture = common::repository().join("tests/wasm/open-members");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "open-members",
@@ -782,7 +782,7 @@ fn source_open_members_agree_with_node() {
 /// each wrapped to C's contract where a bare call differs.
 #[test]
 fn source_string_services_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/string-services");
+    let fixture = common::repository().join("tests/wasm/string-services");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "string-services",
@@ -807,7 +807,7 @@ fn source_string_services_agree_with_node() {
 /// here rather than passing on bytes' answers.
 #[test]
 fn source_owned_views_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/owned-views");
+    let fixture = common::repository().join("tests/wasm/owned-views");
     let emitted = emit_project(&fixture);
     let names = common::function_names(&emitted.bytes);
     for owned in ["owned.View(8)", "owned.View(5)", "owned.Buffer(8)"] {
@@ -836,7 +836,7 @@ fn source_owned_views_agree_with_node() {
 /// against node's order after a turn.
 #[test]
 fn source_promise_order_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/promise-order");
+    let fixture = common::repository().join("tests/wasm/promise-order");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "promise-order",
@@ -853,7 +853,7 @@ fn source_promise_order_agrees_with_node() {
 /// is refused by name.
 #[test]
 fn source_promise_boundary_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/promise-boundary");
+    let fixture = common::repository().join("tests/wasm/promise-boundary");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "promise-boundary",
@@ -870,7 +870,7 @@ fn source_promise_boundary_agrees_with_node() {
 /// cleared timer never fires.
 #[test]
 fn source_timer_order_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/timer-order");
+    let fixture = common::repository().join("tests/wasm/timer-order");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "timer-order",
@@ -886,7 +886,7 @@ fn source_timer_order_agrees_with_node() {
 /// name, since nothing here records how it prints.
 #[test]
 fn source_value_text_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/value-text");
+    let fixture = common::repository().join("tests/wasm/value-text");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "value-text",
@@ -903,7 +903,7 @@ fn source_value_text_agrees_with_node() {
 /// receiver's descriptor, never a type test, may decide how to read it.
 #[test]
 fn a_same_shape_owner_of_another_order_reads_by_its_row() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/interface-same-shape-owner");
+    let fixture = common::repository().join("tests/wasm/interface-same-shape-owner");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "interface-same-shape-owner",
@@ -917,7 +917,7 @@ fn a_same_shape_owner_of_another_order_reads_by_its_row() {
 
 #[test]
 fn source_array_copying_agrees_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/array-copy");
+    let fixture = common::repository().join("tests/wasm/array-copy");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "array-copy-source",
@@ -932,7 +932,7 @@ fn source_array_copying_agrees_with_node() {
 
 #[test]
 fn source_raising_slots_handlers_and_finalizers_agree_with_node() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/raising");
+    let fixture = common::repository().join("tests/wasm/raising");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
         "raising-source",
@@ -947,7 +947,7 @@ fn source_raising_slots_handlers_and_finalizers_agree_with_node() {
 
 #[test]
 fn source_raising_slot_contract_survives_body_renaming() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/raising");
+    let fixture = common::repository().join("tests/wasm/raising");
     let mut program = prepared_project(&fixture);
     let renames: std::collections::BTreeMap<_, _> = program
         .funcs
@@ -1001,7 +1001,7 @@ fn source_raising_slot_contract_survives_body_renaming() {
 
 #[test]
 fn scalar_typescript_agrees_with_node_exactly() {
-    let fixture = common::repository().join("tooling/wasm/fixtures/scalars");
+    let fixture = common::repository().join("tests/wasm/scalars");
     let emitted = emit_project(&fixture);
     let output = common::run(
         "scalars",

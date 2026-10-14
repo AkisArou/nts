@@ -12,9 +12,9 @@ use nts_semantic_schema::{Accessor, MemberKind, SemanticSnapshot, TypeKind};
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/advanced/tsconfig.json")
+        .join("../../tests/programs/advanced/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/advanced fixture is checked in");
+        .expect("tests/programs/advanced fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_decomposition(Budget::DEFAULT)

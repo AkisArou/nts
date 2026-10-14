@@ -18,7 +18,7 @@
 #     NTS_AOT_REF=f.java substitute a reference, to price a *shape* by writing
 #                        it into hand-written Java and checking in `javap`
 #                        that the intended bytecode came out
-#     NTS_AOT_DIR=d      measure a case directory outside `benches/cases`,
+#     NTS_AOT_DIR=d      measure a case directory outside `benchmarks/cases`,
 #                        so a probe need not be added to the corpus
 #     NTS_AOT_KEEP=1     leave the package installed and dump its AOT code
 #                        rather than uninstalling
@@ -29,7 +29,7 @@
 # A raw dex in `/data/local/tmp` has no `.odex`, so that is ART's **interpreter
 # and JIT**. A shipped Android application does not run that way: the system
 # runs `dex2oat` and the app executes AOT-compiled code. So every ART *timing*
-# in `benches/jvm-rows.md` is about a mode no product ships, and the bar's
+# in `benchmarks/jvm-rows.md` is about a mode no product ships, and the bar's
 # second and third numbers are written about Android.
 #
 # A ratio is fairer than an absolute -- ours and the reference get the same
@@ -41,7 +41,7 @@
 # # Why an APK, when `dex2oat` is right there
 #
 # It is not: `dex2oat` is **inaccessible to the shell user** on this emulator,
-# which `benches/jvm-rows.md` already records as what stopped the profile. What
+# which `benchmarks/jvm-rows.md` already records as what stopped the profile. What
 # is *not* recorded, and is true, is that **`oatdump` runs fine from the shell**
 # -- so the artefact can be read once something produces it.
 #
@@ -51,7 +51,7 @@
 #
 # # One measurement implementation, not two
 #
-# `benches/common/Bench.java` is compiled in verbatim and `Case.main` is called
+# `benchmarks/common/Bench.java` is compiled in verbatim and `Case.main` is called
 # unchanged; the activity captures `System.out` rather than reimplementing the
 # warmup and the best-of-five. `awfy-sieve` is why -- two harnesses that should
 # agree differ by 40% on that row, reproducibly, and this file is not adding a
@@ -138,11 +138,11 @@ JAVA
 
 case=${1:-awfy-queens}
 # `NTS_AOT_DIR` measures a case that is **not in the corpus**, which is what a
-# probe wants: adding a directory under `benches/cases` to answer one question
+# probe wants: adding a directory under `benchmarks/cases` to answer one question
 # moves `dexes.sh`'s method floor, adds a row to the published table, and is
 # seen by every sweep that enumerates the corpus. A probe should cost none of
 # that. The directory needs a `case.ts` and a `ref.java` exactly as a case does.
-dir=${NTS_AOT_DIR:-$root/benches/cases/$case}
+dir=${NTS_AOT_DIR:-$root/benchmarks/cases/$case}
 [ -f "$dir/ref.java" ] || { echo "no ref.java for $case" >&2; exit 1; }
 
 entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$dir/case.ts" 2>/dev/null \
@@ -197,8 +197,8 @@ public final class Case {
     public static void main(String[] argv) { Bench.measure(new Ref()); }
 }
 JAVA
-cp "$root/benches/common/Bench.java" "$work/src-nts/"
-cp "$root/benches/common/Bench.java" "$work/src-ref/"
+cp "$root/benchmarks/common/Bench.java" "$work/src-nts/"
+cp "$root/benchmarks/common/Bench.java" "$work/src-ref/"
 
 # ---- one APK per side, same package, installed one at a time ---------------
 build_and_run() {
@@ -291,7 +291,7 @@ PY
   adb shell "am force-stop $package" > /dev/null 2>&1 || true
   # **`NTS_AOT_KEEP=1` leaves the package installed and dumps its AOT code.**
   #
-  # This is the method-level view `benches/jvm-rows.md` records as unavailable.
+  # This is the method-level view `benchmarks/jvm-rows.md` records as unavailable.
   # It was unavailable because `dex2oat` cannot be run by the shell user -- and
   # what was never checked is that **`oatdump` can**. Once `cmd package compile`
   # has produced an `.odex`, the artefact is on disk and readable, so the thing

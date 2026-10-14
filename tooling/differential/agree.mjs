@@ -177,7 +177,7 @@ export function classify(status, out) {
     if (/the (?:LLVM )?backend declined \d+ function/.test(out)) return Outcome.BACKEND_DECLINED;
     if (/invalid HIR/.test(out)) return Outcome.INVALID_HIR;
     // A workspace dependency that will not resolve is not a typecheck
-    // regression: `examples/library` in a worktree. Same keys as the gate.
+    // regression: `tests/programs/library` in a worktree. Same keys as the gate.
     if (/TS2307|TS6059/.test(out)) {
       record.unresolved = true;
       return Outcome.NOT_MEASURED;
@@ -288,7 +288,7 @@ function selfTest() {
   const aborted = classify(1, "checked 3 cases across 1 function(s)\n  the compiled program aborted: f 1\nError: the compiled program aborted 1 time(s) for a reason that is not the program correctly declining its input\n");
   if (aborted.outcome !== Outcome.ABORTED || aborted.answers.length !== 1) return `an abort read as ${JSON.stringify(aborted)}`;
   const every = classify(1, "3 case(s) the compiled program declined -- ...\nchecked 0 of 3 cases; the rest were not reached\nError: no case was checked: all 3 declined, so the two sides were never compared.\n");
-  // Verbatim, from `examples/a-slot-typed-exactly-undefined`: one root, two cascades.
+  // Verbatim, from `tests/programs/a-slot-typed-exactly-undefined`: one root, two cascades.
   const cascaded = classify(0, "  refused: NTS1001 a call inside a `try` whose `throw` would not reach this handler\n" +
     "  refused: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and ...\n" +
     "  refused: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
@@ -301,9 +301,9 @@ function selfTest() {
   // reading yesterday's. The cascade test is what the optional token guards --
   // `refused` counts the prefix and would not have noticed.
   const located = classify(0,
-    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:98:14: NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call is not supported by this lowering yet\n" +
-    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:96:10: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and a call inside a `try` ...\n" +
-    "  refused: examples/a-slot-typed-exactly-undefined/src/main.ts:107:14: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
+    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:98:14: NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call is not supported by this lowering yet\n" +
+    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:96:10: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and a call inside a `try` ...\n" +
+    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:107:14: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
     "checked 87 cases across 3 function(s)\nagreed on every case\n");
   if (located.refused !== 3 || located.refusedRoots !== 1) return `a located root and two cascades read as ${located.refusedRoots} of ${located.refused}`;
   if (every.outcome !== Outcome.ALL_DECLINED) return `every case declined read as ${every.outcome}`;
@@ -483,7 +483,7 @@ const check = (pinned, example) =>
 // A count over this glob is a fact about the working tree, not a commit: say
 // which examples only this tree has.
 const tracked = new Set(
-  execFileSync("git", ["ls-files", "-z", "examples/*/tsconfig.json"], { cwd: ROOT, encoding: "utf8" })
+  execFileSync("git", ["ls-files", "-z", "tests/programs/*/tsconfig.json"], { cwd: ROOT, encoding: "utf8" })
     .split("\0").filter(Boolean).map((path) => path.split("/")[1]),
 );
 const untracked = examples.filter((name) => !tracked.has(name));

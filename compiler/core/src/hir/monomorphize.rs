@@ -297,7 +297,7 @@ fn retype_parameter(
     // is not a nicety: pointing such a call at the written `#call` and leaving
     // its arguments is `CallArgumentCount { expected: 2, found: 9 }`, and
     // *keeping* the uniform entry -- direct, so the dispatch is still bought --
-    // cost `benches/cases/closures` seven `nts_value_of_undefined` constructions
+    // cost `benchmarks/cases/closures` seven `nts_value_of_undefined` constructions
     // and a read-back inside its hot loop. [`super::call_directly`] is that
     // surgery, shared with `fields::devirtualize` because both arrive at the same
     // question from different evidence. The receiver needs no re-typing here: the

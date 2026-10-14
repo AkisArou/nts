@@ -11,7 +11,7 @@ fn closed_erased_calls_keep_every_root_and_independent_parameter_positions() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-closed-call-recovers-an-erased-parameter/tsconfig.json");
+        .join("../../tests/programs/a-closed-call-recovers-an-erased-parameter/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");
@@ -191,7 +191,7 @@ fn a_recovered_array_reads_past_its_end_as_nan() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json");
+        .join("../../tests/programs/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");

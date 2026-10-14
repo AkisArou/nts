@@ -281,7 +281,7 @@ fn build_and_run_hosted(
 
 fn fixture_config(example: &str) -> Utf8PathBuf {
     let fixtures = Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
-    let examples = fixtures.join("../../../examples");
+    let examples = fixtures.join("../../../tests/programs");
     let directory = if examples.join(example).join("tsconfig.json").exists() {
         examples
     } else {
@@ -1916,7 +1916,7 @@ int main(void) {{
 /// something dispatches through its slot, and a callback handed to
 /// `setTimeout` is dispatched through it by the *runtime* -- which reachability
 /// could not see, so the body was pruned and the table emitted as a null
-/// pointer. Every other timer in `examples/timers` is cleared before it can
+/// pointer. Every other timer in `tests/programs/timers` is cleared before it can
 /// fire, so nothing called through the null and everything passed.
 #[test]
 fn a_timer_callback_runs_and_its_effect_is_visible() {
@@ -1955,7 +1955,7 @@ fn a_timer_callback_runs_and_its_effect_is_visible() {
 /// A standalone program: evaluate the module, run the loop, shut down.
 ///
 /// The assertion is termination and exit zero, because a compiled program has
-/// nothing to print with. It is not a weak one: `examples/standalone` still has
+/// nothing to print with. It is not a weak one: `tests/programs/standalone` still has
 /// two timers pending when evaluation finishes, so a loop that gave up early
 /// exits before they run, and one with an idle handle it forgot to stop or a
 /// referenced handle nothing closes never exits at all.

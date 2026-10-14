@@ -17,11 +17,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -35,7 +35,7 @@ fn awaits(lowered: &hir::lower::Lowered, name: &str) -> Vec<Option<hir::Rejectio
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/async-catch"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/async-catch"))
         .values
         .iter()
         .filter_map(|op| match &op.kind {
@@ -98,7 +98,7 @@ fn an_await_with_no_handler_records_none() {
         .collect();
     assert!(
         !uncaught.is_empty(),
-        "examples/async awaits without catching",
+        "tests/programs/async awaits without catching",
     );
     for func in uncaught {
         for op in &func.values {
@@ -129,7 +129,7 @@ fn a_rejection_carries_the_handlers_parameters() {
         .funcs
         .iter()
         .find(|func| func.name == "bothEdges")
-        .expect("exported from examples/async-catch");
+        .expect("exported from tests/programs/async-catch");
     let rejection = func
         .values
         .iter()
@@ -197,7 +197,7 @@ fn a_finally_around_nothing_that_rejects_synthesises_nothing() {
         .funcs
         .iter()
         .find(|func| func.name == "plainCleanup")
-        .expect("exported from examples/async-finally");
+        .expect("exported from tests/programs/async-finally");
 
     // Every block reachable from the entry. A handler nothing jumps to is a
     // block with no predecessors, and this is the smallest thing that says so

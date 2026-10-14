@@ -356,7 +356,7 @@ fn nothing_to_map_writes_nothing() {
 ///
 /// It did not: `strip_prefix` on a relative argument against a canonicalised
 /// project silently fell through to the whole given path, so pointing the tool
-/// at `examples/library/tsconfig.json` produced
+/// at `tests/programs/library/tsconfig.json` produced
 /// `extends: ./examples/library/tsconfig.json` — which resolves to nothing and
 /// inherits nothing, and the failure surfaced three directories away as
 /// "an import path can only end with '.ts' when allowImportingTsExtensions is

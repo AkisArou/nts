@@ -17,11 +17,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -34,7 +34,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/callbacks"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/callbacks"))
 }
 
 /// The index the body reads is the counter, not the value it started at.
@@ -173,7 +173,7 @@ fn reduce_still_binds_its_accumulator_first() {
             .filter(|diagnostic| diagnostic.message.contains("callback"))
             .count(),
         0,
-        "nothing in examples/callbacks is refused for its callback shape",
+        "nothing in tests/programs/callbacks is refused for its callback shape",
     );
     // And it computes something: a `reduce` whose accumulator and element were
     // swapped would still lower, and the differential is what catches the

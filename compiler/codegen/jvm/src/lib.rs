@@ -413,7 +413,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
 /// JDK 9 a `putfield` to a final field outside its declaring `<init>` throws
 /// `IllegalAccessError`. Inlining the constructor body into `<init>` would buy
 /// the flag and cost the verifier's `uninitializedThis` state; it is a later
-/// step and only worth taking if `benches/cases/objects` says the JIT cares.
+/// step and only worth taking if `benchmarks/cases/objects` says the JIT cares.
 /// The fields one class adds, which is not the fields its objects have.
 ///
 /// A base's fields are a prefix of the derived's, so redeclaring them here
@@ -1453,7 +1453,7 @@ fn object_class(
     // TypeScript value in its own right, so it cannot be read as the absence.
     //
     // The symptom was a `NullPointerException` reading `NtsValue.ref` out of an
-    // optional field that had never been assigned: `benches/cases/optional-chain`
+    // optional field that had never been assigned: `benchmarks/cases/optional-chain`
     // builds `{}` and calls `h.fn?.(1)`, and half its iterations reach a field
     // nothing ever wrote. `Func::initializes_receiver` promises the fields are
     // zeroed and this is what keeping that promise costs on this platform.
@@ -1881,7 +1881,7 @@ fn bridge_body(
     // **Ask which lane this is, before touching anything.**
     //
     // A Java framework may call a bound interface from a thread we do not own --
-    // `Loader.load` in `examples/interop/android-shape` is exactly that shape --
+    // `Loader.load` in `tests/interop/android-shape` is exactly that shape --
     // and everything in this runtime except the inbox is confined to one lane.
     // Running a TypeScript body on a framework thread mutates that lane's heap
     // from outside it, with no happens-before edge. `NtsInbox`'s own header is
@@ -3163,7 +3163,7 @@ fn method_of<'a>(
 /// name (`Outer$Inner`, `lambda$main$0`, `this$0`), so a caller typing one is
 /// typing something that looks like it was not meant for them.
 ///
-/// **Measured at zero.** `benches/interop-facade` times the same static called
+/// **Measured at zero.** `benchmarks/interop-facade` times the same static called
 /// directly against the same static called through a forwarder: minima of
 /// 458.96 ns and 457.43 ns over four sittings, with the spread *within* each arm
 /// (6.2 ns) larger than the difference between them. Three instructions that C2
@@ -3293,7 +3293,7 @@ fn member_forwarders(
 /// this one. A bridge that byte-copied the forwarder's `invokestatic` ran the
 /// parent's body instead: `Ring.copy(): Circle` over `Circle.copy(): Circle`
 /// over `Shape.copy(): Shape`, called through a `Shape`, answered "circle"
-/// where node answers "ring" (examples/a-re-overridden-covariant-method-
+/// where node answers "ring" (tests/programs/a-re-overridden-covariant-method-
 /// through-its-root). Ported from Codex 67fe165df.
 fn forwarding_bridge(
     pool: &mut Pool,
@@ -3553,7 +3553,7 @@ fn erased_closures(
     //     %4 = eq %2, %3 : bool     <- %3 a ClosureStatic, never an `Erase`
     //
     // emits `getstatic erased$Ctor_RangeError` for a field nothing declared.
-    // `examples/class-values` does exactly that and the JVM said so:
+    // `tests/programs/class-values` does exactly that and the JVM said so:
     // `NoSuchFieldError`, loudly, at link time rather than as a wrong answer.
     //
     // The precise repair is to enumerate the implicit-erase sites too, and it

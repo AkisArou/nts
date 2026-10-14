@@ -45,7 +45,7 @@ test("an input of a corpus's tsconfig owes that corpus's steps", () => {
   owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"], { not: ["examples", "definitions"] });
   // Extended by every fixture config.
   owes("tsconfig.fixtures.json", ["examples", "blockers", "memory", "bench-agree"]);
-  owes("tooling/memory/cases/closure-capture/src/main.ts", ["memory"], { not: ["examples"] });
+  owes("tests/memory/closure-capture/src/main.ts", ["memory"], { not: ["examples"] });
 });
 
 test("a crate no rule names owes what the crates that use it owe", () => {
@@ -74,8 +74,8 @@ test("interop builds only the projects a range reaches, when it can say which", 
   const jvm = interopBuiltWith("jvm");
   assert.ok(jvm.includes("java-from-ts") && jvm.includes("android-shape") && !jvm.includes("gtk-hello"), jvm.join(" "));
   assert.deepEqual(projects("compiler/codegen/jvm/src/lib.rs"), jvm);
-  assert.deepEqual(projects("examples/interop/gtk-hello/src/main.ts"), ["gtk-hello"]);
-  assert.deepEqual(projects("examples/interop/gtk-hello/src/main.ts", "examples/interop/native-fd/build.sh"), ["gtk-hello", "native-fd"]);
+  assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts"), ["gtk-hello"]);
+  assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts", "tests/interop/native-fd/build.sh"), ["gtk-hello", "native-fd"]);
   // Anything that cannot be narrowed owes every project.
   assert.equal(projects("compiler/codegen/llvm/src/lib.rs"), "all");
   assert.equal(projects("compiler/core/src/hir/lower.rs"), "all");
@@ -137,7 +137,7 @@ test("an instrument outside the node lane that no step runs still owes the full 
 });
 
 test("what a target brings owes the corpora built for it", () => {
-  // examples/interop/chromium-surface reaches Chromium's DOM through
+  // tests/interop/chromium-surface reaches Chromium's DOM through
   // `target.chromium()` in its nts.config.ts; its tsconfig names neither half.
   owes("runtime/chromium/dom/types/lib-dom-bindings.d.ts", ["interop"]);
   owes("runtime/chromium/dom/abi/dom_idl.h", ["interop"], { not: ["blockers"] });
@@ -194,7 +194,7 @@ test("documentation owes its two readers, not the gate", () => {
 });
 
 test("the hand-written rules still decide what they name", () => {
-  owes("examples/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
+  owes("tests/programs/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
   owes("runtime/c/nts_runtime.h", ["tests", "bench-agree", "format"]);
   owes("compiler/core/src/hir/lower.rs", ["test262-cases", "jvm-verifies", "benches"]);
   owes("runtime/node/path/index.ts", ["definitions", "integrity-runtime", "addons", "compile-time"]);
@@ -242,17 +242,17 @@ test("a crate owes its own rule and every rule of the crates that depend on it",
 });
 
 test("a deleted example still owes every step that compiles the examples", () => {
-  const got = changeOwes([{ path: "examples/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
+  const got = changeOwes([{ path: "tests/programs/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
   superset(got, ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"], "a deleted example");
 });
 
 test("a rename is both paths: a blocker moved out still owes blockers, and moved into examples is a new example", () => {
-  const changes = parseNameStatus("R100\ttooling/conformance/blockers/old-fixture/src/main.ts\texamples/old-fixture/src/main.ts\nR100\ttooling/conformance/blockers/old-fixture/tsconfig.json\texamples/old-fixture/tsconfig.json\n");
+  const changes = parseNameStatus("R100\ttests/refusals/old-fixture/src/main.ts\ttests/programs/old-fixture/src/main.ts\nR100\ttests/refusals/old-fixture/tsconfig.json\ttests/programs/old-fixture/tsconfig.json\n");
   assert.deepEqual(changes.map((c) => [c.path, c.added, c.deleted]), [
-    ["tooling/conformance/blockers/old-fixture/src/main.ts", false, true],
-    ["examples/old-fixture/src/main.ts", true, false],
-    ["tooling/conformance/blockers/old-fixture/tsconfig.json", false, true],
-    ["examples/old-fixture/tsconfig.json", true, false],
+    ["tests/refusals/old-fixture/src/main.ts", false, true],
+    ["tests/programs/old-fixture/src/main.ts", true, false],
+    ["tests/refusals/old-fixture/tsconfig.json", false, true],
+    ["tests/programs/old-fixture/tsconfig.json", true, false],
   ]);
   const rules = owed(changes).map((r) => r.name);
   assert.ok(rules.includes("a new example"), rules.join(", "));
@@ -292,9 +292,9 @@ test("the C backend and every runtime module owe C validation", () => {
 });
 
 test("an example's nts.config.ts owes config, new or changed, interop's too", () => {
-  owes("examples/strings/nts.config.ts", ["config"]);
-  superset(changeOwes([{ path: "examples/a-new-one/nts.config.ts", added: true }, { path: "examples/a-new-one/tsconfig.json", added: true }]), ["config"], "a new example with a config");
-  owes("examples/interop/gtk-async/nts.config.ts", ["config", "interop"]);
+  owes("tests/programs/strings/nts.config.ts", ["config"]);
+  superset(changeOwes([{ path: "tests/programs/a-new-one/nts.config.ts", added: true }, { path: "tests/programs/a-new-one/tsconfig.json", added: true }]), ["config"], "a new example with a config");
+  owes("tests/interop/gtk-async/nts.config.ts", ["config", "interop"]);
 });
 
 test("without cargo, a path in a crate or compiled into one owes the full gate", () => {

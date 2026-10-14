@@ -23,11 +23,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -40,7 +40,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is in examples/parameter-defaults"))
+        .unwrap_or_else(|| panic!("`{name}` is in tests/programs/parameter-defaults"))
 }
 
 /// Every argument count of a call to a defaulted signature is filled here.

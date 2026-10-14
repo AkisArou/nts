@@ -27,7 +27,7 @@
 # **Not a benchmark.** The device here is an x86_64 emulator, so timings from
 # it are not a phone's. What survives emulation is *allocation*, which is
 # deterministic, and *whether the program is correct*, which is what this asks.
-# See `benches/jvm-rows.md` for what ART's missing C2 does to the numbers.
+# See `benchmarks/jvm-rows.md` for what ART's missing C2 does to the numbers.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -140,7 +140,7 @@ differ=0
 noted=0
 skipped=0
 for case in $cases; do
-  entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
+  entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benchmarks/cases/$case/case.ts" 2>/dev/null \
     | head -1 | awk '{print $3}')
   # Two cases this driver cannot spell, and neither is the backend's fault --
   # which is what "javac failed" and "no exported entry" implied for two days.
@@ -162,7 +162,7 @@ for case in $cases; do
   # differ on, and so the worst one to leave uncovered. The case's own driver
   # runs against a one-shot `Bench` below.
   own=""
-  [ -f "$root/benches/cases/$case/driver.java" ] && own=$root/benches/cases/$case/driver.java
+  [ -f "$root/benchmarks/cases/$case/driver.java" ] && own=$root/benchmarks/cases/$case/driver.java
   # `json-serialize` exports nothing from `case.ts` at all; its workload comes
   # from `provider`. Counted apart from `differ`: a skip and a disagreement are
   # different results and the summary line said one of them for both.
@@ -171,7 +171,7 @@ for case in $cases; do
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"
   cat > "$out/tsconfig.json" <<JSON
-{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benches/cases/$case"] }
+{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
   if ! NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
     --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1; then
@@ -266,7 +266,7 @@ echo
 # having told you its limits. MainClaude hit the same shape the same night --
 # a census warning carefully about unparsed lines while silently capping its
 # roots at 25 of 204 -- and concluded a corpus reach was zero from it.
-total_known=$(ls -d "$root"/benches/cases/*/ 2>/dev/null | wc -l | tr -d ' ')
+total_known=$(ls -d "$root"/benchmarks/cases/*/ 2>/dev/null | wc -l | tr -d ' ')
 driven=$(printf '%s\n' $cases | wc -w | tr -d ' ')
 [ "$skipped" = 0 ] \
   && echo "every case was driven -- $driven of the $total_known bench cases$([ $# -gt 0 ] || echo ', the default set')" \

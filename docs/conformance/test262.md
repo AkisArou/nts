@@ -505,7 +505,7 @@ transformations prescribed by Test262.
 ordered across modules by `evaluation_order`, rooted for reachability, and
 `emit-c --out <dir> --main` writes a `main.c` that calls it and then drains the
 microtask queue. `tooling/cli/tests/build.rs` builds a top-level-only program
-and runs it; `examples/module-order` pins the cross-file order against node.
+and runs it; `tests/programs/module-order` pins the cross-file order against node.
 
 This paragraph read "NativeTS currently lowers function bodies, not a complete
 global script" and was the first of four prerequisites named here; three were

@@ -14,7 +14,7 @@
 # answer it; the emulator is not involved and neither is the gate lock.
 #
 # Run 2026-09-12: **2 of 52**, and both are the two already known. 34 rows match
-# their reference exactly. See `benches/jvm-rows.md`.
+# their reference exactly. See `benchmarks/jvm-rows.md`.
 #
 # # What it cannot answer, which is the more useful half
 #
@@ -37,7 +37,7 @@
 # names a constant-pool index with the class in a trailing comment, so reading
 # the next token printed types like `62:1`. A column constant across forty-four
 # rows is the instrument, every time. The control is the five rows whose answers
-# `benches/jvm-rows.md` already records.
+# `benchmarks/jvm-rows.md` already records.
 set -u
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 nts=${NTS_BIN:-$root/target-jvm/release/nts}
@@ -73,11 +73,11 @@ kinds() {
 }
 
 printf "%-26s %-34s %s\n" "case" "ours" "reference"
-for case in ${CASES:-$(find $root/benches/cases -name ref.java | sed "s|$root/benches/cases/||;s|/ref.java||" | sort)}; do
+for case in ${CASES:-$(find $root/benchmarks/cases -name ref.java | sed "s|$root/benchmarks/cases/||;s|/ref.java||" | sort)}; do
   out=$work/$case; mkdir -p "$out/ours" "$out/ref"
 
   cat > "$out/tsconfig.json" <<JSON
-{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benches/cases/$case"] }
+{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
   if NTS_TSGO=$root/target/tsgo "$nts" emit-jvm "$out/tsconfig.json" --out "$out/ours" \
        > "$out/emit.log" 2>&1; then
@@ -89,7 +89,7 @@ JSON
     ours="(declined)"
   fi
 
-  cp "$root/benches/cases/$case/ref.java" "$out/ref/Ref.java"
+  cp "$root/benchmarks/cases/$case/ref.java" "$out/ref/Ref.java"
   cp "$work/stub/Bench.java" "$out/ref/"
   sources=$(find "$out/ref" -name '*.java')
   # **Only for `awfy-*`.** Appending these to every reference compiled the whole

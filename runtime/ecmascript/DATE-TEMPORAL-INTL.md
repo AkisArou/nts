@@ -953,7 +953,7 @@ target/ecmascript/audit/duration-*.log and the integration handoff records the
 compiler/frontend fingerprints.
 
 The earlier loop-condition compiler defect
-[a-postfix-increment-in-a-loop-condition-is-not-carried](../../tooling/conformance/outcomes/a-postfix-increment-in-a-loop-condition-is-not-carried/src/main.ts)
+[a-postfix-increment-in-a-loop-condition-is-not-carried](../../tests/outcomes/a-postfix-increment-in-a-loop-condition-is-not-carried/src/main.ts)
 was recorded at `9ef297662` and fixed by the compiler lane. The padding algorithm
 uses bounded multiplication; the runtime loop-header audit found no remaining
 increment/decrement expressions in loop conditions.

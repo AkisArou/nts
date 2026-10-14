@@ -13,7 +13,7 @@ fn every_generic_exception_subject_is_compiled_and_verified() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-specialized-function-carrying-a-throw/tsconfig.json")
+        .join("../../tests/programs/a-specialized-function-carrying-a-throw/tsconfig.json")
         .canonicalize_utf8()
         .expect("the regression example exists");
     let snapshot = TsgoApi::for_compilation(tsgo)

@@ -127,7 +127,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/nts-inbound-XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/src"
 cat > "$work/tsconfig.json" <<EOF
-{ "extends": "$root/tooling/conformance/blockers/tsconfig.base.json",
+{ "extends": "$root/tests/refusals/tsconfig.base.json",
   "compilerOptions": { "rootDir": "." } }
 EOF
 # `Map`, not `Date`. `new Date()` with no argument is refused for reading a

@@ -507,7 +507,7 @@ export class BroadcastWriter {
    *
    * A `PromiseWithResolvers<boolean>` has `resolve` and `reject` with the same
    * signatures, so the consumers below are unchanged and the class was not
-   * replaced, it was **removed**. See `examples/promise-with-resolvers`.
+   * replaced, it was **removed**. See `tests/programs/promise-with-resolvers`.
    */
   #pendingDrains: PromiseWithResolvers<boolean>[] = [];
   #totalBytes = 0;

@@ -157,7 +157,7 @@ fn fixture_classes() -> Option<std::path::PathBuf> {
                 return None;
             }
             let sources = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../../examples/interop/android-shape/java/com/example/ui");
+                .join("../../../tests/interop/android-shape/java/com/example/ui");
             if !sources.exists() {
                 return None;
             }

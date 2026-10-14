@@ -84,14 +84,14 @@ file left untracked is a commit nobody can build.
 
 ## Fixtures
 
-The corpora are the specification: `examples/` (compiled and compared with
-node), `tooling/conformance/blockers/` (must refuse, with the `// expect:`
-message), `tooling/conformance/outcomes/` (a recorded wrong answer or crash,
-then a guard once fixed), `tooling/memory/cases/`.
+The corpora are the specification: `tests/programs/` (compiled and compared with
+node), `tests/refusals/` (must refuse, with the `// expect:`
+message), `tests/outcomes/` (a recorded wrong answer or crash,
+then a guard once fixed), `tests/memory/`.
 
 - A defect is reported as a fixture with a **control** that differs from it in
   one thing and agrees with node, so the fixture shows what breaks it.
-- Many `examples/` entries are a specific test's input: check before editing or
+- Many `tests/programs/` entries are a specific test's input: check before editing or
   reusing one.
 - A new blocker or outcome whose refused function runs at module scope cuts
   that statement; register the cut in `tooling/conformance/integrity.known` in

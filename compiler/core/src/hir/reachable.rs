@@ -216,7 +216,7 @@ const READS_ONLY: &[&str] = &["nts_function_name"];
 ///
 /// Without this the body was pruned, and because the layout's entry went with it
 /// the table was emitted as a null pointer. Nothing failed the first time:
-/// `examples/timers` cancels every timer before it can fire, so the call through
+/// `tests/programs/timers` cancels every timer before it can fire, so the call through
 /// the null was never made -- which is what a rule with no case that executes it
 /// looks like from the outside.
 #[must_use]
@@ -361,7 +361,7 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
         // **Module evaluation is a root here too**, for the reason it is one
         // under `Entry`: nothing *calls* it and the program is wrong without it.
         // Leaving it out was measured rather than reasoned about --
-        // `examples/library` exports `add` and a module-level
+        // `tests/programs/library` exports `add` and a module-level
         // `const greeting`, and without this line the emitted C lost
         // `module__init` and the string it stores, so a library whose whole
         // surface is two names published one of them as null. That is the same

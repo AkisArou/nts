@@ -16,11 +16,11 @@ fn tsgo() -> Option<Utf8PathBuf> {
 
 fn fixture(name: &str) -> Utf8PathBuf {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"))
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"))
 }
 
 fn jsx_snapshot() -> Option<SemanticSnapshot> {

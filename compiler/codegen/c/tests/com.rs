@@ -3,7 +3,7 @@
 //!
 //! Nothing here needs Windows. The program is checked by clang for
 //! `x86_64-windows-gnu` against zig's mingw headers, which is what `nts build`
-//! compiles it with; running it is `examples/interop/windows-winrt`'s job, on
+//! compiles it with; running it is `tests/interop/windows-winrt`'s job, on
 //! the lane's VM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -43,7 +43,7 @@ fn prepare(name: &str, binding: &str, source: &str) -> Option<(ScratchDir, hir::
     ))
 }
 
-/// `Windows.Data.Json` as `examples/interop/windows-winrt` binds it, with
+/// `Windows.Data.Json` as `tests/interop/windows-winrt` binds it, with
 /// `{method}` spliced into `IJsonValueMethods` and `{function}` beside
 /// `Parse` for the refusal cases.
 fn binding(method: &str, function: &str) -> String {

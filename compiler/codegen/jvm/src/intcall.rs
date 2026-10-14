@@ -15,7 +15,7 @@
 //! %66 = add %57, %106 : i32
 //! ```
 //!
-//! `benches/cases/array-methods` does that three times a round, 256 rounds.
+//! `benchmarks/cases/array-methods` does that three times a round, 256 rounds.
 //! Priced on the reference, which is the only way to price a replacement:
 //! `indexOf` and `lastIndexOf` made to return `double` with the caller casting
 //! back, one file, same checksum:
@@ -229,7 +229,7 @@ pub(crate) fn cursor_helper(name: &str) -> Option<(Option<usize>, bool, &'static
 ///
 /// # The measurement
 ///
-/// `benches/cases/array-from` walks a 256-element set 2000 times through
+/// `benchmarks/cases/array-from` walks a 256-element set 2000 times through
 /// `nts_map_next` and `nts_map_key_at`, and the cursor between them is an `f64`
 /// because `hir::runtime` types it so -- correctly, because that table is the
 /// single answer about conversions for three backends. Per element the walk

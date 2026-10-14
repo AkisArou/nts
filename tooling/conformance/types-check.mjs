@@ -1,7 +1,7 @@
 // Is what `nts types` prints a consistent table?
 //
 //   node tooling/conformance/types-check.mjs [project ...]   (default: runtime/node/*, runtime/web-platform)
-//   node tooling/conformance/types-check.mjs --examples      every examples/* project instead
+//   node tooling/conformance/types-check.mjs --examples      every tests/programs/* project instead
 //   node tooling/conformance/types-check.mjs --self-test
 //   NTS_BIN=<a pinned copy> node tooling/conformance/types-check.mjs
 //

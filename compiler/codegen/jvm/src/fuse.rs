@@ -3,7 +3,7 @@
 //!
 //! # The measurement this exists for, and it is an ART measurement
 //!
-//! `benches/cases/array-methods` calls `xs.at(-1)` 256 times an operation. The
+//! `benchmarks/cases/array-methods` calls `xs.at(-1)` 256 times an operation. The
 //! lowering emits `nts_array_at_value`, which answers an `NtsValue`, and the
 //! next instruction is `getfield num` -- so a box is built and read once:
 //!

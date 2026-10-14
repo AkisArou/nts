@@ -16,9 +16,9 @@ fn decomposed_types() -> Option<SemanticSnapshot> {
         return None;
     }
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/types/tsconfig.json")
+        .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/types fixture is checked in");
+        .expect("tests/programs/types fixture is checked in");
     let mut source = TsgoApi::new(tsgo).with_decomposition(Budget::DEFAULT);
     Some(source.snapshot(&tsconfig).expect("snapshot should succeed"))
 }
@@ -227,9 +227,9 @@ fn every_shape_something_references_is_opened() {
 fn decomposed_signatures() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/signatures/tsconfig.json")
+        .join("../../tests/programs/signatures/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/signatures fixture is checked in");
+        .expect("tests/programs/signatures fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_decomposition(Budget::DEFAULT)
@@ -341,9 +341,9 @@ fn a_function_is_not_decomposed_as_an_object() {
 fn classes_snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/classes/tsconfig.json")
+        .join("../../tests/programs/classes/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/classes fixture is checked in");
+        .expect("tests/programs/classes fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_decomposition(Budget::DEFAULT)

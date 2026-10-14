@@ -89,10 +89,10 @@ javac -cp "$work/ours:$jar" -d "$work/ours" "$work/ours/Count.java"
 # The reference's entry is its own `run`, which takes no argument -- `Ref`
 # extends `Bench.Work` and holds its input in a `volatile` of its own.
 have_ref=no
-if [ -f "$root/benches/cases/$case/ref.java" ]; then
+if [ -f "$root/benchmarks/cases/$case/ref.java" ]; then
   mkdir -p "$work/ref"
-  cp "$root/benches/cases/$case/ref.java" "$work/ref/Ref.java"
-  cp "$root/benches/common/Bench.java" "$work/ref/"
+  cp "$root/benchmarks/cases/$case/ref.java" "$work/ref/Ref.java"
+  cp "$root/benchmarks/common/Bench.java" "$work/ref/"
   # AWFY references reach for classes on the vendored classpath.
   awfy=$root/target/bench/awfy-java
   emit "$work/ref" "ref.run()" "final Ref ref = new Ref();"

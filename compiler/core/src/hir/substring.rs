@@ -2,7 +2,7 @@
 //!
 //! # The measurement this exists for
 //!
-//! `benches/cases/substrings` is the worst C++ ratio on the board, and its own
+//! `benchmarks/cases/substrings` is the worst C++ ratio on the board, and its own
 //! header says why it is there: `substring` is O(1) for anything that can
 //! return a *view* of its input and O(n) for anything that must copy.
 //!

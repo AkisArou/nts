@@ -33,7 +33,7 @@ fn machine(name: &str) -> Option<hir::Program> {
     let refusals = hir::suspend::transform(&mut lowered.program);
     assert!(
         refusals.is_empty(),
-        "nothing in examples/generators is refused: {refusals:#?}",
+        "nothing in tests/programs/generators is refused: {refusals:#?}",
     );
     Some(lowered.program)
 }
@@ -42,11 +42,11 @@ fn machine(name: &str) -> Option<hir::Program> {
 fn prepared(name: &str) -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -59,11 +59,11 @@ fn prepared(name: &str) -> Option<hir::Prepared> {
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -86,7 +86,7 @@ fn func<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Func {
 ///
 /// The number that matters is **zero allocations inside the loop**. An
 /// implementation that built a `{ value, done }` per step would agree with node
-/// on every case in `examples/generators` and cost an object per element, which
+/// on every case in `tests/programs/generators` and cost an object per element, which
 /// is what `Walk::Protocol` does for a user type that hands one back and what
 /// this walk exists not to do.
 #[test]
@@ -396,7 +396,7 @@ fn a_walk_of_any_length_allocates_once() {
 /// `suspend::yielded_slot` gives it a placeholder -- asked by all four places
 /// that derive the element, because a placeholder applied to fewer than all of
 /// them is a store and a load that disagree. 176 files of the slice-1
-/// `test/language` population, 125 of which now pass. See `examples/generators`
+/// `test/language` population, 125 of which now pass. See `tests/programs/generators`
 /// and the arms that moved there from `generator-unsupported`.
 ///
 /// `yield*` was another, and is not one either: it is a walk with a `yield`

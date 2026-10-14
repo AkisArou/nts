@@ -95,7 +95,7 @@ fn an_async_callback_is_bridged_only_where_callbacks_checkpoint() {
     let dir = ScratchDir::new(&root.join("target/native-llvm-tests"), "async-callback");
     std::fs::write(
         dir.join("closures.d.ts"),
-        include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"),
+        include_str!("../../../../tests/interop/native-closure/types/closures.d.ts"),
     )
     .unwrap();
     std::fs::write(dir.join("tsconfig.json"), format!(
@@ -1518,7 +1518,7 @@ export function run(): void {
 /// A capturing closure crosses to C and back, on both backends and both
 /// providers, and a retained one is released when C lets go.
 ///
-/// The fixture is `examples/interop/native-closure`'s own library and caller:
+/// The fixture is `tests/interop/native-closure`'s own library and caller:
 /// captures read back after C calls them, two closures through one C function
 /// each reaching their own variable, and a closure registered by a function
 /// that has returned by the time C calls it.
@@ -1532,10 +1532,10 @@ export function run(): void {
 #[test]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_capturing_closure_crosses_to_c_on_both_backends() {
-    let source = include_str!("../../../../examples/interop/native-closure/src/main.ts");
+    let source = include_str!("../../../../tests/interop/native-closure/src/main.ts");
     let declarations = [(
         "closures.d.ts",
-        include_str!("../../../../examples/interop/native-closure/types/closures.d.ts"),
+        include_str!("../../../../tests/interop/native-closure/types/closures.d.ts"),
     )];
     for (label, provider) in [
         ("nogc", hir::Provider::NoGc),
@@ -1563,17 +1563,17 @@ fn a_capturing_closure_crosses_to_c_on_both_backends() {
         }
         std::fs::write(
             dir.join("closures.h"),
-            include_str!("../../../../examples/interop/native-closure/native/closures.h"),
+            include_str!("../../../../tests/interop/native-closure/native/closures.h"),
         )
         .unwrap();
         std::fs::write(
             dir.join("closures.c"),
-            include_str!("../../../../examples/interop/native-closure/native/closures.c"),
+            include_str!("../../../../tests/interop/native-closure/native/closures.c"),
         )
         .unwrap();
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-closure/consumer/caller.c"),
+            include_str!("../../../../tests/interop/native-closure/consumer/caller.c"),
         )
         .unwrap();
         std::fs::write(dir.join("cycles.c"), SIGNAL_CYCLES).unwrap();
@@ -1997,7 +1997,7 @@ int main(int argc, char **argv) { (void)argv; return run(argc > 1 ? 1 : 10) == 6
 /// A `string` parameter reaches C as NUL-terminated UTF-8, on both backends
 /// and both providers.
 ///
-/// The fixture is `examples/interop/native-string`'s own library and caller,
+/// The fixture is `tests/interop/native-string`'s own library and caller,
 /// so what is checked here is what that example checks: C reads the bytes
 /// back, "β😀" must answer differently from "α😀", and a string holding U+0000
 /// stops at the boundary instead of reaching C truncated. The conversion is
@@ -2006,10 +2006,10 @@ int main(int argc, char **argv) { (void)argv; return run(argc > 1 ? 1 : 10) == 6
 #[test]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_string_parameter_crosses_as_utf8_on_both_backends() {
-    let source = include_str!("../../../../examples/interop/native-string/src/main.ts");
+    let source = include_str!("../../../../tests/interop/native-string/src/main.ts");
     let declarations = [(
         "text.d.ts",
-        include_str!("../../../../examples/interop/native-string/types/text.d.ts"),
+        include_str!("../../../../tests/interop/native-string/types/text.d.ts"),
     )];
     for (label, provider) in [
         ("nogc", hir::Provider::NoGc),
@@ -2045,17 +2045,17 @@ fn a_string_parameter_crosses_as_utf8_on_both_backends() {
         }
         std::fs::write(
             dir.join("text.h"),
-            include_str!("../../../../examples/interop/native-string/native/text.h"),
+            include_str!("../../../../tests/interop/native-string/native/text.h"),
         )
         .unwrap();
         std::fs::write(
             dir.join("text.c"),
-            include_str!("../../../../examples/interop/native-string/native/text.c"),
+            include_str!("../../../../tests/interop/native-string/native/text.c"),
         )
         .unwrap();
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-string/consumer/caller.c"),
+            include_str!("../../../../tests/interop/native-string/consumer/caller.c"),
         )
         .unwrap();
         // Both halves counted or neither: the provider decides what the
@@ -2195,12 +2195,12 @@ export function identity(c: Counter | null): Counter | null { return c; }
         }
         std::fs::write(
             dir.join("counter.h"),
-            include_str!("../../../../examples/interop/c-from-ts/native/counter.h"),
+            include_str!("../../../../tests/interop/c-from-ts/native/counter.h"),
         )
         .unwrap();
         std::fs::write(
             dir.join("counter.c"),
-            include_str!("../../../../examples/interop/c-from-ts/native/counter.c"),
+            include_str!("../../../../tests/interop/c-from-ts/native/counter.c"),
         )
         .unwrap();
         std::fs::write(
@@ -2342,7 +2342,7 @@ fn scalar_pointer_memory_agrees_with_c_layout_and_aliasing() {
     );
     // Compile the checked-in example as part of this same two-backend fixture,
     // without its imports: the fixture's own import the same names.
-    let example = include_str!("../../../../examples/interop/native-buffer/src/main.ts");
+    let example = include_str!("../../../../tests/interop/native-buffer/src/main.ts");
     for line in example.lines().filter(|line| !line.starts_with("import ")) {
         source.push_str(line);
         source.push('\n');
@@ -2500,10 +2500,10 @@ fn native_struct_fields_addresses_and_aliases_agree_with_c() {
 
 #[test]
 fn native_poll_calls_libc_and_matches_the_platform_header() {
-    let source = include_str!("../../../../examples/interop/native-poll/src/main.ts");
+    let source = include_str!("../../../../tests/interop/native-poll/src/main.ts");
     let declarations = [(
         "poll.d.ts",
-        include_str!("../../../../examples/interop/native-poll/types/poll.d.ts"),
+        include_str!("../../../../tests/interop/native-poll/types/poll.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let Some((dir, prepared)) =
@@ -2528,12 +2528,12 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
         }
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-poll/consumer/caller.c"),
+            include_str!("../../../../tests/interop/native-poll/consumer/caller.c"),
         )
         .unwrap();
         std::fs::write(
             dir.join("layout.c"),
-            include_str!("../../../../examples/interop/native-poll/native/layout.c"),
+            include_str!("../../../../tests/interop/native-poll/native/layout.c"),
         )
         .unwrap();
         // The check, compiled and never linked. It used to live inside
@@ -2581,10 +2581,10 @@ fn native_poll_calls_libc_and_matches_the_platform_header() {
 
 #[test]
 fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
-    let source = include_str!("../../../../examples/interop/native-fd/src/main.ts");
+    let source = include_str!("../../../../tests/interop/native-fd/src/main.ts");
     let declarations = [(
         "unistd.d.ts",
-        include_str!("../../../../examples/interop/native-fd/types/unistd.d.ts"),
+        include_str!("../../../../tests/interop/native-fd/types/unistd.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let Some((dir, prepared)) =
@@ -2609,7 +2609,7 @@ fn native_fd_reads_through_a_void_pointer_and_agrees_with_unistd() {
         }
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-fd/native/caller.c"),
+            include_str!("../../../../tests/interop/native-fd/native/caller.c"),
         )
         .unwrap();
         // The witness is the check: it includes the real <unistd.h>, named by
@@ -2796,10 +2796,10 @@ fn an_inline_struct_member_agrees_with_the_system_header() {
 /// would not notice LLVM producing nothing.
 #[test]
 fn c_calls_a_typescript_function_through_a_bridge() {
-    let source = include_str!("../../../../examples/interop/native-callback/src/main.ts");
+    let source = include_str!("../../../../tests/interop/native-callback/src/main.ts");
     let declarations = [(
         "library.d.ts",
-        include_str!("../../../../examples/interop/native-callback/types/library.d.ts"),
+        include_str!("../../../../tests/interop/native-callback/types/library.d.ts"),
     )];
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let Some((dir, prepared)) =
@@ -2824,12 +2824,12 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         }
         std::fs::write(
             dir.join("caller.c"),
-            include_str!("../../../../examples/interop/native-callback/consumer/caller.c"),
+            include_str!("../../../../tests/interop/native-callback/consumer/caller.c"),
         )
         .unwrap();
         std::fs::write(
             dir.join("library.c"),
-            include_str!("../../../../examples/interop/native-callback/native/library.c"),
+            include_str!("../../../../tests/interop/native-callback/native/library.c"),
         )
         .unwrap();
         // The library's header, which both `library.c` and the witness include.
@@ -2838,7 +2838,7 @@ fn c_calls_a_typescript_function_through_a_bridge() {
         // re-declared them next to nothing and agreed with itself.
         std::fs::write(
             dir.join("library.h"),
-            include_str!("../../../../examples/interop/native-callback/native/library.h"),
+            include_str!("../../../../tests/interop/native-callback/native/library.h"),
         )
         .unwrap();
         clang(

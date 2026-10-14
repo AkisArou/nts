@@ -572,14 +572,14 @@ fn tag_of(ty: &HirType) -> Option<u32> {
         // tag -- told apart by the id rather than by the layout, because that
         // is all this sees. The C backend has had this case since closures
         // became values; here they fell into `OBJECT` below, and
-        // `examples/absent` read 42 where node reads 45.
+        // `tests/programs/absent` read 42 where node reads 45.
         HirType::Managed(nts_core::hir::ManagedType::Object(ty))
             if nts_core::hir::is_closure_type(*ty) =>
         {
             tags::FUNCTION
         }
         // And a symbol answers `"symbol"`, for the same reason and with the
-        // same failure mode: it fell into `OBJECT` below, `examples/symbol-values`
+        // same failure mode: it fell into `OBJECT` below, `tests/programs/symbol-values`
         // disagreed with node on this lane and agreed on the C one, and the
         // comment above about closures had already described the shape. The
         // second time a wildcard over `Managed` has answered for a newcomer
@@ -739,7 +739,7 @@ const KIND_TUPLE: u32 = 6;
 /// Identical in every field a descriptor holds and differing in its **address**,
 /// which is what `nts_is_class` compares, and in the name it reports as its own.
 /// See `descriptor_for`; the C backend emits the same pair and
-/// `examples/two-classes-one-descriptor` holds both lanes to it.
+/// `tests/programs/two-classes-one-descriptor` holds both lanes to it.
 fn class_descriptors(
     out: &mut String,
     program: &Program,
@@ -2418,7 +2418,7 @@ fn identity_suffix(
 /// The layout's own where nothing shares it. Where two classes share a shape
 /// they get one global each -- same size, same reference map, same table --
 /// differing in the **address**, which is what `nts_is_class` compares. The C
-/// backend does the same thing and `examples/two-classes-one-descriptor` holds
+/// backend does the same thing and `tests/programs/two-classes-one-descriptor` holds
 /// both lanes to it.
 fn descriptor_for(
     program: &Program,
@@ -2604,7 +2604,7 @@ fn string_ordering(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String 
 /// because here the string rule is a match arm rather than a function that can
 /// decline.
 ///
-/// Fifteen crashes in `examples/optional-access` were this, and the arm shipped
+/// Fifteen crashes in `tests/programs/optional-access` were this, and the arm shipped
 /// without it for one build.
 fn absent(func: &Func, value: ValueId) -> bool {
     matches!(
@@ -2615,7 +2615,7 @@ fn absent(func: &Func, value: ValueId) -> bool {
 
 /// The frame bound on a call whose result the escape analysis kept off the heap.
 ///
-/// `benches/substrings` is a parser's shape -- one `substring` per word -- and
+/// `benchmarks/substrings` is a parser's shape -- one `substring` per word -- and
 /// without this the second backend allocated for every token while the first
 /// allocated for none. It ran 2.25x slower for exactly that reason.
 fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
@@ -2632,7 +2632,7 @@ fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
 /// Every one of them, in the **entry block**. An `alloca` runs where it is
 /// written, so one emitted beside its call sits inside whatever loop the call
 /// is in and takes another 186 bytes of stack every iteration -- and
-/// `benches/substrings` slices a word at a time, sixty-four rounds deep. The C
+/// `benchmarks/substrings` slices a word at a time, sixty-four rounds deep. The C
 /// backend declares this storage with the function's other locals and says why:
 /// one slot per allocation *site* rather than one per execution of it, which is
 /// correct precisely because nothing outlives the iteration that made it.
@@ -2646,7 +2646,7 @@ fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
 /// for as long as this backend has placed one. Its `alloca` sat where the
 /// allocation was written, so an object made in a loop took another `sizeof`
 /// bytes of stack every iteration and gave none of them back until the function
-/// returned. `examples/cycles` builds one `Node` per round and asks for as many
+/// returned. `tests/programs/cycles` builds one `Node` per round and asks for as many
 /// rounds as the caller likes: it ran off the end of the stack and died of
 /// signal 11, and it took a change that placed *more* objects in frames to
 /// reach it.
@@ -2713,7 +2713,7 @@ fn one_frame(out: &str, units: u32) -> String {
 /// that `-flto` removes anyway.
 ///
 /// `nts_to_uint8` is why: `x | 0` on a `Uint8Array` element lowers to it, and
-/// `benches/cases/bytes` was refused outright for want of one symbol.
+/// `benchmarks/cases/bytes` was refused outright for want of one symbol.
 fn linkable(target: &str) -> String {
     if signatures::signature(target).is_some() {
         return target.to_owned();
@@ -3097,7 +3097,7 @@ fn function(
     // module outright -- `PHI node entries do not match predecessors` -- so it
     // is a hard failure rather than a wrong answer, but it is reachable today
     // by a closure that reads a forward-captured `const` inside a `?:`, and
-    // `examples/a-guarded-cell-read-in-a-branch` is that program.
+    // `tests/programs/a-guarded-cell-read-in-a-branch` is that program.
     //
     // Rendering first is what makes the answer available: a successor may be
     // emitted before its predecessor (any back edge), so the exit label cannot
@@ -4995,7 +4995,7 @@ fn memory_operation(
         // `CellReady` belongs with the other two halves of the suspension
         // machine, and was the one kind missing from this list -- so it fell
         // through to "does not render yet" while `suspension` implemented it
-        // in full, four functions of `examples/captured-by-reference` away.
+        // in full, four functions of `tests/programs/captured-by-reference` away.
         // An implementation nothing routes to reads exactly like one that was
         // never written.
         | OpKind::CellReady { .. }
@@ -5272,7 +5272,7 @@ fn checked_bigint(out: &str, op: BinOp, left: &str, right: &str) -> Option<Strin
 /// The C backend has spelled this since it was written: `(double)((int32_t)a |
 /// (int32_t)b)`. This one refused it, so a program the C lane compiled was
 /// declined here with "the operator `BitOr` on this representation" -- found by
-/// `examples/module-numbers`, which is the first example to put a `| 0` in a
+/// `tests/programs/module-numbers`, which is the first example to put a `| 0` in a
 /// branch beside a NaN.
 ///
 /// **Not `fptosi`.** This used to say "`fptosi` is exact here for the same
@@ -5336,7 +5336,7 @@ fn float_bitwise(out: &str, op: BinOp, lhs: ValueId, rhs: ValueId) -> String {
 /// at or past the width, where LLVM's `shl` and `ashr` are *poison*. So the
 /// runtime spells the rule and both backends call it -- emitting the
 /// instruction rendered a module that compiled and then disagreed with node on
-/// 28 cases of `examples/bigint`.
+/// 28 cases of `tests/programs/bigint`.
 ///
 /// `>>>` has no `bigint` form: JavaScript throws for it, so there is nothing
 /// here to route.
@@ -5580,7 +5580,7 @@ fn conversion(from: &HirType, to: &HirType, func: &Func) -> Result<&'static str,
         //
         // This asked the destination, which was unreachable while every integer
         // conversion went through `f64` on its way -- and wrong the moment
-        // `simplify` learned to collapse that detour. `benches/cases/bytes`
+        // `simplify` learned to collapse that detour. `benchmarks/cases/bytes`
         // answered -131008 where node answered 1090394752.
         (
             HirType::Int {
@@ -5900,7 +5900,7 @@ fn unary(
             //
             // Without it `Math.floor(x / 65536)` emitted a `double` and the
             // next instruction read it as an `i32`: "defined with type 'double'
-            // but expected 'i32'", and `examples/mathops` could not be built
+            // but expected 'i32'", and `tests/programs/mathops` could not be built
             // through this backend at all.
             if let HirType::Int { bits, .. } = &func.values[value.0 as usize].ty {
                 let rounded = format!("{out}.r");

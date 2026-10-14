@@ -69,7 +69,7 @@ fn phi_swap() -> nts_core::hir::Func {
 
 fn triangle_graph() -> nts_core::hir::Func {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../tooling/wasm/fixtures/triangle-resume-cfg.json"
+        "../../../../tests/wasm/triangle-resume-cfg.json"
     ))
     .unwrap();
     let graph: Vec<Vec<u32>> = serde_json::from_value(fixture["successors"].clone()).unwrap();
@@ -160,7 +160,7 @@ fn structured_phi_copies_and_irreducible_dispatch_execute_exactly() {
         origin: origin(),
     });
     let emitted = nts_codegen_wasm::emit(&p).expect("valid scalar control fixture");
-    let fixture = common::repository().join("tooling/wasm/fixtures/triangle-resume-cfg.json");
+    let fixture = common::repository().join("tests/wasm/triangle-resume-cfg.json");
     let result = common::run(
         "control",
         &emitted,

@@ -39,8 +39,8 @@ out=${1:?usage: allocation-sweep.sh <out.tsv> [case...]}
 shift
 per=${NTS_SWEEP_TIMEOUT:-420}
 
-cases=${*:-$(find "$root/benches/cases" -name ref.java \
-  | sed "s|$root/benches/cases/||;s|/ref.java||" | sort)}
+cases=${*:-$(find "$root/benchmarks/cases" -name ref.java \
+  | sed "s|$root/benchmarks/cases/||;s|/ref.java||" | sort)}
 
 [ -f "$out" ] || printf "case\tours_hotspot\tours_art\tref_hotspot\tref_art\n" > "$out"
 

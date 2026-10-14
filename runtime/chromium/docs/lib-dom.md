@@ -33,7 +33,7 @@ module `nts:dom`.
 6. Listener identity: one context per closure object. This already holds,
    since lending answers the closure itself.
 
-Gated blocker fixtures in `tooling/conformance/blockers/lib-dom-*` go green
+Gated blocker fixtures in `tests/refusals/lib-dom-*` go green
 as each piece lands.
 
 ## The goal

@@ -27,7 +27,7 @@
 # forty lines deep, which is how the first version of this was useless.
 set -u
 bin=${NTS_BIN:-./target-jvm/release/nts}
-{ ls -d examples/*/tsconfig.json; ls target/bench/*.tsconfig.json; } |
+{ ls -d tests/programs/*/tsconfig.json; ls target/bench/*.tsconfig.json; } |
   xargs -P 8 -n 1 sh -c '
     d=$1
     case "$d" in *"/invalid/"*|*"/unsupported/"*) exit 0 ;; esac

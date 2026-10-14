@@ -1,7 +1,7 @@
 //! A symbol as a value, whose identity is the address of its cell.
 //!
 //! This is a different feature from a symbol as a *member name*, and the two
-//! have to keep not being each other. `examples/symbol-keys` resolves `[kRefed]`
+//! have to keep not being each other. `tests/programs/symbol-keys` resolves `[kRefed]`
 //! to a field at compile time and never makes a symbol at all — that row is
 //! shipped, measured at 1.02x C++, and a representation for symbol *values*
 //! must not turn it into a map lookup. The last test here is that.
@@ -24,11 +24,11 @@ use nts_frontend_ts::SemanticSource;
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -148,7 +148,7 @@ fn a_symbol_keys_an_ordinary_map() {
 
 /// A symbol as a **member name** is still a field, not a lookup.
 ///
-/// `examples/symbol-keys` is the shipped row, measured at 1.02x C++ against a
+/// `tests/programs/symbol-keys` is the shipped row, measured at 1.02x C++ against a
 /// plain struct, and its whole claim is that `[kRefed]` costs exactly what
 /// `_refed` would. Giving symbols a runtime representation must not turn that
 /// into a map: the uniqueness of a `unique symbol` is a *type-level* fact the

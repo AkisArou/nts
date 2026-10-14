@@ -151,7 +151,7 @@ fn puts_label(program: &Program, func: &Func, value: ValueId) -> bool {
         // A label per arm and a join at the end, so a slot left `Top`
         // is `Top` at the join and the verifier says "Type top (current
         // frame, locals[1]) is not assignable to reference type" -- the
-        // sentence `examples/async-catch` produced, from a different op,
+        // sentence `tests/programs/async-catch` produced, from a different op,
         // for the same reason. The open pair is the same chain with
         // per-arm indices, and `OpenFieldSet` puts labels too although it
         // produces nothing, because the labels are the chain and not the
@@ -250,7 +250,7 @@ fn crossing_values(program: &Program, func: &Func) -> rustc_hash::FxHashSet<Valu
         // the copies read their operands *after* it. Those reads need a frame,
         // and a slot this walk left as `Top` fails to verify there.
         //
-        // `examples/async-catch` is the first program to produce the shape:
+        // `tests/programs/async-catch` is the first program to produce the shape:
         // `br is_rejected, handler(reason), fulfil`, where `reason` is
         // computed one operation earlier and read nowhere else, so nothing
         // else made it cross. The verifier named it exactly -- "Type top
@@ -617,7 +617,7 @@ impl<'a> Emitter<'a> {
         // name a type for all of them (see `nts_jvm_emitter::frames`) -- and is
         // pure waste in a method that has no frames at all. A straight-line
         // function is most of an arithmetic module, and `javap` showed four
-        // bytes of prologue in every one of `examples/arith` before this test
+        // bytes of prologue in every one of `tests/programs/arith` before this test
         // existed.
         if framed {
             let first_free: u16 = self

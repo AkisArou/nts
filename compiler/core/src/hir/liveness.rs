@@ -557,7 +557,7 @@ pub(in crate::hir) mod tests {
     /// Two objects thrown from two arms and caught at one handler.
     ///
     /// `f(a) { if (..) { throw %1 } else { throw %4 } }` with the handler as a
-    /// block parameter -- the shape `merged` in `examples/code-points` has, and
+    /// block parameter -- the shape `merged` in `tests/programs/code-points` has, and
     /// the one `undominated_names` exists for.
     pub(in crate::hir) fn joining() -> Func {
         let values = vec![

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Start a port of a Workbench demo: its directory under examples/gjs-corpus,
+# Start a port of a Workbench demo: its directory under tests/gjs,
 # the config and tsconfig every port shares, the original's name, and its
 # Blueprint compiled to main.ui. The program and the driver are written by
 # hand.
@@ -11,12 +11,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$here/../.." && pwd)
 upstream=$1
 slug=$2
-port="$root/examples/gjs-corpus/$slug"
+port="$root/tests/gjs/$slug"
 mkdir -p "$port/src"
 printf '%s\n' "$upstream" > "$port/upstream"
 # Button's config and tsconfig are every port's; a port run again keeps its own.
-[ -f "$port/nts.config.ts" ] || cp "$root/examples/gjs-corpus/button/nts.config.ts" "$port/nts.config.ts"
-[ -f "$port/tsconfig.json" ] || cp "$root/examples/gjs-corpus/button/tsconfig.json" "$port/tsconfig.json"
+[ -f "$port/nts.config.ts" ] || cp "$root/tests/gjs/button/nts.config.ts" "$port/nts.config.ts"
+[ -f "$port/tsconfig.json" ] || cp "$root/tests/gjs/button/tsconfig.json" "$port/tsconfig.json"
 python3 "$BLUEPRINT" compile "$NTS_WORKBENCH_DEMOS/$upstream/main.blp" > "$port/main.ui"
 # The UI's first object is what Workbench previews, inside its window; the
 # hosts find it by id, so one Blueprint leaves unnamed is named here. A UI
@@ -38,7 +38,7 @@ if root and " id=" not in root.group(0):
 PY
 [ -f "$port/driver.txt" ] || : > "$port/driver.txt"
 # Enrolled where the config audit typechecks every port's nts.config.ts.
-python3 - "$root/examples/gjs-corpus/tsconfig.configs.json" "$slug/nts.config.ts" <<'PY'
+python3 - "$root/tests/gjs/tsconfig.configs.json" "$slug/nts.config.ts" <<'PY'
 import json, sys
 path, entry = sys.argv[1], sys.argv[2]
 with open(path) as f:

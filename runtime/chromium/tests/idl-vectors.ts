@@ -334,7 +334,7 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   // href, hash), where a DOMString keeps it (title). Read back as UTF-16
   // code units, so the comparison is exact. The surrogates are built with
   // fromCharCode: a literal "\uD800" compiles to three U+FFFD today
-  // (tooling/conformance/blockers/a-lone-surrogate-in-a-string-literal).
+  // (tests/refusals/a-lone-surrogate-in-a-string-literal).
   const units = (text: string): string => {
     let out = "";
     for (let i = 0; i < text.length; i += 1)

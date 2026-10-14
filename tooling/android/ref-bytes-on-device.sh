@@ -138,7 +138,7 @@ public final class RefH {
 JAVA
 printf "%-24s %14s %14s\n" "case" "ref HotSpot" "ref on ART"
 for case in "$@"; do
-  ref=$root/benches/cases/$case/ref.java
+  ref=$root/benchmarks/cases/$case/ref.java
   [ -f "$ref" ] || { printf "%-24s %14s %14s\n" "$case" "no ref.java" "no ref.java"; continue; }
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"

@@ -905,7 +905,7 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
 /// or handed to a *runtime* helper that may keep it ([`super::runtime::keeps`]),
 /// belongs to that container, which gives it up when it is overwritten or freed
 /// -- so stretching the temporary would make an object outlive the only thing
-/// holding it. `examples/interop/macos-classes`
+/// holding it. `tests/interop/macos-classes`
 /// asserts that through a weak watch: `objects[0] = new NSObject()` replaces the
 /// one `watched()` made, and it must read `gone`. A **native** call is not a
 /// holder -- C borrows its arguments for the call, and that unrecorded borrow is
@@ -918,14 +918,14 @@ fn control_flow(func: &Func) -> (Vec<Option<usize>>, Vec<rustc_hash::FxHashSet<u
 /// was left out at first because no fixture witnessed it and a guard nothing
 /// reaches reads as protection; the GTK lane produced the witness the same evening
 /// (`gtk-values`' `temporary` arm, a button set into a map, watched, then deleted,
-/// which must read `gone`), and `examples/interop/macos-classes` will produce the
+/// which must read `gone`), and `tests/interop/macos-classes` will produce the
 /// Objective-C one as soon as such a handle stops being boxed on its way in.
 ///
 /// **Defined outside every cycle.** A handle made in a loop keeps today's
 /// placement: one `ValueId` stands for every iteration's handle, so holding it to
 /// the exit would release the last and leak the rest. What it wants is the end of
 /// its *iteration*, which is a different change with a different fixture;
-/// `examples/interop/gtk-iter-lifetime/escape` records that the
+/// `tests/interop/gtk-iter-lifetime/escape` records that the
 /// invisible-dependency problem is not fully closed.
 ///
 /// **Its definition dominates every exit it reaches.** The value is held through
@@ -1002,7 +1002,7 @@ fn held_to_the_end(func: &Func) -> Vec<(ValueId, rustc_hash::FxHashSet<usize>)> 
                 // `init(o)` is Objective-C's two-step, and `init` consumes its
                 // receiver: holding the `alloc` result to the end leaves a second
                 // reference to the *same object* alive, so
-                // `examples/interop/macos-classes`' map entry read `alive` where it
+                // `tests/interop/macos-classes`' map entry read `alive` where it
                 // must read `gone`. See `native::Function::consumes`.
                 super::Callee::Native(function) => function
                     .consumes
@@ -2296,7 +2296,7 @@ fn quiet(kind: &OpKind) -> bool {
         // returns. `Stat.accessed` reads `this.atime` and hands it to
         // `nts_date_value`, which loads a double -- and that call alone made
         // the whole function not inert, so the borrow became a retain and a
-        // release. 34 of `tooling/memory/cases/dates`' 51 operations.
+        // release. 34 of `tests/memory/dates`' 51 operations.
         OpKind::Call {
             callee: super::Callee::External(name),
             ..
@@ -3190,7 +3190,7 @@ fn hands_back_a_parameter(program: &Program, layouts: &[Layout]) -> rustc_hash::
 /// `g_object_unref` for the upcast receiver on every call: 45-55 ns against
 /// 5-6 ns for the call alone, measured against GTK. The crossing case is the
 /// common one: a handle a closure captured is a load from its environment,
-/// and `tooling/gtk-bench`'s `method` row went from 20.3 ns to 4.1 (C: 7.3). A view that escapes -- is
+/// and `benchmarks/gtk`'s `method` row went from 20.3 ns to 4.1 (C: 7.3). A view that escapes -- is
 /// stored, returned, passed on an edge -- is retained there, as any borrowed
 /// value is.
 fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<ValueId>) -> bool {

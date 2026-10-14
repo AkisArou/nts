@@ -222,7 +222,7 @@ impl Form {
 /// for the symbol — so the name depends on the receiver's type. Carrying the
 /// description and resolving it where the type is known is what `hir::lower`
 /// does, and a census that used the identifier's spelling instead finds no such
-/// member: `examples/symbol-keys` reported nine undeclared members against four
+/// member: `tests/programs/symbol-keys` reported nine undeclared members against four
 /// counted accesses before this existed.
 #[derive(Clone, Copy)]
 enum Member<'a> {
@@ -746,7 +746,7 @@ fn record(
         return;
     };
     // A table has no fixed offset to make indirect, so its reads already cost
-    // what indirection would charge. `examples/a-dotted-read-on-an-index-signature`
+    // what indirection would charge. `tests/programs/a-dotted-read-on-an-index-signature`
     // is the case.
     if snapshot.index_signatures.contains_key(&ty) {
         out.excluded.index_signature += 1;
@@ -950,7 +950,7 @@ fn shape_of(snapshot: &SemanticSnapshot, ty: TypeId, out: &mut Census) -> Option
 /// `this.field = v` in a constructor arrives here as a `TypeParameter` and a
 /// census that stopped at the outer type counted none of them: the first run of
 /// this pass reported 7 field accesses and 0 writes for
-/// `examples/a-structural-cast-that-is-a-prefix`, whose three constructors write
+/// `tests/programs/a-structural-cast-that-is-a-prefix`, whose three constructors write
 /// five fields between them. The interface column was right and the
 /// **denominator** was short by every `this`, which inflated the one percentage
 /// the whole census exists to produce.

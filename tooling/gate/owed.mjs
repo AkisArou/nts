@@ -131,7 +131,7 @@ export const ASKS = {
   // A corpus of its own, and the only step that compiles it: `any` as Erased
   // (093733f2d) left awfy-towers emitting C that clang rejects, and nothing a
   // lowering change owed pointed at it until another lane found it red.
-  "benches": ["answers", "does every benches/cases program still emit C that compiles and runs"],
+  "benches": ["answers", "does every benchmarks/cases program still emit C that compiles and runs"],
   addons: ["valid", "does each runtime module build, load and publish something"],
   "compile-time": ["hygiene", "did lowering any runtime module get twice as slow (instructions, perf-counted)"],
   profile: ["whether", "does runtime/node emit without a panic, under the refusal ceiling, above the definition floor"],
@@ -404,7 +404,7 @@ export const RULES = [
     arms: [],
   },
   {
-    // Run by `examples/interop/{java-from-ts,android-shape}/build.sh` and
+    // Run by `tests/interop/{java-from-ts,android-shape}/build.sh` and
     // nothing else, which the `interop` step runs. Before this rule it owed the
     // full gate.
     name: "the refused.ts claim checker",
@@ -529,7 +529,7 @@ const ALWAYS = { name: "every change", when: () => true, steps: ["clippy", "test
 /**
  * `{ path, added, deleted }` for the change asked about. A rename or copy is
  * both of its paths: the old one deleted (moving a fixture out of blockers/
- * still owes blockers) and the new one added (moving one into examples/ is a
+ * still owes blockers) and the new one added (moving one into tests/programs/ is a
  * new example).
  */
 export function parseNameStatus(text) {
@@ -670,13 +670,13 @@ export function dependents(dir) {
 // `member` decides membership by the path alone, so a deleted or renamed
 // program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
-  { name: "the examples", member: /^examples\/(?!interop\/)[^/]+\//, dirs: () => kids("examples").filter((d) => d !== "examples/interop"), steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
-  { name: "the interop projects", member: /^examples\/interop\/[^/]+\//, dirs: () => kids("examples/interop"), steps: ["interop"] },
-  { name: "the blockers", member: /^tooling\/conformance\/blockers\/[^/]+\//, dirs: () => kids("tooling/conformance/blockers"), steps: ["blockers", "integrity"] },
-  { name: "the outcomes", member: /^tooling\/conformance\/outcomes\/[^/]+\//, dirs: () => kids("tooling/conformance/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
+  { name: "the examples", member: /^examples\/(?!interop\/)[^/]+\//, dirs: () => kids("examples").filter((d) => d !== "tests/interop"), steps: ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
+  { name: "the interop projects", member: /^examples\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
+  { name: "the blockers", member: /^tooling\/conformance\/blockers\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
+  { name: "the outcomes", member: /^tooling\/conformance\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
   { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", member: /^benches\/cases\/[^/]+\//, dirs: () => kids("benches/cases"), steps: ["benches", "bench-agree", "dex"] },
-  { name: "the memory cases", member: /^tooling\/memory\/cases\/[^/]+\//, dirs: () => kids("tooling/memory/cases"), steps: ["memory"] },
+  { name: "the bench cases", member: /^benches\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex"] },
+  { name: "the memory cases", member: /^tooling\/memory\/cases\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];
 function kids(dir) {
   try {
@@ -706,7 +706,7 @@ function readJsonc(path) {
  * it, repo-relative: the `runtimeFile("...")` calls in that constructor in
  * tooling/config/src/target.ts, its `surface` and `native`. A program reaches
  * them through its nts.config.ts, and no tsconfig names them:
- * examples/interop/chromium-surface builds on Chromium's DOM surface and links
+ * tests/interop/chromium-surface builds on Chromium's DOM surface and links
  * its native half with neither in its tsconfig.json.
  */
 export function targetFiles() {
@@ -764,7 +764,7 @@ export function interopInputs() {
   return once("interop-inputs", () => {
     const map = new Map();
     const add = (input, project) => { if (!map.has(input)) map.set(input, new Set()); map.get(input).add(project); };
-    for (const dir of kids("examples/interop")) {
+    for (const dir of kids("tests/interop")) {
       if (!existsSync(join(TREE, dir, "build.sh"))) continue;
       const project = dir.split("/")[2];
       add(dir, project);
@@ -1069,7 +1069,7 @@ export function interopBuiltWith(backend) {
   const words = { jvm: /jvm|android|\bdex\b|\bd8\b/i }[backend];
   if (!words) throw new Error(`interopBuiltWith: no match written for ${backend}`);
   return once(`interop-${backend}`, () => {
-    const dir = join(TREE, "examples/interop");
+    const dir = join(TREE, "tests/interop");
     return readdirSync(dir).filter((name) => {
       const read = (f) => (existsSync(join(dir, name, f)) ? readFileSync(join(dir, name, f), "utf8") : "");
       return existsSync(join(dir, name, "build.sh")) && words.test(read("build.sh") + read("nts.config.ts"));
@@ -1105,13 +1105,13 @@ export function gateSteps(rules) {
 // **Seen to select before it is trusted**, on the three changes that motivated it.
 function selfTest() {
   const names = (changes) => owed(changes).map((r) => r.name).join(", ");
-  const example = names([{ path: "examples/is-array-of-object/tsconfig.json", added: true }, { path: "examples/is-array-of-object/src/main.ts", added: true }]);
+  const example = names([{ path: "tests/programs/is-array-of-object/tsconfig.json", added: true }, { path: "tests/programs/is-array-of-object/src/main.ts", added: true }]);
   if (!example.includes("a new example") || example.includes("an example changed")) return `a new example: ${example}`;
   const blocked = names([{ path: "tooling/conformance/build-floor.sh", added: false }]);
   if (!blocked.includes("an instrument")) return `a change to build-floor.sh: ${blocked}`;
   const tool = names([{ path: "tooling/census/rows.ts", added: false }]);
   if (!tool.includes("an instrument")) return `a change to a TypeScript tool: ${tool}`;
-  const blocker = owed([{ path: "tooling/conformance/blockers/x/src/main.ts", added: true }]);
+  const blocker = owed([{ path: "tests/refusals/x/src/main.ts", added: true }]);
   if (blocker.some((r) => r.name === "an instrument")) return "a blockers fixture's source read as an instrument";
   if (!blocker.find((r) => r.name === "a blockers fixture")?.steps.includes("integrity")) return "a blockers fixture does not owe integrity";
   const backend = names([{ path: "compiler/codegen/c/src/emit.rs", added: false }]);

@@ -11,7 +11,7 @@ fn void_arguments_preserve_default_roots_and_verify() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-void-argument-takes-its-default/tsconfig.json");
+        .join("../../tests/programs/a-void-argument-takes-its-default/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");

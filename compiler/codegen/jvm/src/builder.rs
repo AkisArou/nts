@@ -2,7 +2,7 @@
 //!
 //! # The measurement this exists for
 //!
-//! `benches/cases/node-utf8` runs node's own UTF-8 decoder, which builds its
+//! `benchmarks/cases/node-utf8` runs node's own UTF-8 decoder, which builds its
 //! answer with `out += ...` at seven sites in a loop. Record 0166:
 //!
 //! ```text

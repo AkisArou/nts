@@ -67,10 +67,10 @@ const kEof = Symbol("kEof");
  * to hand to a field.
  *
  * `Promise.withResolvers()` is the standard spelling that survives it, and
- * `examples/promise-with-resolvers` says why: the capability *is* the promise in
+ * `tests/programs/promise-with-resolvers` says why: the capability *is* the promise in
  * this representation -- no layout, no allocation, no capture -- so it can be
  * stored, reassigned and passed on.
- * `examples/a-capability-settled-through-an-optional-link` already holds one in
+ * `tests/programs/a-capability-settled-through-an-optional-link` already holds one in
  * a field. What stays refused is extracting `pending.resolve` as a *value*;
  * calling it as a member is a settle with the promise as receiver, which is what
  * `wake` does.

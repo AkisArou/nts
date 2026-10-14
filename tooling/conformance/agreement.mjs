@@ -17,7 +17,7 @@
 //     blockers/                asserts a refusal, and this is not one
 //     differential-ts.mjs      runs the TypeScript on node, so both sides are node
 //     differential-addon.mjs   needs a whole module and its node counterpart
-//     examples/                a case is written because it *agrees* with node
+//     tests/programs/                a case is written because it *agrees* with node
 //
 // A fixture-sized program that compiles, runs, and answers differently had no
 // home. This is that home.

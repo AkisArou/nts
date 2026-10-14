@@ -1,9 +1,9 @@
 packages:
   - tooling/*
   - libraries/*
-  - examples/library
-  - examples/workspace
-  - examples/interop
+  - tests/programs/library
+  - tests/workspace
+  - tests/interop
 
 catalog:
   '@types/node': 24.13.3

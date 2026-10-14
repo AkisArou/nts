@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs an existing C interop example (examples/interop/<name>) for Windows:
+# Runs an existing C interop example (tests/interop/<name>) for Windows:
 # the library built here for windows x86_64, its C `caller` compiled and
 # linked here with zig's mingw-w64, and the caller run on the lane's Windows.
 #
@@ -42,20 +42,20 @@ mkdir -p "$out"
 win_cc="$out/win-cc"
 printf '#!/bin/sh\nexec zig cc -target x86_64-windows-gnu -Wno-unused-command-line-argument "$@"\n' >"$win_cc"
 chmod +x "$win_cc"
-mkdir -p "$mirror/examples/interop" "$mirror/runtime" "$mirror/tooling"
+mkdir -p "$mirror/tests/interop" "$mirror/runtime" "$mirror/tooling"
 ln -s "$repo/tsconfig.fixtures.json" "$mirror/tsconfig.fixtures.json"
 ln -s "$repo/node_modules" "$mirror/node_modules"
 ln -s "$repo/runtime/native" "$mirror/runtime/native"
 ln -s "$repo/tooling/config" "$mirror/tooling/config"
 ln -s "$repo/target" "$mirror/target"
-ln -s "$repo/examples/interop/node_modules" "$mirror/examples/interop/node_modules"
-ln -s "$repo/examples/interop/package.json" "$mirror/examples/interop/package.json"
+ln -s "$repo/tests/interop/node_modules" "$mirror/tests/interop/node_modules"
+ln -s "$repo/tests/interop/package.json" "$mirror/tests/interop/package.json"
 
 status=0
 for name in "${names[@]}"; do
-  source="$repo/examples/interop/$name"
+  source="$repo/tests/interop/$name"
   [[ -f "$source/build.sh" ]] || { echo "no example $name" >&2; status=1; continue; }
-  copy="$mirror/examples/interop/$name"
+  copy="$mirror/tests/interop/$name"
   cp -R "$source" "$copy"
   config="$copy/nts.config.ts"
   grep -qF 'target.linux({ backend: "c" })' "$config" ||

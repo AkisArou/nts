@@ -1,6 +1,6 @@
 // A closure whose call returns another closure.
 //
-// Here rather than in `examples/` because the three backends do not agree
+// Here rather than in `tests/programs/` because the three backends do not agree
 // about it yet: the lowering is right and C and LLVM compile it, while the JVM
 // backend refuses the dispatch. An example is a claim on every lane at once,
 // and this is a claim about the lowering.

@@ -9,6 +9,6 @@ set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="${1:-$root/target/sweep}"
 mkdir -p "$work/src"
-[ -f "$work/tsconfig.json" ] || cp "$root/examples/absent/tsconfig.json" "$work/tsconfig.json"
+[ -f "$work/tsconfig.json" ] || cp "$root/tests/programs/absent/tsconfig.json" "$work/tsconfig.json"
 node "$root/tooling/sweep/sweep.mjs" > "$work/src/main.ts"
 exec "${NTS_BIN:-$root/target/release/nts}" check "$work/tsconfig.json"

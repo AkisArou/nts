@@ -5,7 +5,7 @@
 //!
 //! Nothing here needs Windows. The C is checked by clang for
 //! `x86_64-w64-windows-gnu` against zig's mingw headers and the IR compiled
-//! for the same target; running it is `examples/interop/winui-hello`'s job,
+//! for the same target; running it is `tests/interop/winui-hello`'s job,
 //! on the lane's VM.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

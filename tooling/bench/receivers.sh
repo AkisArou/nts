@@ -3,7 +3,7 @@
 #
 # A cost paid on every field read is a benchmark question before it is a corpus
 # question, and `nts receivers` takes a `tsconfig.json` like every other
-# subcommand. A bench case has none: `benches/tsconfig.json` explains why --
+# subcommand. A bench case has none: `benchmarks/tsconfig.json` explains why --
 # "compiling fifty cases as one program would make every export a root of every
 # other" -- so `tooling/bench` generates one per case at run time and this
 # reproduces that generation rather than inventing a second shape for it. Keep it
@@ -21,7 +21,7 @@ mkdir -p "$out"
 [ -x "$nts" ] || { echo "no nts at $nts (set NTS_BIN)" >&2; exit 1; }
 
 printf '%-28s %8s %10s %9s\n' case accesses interface share
-for case_dir in "$root"/benches/cases/*/; do
+for case_dir in "$root"/benchmarks/cases/*/; do
   name="$(basename "$case_dir")"
   config="$case_dir/tsconfig.json"
   if [ ! -f "$config" ]; then

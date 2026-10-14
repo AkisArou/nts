@@ -18,7 +18,7 @@ way `S` is. Two consequences, one of them a wrong answer:
    interface), a field is read and written at the *interface's* position, which
    is the wrong field for a class laid out in another order. That is a silent
    wrong answer on main today
-   (`tooling/conformance/outcomes/a-field-through-an-interface-its-classes-order-differently`).
+   (`tests/outcomes/a-field-through-an-interface-its-classes-order-differently`).
    Where the class is known, the same structural cast is refused instead when the
    layouts disagree: 60 distinct sites, 638 occurrences.
 
@@ -134,7 +134,7 @@ fills it, and the call compiles as today's virtual call.
   candidate that can neither fit nor adapt leaves the interface as it was.
   Adaptable candidates now receive entries, including beside a class with a
   written `implements`; the crash fixture is an example under
-  `examples/a-structural-misfit-dispatched-through-an-interface`.
+  `tests/programs/a-structural-misfit-dispatched-through-an-interface`.
   Contextual literal owners participate too. Every initial function and possible
   method write must satisfy the contract before their rows can fill the slots.
 

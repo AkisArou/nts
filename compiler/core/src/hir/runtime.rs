@@ -1915,7 +1915,7 @@ pub fn into_form(target: &str) -> String {
 /// it mutates too. That second one is coarser than it needs to be… Until it
 /// does, an external call ends a borrow."*
 ///
-/// The cost of that coarseness, measured on `tooling/memory/cases/dates`:
+/// The cost of that coarseness, measured on `tests/memory/dates`:
 /// reading `this.atime` to hand to `nts_date_value` — a helper that loads a
 /// double and returns it — took a retain and a release per iteration, **34 of
 /// that case's 51 operations**.

@@ -13,11 +13,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(fixture: &str) -> Option<Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
     // The configuration the compiler itself uses. Building a lighter one here
     // tested a snapshot no user of this compiler ever gets: without decomposed
     // signatures, an un-annotated function's return type is unavailable and

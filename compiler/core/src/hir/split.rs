@@ -2,7 +2,7 @@
 //!
 //! # The measurement this exists for
 //!
-//! `benches/cases/absences` is the absence primitive's speed ratchet, and it
+//! `benchmarks/cases/absences` is the absence primitive's speed ratchet, and it
 //! was the last row on the board losing to node — 4.45x C++ and 1.06x node.
 //! 0053 measured the cause and named the fix without building it; this is the
 //! fix.

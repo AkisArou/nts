@@ -91,7 +91,7 @@ enum Generated {
     JavaReference,
     /// The same program as a WebAssembly module, run by node.
     ///
-    /// Timed by node's own harness (`benches/common/bench.mjs`), importing the
+    /// Timed by node's own harness (`benchmarks/common/bench.mjs`), importing the
     /// case's function from the module's generated glue rather than from
     /// `case.ts`, so the only difference from the node column is the artifact:
     /// `nts (Wasm)/V8` is what this compiler emitted for V8 against what V8's
@@ -340,7 +340,7 @@ fn quiet_enough(when: &str) -> Option<String> {
         return None;
     }
     // **With its age, which is the difference between a note and an alarm.**
-    // On 2026-09-12 an `emit-jvm` of `examples/library` blocked in
+    // On 2026-09-12 an `emit-jvm` of `tests/programs/library` blocked in
     // `anon_pipe_read` waiting on a `tsgo` reply that never came -- zero CPU
     // ticks in eleven hours and forty-three minutes -- and this check did its
     // job perfectly: it declined every timed run on the machine for half a day
@@ -433,7 +433,7 @@ fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     validate_lanes()?;
     let root = repository_root(&argv)?;
-    let cases_dir = root.join("benches/cases");
+    let cases_dir = root.join("benchmarks/cases");
 
     // A flag's *value* is not a case name. Filtering on the leading dash alone
     // would leave `--root <path>` looking like a request for a case called
@@ -1050,7 +1050,7 @@ fn provider_for(case: &Utf8Path) -> hir::Provider {
 /// The runtime translation units every variant of a case links.
 ///
 /// The Unicode tables join them only for a case that converts case: linking
-/// them always takes `examples/hello` from 81 KB to 162 KB, and a benchmark
+/// them always takes `tests/programs/hello` from 81 KB to 162 KB, and a benchmark
 /// binary has no more reason to carry them than any other program.
 fn runtime_sources(out: &Utf8Path, needs_unicode: bool) -> Vec<Utf8PathBuf> {
     let mut sources = vec![out.join(nts_codegen_c::RUNTIME_SOURCE_NAME)];
@@ -1248,7 +1248,7 @@ fn variants(
         } else {
             driver.clone()
         };
-        let cpp = vec![front, root.join("benches/common/main.cpp")];
+        let cpp = vec![front, root.join("benchmarks/common/main.cpp")];
         let mut c = runtime_sources(out, emission.needs_unicode);
         match variant.generated {
             // Not a C++ file linked against a generated object, so it leaves
@@ -2181,7 +2181,7 @@ fn run_driver(
         .arg(dir)
         .arg("-d")
         .arg(dir)
-        .arg(root.join("benches/common/Bench.java"))
+        .arg(root.join("benchmarks/common/Bench.java"))
         .arg(driver_path)
         .output()
         .context("running javac")?;
@@ -2207,7 +2207,7 @@ fn run_driver(
 /// `Ok(None)` for a case with no counterpart, which is every case that is not a
 /// port of one of theirs -- a blank cell rather than a failed row.
 ///
-/// The driver mirrors `benches/cases/awfy-*/src/main.ts` exactly: construct the
+/// The driver mirrors `benchmarks/cases/awfy-*/src/main.ts` exactly: construct the
 /// benchmark, call `innerBenchmarkLoop`, return 1 or 0. That is their driver
 /// unchanged, and it is what makes the checksum comparable across every column
 /// -- a variant that were fast because it computed something else would fail
@@ -2272,7 +2272,7 @@ fn handwritten_java(
         .arg("-d")
         .arg(dir.as_str())
         .arg(case.join("ref.java").as_str())
-        .arg(root.join("benches/common/Bench.java").as_str())
+        .arg(root.join("benchmarks/common/Bench.java").as_str())
         .arg(driver_path.as_str())
         .output()
         .context("running javac over a hand-written Java reference")?;
@@ -2593,7 +2593,7 @@ fn compile(
     const SHARED: &[&str] = &["-O2", "-flto", "-Wall", "-Wextra", "-Werror"];
     let mut includes = vec![
         "-I".to_owned(),
-        root.join("benches/common").to_string(),
+        root.join("benchmarks/common").to_string(),
         "-I".to_owned(),
         root.join("target/bench").to_string(),
     ];
@@ -2963,7 +2963,7 @@ const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // agreeing. The arithmetic closes on the reference's mode alone: that
     // harness measured the reference at 4359 and 4441 ns, squarely the fast
     // mode, where 0.94x needs it near 5740. Both harnesses honest, habitually
-    // landing in different modes. `benches/jvm-rows.md` carries the row as a
+    // landing in different modes. `benchmarks/jvm-rows.md` carries the row as a
     // range rather than a number.
     // **Both halves, which took a control to find.** The reference's two modes
     // were recorded first and looked like the whole story. Then the JVM lane

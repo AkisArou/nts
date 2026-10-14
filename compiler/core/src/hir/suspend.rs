@@ -1448,7 +1448,7 @@ fn segment_layout(
     // which is what the count below adds; the **shared rejection exit** is one
     // block for the whole function and is reserved only when something reaches
     // it. Spending one `shared` on both took a block away from every generator
-    // and broke `examples/generators`, which is what the corpus is for.
+    // and broke `tests/programs/generators`, which is what the corpus is for.
     // **Per suspension point, not per function.** An `await` needs two blocks
     // -- the segment that suspends and the one the dispatch lands on, which
     // tests for a rejection before anything reads a payload -- and a `yield`

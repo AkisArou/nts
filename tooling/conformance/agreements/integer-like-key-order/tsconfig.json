@@ -1,4 +1,0 @@
-{
-  "extends": "../../blockers/tsconfig.base.json",
-  "compilerOptions": { "rootDir": "." }
-}

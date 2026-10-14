@@ -814,14 +814,14 @@ process.exitCode = 0;
 // Committed fixtures are not re-judged: the gate's own `integrity` step does.
 const pending = [
   ...new Set(
-    spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tooling/conformance/blockers"], { cwd: ROOT, encoding: "utf8" })
+    spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"], { cwd: ROOT, encoding: "utf8" })
       .stdout.split("\n")
       .map((l) => /tooling\/conformance\/blockers\/([^/]+)\//.exec(l)?.[1])
       .filter((n) => n !== undefined && names.includes(n)),
   ),
 ];
 if (pending.length > 0) {
-  const check = spawnSync("node", [join(HERE, "integrity.ts"), ...pending.map((n) => join("tooling/conformance/blockers", n))], {
+  const check = spawnSync("node", [join(HERE, "integrity.ts"), ...pending.map((n) => join("tests/refusals", n))], {
     cwd: ROOT,
     encoding: "utf8",
     env: { ...process.env, NTS_BIN: compiler },

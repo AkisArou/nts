@@ -178,7 +178,7 @@ fn winrt_metadata() -> Option<PathBuf> {
 ///
 /// **The pairs are the metadata's, checked against the C oracle that ran on
 /// Windows**: `Parse` is slot 6 of `IJsonValueStatics`, `Stringify` 7 and
-/// `GetNumber` 9 of `IJsonValue` -- the calls `examples/interop/windows-winrt`
+/// `GetNumber` 9 of `IJsonValue` -- the calls `tests/interop/windows-winrt`
 /// makes, and the ones a hand-written oracle made first. A binder that
 /// numbered from 0, or skipped a refused method's slot, fails here.
 #[test]
@@ -264,7 +264,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
     );
     // A class's other interface, by the IID the Windows Runtime computes for
     // the instantiation: the value Windows answered `QueryInterface` for, in
-    // `examples/interop/windows-winrt`.
+    // `tests/interop/windows-winrt`.
     assert!(
         module.contains("@ntsQuery D44662BC-DCE3-59A8-9272-4B210F33908B\n     */\n    as_IVector(this: JsonArray): IVectorOfIJsonValue;"),
         "JsonArray is not queried for IVector<IJsonValue> by its computed IID:\n{module}"
@@ -325,7 +325,7 @@ fn winrt_bindings_are_the_metadata_slot_for_slot() {
 /// the delegate's `Invoke` with the instantiation's arguments, and whose IID
 /// is the one computed for `TypedEventHandler<IMemoryBufferReference,
 /// Object>` -- the IID Windows asked the delegate object for, in
-/// `examples/interop/windows-winrt` and in the C oracle before it. An
+/// `tests/interop/windows-winrt` and in the C oracle before it. An
 /// interface's required interfaces are `as_` queries on it too, since every
 /// object implementing it answers them: `reference.as_IClosable()`. A
 /// delegate a method answers is refused.
@@ -430,7 +430,7 @@ fn winrt_events_take_delegates_by_their_computed_iid() {
 /// A struct is a `Struct` of its fields, tagged with the C name the compiler
 /// defines it by, and crosses by value: `ByValue<T>` where a method takes or
 /// answers one -- `BitmapBounds` sixteen bytes, `DateTime` eight, the two
-/// sizes Win64 passes differently, both run in `examples/interop/windows-winrt`.
+/// sizes Win64 passes differently, both run in `tests/interop/windows-winrt`.
 /// A method naming a class this binder refuses is refused with it, rather than
 /// written naming a type nothing declares.
 #[test]
@@ -692,7 +692,7 @@ fn winrt_byte_arrays_are_lent_in_place() {
 /// whose IID is computed from them -- is declared for those arguments:
 /// `IAsyncOperation<StorageFolder>` is `IAsyncOperationOfStorageFolder`,
 /// with the `put_Completed` its generic interface could not declare. The IID
-/// is the one Windows accepted in `examples/interop/windows-winrt`, where a
+/// is the one Windows accepted in `tests/interop/windows-winrt`, where a
 /// wrong one kept the completion from ever arriving.
 #[test]
 fn an_instantiation_declares_the_members_its_arguments_decide() {

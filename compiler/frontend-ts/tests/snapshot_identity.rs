@@ -14,7 +14,7 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 /// `nts frontend --decompose --calls --constants` asks for all three. They shared
 /// one cache key until 2026-09-27, and because the cache lives under the temp
 /// directory it crossed lanes: a `frontend` run made the next build of the same
-/// project compile a **smaller program** -- 16 functions where `examples/math`
+/// project compile a **smaller program** -- 16 functions where `tests/programs/math`
 /// emits 40 -- with nothing refused and nothing printed.
 #[test]
 fn the_questions_asked_are_part_of_the_identity() {

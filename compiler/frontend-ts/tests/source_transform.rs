@@ -19,11 +19,11 @@ fn tsgo() -> Option<Utf8PathBuf> {
 
 fn example(name: &str) -> Utf8PathBuf {
     Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"))
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"))
 }
 
 /// A one-file project under the temporary directory, as its tsconfig.
@@ -125,12 +125,12 @@ fn a_transform_that_rewrites_nothing_leaves_the_snapshot_as_it_was() {
             .unwrap();
         assert!(
             !asked.lock().unwrap().offered.is_empty(),
-            "examples/{name}: the transform was offered no file, so this compared nothing"
+            "tests/programs/{name}: the transform was offered no file, so this compared nothing"
         );
         assert_eq!(
             today.digest().unwrap(),
             through.digest().unwrap(),
-            "examples/{name}: a transform that rewrote nothing changed the snapshot"
+            "tests/programs/{name}: a transform that rewrote nothing changed the snapshot"
         );
     }
 }

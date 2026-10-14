@@ -12,7 +12,7 @@ fn module_initialization_preserves_subjects_and_leaves_safe_readers_unguarded() 
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-binding-read-before-its-declaration/tsconfig.json")
+        .join("../../tests/programs/a-binding-read-before-its-declaration/tsconfig.json")
         .canonicalize_utf8()
         .expect("the example exists");
     let snapshot = TsgoApi::for_compilation(tsgo)

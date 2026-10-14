@@ -1,4 +1,4 @@
-// Defects that neither `examples/` nor `blockers/` can hold, each pinned to what
+// Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
 //
 //   node tooling/conformance/outcomes-check.ts [name ...]
@@ -13,7 +13,7 @@
 //
 // # Why a third fixture kind
 //
-// `examples/` requires agreement with node, so a program that disagrees cannot
+// `tests/programs/` requires agreement with node, so a program that disagrees cannot
 // be committed there without failing the gate for everyone. `blockers/` requires
 // an `// expect:` line naming a refusal, so a program that refuses nothing has no
 // line to write. In one night three lanes found nine defects that fit neither --
@@ -25,7 +25,7 @@
 //
 // # The fixture
 //
-//   tooling/conformance/outcomes/<name>/
+//   tests/outcomes/<name>/
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
 //     src/main.ts     the program; `// run: build` (default) or `// run: check`,
 //                     and with `check`, optionally `// backend: jvm` (or `llvm`)
@@ -98,7 +98,7 @@
 //
 //   holds / reproduces   the record still describes the case
 //   FIXED                it agrees with node now -- loud, because the fixture
-//                        should move to `examples/` or be re-recorded as a guard
+//                        should move to `tests/programs/` or be re-recorded as a guard
 //   REFUSES NOW          hand it to `blockers/` with the printed expect line
 //   REGRESSED            a guard that agreed stopped agreeing
 //   CHANGED              still wrong, differently -- a person decides which way
@@ -554,14 +554,14 @@ function judge(was, now) {
   if (same) return { word: was.category === "agrees" ? "holds" : "reproduces", ok: true, why: `${now.category} -- ${now.nts}${past}` };
   if (was.category === "agrees") return { word: "REGRESSED", ok: false, why: `agreed with node; now ${now.category} -- ${now.nts}` };
   if (now.category === "agrees") {
-    return { word: "FIXED", ok: true, loud: true, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to examples/ or re-record it as a guard` };
+    return { word: "FIXED", ok: true, loud: true, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to tests/programs/ or re-record it as a guard` };
   }
   if (now.category === "refused" && was.category !== "refused") {
     return {
       word: "REFUSES NOW",
       ok: true,
       loud: true,
-      why: `was ${was.category}; hand it to tooling/conformance/blockers/ with\n                // expect: ${now.nts}`,
+      why: `was ${was.category}; hand it to tests/refusals/ with\n                // expect: ${now.nts}`,
     };
   }
   if (was.category === now.category && textOf(was) === textOf(now)) {
@@ -578,7 +578,7 @@ function judge(was, now) {
 // integrity passes over it: run here, on the same pinned compiler, and any
 // violation it does not already know is printed as owed.
 if (recording && chosen.length > 0) {
-  const recorded = chosen.map((name) => join("tooling/conformance/outcomes", name));
+  const recorded = chosen.map((name) => join("tests/outcomes", name));
   const check = spawnSync("node", [join(HERE, "integrity.ts"), ...recorded], {
     cwd: ROOT,
     encoding: "utf8",

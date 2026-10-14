@@ -11,7 +11,7 @@
 // That matters because of what the other instruments cannot see. The test262
 // census ranks **refusals**, so a construct that compiles and returns the wrong
 // number is invisible to it -- it is a `strict-pass` that happens to fail an
-// assertion, or worse, one that passes anyway. The gate compares `examples/`,
+// assertion, or worse, one that passes anyway. The gate compares `tests/programs/`,
 // which are programs a person thought to write. On 2026-09-20 five wrong
 // answers were found in one night by hand-writing ten-line probes, one area at
 // a time: object spread dropping a getter, six enumerations dropping one, a
@@ -285,7 +285,7 @@ function boolExpr(depth) {
 function arrayExpr(depth) {
   // **At least one element.** A generated `[]` refuses as "an array literal
   // that is not an array" --- a real refusal, and one already covered by
-  // `examples/a-default-over-an-empty-source` and its blockers. Generating it
+  // `tests/programs/a-default-over-an-empty-source` and its blockers. Generating it
   // here spent most of a run's refusal budget re-finding it: 16 of the 20
   // refused groups across three seeds.
   const items = () =>

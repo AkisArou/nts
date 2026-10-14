@@ -473,7 +473,7 @@ fn escaped(escapes: &mut Escapes, func: &Func, value: ValueId) {
 /// is released, and a release above zero asks the collector.
 ///
 /// Answering `true` for an object as well was the first version of this, and
-/// `tooling/memory/cases/cycle` refuted it in one line: two objects that point
+/// `tests/memory/cycle` refuted it in one line: two objects that point
 /// at each other, both in the frame, both immortal, neither ever buffered --
 /// and eighteen heap allocations appeared where the case says zero.
 ///
@@ -1193,7 +1193,7 @@ fn bodies_reached<'a>(
 /// `push(list, new Node())` in a function that was handed the list is a fresh
 /// node in a frame and a list pointing into it after the frame is gone. That is
 /// what `escape` refused to do by escaping the argument outright, and leaving
-/// it out here was a segmentation fault in `examples/cycles` under LLVM and a
+/// it out here was a segmentation fault in `tests/programs/cycles` under LLVM and a
 /// program the C backend happened to survive.
 ///
 /// Is it one call reaching one body? A dispatch is decided by a receiver this
@@ -2079,7 +2079,7 @@ mod tests {
     /// which is `what_a_frame_local_container_holds_stays_in_the_frame` above.
     ///
     /// The program this came from segfaulted under `NTS_RC_NAIVE` and is now
-    /// `tooling/memory/cases/cyclic-array`, which holds the cost still.
+    /// `tests/memory/cyclic-array`, which holds the cost still.
     #[test]
     fn what_a_bufferable_container_holds_cannot_stay_in_the_frame() {
         let program = Program {

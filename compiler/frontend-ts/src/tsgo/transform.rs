@@ -226,7 +226,7 @@ pub(super) fn apply(
     // builds until `react: { compiler: true }` is added to its config -- and it
     // survived this long because a transform is what calls `update_files`, so it
     // takes a project with **both** a generator and a transform to reach. Nothing
-    // in `examples/` has both, and the GIR types were project-local until
+    // in `tests/programs/` has both, and the GIR types were project-local until
     // `6178f7d75` moved them into the store.
     let mut current = opened;
     current.snapshot = client.update_files(&paths)?.snapshot;

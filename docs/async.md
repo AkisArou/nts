@@ -411,7 +411,7 @@ proof, and calls the named function with the handle and the resolving
 functions. A resolving function settles at the type it delivers, which is what
 lets a counted handle arrive boxed, where a promise of one keeps it.
 
-`examples/an-await-of-a-thenable` pins the tick: awaiting a thenable resumes one
+`tests/programs/an-await-of-a-thenable` pins the tick: awaiting a thenable resumes one
 turn after awaiting a promise would, and running the job inline agrees on every
 other arm and fails that one.
 
@@ -623,7 +623,7 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
 
    Timers are not observable from TypeScript yet. A timer's effect reaches a
    program only through a promise its callback settles, and `new Promise` is
-   not implemented -- so `examples/timers` checks that the lowering compiles,
+   not implemented -- so `tests/programs/timers` checks that the lowering compiles,
    links and runs, and `runtime/c/tests/timers.c` checks what it does, against
    a closure built by hand in the shape the compiler emits.
 
@@ -633,7 +633,7 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
    -- an external callee, which reachability read as "not in this program, so
    nothing to keep". The body was pruned, the layout's entry went with it, and
    the table was emitted as a null pointer. Nothing failed, because every timer
-   in `examples/timers` is cancelled before it can fire, so the call through the
+   in `tests/programs/timers` is cancelled before it can fire, so the call through the
    null was never made. That is what a rule with no case that executes it looks
    like from the outside: a passing suite.
 
@@ -657,7 +657,7 @@ wrong for the newcomer: `Convert` returning `TOP` in the facts analysis,
     -- and it is why `--main` also makes module evaluation the *reachability*
     root rather than the exports. Nothing outside an executable can call them.
 
-    `examples/standalone` still has two timers pending when evaluation
+    `tests/programs/standalone` still has two timers pending when evaluation
     finishes, and the assertion is that the binary terminates and exits zero.
     That is not weak: a loop that gave up early exits before they run, and one
     with an idle handle it forgot to stop, or a referenced handle nothing ever

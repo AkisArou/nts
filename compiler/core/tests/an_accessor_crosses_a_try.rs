@@ -32,11 +32,11 @@ const EXAMPLE: &str = "a-throwing-accessor-inside-a-try";
 fn lowered() -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(EXAMPLE)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{EXAMPLE} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{EXAMPLE} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -116,7 +116,7 @@ fn a_quiet_accessor_is_not_refused_for_want_of_a_copy() {
 ///     is the JVM lane's `SHADOWED`, a class running its ancestor's body with a happy
 ///     verifier and no `NoSuchMethodError`.
 ///
-/// `examples/a-throwing-accessor-inside-a-try` carries the same three as **answers**,
+/// `tests/programs/a-throwing-accessor-inside-a-try` carries the same three as **answers**,
 /// which is the half this cannot do: a wrong dispatch here is a plausible number.
 #[test]
 fn an_overridden_accessor_dispatches_at_its_own_slot() {

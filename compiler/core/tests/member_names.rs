@@ -141,12 +141,12 @@ fn a_setter_returns_nothing() {
 /// `o.x` and `o["x"]` reach one member, and `o[0]()` is a call and not an index.
 #[test]
 fn brackets_at_the_use_site_reach_the_same_member() {
-    let Some(lowered) = lower_at("../../examples/computed-members") else {
+    let Some(lowered) = lower_at("../../tests/programs/computed-members") else {
         return;
     };
     assert!(
         lowered.diagnostics.is_empty(),
-        "examples/computed-members should lower clean: {:?}",
+        "tests/programs/computed-members should lower clean: {:?}",
         messages(&lowered),
     );
     let accessors = named(&lowered, "accessors").expect("`accessors` lowers");
@@ -204,7 +204,7 @@ fn a_private_name_does_not_swallow_the_members_after_it() {
 /// second one refuses.
 #[test]
 fn an_overridden_accessor_is_dispatched() {
-    let Some(lowered) = lower_at("../../examples/accessors") else {
+    let Some(lowered) = lower_at("../../tests/programs/accessors") else {
         return;
     };
     let virtuals: Vec<String> = lowered

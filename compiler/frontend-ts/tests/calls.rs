@@ -12,9 +12,9 @@ use nts_semantic_schema::{NodeId, SemanticSnapshot, TypeKind};
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/calls/tsconfig.json")
+        .join("../../tests/programs/calls/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/calls fixture is checked in");
+        .expect("tests/programs/calls fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_call_resolution(Budget::DEFAULT)
@@ -128,7 +128,7 @@ fn tagged_templates_resolve_through_the_same_call_target_table() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-tagged-template/tsconfig.json");
+        .join("../../tests/programs/a-tagged-template/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot succeeds");
@@ -188,9 +188,9 @@ fn dynamic_import_calls_the_import_keyword() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-dynamic-import/tsconfig.json")
+        .join("../../tests/programs/a-dynamic-import/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/a-dynamic-import fixture is checked in");
+        .expect("tests/programs/a-dynamic-import fixture is checked in");
     // Decomposed and call-resolved, as a build takes it: a bare snapshot leaves
     // the promise's type arguments out, and lowering never sees that one.
     let snapshot = TsgoApi::new(tsgo)

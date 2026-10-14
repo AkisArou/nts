@@ -47,7 +47,7 @@ mkdir -p "$work/src"
 cp "$declarations" "$work/src/main.ts"
 cat > "$work/tsconfig.json" <<JSON
 {
-  "extends": "$root/tooling/conformance/blockers/tsconfig.base.json",
+  "extends": "$root/tests/refusals/tsconfig.base.json",
   "compilerOptions": { "rootDir": "." }
 }
 JSON

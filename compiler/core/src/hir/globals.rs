@@ -12,7 +12,7 @@
 //! const mix = (x: number): number => (((x * 2654435761) ^ (x >>> 3)) + step) | 0;
 //! ```
 //!
-//! `benches/cases/module-closures` runs that 4096 times and was **4.83x
+//! `benchmarks/cases/module-closures` runs that 4096 times and was **4.83x
 //! hand-written C++ and 2.15x node**. Writing `step` as a `const` that folds
 //! instead — same arithmetic, same closures, same globals — was 0.99x C++. The
 //! whole gap was one `static double step` where C has `std::int32_t`: the body
@@ -20,7 +20,7 @@
 //! call site converts around it.
 //!
 //! The contrast that names the cause is inside one program. In
-//! `benches/cases/closures` the same variable is captured by a closure that
+//! `benchmarks/cases/closures` the same variable is captured by a closure that
 //! stays in the frame, so it is a *field*, so `hir::fields` narrows it and the
 //! loop collapses. Move it to module scope and nothing looks at it. Same value,
 //! same writes, same reads; only the kind of storage differs.
@@ -35,7 +35,7 @@
 //! [`super::Global::initial`] is joined in as the starting value, because a
 //! read can happen before `module#init` runs — a cycle crossed by a function
 //! reads a global whose initializer has not executed, which is the whole
-//! subject of `examples/module-cycle`. It is the value the declaration starts
+//! subject of `tests/programs/module-cycle`. It is the value the declaration starts
 //! at, so it is a store like any other.
 //!
 //! # Where it stops
@@ -67,7 +67,7 @@ pub type GlobalFacts = FxHashMap<u32, Facts>;
 ///
 /// The facts are the product and the width below is a *consequence* of them,
 /// which is the order that matters. Narrowing the storage alone bought almost
-/// nothing when it was tried the other way round -- `benches/cases/module-closures`
+/// nothing when it was tried the other way round -- `benchmarks/cases/module-closures`
 /// went 17.84us to 16.05us against C++'s 2.30us -- because the width is not what
 /// the arithmetic is waiting on. A `GlobalGet` with no facts is TOP, and a TOP in
 /// a loop makes every operation after it floating point whatever the slot holds.

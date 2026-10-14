@@ -837,7 +837,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // **Passing a concrete view where this is declared costs nothing.**
         // Reference assignment on the JVM is covariant, so a `NtsViewU8` goes
         // into a parameter or field of this type with no `checkcast` and no
-        // conversion, which is the same fact `examples/upcast-to-base` turns
+        // conversion, which is the same fact `tests/programs/upcast-to-base` turns
         // on. The middle end spells the round trip back out as
         // `Erase`/`Unerase` because both are one `NtsView *` on the other
         // lanes; here both are one reference and the pair is equally free.
@@ -1259,7 +1259,7 @@ mod tests {
     /// And so its array is a reference array, bare or growable: without the
     /// `HirType::BigInt` arm in `descriptor_of_element` every `bigint[]` in a
     /// program that grows an array was "a return type with no
-    /// representation" (`examples/an-array-of-bigints`).
+    /// representation" (`tests/programs/an-array-of-bigints`).
     #[test]
     fn an_array_of_bigints_is_a_reference_array() {
         let array = HirType::Managed(ManagedType::Array(Box::new(HirType::BigInt)));

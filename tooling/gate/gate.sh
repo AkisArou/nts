@@ -28,7 +28,7 @@ export NTS_TSGO
 # One example, named on the command line: run it plainly so its output is the
 # point rather than a tally.
 if [ $# -gt 0 ]; then
-  exec "${NTS_BIN:-./target/release/nts}" check "examples/$1/tsconfig.json"
+  exec "${NTS_BIN:-./target/release/nts}" check "tests/programs/$1/tsconfig.json"
 fi
 
 # Capped, not `nproc`. Every worker starts a frontend of its own, and enough of
@@ -47,7 +47,7 @@ trap 'rm -f "$results"' EXIT
 # Inline in `sh -c` rather than a shell function: `export -f` is a bashism and
 # this runs under whatever /bin/sh is.
 # Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-ls examples/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
+ls tests/programs/*/tsconfig.json | xargs -P "$jobs" -n 1 "$root/tooling/gate/token.sh" sh -c '
   d=$1
   n=$(basename "$(dirname "$d")")
   case "$n" in

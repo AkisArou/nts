@@ -110,8 +110,8 @@ export class ConnectionPool {
    * refused for the same reason `new Promise(r => { f = r })` is: a settler is a
    * settle with the promise as receiver, not a function object. Holding the
    * capability instead works because in this representation it *is* the promise
-   * -- see `examples/promise-with-resolvers` and
-   * `examples/a-capability-settled-through-an-optional-link`, which already keeps
+   * -- see `tests/programs/promise-with-resolvers` and
+   * `tests/programs/a-capability-settled-through-an-optional-link`, which already keeps
    * one in a field.
    */
   private drainCapability: PromiseWithResolvers<void> | null = null;

@@ -74,7 +74,7 @@ pub fn simplify(func: &mut Func) -> usize {
 /// add as `u8 -> f64 -> i32`: `uitofp i8 ... to double` and `fptosi double ...
 /// to i32` around a value that was already an integer.
 ///
-/// `benches/cases/bytes` says in its own comment that "the byte that comes out
+/// `benchmarks/cases/bytes` says in its own comment that "the byte that comes out
 /// of it is already an integer, so the arithmetic after it stays integer
 /// without anything having to prove it". It did not.
 ///
@@ -436,7 +436,7 @@ pub fn substitute_terminator(terminator: &mut super::Terminator, of: impl Fn(Val
 /// # Why this is worth a pass when clang would do it
 ///
 /// Because two of the three backends are not clang, and the one that is does
-/// not see this shape. The JVM lane found it in `benches/common/awfy-som.ts`,
+/// not see this shape. The JVM lane found it in `benchmarks/common/awfy-som.ts`,
 /// which is the same source as `som/Random.java` and compiles to more dex:
 ///
 /// ```text
@@ -502,13 +502,13 @@ pub(super) fn forward_stores(func: &mut Func) -> usize {
                     // double where an integer was wanted.
                     //
                     // Measured rather than assumed -- it is why
-                    // `examples/a-field-read-after-its-own-write` has arms that
+                    // `tests/programs/a-field-read-after-its-own-write` has arms that
                     // keep their load for a reason other than aliasing, and
                     // that example says which. Inserting the conversion instead
                     // is a larger change with a smaller motivating case.
                     // **Scalars only, and a managed reference is the case this
                     // exists to stay out of.** A load of a reference is not
-                    // merely a load: `tooling/memory/cases/subclass-field` says
+                    // merely a load: `tests/memory/subclass-field` says
                     // in its own comment that the read of `b.left` *takes* --
                     // the slot is overwritten before anything else reaches it,
                     // so the reference moves out rather than being copied and

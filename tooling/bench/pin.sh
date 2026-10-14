@@ -7,7 +7,7 @@
 #
 # # The failure this exists for, which cost an afternoon
 #
-# On 2026-09-08 the JVM lane read `benches/cases/absences` out of this worktree
+# On 2026-09-08 the JVM lane read `benchmarks/cases/absences` out of this worktree
 # at **2.66x** and spent a profile and two measurements on it. The row is
 # **1.27x**. The worktree was pinned at `f071672b` from 08:41, an ancestor of a
 # fix that had landed that morning, so every emission under `target/bench` was

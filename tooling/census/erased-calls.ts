@@ -1,7 +1,7 @@
 // Every call of a function value reached through an erased slot, and the
 // signatures they call it at.
 //
-//   node tooling/census/erased-calls.ts [project ...]   (default: the runtime, runtime/react, examples/, outcomes)
+//   node tooling/census/erased-calls.ts [project ...]   (default: the runtime, runtime/react, tests/programs/, outcomes)
 //   node tooling/census/erased-calls.ts --test262 <rows> ...   and every test262 file those census rows saw reach lowering
 //   node tooling/census/erased-calls.ts --origins [project ...]  and where each site's value was erased
 //   node tooling/census/erased-calls.ts --every [project ...]    and every call through a function value,

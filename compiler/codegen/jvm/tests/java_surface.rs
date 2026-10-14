@@ -24,7 +24,7 @@ fn repository() -> PathBuf {
     from.canonicalize().unwrap_or(from)
 }
 
-/// Emit `examples/interop/ts-from-java`, which exists to be read from Java.
+/// Emit `tests/interop/ts-from-java`, which exists to be read from Java.
 /// The program both helpers below are about, prepared once.
 ///
 /// Shared rather than duplicated because the two answers must be about the same
@@ -42,7 +42,7 @@ fn prepared() -> Option<hir::Program> {
     }
     let tsconfig = Utf8PathBuf::from_path_buf(
         repository()
-            .join("examples/interop/ts-from-java/tsconfig.json")
+            .join("tests/interop/ts-from-java/tsconfig.json")
             .canonicalize()
             .expect("the project is checked in"),
     )

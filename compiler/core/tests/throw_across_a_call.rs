@@ -34,7 +34,7 @@
 //! `throw` and its handler in one function, a call to a callee that cannot
 //! raise, and an `await` of a rejecting async function, whose rejection is a
 //! real edge into the handler. Each is one arm of
-//! `examples/a-throw-that-stays-in-its-function` and each is asserted here by
+//! `tests/programs/a-throw-that-stays-in-its-function` and each is asserted here by
 //! name.
 //!
 //! Skips only when `tsgo` is not built.
@@ -50,11 +50,11 @@ const EXAMPLE: &str = "a-throw-that-stays-in-its-function";
 fn lowered() -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(EXAMPLE)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{EXAMPLE} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{EXAMPLE} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -221,7 +221,7 @@ fn a_throw_within_one_function_still_compiles() {
 }
 
 /// A callee that cannot raise. Refusing on "is it compiled code" alone cost
-/// `examples/array-buffer` six tests, which is what the `throwing` set exists
+/// `tests/programs/array-buffer` six tests, which is what the `throwing` set exists
 /// to prevent.
 #[test]
 fn a_call_that_cannot_throw_still_compiles() {
@@ -232,7 +232,7 @@ fn a_call_that_cannot_throw_still_compiles() {
 }
 
 /// An `async` callee. A `throw` in one rejects the promise it already returned,
-/// and `examples/async-catch` is eight functions proving that edge is wired —
+/// and `tests/programs/async-catch` is eight functions proving that edge is wired —
 /// admitting async callees to the `throwing` set refused all eight.
 #[test]
 fn awaiting_a_rejection_still_compiles() {
@@ -294,7 +294,7 @@ fn an_overloaded_callee_names_the_implementations_copy() {
 /// merges the duplicated constants into one address and the dev profile does not, so
 /// the compiler said "this is a closure call" for the gate and "it is not" for its
 /// own test suite. Every release-profile instrument -- `example-refusals`, `agree`,
-/// the censuses -- was blind to it by construction, and nothing in `examples/` had an
+/// the censuses -- was blind to it by construction, and nothing in `tests/programs/` had an
 /// IIFE *and* an assertion here until now.
 #[test]
 fn a_member_shaped_callee_is_not_a_function_held_as_a_value() {

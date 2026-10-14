@@ -11,9 +11,9 @@ use nts_semantic_schema::SemanticSnapshot;
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/imports/tsconfig.json")
+        .join("../../tests/programs/imports/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/imports fixture is checked in");
+        .expect("tests/programs/imports fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_call_resolution(Budget::DEFAULT)
@@ -123,9 +123,9 @@ fn an_import_records_the_symbol_it_aliases() {
     let tsgo = nts_frontend_ts::tsgo::locate();
     let Some(tsgo) = tsgo else { return };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/module-bindings/tsconfig.json")
+        .join("../../tests/programs/module-bindings/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/module-bindings fixture is checked in");
+        .expect("tests/programs/module-bindings fixture is checked in");
     let snapshot = TsgoApi::new(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");

@@ -717,7 +717,7 @@ struct Leaning<'a, 'f> {
     /// on the heap and its store is a retain of an immortal header, so the
     /// tuple's fields were given up at the tuple's last use while the array
     /// still reached it: `for (const [a, [b, c]] of rows)` read a freed inner
-    /// array (examples/a-for-of-head-that-destructures under RC).
+    /// array (tests/programs/a-for-of-head-that-destructures under RC).
     holds: rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     memo: rustc_hash::FxHashMap<ValueId, std::rc::Rc<[ValueId]>>,
 }
@@ -2082,7 +2082,7 @@ mod tests {
     /// -- so nothing on the platform's side holds it uncounted, and it is given
     /// back after its last use, as ARC gives back a temporary at the end of its
     /// statement. Held to the end instead, a map's entry deleted before `later`
-    /// was not the last holder (examples/interop/gtk-values, `temporary`).
+    /// was not the last holder (tests/interop/gtk-values, `temporary`).
     #[test]
     fn a_foreign_object_only_erased_is_released_after_its_last_use() {
         let (releases, later) = erased_temporary(0);

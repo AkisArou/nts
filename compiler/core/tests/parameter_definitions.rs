@@ -12,7 +12,7 @@ fn pattern_parameters_keep_narrowing_guards_and_ownership_on_actual_inputs() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-pattern-parameter-before-scalars/tsconfig.json");
+        .join("../../tests/programs/a-pattern-parameter-before-scalars/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(frontend)
         .snapshot(&config)
         .expect("snapshot");

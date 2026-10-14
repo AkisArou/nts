@@ -1762,7 +1762,7 @@ impl Emitter<'_> {
                 // reads as a note about the tag, and is also a note about the
                 // payload. `NtsValue instanceof Circle` is always false.
                 //
-                // Which is exactly what it was. `benches/cases/instanceof`
+                // Which is exactly what it was. `benchmarks/cases/instanceof`
                 // returned 3 per iteration where node returns an average of 2:
                 // every test false, every `else` taken, and a plausible number
                 // out the end. The benchmark's cross-variant checksum caught
@@ -1954,7 +1954,7 @@ impl Emitter<'_> {
             // `LLeaf;` accepts a `Bigger` off the stack with no `checkcast` and
             // no widening, because reference assignment on the JVM is
             // covariant -- so refusing it was this backend being stricter than
-            // its own instruction set. `examples/upcast-to-base` is exactly
+            // its own instruction set. `tests/programs/upcast-to-base` is exactly
             // that store and it was refused for a reason that was never true
             // of it, having been written about arrays.
             //
@@ -2072,7 +2072,7 @@ impl Emitter<'_> {
     /// `NtsValue`, which is not a supertype of anything -- it *contains* the
     /// reference. Casting it is a `ClassCastException` at the first call, and
     /// it was: `NtsArrayL.atValue` returning an `NtsValue` followed by
-    /// `checkcast java/lang/String`, seventeen times in `examples/callbacks`.
+    /// `checkcast java/lang/String`, seventeen times in `tests/programs/callbacks`.
     ///
     /// The unboxing here is the same sequence `Unerase` already emits for a
     /// boxed value, which is the argument for it being right: the two paths
@@ -3730,7 +3730,7 @@ impl Emitter<'_> {
         // closure's own type. `tags::of_prepared` is the one answer for both,
         // from the closure ids and `program.signature_faces`. Flattening every
         // managed reference to `ofObject` threw the first away:
-        // `examples/absent` computed 42 where node computes 45, because
+        // `tests/programs/absent` computed 42 where node computes 45, because
         // `typeof f === "function"` was false for an arrow.
         //
         // The tag goes on the stack *before* the value, because `ofTagged`
@@ -3924,7 +3924,7 @@ impl Emitter<'_> {
     /// values gets a hole -- `new Array(n)`, a longer `length`, a growable
     /// array's spare capacity -- reaches one of the three loads that call
     /// this, so the answer is given at the read rather than at each.
-    /// (`examples/an-erased-array-read-keeps-missing-elements`, `hole`.)
+    /// (`tests/programs/an-erased-array-read-keeps-missing-elements`, `hole`.)
     fn hole_reads_undefined(
         code: &mut Code,
         pool: &mut Pool,
@@ -5560,7 +5560,7 @@ impl Emitter<'_> {
                 // is held in an `int` slot, raw, because the JVM has no
                 // unsigned type -- so every value above 2^31 is a negative
                 // `int` and `irem` answers with the sign of a dividend that has
-                // no sign. `benches/cases/absences` reached it with `i % 3`
+                // no sign. `benchmarks/cases/absences` reached it with `i % 3`
                 // where the counter passes 2^31, and the C lane agreed with
                 // node because C has the type.
                 let unsigned = matches!(self.ty(value), HirType::Int { signed: false, .. });
@@ -5757,7 +5757,7 @@ impl Emitter<'_> {
         // Two ends again: what the *instruction* operates on and what the
         // middle end chose to keep the answer in. They agree in most prepared
         // HIR and they do not always -- `Math.abs` of an `i32` arrives with an
-        // `i64` result in `examples/mathops`, and taking the signature from the
+        // `i64` result in `tests/programs/mathops`, and taking the signature from the
         // result called `Math.abs(J)J` with an `int` on the stack.
         //
         // So each arm names the kind it works in, the operand is pushed as
@@ -5774,7 +5774,7 @@ impl Emitter<'_> {
             // unchanged -- `Math.abs` is documented to, and it is the one
             // answer that is a plausible number rather than a crash.
             //
-            // `examples/mathops` reported -32768 where node says 32768.
+            // `tests/programs/mathops` reported -32768 where node says 32768.
             // A bigint has no `ineg`; negation is a call like every other
             // operation on one.
             UnOp::Neg if matches!(result, HirType::BigInt) => {
@@ -6412,7 +6412,7 @@ impl Emitter<'_> {
                 // did not, so a value the program could not license became a
                 // `VerifyError` at class load instead of a refusal by name.
                 //
-                // `examples/function-in-an-object-literal` is the shape:
+                // `tests/programs/function-in-an-object-literal` is the shape:
                 // `const table = { doubled }` gives `Type5.doubled` the
                 // *function type* as its descriptor and stores the *closure
                 // class* into it, and with one closure of that signature
@@ -6977,7 +6977,7 @@ impl Emitter<'_> {
                 //   so this emits `checkcast NtsValue` against a `double` on
                 //   the stack -- which the verifier reports as `Type
                 //   double_2nd is not assignable to 'java/lang/Object'` at the
-                //   `checkcast`, and which is how `examples/arrays`' `nth`
+                //   `checkcast`, and which is how `tests/programs/arrays`' `nth`
                 //   failed.
                 //
                 // Both were found the same way: read the listing at the offset
@@ -7431,7 +7431,7 @@ impl Emitter<'_> {
         // these types; the class file has to as well, and where `Layout.base`
         // does not say so the JVM refuses the class rather than the call.
         //
-        // This is what `examples/absent` hits: a closure whose own layout is
+        // This is what `tests/programs/absent` hits: a closure whose own layout is
         // `Closure3` passed where the *function type's* layout `Fn109` is
         // declared, with no base relating them because a closure has no
         // `extends` in the source.
@@ -7500,7 +7500,7 @@ impl Emitter<'_> {
                     Some(value) => {
                         // **A return is an assignment to the declared return
                         // type, and it was the one place this was not checked.**
-                        // `examples/declared-wider` returns an object allocated
+                        // `tests/programs/declared-wider` returns an object allocated
                         // with the base's fields from a function declaring the
                         // wider type, and the JVM answered `VerifyError: Bad
                         // return type` at link -- correct, and a stack trace

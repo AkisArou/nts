@@ -42,7 +42,7 @@ export function notPublished(n: number): number { return n - 1; }
 /// **Sixteen tests here skipped in silence**, every one written on 2026-09-16,
 /// in a file whose older tests all print a reason. A suite goes green over
 /// tooling that was never installed and the count says `ok` either way --
-/// `examples/interop/java-from-ts/build.sh` states the rule: "a skip that
+/// `tests/interop/java-from-ts/build.sh` states the rule: "a skip that
 /// prints nothing is indistinguishable from a pass".
 ///
 /// **And printing it is not enough, which is the part that took a measurement.**
@@ -293,7 +293,7 @@ export default defineConfig({
 /// program's own object, so the member a consumer pulls in for `total` brings
 /// it. A heap array built by module evaluation is the state, because a constant
 /// would fold and answer whether or not the constructor ran
-/// (`examples/interop/library-module-state` is the C arm of the same claim).
+/// (`tests/interop/library-module-state` is the C arm of the same claim).
 #[test]
 fn an_llvm_static_library_evaluates_its_module_when_linked() {
     if !available() {
@@ -470,7 +470,7 @@ int main(void) { printf("%s\n", label ? "initialised" : "NULL"); return label ? 
 
 /// An executable links its host and terminates.
 ///
-/// **A compiled program has nothing to print with**, which `examples/standalone`
+/// **A compiled program has nothing to print with**, which `tests/programs/standalone`
 /// states and is why the assertion is termination *and* exit zero. The two
 /// pending timers are the point: a program that exits before they run has a loop
 /// that gave up early, and one that never exits has a handle nothing will close.
@@ -984,7 +984,7 @@ export default defineConfig({
 /// when what `nts` believes about a struct disagrees with them. A wrong offset
 /// is a silently wrong answer, not a link error.
 ///
-/// The fixture is `examples/interop/native-uname`'s own binding, because a
+/// The fixture is `tests/interop/native-uname`'s own binding, because a
 /// hand-written one would be testing something `nts bind-c` does not produce.
 #[test]
 fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
@@ -999,7 +999,7 @@ fn a_binding_that_disagrees_with_the_headers_stops_the_build() {
         .join("../..")
         .canonicalize()
         .expect("the repository root");
-    let source = repo.join("examples/interop/native-uname");
+    let source = repo.join("tests/interop/native-uname");
     if !source.join("types/utsname.d.ts").exists() {
         eprintln!("skipping: the native-uname fixture is not here");
         return;
@@ -1313,7 +1313,7 @@ export default defineConfig({
 
 /// Objects are reused between builds, and not when a header they read changed.
 ///
-/// **Measured before built.** A build of `examples/library` was 1.10s, of which
+/// **Measured before built.** A build of `tests/programs/library` was 1.10s, of which
 /// compiling `nts_runtime.c` was 0.96s -- the emit 0.06, the config evaluation
 /// 0.02, the program's own compile 0.02, the link 0.02. Caching the runtime was
 /// the whole problem, and a general action cache would have been the wrong
@@ -1894,7 +1894,7 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
     let project = fixture("build-apk-fragment", ANDROID_APP);
     // A package beside the app, with a config of its own. `config_roots` is
     // every config above a file in the program, so importing one file from it
-    // is what puts it in scope -- the same mechanism `examples/workspace` uses.
+    // is what puts it in scope -- the same mechanism `tests/workspace` uses.
     let pkg = project.join("pkg");
     std::fs::create_dir_all(pkg.join("manifests")).expect("package dir");
     std::fs::write(
@@ -1993,7 +1993,7 @@ fn an_apk_refuses_to_silently_drop_a_package_fragment() {
 /// module from a package's header failed with ``no complete definition of
 /// `Uint32` in these headers`` -- a correct sentence about a symbol the reader
 /// never asked for, in a module their package was never supposed to declare.
-/// `examples/workspace/apps/node-brownfield` sat behind it, and the thing to do
+/// `tests/workspace/apps/node-brownfield` sat behind it, and the thing to do
 /// was add one path to a tsconfig. The scalar library is the same mistake, and
 /// was TypeScript's bare `Cannot find module` until it said so too.
 #[test]
@@ -2453,7 +2453,7 @@ fn a_macos_target_without_a_sysroot_names_the_script() {
 
 /// A macOS application with no `id` is refused before anything is written:
 /// its bundle identifier is not something to invent. The bundle itself runs
-/// on the Mac, in `examples/interop/macos-window`'s application arm.
+/// on the Mac, in `tests/interop/macos-window`'s application arm.
 #[test]
 fn a_macos_application_without_an_id_is_refused_before_writing() {
     if !available() || cfg!(target_os = "macos") {
@@ -2493,7 +2493,7 @@ export default defineConfig({
 /// **Three spellings of one request, and one of them did something else.** A
 /// directory already resolved to the `tsconfig.json` in it; naming the config
 /// file -- the one a person has open -- made the *config* the program, and
-/// `examples/library` failed with four `TS5097`s about `@nts/config`'s
+/// `tests/programs/library` failed with four `TS5097`s about `@nts/config`'s
 /// `package.json`. The sources were fine and the other two spellings built it.
 ///
 /// All three are asserted together, because the bug is a disagreement between
@@ -2797,9 +2797,9 @@ export default defineConfig({
 
 /// The workspace fixture builds, which nothing in the tree checked.
 ///
-/// **`examples/workspace` is the config language's only multi-package fixture
+/// **`tests/workspace` is the config language's only multi-package fixture
 /// and it had no observer.** The gate's `config` step typechecks its nineteen
-/// configs and builds none of them, which is how `examples/library` carried a
+/// configs and builds none of them, which is how `tests/programs/library` carried a
 /// broken `nts build` invocation for an unknown length of time -- and how the
 /// APK path, cross-compilation and the `integrate` hooks would rot next, since
 /// every one of them is exercised only here.
@@ -2813,9 +2813,9 @@ fn the_workspace_fixture_still_builds() {
         skip("node, the tsgo frontend, clang and nm");
         return;
     }
-    let apps = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/workspace/apps");
+    let apps = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/workspace/apps");
     if !apps.is_dir() {
-        skip("examples/workspace to be present");
+        skip("tests/workspace to be present");
         return;
     }
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("workspace-build");
@@ -3052,7 +3052,7 @@ export default defineConfig({
 /// itself.
 ///
 /// **No fixture violates a claim, which is why this is a test and not an
-/// example.** `examples/workspace` is careful: `apps/linux` says "deliberately
+/// example.** `tests/workspace` is careful: `apps/linux` says "deliberately
 /// not biometrics" and `apps/macos` says "no biometrics -- `biometrics`
 /// declares", so every app respects every claim and the check would never have
 /// fired there. A constraint nothing violates is a constraint nothing tests.
@@ -4581,7 +4581,7 @@ fn a_kind_belonging_to_the_other_backend_says_which_backend() {
 /// than a duration that would flake.
 ///
 /// One, because the fixture has one config. With memoisation disabled this
-/// fixture spawns several, and `examples/workspace/apps/linux` goes from 3 to
+/// fixture spawns several, and `tests/workspace/apps/linux` goes from 3 to
 /// 10 -- checked by disabling it.
 #[test]
 fn the_config_is_evaluated_once_however_often_it_is_asked() {

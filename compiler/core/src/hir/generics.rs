@@ -121,7 +121,7 @@ pub struct Instantiation {
     /// does not carry `2`, and `fixed_arity_positions` had nothing to recover it
     /// from. So a spread of `this.args` could not be expanded and the callee got
     /// one erased array where its uniform entry wanted two values --
-    /// `examples/a-rest-tuple-stored-in-a-field-and-spread`'s `uniform` arm, which
+    /// `tests/programs/a-rest-tuple-stored-in-a-field-and-spread`'s `uniform` arm, which
     /// was an `outcomes` record until this line existed.
     ///
     /// One line beside the substitution, at the one place that holds the

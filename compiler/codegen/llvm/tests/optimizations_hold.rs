@@ -14,7 +14,7 @@
 //! # Why the differential does not already cover this
 //!
 //! It proves the answer is right, which is a different question from whether
-//! the optimization still fires. `benches/cases/elementwise` could go back to
+//! the optimization still fires. `benchmarks/cases/elementwise` could go back to
 //! 4.95x hand-written C++ with every existing test green -- the numbers are
 //! timings, and nobody fails a build on a timing.
 //!
@@ -91,7 +91,7 @@ fn optimized(case: &str, module: &str) -> Option<String> {
 ///
 /// Left a `double`, every index is an `fptoui` of a floating-point induction
 /// variable, which LLVM's scalar evolution cannot model.
-/// `benches/cases/elementwise` was 4.95x hand-written C++ and is 1.25x.
+/// `benchmarks/cases/elementwise` was 4.95x hand-written C++ and is 1.25x.
 ///
 /// # Why `i32` specifically, and why this used to accept either
 ///

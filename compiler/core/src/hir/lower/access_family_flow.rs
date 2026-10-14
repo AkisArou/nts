@@ -182,7 +182,7 @@ impl<'p, 's> Graph<'p, 's> {
             // `unknown`, the narrowed `value` read nothing from it, and
             // `value as Named` licensed no family -- `Named`'s slot was read
             // straight off a `Context`, a `string` taken for an erased value
-            // (`tooling/conformance/outcomes/a-string-field-read-through-a-cast-of-unknown`).
+            // (`tests/outcomes/a-string-field-read-through-a-cast-of-unknown`).
             if identity_type(&target_kind.kind) || self.probe.is_the_object_type(target) {
                 let (from, to) = (Self::index(source), Self::index(target));
                 if from != to {

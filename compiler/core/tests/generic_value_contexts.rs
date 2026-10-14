@@ -19,7 +19,7 @@ const _: () = assert!(hir::generics::VALUE_CONTEXT_CAP < 11);
 fn programs(example: &str) -> Option<(hir::Program, hir::Program)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../examples/{example}/tsconfig.json"));
+        .join(format!("../../tests/programs/{example}/tsconfig.json"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");

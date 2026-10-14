@@ -139,7 +139,7 @@ the class out, allocated an object and called a constructor of ours, all three
 wrong for a class that lives in a jar.
 
 **Both stayed invisible because the only real fixture exercises neither.**
-`examples/interop/java-from-ts` calls no static method at all and constructs
+`tests/interop/java-from-ts` calls no static method at all and constructs
 nothing with a zero-argument constructor, so its column of the matrix passed
 by not being asked.
 

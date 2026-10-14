@@ -190,7 +190,7 @@ const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
  */
 const where = new Map();
 const outcomes = () => outcomeFixtures().map((n) => {
-  const label = `tooling/conformance/outcomes/${n}`;
+  const label = `tests/outcomes/${n}`;
   where.set(label, materialise(scratch, n, join(OUTCOMES, n, "src"), runMode(n)));
   return label;
 });
@@ -424,7 +424,7 @@ async function check(project, slot) {
   // and the one line that said so read as a note (fb3325b3f, 2026-10-10). So
   // there it is NOT MEASURED, and the run fails.
   if (/refusing to emit code from invalid HIR/.test(emit.out)) {
-    if (project.startsWith("tooling/conformance/outcomes/")) {
+    if (project.startsWith("tests/outcomes/")) {
       invalidHir.push(project);
     } else {
       const why = emit.out.split("\n").find((l) => l.startsWith("invalid HIR")) ?? "invalid HIR";

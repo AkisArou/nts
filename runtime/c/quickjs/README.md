@@ -48,7 +48,7 @@ nothing is waiting on that decision today.
 
 ## Why it is not linked into every program
 
-Measured: linking this into `examples/hello` takes it from 81 KB to 162 KB.
+Measured: linking this into `tests/programs/hello` takes it from 81 KB to 162 KB.
 Doubling a hello-world to carry tables it never reads is not a tradeoff worth
 making, so it is emitted only for a program that calls a method needing it — the
 same way `nts_uv_host.c` is emitted only for a program that needs a loop.

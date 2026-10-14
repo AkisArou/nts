@@ -1646,7 +1646,7 @@ impl SemanticSource for TsgoApi {
     /// asks for all three. With only the transform's identity here, all three
     /// stored under **one key** -- so `nts frontend P` followed by a build of `P`
     /// was served the narrow snapshot as a valid hit and compiled a smaller
-    /// program with nothing refused and nothing printed. `examples/math` emitted
+    /// program with nothing refused and nothing printed. `tests/programs/math` emitted
     /// **16 functions where it emits 40** (`aNaNExponent`, `powerCall`, `sign`,
     /// `fround`, `logs` and `exponentials` among the missing), and
     /// `runtime/node/stream` differed in eight emitted files. The cache lives

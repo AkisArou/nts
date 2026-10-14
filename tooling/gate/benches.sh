@@ -8,7 +8,7 @@
 #
 # `corpus` checks that arbitrary input produces C that compiles, and `examples`
 # compiles and *runs* the examples against node. Neither of them touches
-# `benches/cases`, so a code generation bug that only shows up there reaches a
+# `benchmarks/cases`, so a code generation bug that only shows up there reaches a
 # person through `cargo run -p nts-bench` -- which takes twenty-five minutes and
 # is not part of the gate.
 #
@@ -57,7 +57,7 @@ only=${1:-}
 fail=0
 count=0
 
-for case in benches/cases/*/; do
+for case in benchmarks/cases/*/; do
   name=$(basename "$case")
   [ -n "$only" ] && [ "$only" != "$name" ] && continue
   [ -f "$case/case.ts" ] || continue
@@ -163,10 +163,10 @@ fi
 # moves, and it reports the silence as success. This one already did: the guard
 # above was `[ -f "$case/tsconfig.json" ]`, the per-case configs were deleted,
 # and it skipped all fifty cases and exited green in **zero seconds** -- while
-# being the only thing in the gate that compiles `benches/cases` at all.
+# being the only thing in the gate that compiles `benchmarks/cases` at all.
 if [ "$count" -eq 0 ]; then
   printf '  no benchmark cases found -- this step compiles nothing and is not\n'
-  printf '  passing. `benches/cases/*/case.ts` is what it looks for.\n'
+  printf '  passing. `benchmarks/cases/*/case.ts` is what it looks for.\n'
   exit 1
 fi
 echo "  $count benchmark case(s) compile, all three backends"

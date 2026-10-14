@@ -10,7 +10,7 @@ fn missing_and_present_reference_elements_retain_their_subjects() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-nested-pattern-missing-a-reference-element/tsconfig.json");
+        .join("../../tests/programs/a-nested-pattern-missing-a-reference-element/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");

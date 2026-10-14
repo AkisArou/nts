@@ -663,7 +663,7 @@ pub(super) fn witness(
     // outside of this function*, a complaint about C scoping rather than a
     // disagreement about anything, and the file does not compile.
     //
-    // `examples/interop/c-from-ts` binds an opaque `struct Counter` and is the
+    // `tests/interop/c-from-ts` binds an opaque `struct Counter` and is the
     // one example of sixteen whose `build.sh` has no `-fsyntax-only` line, so
     // its witness had been emitted and compiled by nothing for as long as it
     // existed. The build lane found it by adding the check.

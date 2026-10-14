@@ -17,9 +17,9 @@
 //! Lint compares types and not attributes, so every ABI bug that lives in an
 //! attribute -- `byval`, `sret`, `zeroext`, `dead_on_return` -- is outside what
 //! it can see. Two were found there: the Win64 retain of an erased value
-//! (by the rc arm of `examples/interop/windows-winrt`, run on Windows), and an
+//! (by the rc arm of `tests/interop/windows-winrt`, run on Windows), and an
 //! awaited task passed `byval` where AAPCS64 reads a pointer (by
-//! `examples/interop/linux-arm64`, run under qemu -- a segfault, with this
+//! `tests/interop/linux-arm64`, run under qemu -- a segfault, with this
 //! test clean). Each platform's clean answer here is necessary, and the run of
 //! the same program on that platform, against the C backend's build, is what
 //! makes it sufficient.

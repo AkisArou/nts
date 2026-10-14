@@ -204,7 +204,7 @@ pub fn snapshot<S: SemanticSource>(
     // reporting.
     //
     // **What it is worth, on the same project and the same rounds once it hits
-    // again**: `examples/workspace/apps/linux`, five alternating rounds, warm,
+    // again**: `tests/workspace/apps/linux`, five alternating rounds, warm,
     // under the gate lock, artifact verified rather than only the exit status --
     //
     //     cache      best 0.088s  median 0.099s

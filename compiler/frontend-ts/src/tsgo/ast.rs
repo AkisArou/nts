@@ -844,7 +844,7 @@ fn byte_of(utf16: &[u32], unit: u32) -> usize {
 ///
 /// Three findings chased separately turned out to be this: `stream`'s `map`
 /// refused as "a `finally` that spans a `yield`" and pointing at the closing line
-/// of a **type alias** two declarations earlier; `examples/generator-unsupported`'s
+/// of a **type alias** two declarations earlier; `tests/programs/generator-unsupported`'s
 /// root pointing at a `let` before `function* guarded`; and all twenty "a
 /// declaration outside every walk" lines in `web-platform`, each on the brace or
 /// closing line before the member it names. The Assistant lane found the common

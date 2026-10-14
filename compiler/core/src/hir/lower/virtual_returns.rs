@@ -8,7 +8,7 @@
 //! itself, a caller through the root reads sixteen bytes of `NtsValue` out of a
 //! function that returned a pointer: deterministic wrong answers on C and LLVM,
 //! and `NTS4009` on the JVM, whose descriptors cannot spell the mistake.
-//! `examples/a-nullable-virtual-return-keeps-its-absence` and
+//! `tests/programs/a-nullable-virtual-return-keeps-its-absence` and
 //! `a-virtual-return-is-erased-with-its-actual-storage` are the witnesses.
 //!
 //! The answer is Java's covariant-return **bridge**, made once in the IR rather
@@ -574,7 +574,7 @@ fn interface_projection(
 /// its bridge, `{root}@erased`, that the root's table holds: the call names
 /// that. Naming the body left C calling the bridge through a pointer typed to
 /// return an object, and the JVM a method the class does not declare
-/// (`tooling/conformance/outcomes/an-override-called-through-an-interface-returning-unknown-*`). The call keeps its value id by moving: the call goes to a fresh id typed
+/// (`tests/outcomes/an-override-called-through-an-interface-returning-unknown-*`). The call keeps its value id by moving: the call goes to a fresh id typed
 /// `Erased`, and the old id becomes the `Unerase` of it, so every use of the old
 /// id reads the value it always did.
 fn retarget(

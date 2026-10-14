@@ -50,7 +50,7 @@ fn called_slot(program: &Program, caller: &str) -> usize {
 fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
         let Some(program) = prepared(
-            "examples/a-try-around-a-helper-that-calls-an-interface-method",
+            "tests/programs/a-try-around-a-helper-that-calls-an-interface-method",
             provider,
         ) else {
             return;
@@ -82,7 +82,7 @@ fn a_transitive_class_call_has_both_raising_and_nonraising_rows() {
 fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
     for provider in [Provider::NoGc, Provider::ReferenceCounting] {
         let Some(program) = prepared(
-            "examples/a-throwing-literal-interface-method-one-helper-below-a-try",
+            "tests/programs/a-throwing-literal-interface-method-one-helper-below-a-try",
             provider,
         ) else {
             return;
@@ -109,7 +109,7 @@ fn a_transitive_literal_call_reaches_the_uniform_raising_entry() {
 #[test]
 fn the_strict_gate_still_withholds_the_uniform_raising_entry() {
     let Some(program) = prepared(
-        "tooling/conformance/blockers/a-callback-held-in-a-field-with-the-raising-gate-off",
+        "tests/refusals/a-callback-held-in-a-field-with-the-raising-gate-off",
         Provider::NoGc,
     ) else {
         return;

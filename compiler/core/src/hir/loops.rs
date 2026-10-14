@@ -78,7 +78,7 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
         // whole number, so it stays a `double`, every index becomes an
         // `fptoui` of a floating-point induction variable, and LLVM's scalar
         // evolution cannot model one -- so the loop never vectorizes. See
-        // `benches/cases/elementwise`.
+        // `benchmarks/cases/elementwise`.
         if let Some((counter, bound)) = counter_bound(func, analysis, header, &loop_shape) {
             caps.insert(counter, bound);
         }

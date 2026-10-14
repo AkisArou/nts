@@ -24,7 +24,7 @@ The C-level binding layer is scaffolding for that, not the product.
 
 ## Where it stands: M0, measured
 
-`examples/interop/gtk-hello` (`cd4af93a`) is an `app.linux` executable with
+`tests/interop/gtk-hello` (`cd4af93a`) is an `app.linux` executable with
 gtk4 through pkg-config.
 
 - **What it does:** `activate` builds a window holding a button, clicks it twice through the signal system, and quits.
@@ -66,7 +66,7 @@ falsifier first, C then LLVM.
 
 1. **Strings across the boundary: landed.** (`1be75f5e` runtime, `85cfd136` lowering, `961a2e84` gtk-hello.)
    - **Surface:** a `c:` parameter typed plain `string` is `const char *`, borrowed UTF-8 for the call. No brand, so the intersection wall never comes up.
-   - **Example:** `examples/interop/native-string` checks the bytes C receives against node's TextEncoder. U+0000 stops at the boundary.
+   - **Example:** `tests/interop/native-string` checks the bytes C receives against node's TextEncoder. U+0000 stops at the boundary.
    - **Leak arm:** under valgrind, loss is flat from 1k to 20k calls, and a compiler without the release loses one block per call.
    - **Cost:** 15-16 ns per string call against 1.5 ns for an int; this is what a borrowed fast path has to beat.
    - Returned strings and `string | null` are still to do.
@@ -76,13 +76,13 @@ falsifier first, C then LLVM.
    - **Downcast:** a checked downcast is not built; `GTK_WINDOW(w)` stays in the shim. It will be designed with the Apple lane, which needs `isKindOfClass:`.
 3. **Capturing closures into C: landed.** (`09ae016f` runtime, `580e25bb` lowering and backends.)
    - **Surface:** `Closure<F>` is retained and released by C's destroy notify. `ScopedClosure<F>` is lent for one call.
-   - **Tests:** `examples/interop/native-closure` covers captures read back, two contexts that must not cross, a closure outliving its registering frame, an arrow taking fewer parameters than C passes, and a handle in the callback. Under reference counting, 50 subscribe/unsubscribe cycles leave `nts_live_count` exactly equal; the control without the notify grows by 50 or more. A throw inside still stops at the boundary.
+   - **Tests:** `tests/interop/native-closure` covers captures read back, two contexts that must not cross, a closure outliving its registering frame, an arrow taking fewer parameters than C passes, and a handle in the callback. Under reference counting, 50 subscribe/unsubscribe cycles leave `nts_live_count` exactly equal; the control without the notify grows by 50 or more. A throw inside still stops at the boundary.
    - **gtk-hello:** connects both signals with capturing arrows.
 4. **The GLib loop: landed.** (`9055d56b`.)
    - **Design:** libuv stays the host, and a `GSource` on the default context drives it (`nts_uv_host_backend_fd` / `_timeout` / `_pump`, and `nts_glib_host.{c,h}`). The Apple lane writes a CFRunLoop adapter over the same three calls.
    - **Microtasks:** a callback returning to the loop at `depth` 0 is a checkpoint (`nts_checkpoint_after_callbacks`, set once in main.c before module evaluation). A handler entered synchronously from a task is not, so the task still runs to completion.
    - **Selection:** by link, for any program whose libs include `-lglib-2.0`.
-   - **Tests:** `examples/interop/gtk-loop` has four arms: the exact order, a control with no drain, a control with the source detached, and idle CPU.
+   - **Tests:** `tests/interop/gtk-loop` has four arms: the exact order, a control with no drain, a control with the source detached, and idle CPU.
    - **Defect found:** `uv_backend_timeout` answers 0 for a loop with nothing alive. The source spun at 100% and starved GLib's idle sources until that was mapped to -1.
    - **The unembedded row** is an assertion in `native-callback`: no foreign loop means no checkpoint at a callback's return.
 5. **Blocker 1** is still standing: a module-scope native pointer.
@@ -112,7 +112,7 @@ The first and the `gpointer` half of the fourth are what M2's generator has to a
 does it on its own for any `c:Name-Version` import. The bindings are
 platform packages in the machine's store, not files of the project (see
 "GTK as platform packages" below).
-`examples/interop/gtk-gir` is a GTK program with no hand-written GTK
+`tests/interop/gtk-gir` is a GTK program with no hand-written GTK
 declarations. Landed:
 
 | Commit | What |
@@ -344,7 +344,7 @@ Still missing: under `--rc` an iterator can outlive its buffer's last
 use. `GtkTextIter` points into the buffer without counting it, so releasing
 the buffer at its last use frees the storage the iterator reads. Foreign
 handles are to be released at block end instead, against the fixture
-`examples/interop/gtk-iter-lifetime`.
+`tests/interop/gtk-iter-lifetime`.
 
 ### Arrays of objects, lent in place
 
@@ -429,7 +429,7 @@ application that opens files (`HANDLES_OPEN`) takes them. C passes
   value, as `Property<T>` is its `T`, since the markers are optional and
   never exist.
 
-Witness: `examples/interop/gtk-open`. The program opens two files itself
+Witness: `tests/interop/gtk-open`. The program opens two files itself
 through `app.open([a, b], "hint")`, which lends the array out, and the
 handler gets `open 2 a.txt,b.txt hint`. It stores the array, which is read
 after the handler returns (`kept a.txt,b.txt`). That runs on C and LLVM,
@@ -1070,7 +1070,7 @@ UTF-8, as GJS sets it) and `setlocale`, declared in `runtime/gtk/libintl.d.ts`.
   enclosing scope". The default export is there and typechecks.
 - `LocaleCategory` holds glibc's `LC_*` values, written out: the header's
   constants reach a binding only once the constants fold lands.
-- Witness: `examples/interop/gtk-gettext` translates from a catalogue
+- Witness: `tests/interop/gtk-gettext` translates from a catalogue
   build.sh compiles (`Saluton pomo pomoj Malfermi Saluton Untranslated`) on
   all four arms, and with no catalogue bound answers each msgid, which is
   its control. Without the base config the program is TS2307. The corpus's
@@ -1139,7 +1139,7 @@ tag or an absence and aborts otherwise, naming a box as its own case.
   released at its last use (`rc::only_erased`), as ARC gives a temporary back
   at the end of its statement. `held_to_the_end` (own.rs) treats the erased
   slot as the holder for the same reason.
-- Witness: `examples/interop/gtk-values`, C and LLVM, plain and `--rc`. Its
+- Witness: `tests/interop/gtk-values`, C and LLVM, plain and `--rc`. Its
   `watch` arm alone passed while the release gap was open -- `stash()` returned
   before the delete -- and its `temporary` arm, a button made in `m.set`'s
   argument list, is the one that read `held alive` before the rule.
@@ -1329,7 +1329,7 @@ list items, which are always GObjects. `set_sort_func` was refused as "a
 ### libadwaita, and what a props type says
 
 Adw-1 binds from GIR like any other namespace (12,342 functions), and
-`examples/interop/adw-hello` is an `AdwApplication` with an
+`tests/interop/adw-hello` is an `AdwApplication` with an
 `AdwToolbarView`, an `AdwHeaderBar` and an `AdwStatusPage`. It passes plain
 and `--rc`, on C and LLVM.
 
@@ -1366,7 +1366,7 @@ work toward that is in steps that each land on their own:
 
 ### Lifetimes nts does not keep, witnessed
 
-`examples/interop/gtk-iter-lifetime` has two arms that fail under `--rc`, on
+`tests/interop/gtk-iter-lifetime` has two arms that fail under `--rc`, on
 purpose, and its `build.sh` requires them to fail:
 
 - a `GtkTextIter` read after its buffer's last use, which a release at that
@@ -1456,7 +1456,7 @@ representation for foreign objects beside Objective-C's.
 A garbage object's own handlers do not run on the way out: they are garbage
 with it and severed first, as GJS refuses to call JavaScript during a sweep.
 
-**Measured** (`examples/interop/gtk-cycles`, real GTK, fatal-criticals):
+**Measured** (`tests/interop/gtk-cycles`, real GTK, fatal-criticals):
 a self-capturing label is finalized, and so is the same label parented into
 a window that is then destroyed (both 0 before). A label whose emission holds
 the only references outside its cycle survives a collection that looks at
@@ -1472,7 +1472,7 @@ registered no cycle is.
 
 ### Subclassing a GObject: built, step one
 
-**Where it stands** (`examples/interop/gtk-subclass`, C and LLVM, plain and
+**Where it stands** (`tests/interop/gtk-subclass`, C and LLVM, plain and
 `--rc`): `class Counter extends GtkButton` is a `GType` of its own,
 `Nts_Counter`, registered the first time one is made. A `vfunc_clicked()`
 method is the override GTK calls through `GtkButtonClass.clicked`, with
@@ -1697,7 +1697,7 @@ override ran, like a `snapshot` that draws or a `clicked` that counts.
 
 ## M4: against GJS, and a real application
 
-`tooling/gtk-bench/run.sh`: the same program in TypeScript (nts, `--rc`) and
+`benchmarks/gtk/run.sh`: the same program in TypeScript (nts, `--rc`) and
 in GJS, one process per case under xvfb, beside C calling GTK directly --
 the floor, which says how much of a row is GTK's own work. GJS 1.88.1,
 GTK 4.22; ns per operation, best of three in-process runs after one untimed.
@@ -1733,7 +1733,7 @@ every inherited call was 45-55 ns against GTK's 5-6. It then read *below*
 the C floor, 4.1 against 7.3, because the C kept the widget and the count in
 static globals, which C re-reads after every call; written with locals, as
 nts holds them, C is 4.0. The notes application is
-`examples/interop/gtk-notes` against `gjs/notes.js`, line for line. The
+`tests/interop/gtk-notes` against `gjs/notes.js`, line for line. The
 virtual-function row is `gtk_widget_measure` on a `GtkWidget` subclass
 whose override answers constants (`class Square extends GtkWidget` in nts,
 `GObject.registerClass` in GJS, `G_DEFINE_TYPE` in C), with `for_size`
@@ -1763,7 +1763,7 @@ and so would a larger app with real logic per row. The binary binds lazily,
 where gjs is linked `BIND_NOW`, so the loader's share is GTK's dependency
 closure and not symbol resolution the program asked for.
 
-**The task list** (`tooling/gtk-bench/tasks`, and `gjs/tasks.js` line for
+**The task list** (`benchmarks/gtk/tasks`, and `gjs/tasks.js` line for
 line) is the first row whose time is the program's own. Ten thousand tasks
 are made and sorted with `tasks.sort(compare)`. Fifteen queries are then
 typed into a search whose `GtkCustomFilter` is a TypeScript closure, called
@@ -1796,7 +1796,7 @@ The task-list rows' upper ends are the `Task`-object version, from a
 `run.sh` pass at load average 7 rising to 14. The micro rows of that pass
 matched the table above, each within its range.
 
-**The journal** (`examples/interop/gtk-journal`, and `gjs/journal.js` line
+**The journal** (`tests/interop/gtk-journal`, and `gjs/journal.js` line
 for line) is the first application that uses every surface at once. It is
 a libadwaita window with:
 - a sidebar `GtkListView` over a filter model and a sort model, whose
@@ -1862,7 +1862,7 @@ which a caller that only destructures could avoid.
 "Complete" is measured against real GJS programs. The corpus is
 Workbench's Library demos (`github.com/workbenchdev/demos`, CC0; Workbench
 itself is GPL-3.0, and none of it is copied here). The ports are ours, in
-`examples/gjs-corpus/<demo>`:
+`tests/gjs/<demo>`:
 - `src/main.ts`, the demo's own code as GJS writes it, in the function the
   host calls;
 - `main.ui`, the demo's Blueprint compiled with `blueprint-compiler`;
@@ -1877,7 +1877,7 @@ gives it and reads the same driver. A demo passes when all four arms match.
 The originals come from a clone named by `NTS_WORKBENCH_DEMOS`; without one
 the harness says it skipped.
 
-The nts host (`examples/gjs-corpus/host/workbench.ts`) differs from the GJS
+The nts host (`tests/gjs/host/workbench.ts`) differs from the GJS
 one in two ways, both core gaps:
 - a port's demo is a function the host calls, because nts compiles no
   dynamic `import()`;
@@ -2081,7 +2081,7 @@ const store = new Gio.ListStore({ itemType: Label.$gtype });
   the `c:` binding's, found by name (`@ntsCall`).
 - **Witnesses.** `the_gir_packages_typecheck` checks all 29 packages
   together (a name the table missed would not resolve) and pins the `gi:`
-  spellings. `examples/interop/gtk-gi` runs construction by camelCase props,
+  spellings. `tests/interop/gtk-gi` runs construction by camelCase props,
   a method, a property, an override chaining up in plain types, `connect` and
   `connectAfter`, a namespace import's construct-only property, and GIR's
   constants, on C and LLVM, plain and `--rc`. A namespace import

@@ -1,6 +1,6 @@
 //! ARC's ownership rules, on both backends, against a stub Objective-C runtime.
 //!
-//! `examples/interop/macos-foundation` checks the same rules against Apple's
+//! `tests/interop/macos-foundation` checks the same rules against Apple's
 //! Foundation on a Mac. This file checks them wherever the gate runs, with a
 //! runtime small enough to count every retain and release per object:
 //!

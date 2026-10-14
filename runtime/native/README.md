@@ -64,7 +64,7 @@ use the managed convention above.
 Opaque C handles use `Opaque<"Counter">` imported from `c:types`, where `Counter`
 is the C struct tag. A foreign constructor can return `Opaque<"Counter"> | null`;
 locals, parameters, returns, null checks, equality, and closure captures preserve
-the pointer and its pointee identity. See `examples/interop/c-from-ts` for a
+the pointer and its pointee identity. See `tests/interop/c-from-ts` for a
 complete separately compiled C library and caller.
 
 Opaque handles have no managed header and receive no automatic retain, release,
@@ -76,7 +76,7 @@ handles are refused. Node-API and JVM do not marshal opaque C pointers.
 Native scalar/struct access, `addrOf`, `local<T>(count)`, `sizeof<T>()`, typed
 `malloc<T>(byteCount)` and `free` are described in
 [the native operations contract](../../docs/native-operations.md). The
-[poll example](../../examples/interop/native-poll/src/main.ts) uses local, fixed
+[poll example](../../tests/interop/native-poll/src/main.ts) uses local, fixed
 array, and heap request storage. Local addresses cannot escape; foreign borrowing
 uses the declaration's `@ntsNoEscape` contract. General heap ownership remains
 manual.

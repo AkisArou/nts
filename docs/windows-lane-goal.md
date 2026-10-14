@@ -38,7 +38,7 @@ either builds them.
 | `be817840` | `windows_toolchain`: clang compiles against zig's mingw headers, because `zig cc` ignores `-fsyntax-only` and so cannot run the witness, and `zig cc` links. `tooling/windows/build-libuv.sh` cross-builds libuv's `src/win`. |
 | `b918772d` | `sizeof<T>()` became `NativeSizeOf`, resolved per backend. It was folded to one target's size during lowering. |
 | `f9a9d4ae` | LLP64: `NativeAbi { SysV, Win64 }`, a required backend argument. A `c_long` is an exact `i64` in HIR and a 32-bit slot on Windows. A constant that does not fit is refused, and a runtime value truncates as C's does. A bit-field record under Win64 is refused, because MS placement is not implemented. |
-| `9941c67b`, `cc451a34` | `examples/interop/windows-hello`, `tooling/windows/run.sh`. |
+| `9941c67b`, `cc451a34` | `tests/interop/windows-hello`, `tooling/windows/run.sh`. |
 
 **Measured on the VM (Windows 11 build 26200, x86_64):**
 
@@ -70,7 +70,7 @@ either builds them.
 
 ## W1, Win32 from TypeScript: where it stands
 
-`examples/interop/windows-window` is a Win32 window whose window procedure is
+`tests/interop/windows-window` is a Win32 window whose window procedure is
 TypeScript, closed by `await new Promise(r => setTimeout(() => r(), 30))`
 while `GetMessageW` owns the thread. It is built by `nts build` alone and run
 on the VM.
@@ -114,7 +114,7 @@ idiomatic layer on top of it is W4.
 
 ## W2, the Windows Runtime from TypeScript: where it stands
 
-`examples/interop/windows-winrt` runs on Windows on both backends and both
+`tests/interop/windows-winrt` runs on Windows on both backends and both
 providers. Each piece below is one line of its output, and a C oracle making
 the same vtable calls on the VM measured the behaviour first.
 
@@ -382,7 +382,7 @@ the same vtable calls on the VM measured the behaviour first.
 
 ## W3, WinUI 3: where it stands
 
-`examples/interop/winui-hello` runs on Windows, in the signed-in session, on
+`tests/interop/winui-hello` runs on Windows, in the signed-in session, on
 both backends and both providers, written as C# writes it:
 
 ```ts

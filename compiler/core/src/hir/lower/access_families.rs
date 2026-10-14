@@ -284,7 +284,7 @@ impl FuncBuilder<'_> {
     /// test this program ran: `typeof named.displayName === "string"` made the
     /// read a `string`, and holding it erased refused `return
     /// named.displayName` once a class held the field as a `string`
-    /// (`tooling/conformance/blockers/a-narrowed-read-of-an-unknown-field-a-class-holds-as-a-string`).
+    /// (`tests/refusals/a-narrowed-read-of-an-unknown-field-a-class-holds-as-a-string`).
     ///
     /// **Stored suppliers only.** A stored field reads back what the test read,
     /// which is the trust a class field's narrowed read already takes; a getter

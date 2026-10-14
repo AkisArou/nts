@@ -543,7 +543,7 @@ struct Hierarchy {
     /// entry is that a site knowing only the signature can call it -- a site that
     /// had to know the arity would be back to knowing the body. But it does not
     /// have to be fixed across programs, and making it one was expensive: at a
-    /// global eight, `benches/cases/closure-merge` marshalled **nine** `NtsValue`s
+    /// global eight, `benchmarks/cases/closure-merge` marshalled **nine** `NtsValue`s
     /// per call in a hot loop where the direct call passed one `double`, and the
     /// row went 22.25 us to 49.07 us. Its own header had predicted the shape of
     /// the objection -- "it should not be free ... what it should *not* be is
@@ -728,7 +728,7 @@ impl Hierarchy {
     /// An interface needs no special case here, which was measured rather than
     /// assumed. A version of this walked the implemented interfaces looking for
     /// the highest one declaring `member`, and sabotaging that walk to return
-    /// nothing left every case in `examples/interface-dispatch` agreeing --
+    /// nothing left every case in `tests/programs/interface-dispatch` agreeing --
     /// including a class that both extends a class and implements an interface
     /// that extends another, written specifically to reach it.
     ///
@@ -1686,7 +1686,7 @@ fn number_slots(hierarchy: &mut Hierarchy) {
 /// numbered against `S` and every implementer fills it (record 0201) -- and the
 /// edge came from the heritage clause alone, so `take(s: S) { return s.go() }`
 /// was refused whenever no class *wrote* `implements S`: `S#go` had no body to
-/// declare (`examples/a-method-through-a-structural-interface`).
+/// declare (`tests/programs/a-method-through-a-structural-interface`).
 ///
 /// Inferred for the whole program before any slot is numbered, so everything
 /// after -- `overridden`, the slot loop, the tables, `Layout::interfaces` and so
@@ -4079,7 +4079,7 @@ pub const MODULE_INIT: &str = "module#init";
 /// A class that has none does not, and the difference is not cosmetic: putting
 /// every class in the list gives a file that had no module evaluation an empty
 /// `module#init`, which is a new exported function in every such program.
-/// `examples/delete` declares two classes, no statics, and went from eight
+/// `tests/programs/delete` declares two classes, no statics, and went from eight
 /// exports to nine -- caught by a test asserting the count exactly, which is the
 /// kind of assertion that earns its keep here.
 ///
@@ -4194,7 +4194,7 @@ fn is_module_declaration(kind: u16) -> bool {
 /// KIND` cannot be `static readonly` in TypeScript -- that is class syntax --
 /// so it renders as `const KIND: "task";` inside a namespace, and one of those
 /// anywhere made [`carries_code`] answer yes for the whole `declare module`.
-/// `examples/interop/android-shape` was refused entire, at line 1 column 1, for
+/// `tests/interop/android-shape` was refused entire, at line 1 column 1, for
 /// a constant that runs nothing.
 ///
 /// The initializer is found the way `initializer_function` and
@@ -5609,7 +5609,7 @@ fn presence_keys(
 /// widen it anywhere, and this one did until `interop` said so.
 ///
 /// **Reading `any` there was measured and it is wrong**, not merely coarse:
-/// `examples/an-await-of-a-thenable` went from 2 refusals to 11, every one of them
+/// `tests/programs/an-await-of-a-thenable` went from 2 refusals to 11, every one of them
 /// a `then` whose only unresolved callee is the `resolve` the job hands it. A
 /// `then` that calls a callback from somewhere *else* -- a field, a capture -- is
 /// `Elsewhere` and is in both sets, so the distinction is exactly the one the
@@ -5668,7 +5668,7 @@ enum Reached {
     /// callee *with* a symbol was resolved then, however little the symbol named.
     ///
     /// Folding it in with `Elsewhere` left `bodily` **wider** than the set it narrows,
-    /// and that turned `examples/interop/windows-winrt` red on main: the binder's
+    /// and that turned `tests/interop/windows-winrt` red on main: the binder's
     /// `then` for an `IAsyncOperation` reaches a bound member, so the thenable census
     /// called it raising and refused `await operation` at two sites, cascading to
     /// `reportAwaited` and a module-scope statement on both Windows backends. Found by
@@ -6031,7 +6031,7 @@ fn walk_one_declaration(
             // which puts its caller in the set at once -- and since a class now
             // has an entry, every class with an explicit `super()` became a raiser
             // and every `try` constructing one refused.
-            // `examples/an-error-subclass-that-carries-a-field`'s
+            // `tests/programs/an-error-subclass-that-carries-a-field`'s
             // `try { throw new TaggedError(…) }` is the witness, and it was one
             // `agree` regression standing for most of a +69.
             //
@@ -6060,7 +6060,7 @@ fn walk_one_declaration(
             // not a callee arriving from somewhere -- and treating it as one
             // made every function that constructs anything an unresolved
             // caller, which is most of them:
-            // `examples/an-await-of-a-thenable` refused 6 thenables instead
+            // `tests/programs/an-await-of-a-thenable` refused 6 thenables instead
             // of 2, on four `then`s whose bodies call their own two
             // callbacks and `new Error(...)`. `Error` is a provided
             // constructor, whose symbol declares `interface Error` and
@@ -6223,7 +6223,7 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             // An `async` function never raises *synchronously*: a `throw` in
             // one rejects the promise it already returned. That rejection is a
             // real edge into the enclosing handler and `lower_unguarded`
-            // already routes it -- `examples/async-catch` is eight functions
+            // already routes it -- `tests/programs/async-catch` is eight functions
             // of exactly this and every one of them works -- so admitting an
             // async callee here would refuse a shape that is not broken.
             if probe
@@ -6817,7 +6817,7 @@ fn raising_copies(
     // Two narrower rules were tried and both were wrong. Seeding the *closure bodies*
     // misses the closure lowering **synthesises** for a function used as a value,
     // whose body is a call to that function and which is in no `ARROW_FUNCTION` node:
-    // `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm aborted at run
+    // `tests/programs/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm aborted at run
     // time on every backend. Filtering those bodies by "can this raise" then shrank
     // the set a *second* question was asked of, and turned the conformance lane's
     // guard fixture from FIXED to aborted in one line.
@@ -6832,7 +6832,7 @@ fn raising_copies(
         // A function **used as a value** is lowered as a closure whose whole body is a
         // call to it, and that closure is synthesised rather than written -- it is in
         // no `ARROW_FUNCTION` node for the walk below to reach. So the function itself
-        // needs the copy: `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)`
+        // needs the copy: `tests/programs/a-callbacks-throw-inside-a-try`'s `call(thrower)`
         // arm aborted at run time on every backend without this, while its three
         // sibling arms -- the same defect written as an arrow, an expression and a
         // held arrow -- were fine, because those bodies *are* nodes.
@@ -6908,7 +6908,7 @@ fn raising_copies(
     // 8 of 29 cases ending the program where node answers `-1` -- and it was silent
     // because the optimistic answer was the only one this function ever computed. With
     // the gate *on* the same program is
-    // `examples/a-method-that-calls-a-callback-held-in-a-field-inside-a-try` and agrees
+    // `tests/programs/a-method-that-calls-a-callback-held-in-a-field-inside-a-try` and agrees
     // with node, which is why the two halves are two fixtures.
     //
     // Two passes rather than a fixpoint over the gate, because the gate is monotone in
@@ -7376,7 +7376,7 @@ fn a_copy_can_contain(
     // value -- `value.toFixed(digits)` with `value: any` -- and the real lowering
     // cannot dispatch that one at the raising slot: asked here, it made
     // `fixed@raises` a copy that then refused
-    // (`examples/a-closed-call-recovers-an-erased-parameter`, 9 refusals to 10).
+    // (`tests/programs/a-closed-call-recovers-an-erased-parameter`, 9 refusals to 10).
     if a_value_held_call(snapshot, probe, call)
         || probe.reason_without_a_leaf(call) == Some(A_FUNCTION_WRITTEN_AS_A_VALUE)
     {
@@ -7656,7 +7656,7 @@ fn functions_used_as_values(
     // throwing closure is itself in `throwing.any`, every exported function in the
     // program then failed the wrapped test and switched the gate off. The probe that
     // caught it is three exported functions and an IIFE, which is
-    // `examples/an-iife-inside-a-try` now.
+    // `tests/programs/an-iife-inside-a-try` now.
     //
     // Every identifier child, because a declaration's direct identifier children are
     // its name: parameters are `Parameter` nodes, the body is a `Block`, the return
@@ -9027,7 +9027,7 @@ fn settled_declaration_type(probe: &FuncBuilder, name_node: NodeId) -> Option<Hi
             // appends a reference perfectly well --- so requiring it there
             // rejects a type nothing was going to grow by index.
             //
-            // `examples/growable` is the case: `const parts = []` filled by
+            // `tests/programs/growable` is the case: `const parts = []` filled by
             // `parts.push("p" + String(i))` in a loop. It lowered until this
             // derivation was shared with locals, and then refused, because the
             // element is counted and the filter did not ask whether any indexed
@@ -10227,7 +10227,7 @@ fn copy_retype(
     // callee touches -- and a carried owner keeps them elsewhere. `g(f)` with
     // `f: Face` holding an `S1` viewed as `Face`, and `g(p: Plain)` reading
     // `p.b`, got `g@0obj1` reading `Face`'s `b` slot on an `S1`, a SIGSEGV
-    // (`examples/a-structural-alias-read-after-an-interface-view`). Without
+    // (`tests/programs/a-structural-alias-read-after-an-interface-view`). Without
     // the copy the call converts `Face` to `Plain`, which
     // `carried_owners_fit` decides for every carried owner.
     if let HirType::Managed(ManagedType::Object(have)) = represented
@@ -12911,7 +12911,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
 /// Only module-scope variable bindings, and only reads that module evaluation
 /// actually performs. A read inside a function body is not one: by the time
 /// anything calls it every module has evaluated, which is exactly how the
-/// legal half of a cycle is written and why `examples/module-cycle-late`
+/// legal half of a cycle is written and why `tests/programs/module-cycle-late`
 /// compiles.
 ///
 /// A class is a dead-zone binding too, and is not checked here. Its heritage
@@ -13059,7 +13059,7 @@ type ModuleStatements = (
 /// This comment said the opposite -- "a program with top-level statements in
 /// more than one file is refused rather than run in an order this guessed at"
 /// -- describing a state the function below has not been in for some time.
-/// `examples/module-order` is four files with top-level statements in each,
+/// `tests/programs/module-order` is four files with top-level statements in each,
 /// written to pin the order against node, and it has been green throughout.
 #[must_use]
 fn module_statements(
@@ -15253,7 +15253,7 @@ fn raising_closure(
         // ordinary body calls `nts_assertion_failed`, so the error's layout
         // exists only in this builder. Dropped with it, the raising body
         // allocated a type with no layout -- the LLVM backend declined it and the
-        // C backend reported it (`examples/an-element-assertion-in-a-raising-closure`).
+        // C backend reported it (`tests/programs/an-element-assertion-in-a-raising-closure`).
         Ok(mut raising) => {
             raising.name = raising_body;
             let result_absent =
@@ -15980,7 +15980,7 @@ fn is_foreign_name(name: &str) -> bool {
 /// is settled only after `canonicalize_objects`. Before this, `new Box()`
 /// given to a `function (this: Valued)` stopped by name wherever a second
 /// class, or a literal typed as `Box`, shared `Box`'s shape
-/// (`examples/a-function-that-reads-its-own-this`).
+/// (`tests/programs/a-function-that-reads-its-own-this`).
 fn expand_layout_tests(program: &mut Program) {
     let index = super::fields::LayoutIndex::build(program);
     let mut widened: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> = rustc_hash::FxHashMap::default();
@@ -16401,7 +16401,7 @@ fn collect_layouts(program: &mut Program, layouts: Vec<Layout>) {
             // `TypeError` printed whichever of the four had been laid out first.
             // Nothing could see either until `instanceof` existed, and two
             // function types were one layout until a closure declared its
-            // `call` in one: `examples/function-values` collapsed
+            // `call` in one: `tests/programs/function-values` collapsed
             // `(number) => number`, `(number) => void` and
             // `(number, number) => number` into a single layout holding eight
             // type ids, and every closure then declared it overrode a signature
@@ -25940,7 +25940,7 @@ impl<'a> FuncBuilder<'a> {
         // A class with no base has no `super()`, so its own field initialisers
         // go at the top of its constructor. A derived class's go immediately
         // after the `super()` call, which `lower_super` emits -- the language
-        // puts them there and `examples/a-field-initialiser` is the difference.
+        // puts them there and `tests/programs/a-field-initialiser` is the difference.
         if is_constructor
             && self.base.is_none()
             && let Some(receiver) = self.this
@@ -26412,7 +26412,7 @@ impl<'a> FuncBuilder<'a> {
         // back as `Managed(Array(Erased))` is a **reinterpretation**, not a read:
         // what `nts_is_array` proved is that the value is an array, and the *width
         // of its elements* is a fact the runtime descriptor holds and `any` does
-        // not. `examples/dynamic-element` is that program, and its header is the
+        // not. `tests/programs/dynamic-element` is that program, and its header is the
         // reason it exists -- *"Read as the wrong one, 8589934592 is
         // 4.2439915819305446e-314 -- finite, and `typeof` still says "number", so
         // nothing downstream can catch it."* It caught exactly this: 2 of its 9
@@ -27060,7 +27060,7 @@ impl<'a> FuncBuilder<'a> {
             // What actually names a property is an index the checker has given
             // a *single* value: a string or numeric literal, or a
             // `unique symbol`, whose whole purpose is to be one member name.
-            // `[kRefed]` is the shape `examples/symbol-keys` is built on and it
+            // `[kRefed]` is the shape `tests/programs/symbol-keys` is built on and it
             // has to keep resolving at compile time; `buf[i]` must not.
             //
             // What it cost: `fromArrayLike`'s loop is `source[i]`, so
@@ -27848,7 +27848,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// `const f: Face = new S1(); g(f)` with `g(p: Plain)` and `Plain` laid out
     /// as `Face` was a no-op cast here, and `g` read `S1`'s `a` where `Plain`
-    /// keeps `b` (`examples/a-structural-alias-read-after-an-interface-view`).
+    /// keeps `b` (`tests/programs/a-structural-alias-read-after-an-interface-view`).
     fn carried_owners_fit(
         &mut self,
         id: NodeId,
@@ -27877,7 +27877,7 @@ impl<'a> FuncBuilder<'a> {
     /// layouts agree, so the conversion is a plain cast. But a call through
     /// the target class names the target's methods: `as2(new S1()).f()` ran
     /// `S2#f` on an `S1`, 28 of 29 cases wrong on every backend
-    /// (`tooling/conformance/outcomes/a-method-called-through-a-same-shape-unrelated-class`).
+    /// (`tests/outcomes/a-method-called-through-a-same-shape-unrelated-class`).
     ///
     /// Related means one extends the other, along the `extends` chain only:
     /// `class A implements B` with `B` a class gives `A` `B`'s shape and not
@@ -31412,7 +31412,7 @@ impl<'a> FuncBuilder<'a> {
     /// whole and nothing branches on how it settled. The first version passed the
     /// settlement through as `.then` does and was two ticks early -- which the
     /// blocker this replaced (`a-promise-method-call`) had measured and said, and
-    /// which `finallyTicks` in `examples/promise-reactions` now pins.
+    /// which `finallyTicks` in `tests/programs/promise-reactions` now pins.
     ///
     /// A handler's `throw` rejects the result, through the raising entry; see
     /// [`Self::call_a_reaction_handler`]. Settling is [`Self::settle`], the one
@@ -31562,7 +31562,7 @@ impl<'a> FuncBuilder<'a> {
     /// **And for a `Promise<never>`**, which is what `Promise.reject(e)` is typed:
     /// it is never fulfilled, so there is nothing to read, and reading a `never`
     /// to hand a handler refused the reaction -- `twice` in
-    /// `examples/promise-reactions`. Its handler is called with `undefined`, which
+    /// `tests/programs/promise-reactions`. Its handler is called with `undefined`, which
     /// is what it would see if the type were wrong and it ran.
     fn read_fulfilment(
         &mut self,
@@ -31839,7 +31839,7 @@ impl<'a> FuncBuilder<'a> {
         // function, and the `throw` sailed past the very flag test the dispatch
         // had just set up.
         //
-        // `examples/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm is the
+        // `tests/programs/a-callbacks-throw-inside-a-try`'s `call(thrower)` arm is the
         // witness, and its three sibling spellings -- an arrow at the call site,
         // a function expression, an arrow held in a `const` -- were all fine,
         // because those bodies *are* nodes. Four spellings of one construct and
@@ -36374,7 +36374,7 @@ impl<'a> FuncBuilder<'a> {
     /// type is inferred, falling off the end is what *puts* `undefined` in it.
     /// `function pick(c: boolean) { if (c) return 42; }` is ordinary TypeScript
     /// returning `number | undefined`, and it arrives here with nothing produced
-    /// for the path that falls off. `tooling/conformance/outcomes/
+    /// for the path that falls off. `tests/outcomes/
     /// a-function-that-can-fall-off-its-end` pins it, found by the full test262
     /// census in four `for-in/return` files.
     ///
@@ -36963,7 +36963,7 @@ impl<'a> FuncBuilder<'a> {
         // timing: `Array.from(set)` over 256 elements two thousand times reads
         // 1.86 ms growing against 1.84 ms sized, which is no change. It is the
         // allocation count, which goes from nine to five for a sixteen-element
-        // walk -- `tooling/memory/cases/array-from`. Doubling makes the copying
+        // walk -- `tests/memory/array-from`. Doubling makes the copying
         // about one extra pass, and one extra pass over two kilobytes is not
         // what a timing harness can see.
         //
@@ -37803,7 +37803,7 @@ impl<'a> FuncBuilder<'a> {
     /// entry index, `walk_condition` for the test, `read_element` for the reads,
     /// `Step::Walk` for the advance -- with the callback's body inlined where
     /// the head's bindings would go. Nothing is allocated and nothing is called
-    /// indirectly, which is what `examples/callbacks` says about the array
+    /// indirectly, which is what `tests/programs/callbacks` says about the array
     /// methods and is now true of these.
     ///
     /// # The callback's parameters
@@ -42871,7 +42871,7 @@ impl<'a> FuncBuilder<'a> {
         // brand check must answer `false` for the other one -- and matching by
         // name alone answered `true` for both, in either direction.
         //
-        // `examples/a-private-name-is-a-brand` is the fixture that caught it,
+        // `tests/programs/a-private-name-is-a-brand` is the fixture that caught it,
         // on its first run, with 58 cases disagreeing: `Holder.brands(new
         // Decoy())` answered true where node answers false. Without the decoy
         // class the fixture would have passed and the defect would have been
@@ -43043,7 +43043,7 @@ impl<'a> FuncBuilder<'a> {
     /// one a copy binding its parameters to erased values gives it -- and asked
     /// from anywhere else, which binds none of them, it failed: `"reason" in
     /// settled` in a plain function was refused over `Box<T>`'s `value?: T`
-    /// (`tooling/conformance/outcomes/an-in-beside-a-generic-interface-of-the-same-shape`,
+    /// (`tests/outcomes/an-in-beside-a-generic-interface-of-the-same-shape`,
     /// which React's `trackUsedThenable<erased>` was refused with).
     ///
     /// **Built, not skipped.** Skipping it would answer from lowering order: an
@@ -43461,7 +43461,7 @@ impl<'a> FuncBuilder<'a> {
     /// laid out with `extra`, or a class nothing declares related -- and
     /// `"extra" in value` folded to `false` from `Short`'s members, on main
     /// where the layouts are prefixes and through a field view where they
-    /// are not (`tooling/conformance/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
+    /// are not (`tests/outcomes/an-in-test-on-an-interface-holding-a-wider-object`).
     /// The subclasses `lower_in` adds are a fact about classes; a structural
     /// arm's candidates are every object of the program, which is the
     /// `object` answer, read from the object's own layout at run time.
@@ -48912,7 +48912,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// types `called` as the literal `false` at the `if`, having watched nothing
     /// assign it in the enclosing function. Folding on that answer takes the
-    /// wrong arm, and `examples/captured-by-reference` disagrees with node on 28
+    /// wrong arm, and `tests/programs/captured-by-reference` disagrees with node on 28
     /// cases -- which it did from the day `folded_branch` landed until this guard,
     /// silently, because a refusal census cannot see a program that compiles and
     /// answers wrongly.
@@ -50056,7 +50056,7 @@ impl<'a> FuncBuilder<'a> {
             // *variable* an evolved type and the literal is lowered against it,
             // so all three of number, string and `push` already lowered before
             // this existed and none of them arrives here. Checked rather than
-            // reasoned -- the arms are in `examples/an-array-of-nothing`.
+            // reasoned -- the arms are in `tests/programs/an-array-of-nothing`.
             //
             // 15 files of the slice-1 `test/language` population: 12 are
             // `for (... of [[]])` with a destructuring head, and 3 are a bare
@@ -51173,7 +51173,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// It was invisible for as long as it existed, because the differential's
     /// node driver died on the first synchronous throw and every case after it
-    /// went unasked. The driver was fixed and `examples/strings` went red on
+    /// went unasked. The driver was fixed and `tests/programs/strings` went red on
     /// five cases the same day.
     /// `[].reduce(f)` throws, and the message is node's word for word.
     ///
@@ -51478,7 +51478,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // The checker only interns what the source mentions, so
         // `type_named("RangeError")` is `None` for most programs -- and a class
-        // this compiler *provides* cannot depend on that. `examples/strings`
+        // this compiler *provides* cannot depend on that. `tests/programs/strings`
         // has no `RangeError` in it and `"x".repeat(-1)` throws one all the
         // same.
         //
@@ -51549,7 +51549,7 @@ impl<'a> FuncBuilder<'a> {
         // described, which is the third stale comment found this week.
         //
         // Only the JVM can see the difference: an upcast is a pointer here and
-        // a nominal relation checked at class load there, so `examples/
+        // a nominal relation checked at class load there, so `tests/programs/
         // exceptions` emitted `nts/gen/TypeError` extending `Object` and would
         // not verify.
         let base = (name != "Error")
@@ -52446,7 +52446,7 @@ impl<'a> FuncBuilder<'a> {
         // other initializers not at all, so `new AggregateError(errors(),
         // message(), { cause: mark(3) })` ran 2, 3, 1 and `{ before: mark(3),
         // cause: mark(4) }` never ran `before`
-        // (examples/provided-error-arguments-run-in-source-order).
+        // (tests/programs/provided-error-arguments-run-in-source-order).
         let errors = if aggregate {
             let Some(first) = arguments.first() else {
                 return Err(self.unsupported(
@@ -53096,7 +53096,7 @@ impl<'a> FuncBuilder<'a> {
             // one: an inherited `#count` is in the flattened list beside the
             // derived's own fields, and pushing it unconditionally gave
             // `Derived` a second `#count` slot that nothing ever read.
-            // `examples/a-private-name-inherited-not-redeclared` is that
+            // `tests/programs/a-private-name-inherited-not-redeclared` is that
             // control -- the program agreed with node either way, because a
             // phantom slot is wrong without being observable.
             if field.name.starts_with('#') && field.declared_by.is_some() {
@@ -53117,7 +53117,7 @@ impl<'a> FuncBuilder<'a> {
     /// `{ x: number; y: number }` of a literal are one layout and two `TypeId`s.
     /// So `Array(Object(88))` where `Array(Object(87))` is wanted is a pointer
     /// to exactly the right bytes, and refusing it took three cases of
-    /// `examples/destructuring` and one of `examples/objects` — caught by
+    /// `tests/programs/destructuring` and one of `tests/programs/objects` — caught by
     /// `tooling/gate/example-refusals` on the first run after the check went in,
     /// which is the third thing that ledger has caught and the third that was
     /// mine.
@@ -54381,7 +54381,7 @@ impl<'a> FuncBuilder<'a> {
                 // first version took the *last* child and checked it had a
                 // type, which matched the type annotation of `name: number;`
                 // and lowered `number` as an expression -- six functions in
-                // `examples/inheritance` vanished, and the refusal landed in
+                // `tests/programs/inheritance` vanished, and the refusal landed in
                 // the anonymous bucket that had just been emptied.
                 let Some([_, Some(name), _, _, initializer]) = self.child_slots::<5>(member) else {
                     continue;
@@ -54530,7 +54530,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // `make` allocated two fields and returned them as three, and the
         // caller then wrote field 2 -- invisible on a pointer-cast backend,
-        // where `examples/declared-wider` agreed with node on both C and LLVM
+        // where `tests/programs/declared-wider` agreed with node on both C and LLVM
         // and raised a floor. The JVM lane refused it: `Type 'Error' is not
         // assignable to 'Tagged'`. The fourth time that lane has been the only
         // instrument able to see a lie about a type, and the first where what
@@ -54584,7 +54584,7 @@ impl<'a> FuncBuilder<'a> {
     /// `Erased` the node's own type passes an `Array(_)` test while still saying
     /// nothing, and the code was a subset of the sentence above it.
     ///
-    /// `examples/objects` is what noticed: `const balls: Ball[] = new Array(count)`
+    /// `tests/programs/objects` is what noticed: `const balls: Ball[] = new Array(count)`
     /// allocated an array of erased slots and then refused to be a `Ball[]`, which
     /// is the same pointer at two widths.
     ///
@@ -54694,7 +54694,7 @@ impl<'a> FuncBuilder<'a> {
         //
         // The ledger row reads "comparison agrees on C and LLVM ... so checking
         // those two reads as the feature working", and it does:
-        // `examples/a-class-stored-and-compared` binds, returns and compares
+        // `tests/programs/a-class-stored-and-compared` binds, returns and compares
         // tokens and never calls `new` on one. Token comparison works. What
         // shares the row with it does not.
         self.constructed_from_a_value(id, callee, &class)?;
@@ -56467,7 +56467,7 @@ impl<'a> FuncBuilder<'a> {
         // `undefined` to put in a double" -- so where the element type is
         // already erased the slot *can* hold one, and paying a call to learn
         // that is a cost with nothing bought. `unknown[]` is the case:
-        // `benches/cases/erasure-stored-unknown` reads `values[i]` 200,000
+        // `benchmarks/cases/erasure-stored-unknown` reads `values[i]` 200,000
         // times in its inner loop, and routing it here turned a load into a
         // call in the hottest loop of a benchmark. Caught by emitting the bench
         // program and grepping for the call, before any timing.
@@ -56610,7 +56610,7 @@ impl<'a> FuncBuilder<'a> {
     /// first version had it the other way round. Under
     /// `noUncheckedIndexedAccess` an ordinary `people[i]` is typed
     /// `Person | undefined`, whose representation is an object type with no
-    /// layout -- so converting to it refused `examples/objects` with
+    /// layout -- so converting to it refused `tests/programs/objects` with
     /// `NTS2006 an object type with no layout`, and the test that catches that
     /// is one the suite skips when `NTS_TSGO` is unset.
     ///
@@ -58041,7 +58041,7 @@ impl<'a> FuncBuilder<'a> {
     /// `class Both { side; kind; radius }` fits `Circle | Square` and holds
     /// `kind` at index 1 where both arms hold it at 0, and the read shared
     /// across the arms answered `side`
-    /// (`tooling/conformance/outcomes/a-union-of-interfaces-read-on-a-class-laid-out-as-neither-arm`).
+    /// (`tests/outcomes/a-union-of-interfaces-read-on-a-class-laid-out-as-neither-arm`).
     /// The arms come first, in their order: the shared index is read off the
     /// first.
     fn union_holders(&self, members: &[TypeId]) -> Vec<TypeId> {
@@ -58587,7 +58587,7 @@ impl<'a> FuncBuilder<'a> {
     /// blanket answer sends the conversion down the tagged path while the
     /// storage is still a pointer. A declared field's type and a merge's
     /// parameter are positions the narrowing never reaches, and that reduction
-    /// is `examples/a-slot-that-can-only-be-null`'s `aNarrowedFieldIsNotThis`.
+    /// is `tests/programs/a-slot-that-can-only-be-null`'s `aNarrowedFieldIsNotThis`.
     fn holds_only_absences(&self, ty: TypeId) -> bool {
         holds_only_absences(self.snapshot, ty)
     }
@@ -59728,7 +59728,7 @@ impl<'a> FuncBuilder<'a> {
             return Some((node, self.why_no_raising_copy(node)));
         }
         // **An accessor is a call**, which is the first sentence of
-        // `examples/accessors` and was not true of this guard: it matched
+        // `tests/programs/accessors` and was not true of this guard: it matched
         // `CallExpression` and `NewExpression`, and a getter read is a
         // `PropertyAccessExpression`. So `try { return c.checked } catch { }`
         // compiled, and the throw crossed the boundary the refusal exists to
@@ -59918,7 +59918,7 @@ impl<'a> FuncBuilder<'a> {
     /// the duplicates are merged into one address is the linker's business: the
     /// release profile (`lto = "thin"`, `codegen-units = 1`) merges them and the dev
     /// profile does not. So this read `true` under `cargo build --release` and
-    /// `false` under `cargo test`, and `examples/an-iife-inside-a-try` compiled for
+    /// `false` under `cargo test`, and `tests/programs/an-iife-inside-a-try` compiled for
     /// the gate and refused three of its arms for its own unit test -- one program,
     /// two answers, decided by a flag in `Cargo.toml`.
     ///
@@ -60290,7 +60290,7 @@ impl<'a> FuncBuilder<'a> {
         // *ordinary* uniform entry and lost the `throw`: 8 of 29 cases ending the
         // program where node answers `-1`, pinned by
         // `blockers/a-callback-held-in-a-field-with-the-raising-gate-off`, whose
-        // gate-on sibling in `examples/` agrees with node instead.
+        // gate-on sibling in `tests/programs/` agrees with node instead.
         //
         // `a_copy_can_contain` predicts which bodies are safe to copy and this verifies
         // it at the body, which is the division that matters here: the prediction is
@@ -60538,7 +60538,7 @@ impl<'a> FuncBuilder<'a> {
         // silently permissive about the rest.
         //
         // Native C is deliberately *not* this. A C function cannot unwind into
-        // TypeScript: `examples/interop/native-callback` shows the converse on
+        // TypeScript: `tests/interop/native-callback` shows the converse on
         // purpose, containing a `throw` inside a bridge because `longjmp` past a
         // foreign frame skips what it holds. Refusing here would take away every
         // `try` holding a native call. The two are separated by construction
@@ -60619,7 +60619,7 @@ impl<'a> FuncBuilder<'a> {
         // specifier rather than a function and is nevertheless in `throwing`, so
         // a cross-module `try` keeps working -- verified, 29 of 29 against node.
         // A plain non-throwing function keeps compiling, which is
-        // `examples/array-buffer`'s shape and the reason the membership test is
+        // `tests/programs/array-buffer`'s shape and the reason the membership test is
         // still asked below. What remains uncovered is a callee held in a
         // *variable* (`const h = cb; try { h() }`), which has the same hole and
         // no witness yet.
@@ -60631,7 +60631,7 @@ impl<'a> FuncBuilder<'a> {
         // **Unless it is a promise settler**, which is a parameter and is *not a
         // call*: `lower_settler_call` inlines `resolve(v)` into the executor, so
         // there is no callee and nothing to raise. Without this exclusion the
-        // refusal took out **246 functions** in `examples/interop/gtk-gir` -- every
+        // refusal took out **246 functions** in `tests/interop/gtk-gir` -- every
         // generated `*_promise` wrapper, whose body is a `try` around the settler
         // it was handed. The gate's interop step is what said so; the corpus
         // census did not, because the GIR bindings are not in it.
@@ -60653,7 +60653,7 @@ impl<'a> FuncBuilder<'a> {
         // Not merely "compiled", but **can raise**. `bounded(n)` inside a `try`
         // is a compiled call and a pure one, and refusing it would take a
         // working example away to fix a defect it does not have --
-        // `examples/array-buffer` is exactly that shape and caught this.
+        // `tests/programs/array-buffer` is exactly that shape and caught this.
         !record.declarations.is_empty() && self.throwing.contains(&symbol.0)
     }
 
@@ -64461,7 +64461,7 @@ impl<'a> FuncBuilder<'a> {
     /// set". A binding-table lookup was tried first and **never fired** -- the
     /// maps it asks are the lowering's own, so a symbol whose declaration the
     /// lowering already refused is absent from them, which is exactly this
-    /// case. `tooling/conformance/blockers/a-value-of-function-type-called`
+    /// case. `tests/refusals/a-value-of-function-type-called`
     /// pins the sentence.
     fn no_such_callee(&self, callee_node: NodeId, name: &str) -> String {
         let declared_here = self
@@ -70917,7 +70917,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// **Both answers are held by a test**, which is worth saying because the
     /// corpus holds neither: forcing this to `false` leaves all 50
-    /// `examples/interop` refusal counts byte-identical, and breaks
+    /// `tests/interop` refusal counts byte-identical, and breaks
     /// `a_property_reads_and_writes_by_message` in `codegen/c/tests/objc.rs` --
     /// an `objc:` interface's property, read as a message. The `false` side is
     /// `an_override_takes_the_selector_it_replaces_and_a_record_by_value`, whose
@@ -73263,7 +73263,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// What this does *not* do is the positional case: `f.apply(r, [a, b])`
     /// where the callee takes `(a, b)` rather than a rest needs the arity of a
-    /// literal, which is `examples/a-fixed-arity-rest-is-positional`. At the
+    /// literal, which is `tests/programs/a-fixed-arity-rest-is-positional`. At the
     /// twelve `.apply` sites in this tree the callee's parameter is a rest and
     /// the argument is the array that filled it -- `fn.apply(thisArg, args)`
     /// with `fn: (...args: A) => T` and `args: A` -- so this is the shape the
@@ -73448,7 +73448,7 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         // **A tuple has two representations and this end knew one of them.** The
         // other end had the same gap, and the pair is why
-        // `examples/a-rest-tuple-stored-in-a-field-and-spread` held two arms
+        // `tests/programs/a-rest-tuple-stored-in-a-field-and-spread` held two arms
         // failing two ways: `tuple_representation` sends a tuple of mixed storage
         // widths to a struct -- `[string, number]` is a pointer beside a double,
         // and no array of one element width holds both -- so a spread of one
@@ -75409,7 +75409,7 @@ impl<'a> FuncBuilder<'a> {
         // `1, 2` at the front in that order. Interleaved, the second read saw
         // the first append, and one-at-a-time unshifts reversed the run -- 86
         // of 116 cases wrong on every backend
-        // (examples/a-push-and-an-unshift-of-several-arguments).
+        // (tests/programs/a-push-and-an-unshift-of-several-arguments).
         let mut pending = Vec::with_capacity(arguments.len());
         for argument in arguments {
             if self.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT) {
@@ -77028,7 +77028,7 @@ impl<'a> FuncBuilder<'a> {
         // `element`.** Otherwise the two are two derivations of one fact and only
         // one of them reaches the C prototype.
         //
-        // `nts_array_fill_ref` takes a `void *`. `benches/cases/awfy-towers`
+        // `nts_array_fill_ref` takes a `void *`. `benchmarks/cases/awfy-towers`
         // writes `new Array(3).fill(null)` into a `(TowersDisk | null)[]`, and
         // `lower_absent` prefers the *contextual* type over the expectation this
         // function states -- here `fill`'s parameter on `new Array(3)`, which
@@ -77492,7 +77492,7 @@ impl<'a> FuncBuilder<'a> {
         // one the collector reads as `n` references.
         //
         // Zeroing the tail answers that and was the first version. It costs a
-        // `memset` of the whole input: 16.4% of `benches/cases/array-predicates`
+        // `memset` of the whole input: 16.4% of `benchmarks/cases/array-predicates`
         // went to `__memset_avx2_unaligned_erms`.
         //
         // Saying the array is *empty* answers it for nothing. The capacity is
@@ -78656,7 +78656,7 @@ impl<'a> FuncBuilder<'a> {
         // The result was a raising copy that called the base's **ordinary** constructor:
         // `func Calls#constructor@raises { %2 = call Base#constructor(%0, %1) }`, so the
         // base's `throw` ended the program from inside a `try` that had compiled. 10 of 29
-        // cases, and `examples/a-throw-that-stays-in-its-function` carries both arms now --
+        // cases, and `tests/programs/a-throw-that-stays-in-its-function` carries both arms now --
         // an inherited constructor and an explicit `super`.
         let suffix = self.raising_suffix_of(id);
         let call = self.push(
@@ -81873,7 +81873,7 @@ pub(super) fn same_slot(want: &Field, have: &Field) -> bool {
 /// source holds six, and every copy the machinery could make relocates the cast
 /// rather than removing it. The census could not tell them apart either, so the
 /// split is what makes "how much of this is cheap" a question with an answer.
-/// See `tooling/conformance/blockers/an-options-bag-widened-by-assignment`.
+/// See `tests/refusals/an-options-bag-widened-by-assignment`.
 ///
 /// The sentences are deliberately *not* prefixes of one another: a fixture or a
 /// census matching on text has to pick one.

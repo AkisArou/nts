@@ -1818,7 +1818,7 @@ fn to_constant(value: &serde_json::Value) -> Option<ConstantValue> {
 /// `__snapshot` was `___snapshot` in its layout while every access said
 /// `__snapshot`, and was refused as a member its own class does not declare --
 /// React's `__reactInternalSnapshotBeforeUpdate`
-/// (`examples/a-field-whose-name-starts-with-two-underscores`).
+/// (`tests/programs/a-field-whose-name-starts-with-two-underscores`).
 pub(super) fn written_name(interned: &str) -> &str {
     if interned.starts_with("___") {
         return &interned[1..];

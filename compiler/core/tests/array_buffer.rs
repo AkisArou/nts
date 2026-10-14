@@ -23,9 +23,9 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered() -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/array-buffer/tsconfig.json")
+        .join("../../tests/programs/array-buffer/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/array-buffer is checked in");
+        .expect("tests/programs/array-buffer is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -38,7 +38,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/array-buffer"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/array-buffer"))
 }
 
 fn calls(func: &hir::Func) -> Vec<String> {

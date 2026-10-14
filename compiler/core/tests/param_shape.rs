@@ -17,11 +17,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -61,7 +61,7 @@ fn a_rest_parameter_is_told_from_an_array_parameter() {
         .flat_map(|func| &func.params)
         .filter(|param| param.shape == ParamShape::Rest)
         .count();
-    assert!(rests > 0, "examples/parameter-shapes declares one");
+    assert!(rests > 0, "tests/programs/parameter-shapes declares one");
 
     let arrays: usize = lowered
         .program
@@ -99,7 +99,7 @@ fn optional_and_defaulted_are_not_one_case() {
         .collect();
     assert!(
         all.contains(&ParamShape::Defaulted),
-        "examples/parameter-shapes declares one: {all:?}",
+        "tests/programs/parameter-shapes declares one: {all:?}",
     );
 
     assert!(

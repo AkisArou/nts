@@ -1,6 +1,6 @@
 #!/bin/sh
 # The corpus: Workbench's Library demos (CC0, github.com/workbenchdev/demos)
-# ported to TypeScript in examples/gjs-corpus, each run on nts -- C and LLVM,
+# ported to TypeScript in tests/gjs, each run on nts -- C and LLVM,
 # plain and under reference counting -- and against the original under GJS
 # (host.js), driven by the port's `driver.txt`. A demo passes when every arm's
 # log is the original's.
@@ -30,7 +30,7 @@ export GSK_RENDERER=cairo
 mkdir -p "$out"
 # The ports' configs import `@nts/config`, which is this repository's: linked
 # where node resolves it from them, as a fresh checkout has no link yet.
-config="$root/examples/gjs-corpus/node_modules/@nts/config"
+config="$root/tests/gjs/node_modules/@nts/config"
 if [ ! -e "$config" ]; then
   mkdir -p "$(dirname "$config")"
   ln -s ../../../../tooling/config "$config"
@@ -42,14 +42,14 @@ ledger="$out/ledger.tsv"
 passed=0
 total=0
 printf '| demo | C | LLVM | C --rc | LLVM --rc |\n|---|---|---|---|---|\n'
-for port in "$root"/examples/gjs-corpus/*/; do
+for port in "$root"/tests/gjs/*/; do
   port=${port%/}
   [ -f "$port/upstream" ] || continue
   name=$(basename "$port")
   upstream=$(cat "$port/upstream")
   total=$((total + 1))
   expected="$out/$name.gjs.log"
-  NTS_CORPUS_DEMO="$port" timeout 30 "$root/examples/interop/with-display.sh" \
+  NTS_CORPUS_DEMO="$port" timeout 30 "$root/tests/interop/with-display.sh" \
     gjs -m "$here/host.js" "$demos/$upstream/main.js" > "$expected" 2>/dev/null || true
   row="| $name"
   all=yes
@@ -77,7 +77,7 @@ for port in "$root"/examples/gjs-corpus/*/; do
       log="$out/$name.$mode.$product.log"
       if [ ! -x "$binary" ]; then
         verdict=refused
-      elif ! NTS_CORPUS_DEMO="$port" NTS_CORPUS_UPSTREAM="$demos/$upstream" G_DEBUG=fatal-criticals timeout 30 "$root/examples/interop/with-display.sh" "$binary" > "$log" 2>/dev/null; then
+      elif ! NTS_CORPUS_DEMO="$port" NTS_CORPUS_UPSTREAM="$demos/$upstream" G_DEBUG=fatal-criticals timeout 30 "$root/tests/interop/with-display.sh" "$binary" > "$log" 2>/dev/null; then
         verdict=crashed
       elif cmp -s "$log" "$expected" && [ -s "$expected" ]; then
         verdict=ok

@@ -201,7 +201,7 @@ fn a_pump_consumes_a_cross_thread_wakeup() {
 /// `NtsValue`. Four modules' `program.c` stopped compiling the hour that
 /// validator first became reachable.
 ///
-/// The suite is here rather than in `examples/` because the shape cannot be
+/// The suite is here rather than in `tests/programs/` because the shape cannot be
 /// written in a fixture: TypeScript will not typecheck `strings.includes(u)`
 /// without a cast, and `as string` unerases *before* the call, so the bug is out
 /// of reach. Only the generic instantiation node uses produces it, and a generic

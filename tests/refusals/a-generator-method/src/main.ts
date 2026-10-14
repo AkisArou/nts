@@ -1,0 +1,200 @@
+// expect: nothing refused -- FIXED, kept as a guard
+//
+// **Narrowed on 2026-09-11. The generator *method* itself is closed** -- a
+// `*named()` and a `*[Symbol.iterator]()` both lower, and
+// `tests/programs/a-generator-method` guards them across all three backends. What is
+// left is the four other generator shapes found the same day, each its own
+// thing rather than four faces of one.
+//
+//     g.next() by hand              this refusal
+//     g.return(v)                   the same
+//     [...generator]                a copy of something that is not an array
+//
+// **Two of the five listed here on 2026-09-11 have since landed, and this
+// comment went on naming them as gaps.** `yield*` is a walk with a `yield`
+// where the body would be -- `tests/programs/a-yield-star`, 232 cases -- and a
+// generator walked anywhere but where it was made is `tests/programs/
+// a-generator-walked-elsewhere`, 174 cases. Both were closed by the
+// representation the last paragraph below calls for, which is the thing to
+// read twice: the paragraph asking for it stayed accurate while the list
+// above it went stale, because a list of names is falsified one entry at a
+// time and an argument is not.
+//
+// # Why `next` by hand is not the same question the method was
+//
+// A `for...of` over a generator does not call `next`. It **resumes the frame**:
+// `hir::suspend` splits the generator into an entry and a resumption, and the
+// loop calls the resumption and reads two fields. There is no iterator object
+// anywhere in the emitted program, so there is nothing for `g.next()` to be a
+// method *of*.
+//
+// So closing this is not a lookup that is missing -- it is deciding what a
+// generator **value** is when the program holds one rather than walks it. All
+// three above are that same decision: `g.return(v)` needs the frame to carry a
+// completion, and `[...g]` needs a length nothing knows until the walk ends.
+//
+// `g.next()` is the one with a shape already sitting there. The resumption
+// **answers `done`** and leaves the element in `frame.yielded`, which is
+// exactly the two halves of an `IteratorResult` -- so what is missing is not
+// the step but the *object*, and `IteratorResult<T, TReturn>` is a union of
+// `IteratorYieldResult` and `IteratorReturnResult` whose arms disagree about
+// both fields: `done` is optional in one and required in the other, and `value`
+// is `T` against `TReturn`. Probed on 2026-09-12: the same two fields written
+// as a plain `interface Step { value: number; done: boolean }` compile and
+// agree.
+//
+// # Re-probed 2026-09-13, and both halves of the next sentence had moved
+//
+// The refusal is **live but narrower**, and it is **not** the census's number
+// one row any more.
+//
+// Narrower: the lib.d.ts spelling compiles when the program only ever
+// constructs *one* arm. `IteratorResult<number, number>`,
+// `IteratorResult<number, string>` built only as a yield result, and
+// `IteratorYieldResult<number>` all lower and agree with node across 116 cases.
+// It refuses only when both arms are actually built, and the message now reads
+// `\`done\` on a union one of whose members has no layout`.
+//
+// # FIXED 2026-09-19, and kept as a guard
+//
+// `g.next()` on a held generator lowers. The last sentence of the section below
+// -- "what is missing is not the step but the *object*" -- turned out to be the
+// whole of it: `IteratorResult<T>` became a provided layout earlier the same
+// day, and `generator_next` then had two halves to put in one.
+//
+// What that step had to be **read** for rather than reasoned about: the
+// resumption answers `done`, not "produced a value", and it is named two ways
+// -- directly for a frame made by a call in the same function, through a slot
+// otherwise. `tests/programs/generators` carries the arms on both sides.
+//
+// Kept rather than deleted because the reasoning below is the record of how the
+// blocker was mis-stated twice, and because a fixture that says *nothing
+// refused* is a regression guard for exactly the thing that was hardest to get
+// right.
+//
+// # Re-probed 2026-09-19: the union half was closed first
+//
+// `IteratorResult<T>` now has a **provided** layout -- one `bool` slot and one
+// element slot, per instantiation -- so the two things named above stopped
+// being blockers: no arm is decomposed, so the optional modifier is never met,
+// and the return arm's `value` gets no slot, so `TReturn`'s `any` is not
+// represented. `tests/programs/a-library-iterator-result` is the fixture.
+//
+// **This file's refusal did not move then**, which was the point of recording
+// it: bracketed against the pre-change binary, both answered `a method
+// \`next\` with no declaration in the hierarchy`. Clearing the result object
+// was necessary and not sufficient -- the step that builds one had to be
+// written too, hours later, and it is what finally moved this.
+//
+// **That distinction is why the first version of this probe was wrong.** Four
+// arms compiled and agreed, and the HIR is what gave it away: `value` came out
+// `i32`, so the checker had collapsed the union to the arm the program used and
+// the probe had avoided the case it was written for. Reading the dump is what
+// found it -- see [[0296]], and the same shape as an immediately-called closure
+// in `a-closure-over-a-loop-variable` agreeing under either implementation.
+//
+// Not number one: today's `refusal-census.mjs` over 26 modules has a different
+// top row -- `a \`X\` where a \`X\` is wanted, which is a pointer cast between
+// two structs that do not agree about where their shared fields are`, 48 things,
+// 66 sites, 20 modules -- so the 57-across-23 figure quoted here is stale.
+//
+// **A first version of this paragraph said the corpus reach was zero, and that
+// was wrong.** The census prints the top 25 of 204 distinct roots and said so
+// nowhere, so I searched a truncated list, did not find the message, and read
+// absence from the table as absence from the corpus. The cause was in
+// `internal/errors.ts` the whole time, wearing a different member name:
+//
+//     internal/errors.ts:1256  `code` on a union one of whose members has no layout
+//
+// **The total, measured with the cap raised:** `refusal-census.mjs --top=204`
+// reads `\`X\` on a union one of whose members has no layout` at **6 things, 7
+// sites, 24 modules**, with two neighbours in the same family --
+// `\`X\` on a union, past the fields its members agree about` (3, 4, 5) and
+// `\`X\` on a union whose members share no leading field` (3, 3, 2), the last
+// of which is the `union-members-lay-fields-out-differently` fixture.
+//
+// Read the 24 the way this file's own header says to: every root in
+// `internal/errors.ts` appears in every cone that imports it, so 24 modules is
+// where the *sites* are visible and not 24 independent problems. Seven sites in
+// the most-imported file in the tree is still the shape worth knowing, because
+// what it costs is measured by what it cascades into rather than by its count.
+//
+// Two separate reasons the old quotation could not be checked by searching, and
+// only one of them was the search's fault: the **message changed** while the
+// cause did not, and the **table was capped** while claiming only that unparsed
+// lines made it a floor.
+//
+// So this row and that one are **no longer one question**. `g.next()` builds
+// its own result, so it constructs exactly one arm -- which is the case that
+// already lowers. The union stays open on its own account and with nothing in
+// the corpus behind it.
+//
+// What `g.next()` needs is in `generator_walk`, which already derives the
+// resumption both ways: directly from the call that made the frame, and through
+// `generator_dispatch` when the frame arrived from somewhere else. The step
+// answers `done` and leaves the element in `frame.yielded`, which is the two
+// fields. 20 `.next(` and 7 `.return(` sites in `runtime/node`, some of them on
+// `Map`/`Set` iterators, which are deferred for other reasons.
+//
+// # What the method half cost, kept because the shape recurs
+//
+// The declaration half is fifteen lines and was written, measured and **thrown
+// away** once, because the call site could not name the frame: a method call has
+// a receiver type and a member name, and there was no route to a declaration
+// node. Landing it alone would have emitted a method nothing could call -- which
+// produces no event at all, in any lane, ever. Not a refusal, not a wrong
+// answer, not a crash, not a missing symbol. The only observer is a reader, who
+// sees a generator method compile and concludes the feature works.
+//
+// `PropertyRecord::declaration` is the route, and where it went was settled by
+// asking what the fact is *about* rather than by a rule: "where was this member
+// declared" is about the member, and that record is the member. A
+// `(TypeId, member) -> NodeId` map beside it would be a second structure keyed
+// by what the first is already keyed by.
+
+/** Control: a generator function, walked by `for...of`. Lowers. */
+function* plain(n: number): Generator<number> {
+  for (let i = 0; i < n; i++) yield i;
+}
+
+export function viaPlain(n: number): number {
+  let total = 0;
+  for (const v of plain(n & 3)) total += v;
+  return total;
+}
+
+class Counter {
+  limit: number;
+  constructor() {
+    this.limit = 3;
+  }
+
+  /** Under test: a generator method with an ordinary name. */
+  *named(): Generator<number> {
+    for (let i = 0; i < this.limit; i++) yield i;
+  }
+
+  /** Under test: the same, symbol-keyed, which is how a class is made iterable. */
+  *[Symbol.iterator](): Generator<number> {
+    for (let i = 0; i < this.limit; i++) yield i * 2;
+  }
+}
+
+export function viaNamedMethod(n: number): number {
+  let total = 0;
+  for (const v of new Counter().named()) total += v;
+  return total + n * 0;
+}
+
+export function viaIterable(n: number): number {
+  let total = 0;
+  for (const v of new Counter()) total += v;
+  return total + n * 0;
+}
+
+/** Under test: `next` by hand, which no `for...of` ever calls. */
+export function manualNext(n: number): number {
+  const g = plain(n & 3);
+  const first = g.next();
+  return first.done ? -1 : first.value;
+}

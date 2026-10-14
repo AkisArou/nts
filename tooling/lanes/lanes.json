@@ -5,7 +5,7 @@
       "session": "MainClaude",
       "branch": "compiler/",
       "owns": [
-        "benches/",
+        "benchmarks/",
         "build/",
         "compiler/codegen/c/",
         "compiler/codegen/common/",
@@ -16,7 +16,7 @@
         "compiler/frontend-ts/",
         "compiler/semantic-schema/",
         "docs/records/",
-        "examples/",
+        "tests/programs/",
         "runtime/c/",
         "runtime/ecmascript/",
         "tooling/bench/",
@@ -49,14 +49,14 @@
       "session": "JVM",
       "branch": "jvm/",
       "owns": [
-        "benches/jvm-rows.md",
+        "benchmarks/jvm-rows.md",
         "compiler/codegen/jvm/",
         "compiler/jvm-emitter/",
         "docs/jvm-android-provider.md",
         "docs/jvm-interop.md",
-        "examples/interop/android-shape/",
-        "examples/interop/java-from-ts/",
-        "examples/interop/ts-from-java/",
+        "tests/interop/android-shape/",
+        "tests/interop/java-from-ts/",
+        "tests/interop/ts-from-java/",
         "runtime/jvm/",
         "tooling/android/",
         "tooling/conformance/JvmVerify.java",
@@ -88,7 +88,7 @@
       "branch": "gtk/",
       "owns": [
         "docs/gtk-lane-goal.md",
-        "examples/gjs-corpus/",
+        "tests/gjs/",
         "runtime/c/nts_glib_host.c",
         "runtime/c/nts_glib_host.h",
         "runtime/c/nts_gtk.c",
@@ -99,10 +99,10 @@
         "tooling/gir-census/",
         "tooling/gir-sweep/",
         "tooling/gjs-corpus/",
-        "tooling/gtk-bench/"
+        "benchmarks/gtk/"
       ],
       "owns_globs": [
-        "examples/interop/gtk-*"
+        "tests/interop/gtk-*"
       ]
     },
     "apple": {
@@ -114,7 +114,7 @@
         "build/src/swift.rs",
         "docs/apple-lane-goal.md",
         "docs/macos.md",
-        "examples/interop/apple-binding.sh",
+        "tests/interop/apple-binding.sh",
         "runtime/objc/",
         "tooling/apple/",
         "tooling/cli/src/apple_surface.rs",
@@ -126,8 +126,8 @@
         "tooling/cli/src/xcframework.rs"
       ],
       "owns_globs": [
-        "examples/interop/macos-*",
-        "examples/interop/ios-*",
+        "tests/interop/macos-*",
+        "tests/interop/ios-*",
         "runtime/c/nts_cf_host.*"
       ],
       "not_run": "\\bSKIP (macos|ios|interop-on-mac)"
@@ -146,8 +146,8 @@
         "tooling/windows/"
       ],
       "owns_globs": [
-        "examples/interop/windows-*",
-        "examples/interop/winui-*",
+        "tests/interop/windows-*",
+        "tests/interop/winui-*",
         "runtime/c/nts_win_host.*"
       ],
       "not_run": "\\bSKIP (windows|winui)-"

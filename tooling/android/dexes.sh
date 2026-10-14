@@ -168,9 +168,9 @@ trap 'rm -rf "$work"' EXIT INT TERM
 if [ $# -gt 0 ]; then
   targets=""
   for name in "$@"; do
-    if [ -d "$root/benches/cases/$name" ]; then targets="$targets benches/cases/$name"
-    elif [ -f "$root/examples/$name/tsconfig.json" ]; then targets="$targets examples/$name"
-    elif [ -d "$root/examples/$name" ]; then
+    if [ -d "$root/benchmarks/cases/$name" ]; then targets="$targets benchmarks/cases/$name"
+    elif [ -f "$root/tests/programs/$name/tsconfig.json" ]; then targets="$targets tests/programs/$name"
+    elif [ -d "$root/tests/programs/$name" ]; then
       echo "$name is a directory of projects rather than one: it has no tsconfig.json" >&2
       echo "  name one of its members instead" >&2
       exit 1
@@ -184,7 +184,7 @@ else
   # and a permanent fixture is what a real decline would have hidden behind.
   #
   # **An example is a directory with a `tsconfig.json`, not any directory
-  # under `examples/`.** `examples/interop` and `examples/workspace` are
+  # under `tests/programs/`.** `tests/interop` and `tests/workspace` are
   # *containers* -- seventeen projects and four packages -- and the branch below
   # synthesises a tsconfig that includes the whole tree, so each was compiled as
   # one giant program. They declined, every run, for reasons that are properties
@@ -195,20 +195,20 @@ else
   #
   # Both landed in `declined by the backend`, which is the same bucket a real
   # refusal lands in, and contributed 0 methods. A bench case genuinely has no
-  # tsconfig and gets a synthesised one, so the test applies to `examples/` only.
+  # tsconfig and gets a synthesised one, so the test applies to `tests/programs/` only.
   #
   # `if` rather than `[ ... ] && printf`: the `&&` form leaves the loop's exit
   # status at 1 whenever the *last* directory has no tsconfig, which under
   # `set -e` kills the assignment and the script with it, silently, before
-  # anything is printed. `examples/workspace` sorts last and has no tsconfig,
+  # anything is printed. `tests/workspace` sorts last and has no tsconfig,
   # so this failed on the first run -- the same bug `pinned.sh` carried, written
   # again by someone who had been told about it that afternoon.
   examples=$(
-    for dir in "$root"/examples/*/; do
+    for dir in "$root"/tests/programs/*/; do
       if [ -f "$dir/tsconfig.json" ]; then printf '%s\n' "$dir"; fi
     done
   )
-  targets=$( (printf '%s\n' $examples; ls -d "$root"/benches/cases/*/ 2>/dev/null) \
+  targets=$( (printf '%s\n' $examples; ls -d "$root"/benchmarks/cases/*/ 2>/dev/null) \
     | sed "s|^$root/||;s|/$||" | grep -vE '/(invalid|unsupported)$' | sort)
 fi
 

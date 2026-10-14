@@ -10,7 +10,7 @@ fn argument_semantics_retain_every_subject() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/a-template-object-keeps-its-identity/tsconfig.json");
+        .join("../../tests/programs/a-template-object-keeps-its-identity/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot");

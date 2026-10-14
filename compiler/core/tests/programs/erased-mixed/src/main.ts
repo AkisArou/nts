@@ -6,7 +6,7 @@
 // a tag per element and narrowing it would read a string's pointer as a
 // double.
 //
-// The positive case is `benches/cases/erasure-stored-unknown`, whose gap
+// The positive case is `benchmarks/cases/erasure-stored-unknown`, whose gap
 // against the typed control closed to nothing. This is the case that keeps
 // that from being achieved by assuming.
 export function mixed(n: number): number {

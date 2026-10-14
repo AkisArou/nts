@@ -2,7 +2,7 @@
 //!
 //! # The measurement this exists for
 //!
-//! `benches/cases/in-narrowing` narrows `Circle | Square | Wide` with
+//! `benchmarks/cases/in-narrowing` narrows `Circle | Square | Wide` with
 //! `"radius" in shape`. That union is [`HirType::Erased`], so every shape was
 //! boxed into an `NtsValue` and unboxed again one instruction later for the
 //! `instanceof`. Record 0108: **15.48us against hand-written Java's 1.42us,

@@ -343,7 +343,7 @@ export class JsonValue {
     // ordering below is for -- so they *are* the answer and copying them into a
     // second pair is the whole of the work skipped.
     //
-    // Measured on `benches/cases/json-parse`, whose corpus is the serializer's
+    // Measured on `benchmarks/cases/json-parse`, whose corpus is the serializer's
     // own document: `nts_array_grow` and `nts_array_new` were 12.3% of the row
     // and `JsonValue.objectValue` another 7.5%. An object cost nine arrays --
     // three `index*` that stay empty, `order` that stays empty, the two string

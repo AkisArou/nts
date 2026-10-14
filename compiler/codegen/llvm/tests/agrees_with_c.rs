@@ -727,7 +727,7 @@ int main(void) {
 /// arm for it and declined the whole function — "the operator `BitOr` on this
 /// representation" — so a program C compiled produced no LLVM module at all.
 ///
-/// Found by `examples/module-numbers`, which is the first fixture to put a
+/// Found by `tests/programs/module-numbers`, which is the first fixture to put a
 /// `| 0` in a branch beside a NaN, and found *late*: the gate went green on the
 /// run that had it, because the LLVM step scored exactly its floor and a
 /// threshold reports a boolean while discarding which case moved.

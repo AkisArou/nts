@@ -6,7 +6,7 @@
 //! `class Green implements Channel { extra; level }` holds `level` second, and
 //! an access through `Channel` names `Channel`'s index -- 0, which on a `Green`
 //! is `extra`. The store landed in `extra` and the read answered it, silently
-//! (`tooling/conformance/outcomes/a-field-through-an-interface-its-classes-order-differently`).
+//! (`tests/outcomes/a-field-through-an-interface-its-classes-order-differently`).
 //! Where the class is known the access is through the class, and a call that
 //! knows it gets a copy of its callee for it (record 0294). This is where it is
 //! lost: a value of the interface's type out of an `unknown`, or out of the

@@ -205,14 +205,14 @@ self="$PWD/tooling/memory/run.sh"
 # starting work when a worker dies by a signal and `set -e` would end this
 # script silently there; it is reported instead and the accounting decides.
 # Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-printf '%s\0' tooling/memory/cases/*/ | xargs -0 -P "$jobs" -I{} "$PWD/tooling/gate/token.sh" bash -c '
+printf '%s\0' tests/memory/*/ | xargs -0 -P "$jobs" -I{} "$PWD/tooling/gate/token.sh" bash -c '
   dir=$1; rows=$2
   name=$(basename "$dir")
   if "$0" --case "$dir" > "$rows/$name.row.part" 2> "$rows/$name.err"; then :; else : > "$rows/$name.failed"; fi
   mv "$rows/$name.row.part" "$rows/$name.row"
 ' "$self" {} "$rows" || echo "  a worker ended abnormally (xargs exited $?); the cases it held are not measured" >&2
 seen=0
-for dir in tooling/memory/cases/*/; do
+for dir in tests/memory/*/; do
   name=$(basename "$dir")
   [ -f "$rows/$name.row" ] || continue
   seen=$((seen + 1))
@@ -222,7 +222,7 @@ for dir in tooling/memory/cases/*/; do
 done
 # An empty loop is not a clean run: every case has a row, or this measured less
 # than it says.
-total=$(ls -d tooling/memory/cases/*/ 2>/dev/null | wc -l)
+total=$(ls -d tests/memory/*/ 2>/dev/null | wc -l)
 if [ "$seen" -eq 0 ] || [ "$seen" -ne "$total" ]; then
   echo "  measured $seen of $total case(s)" >&2
   fail=1

@@ -1,7 +1,7 @@
 // Legal TypeScript that this backend refuses by name.
 //
 // Every refusal here was reachable and had no producer: `NTS4013` is quoted in
-// `benches/jvm-rows.md`, which is a corpus log, and its own comment in `lib.rs`
+// `benchmarks/jvm-rows.md`, which is a corpus log, and its own comment in `lib.rs`
 // says the shape "has never occurred outside the test that found it" -- a test
 // that is not in the tree. A refusal nobody produces is a branch nobody has
 // watched fire, and the failure it guards against is a class the JVM rejects at

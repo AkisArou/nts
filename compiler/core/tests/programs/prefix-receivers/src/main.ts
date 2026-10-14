@@ -14,7 +14,7 @@ class Unrelated { a = 4; b = "u"; d = 5; }
 
 function read(face: Face): string { return face.b + face.a; }
 
-// Allocated at and never read through, as `examples/readonly`'s `Config`:
+// Allocated at and never read through, as `tests/programs/readonly`'s `Config`:
 // storage with no family and no receivers.
 export interface Settings { a: number; b: string }
 export const settings: Settings = { a: 1, b: "s" };

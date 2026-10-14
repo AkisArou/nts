@@ -28,7 +28,7 @@ produces better numbers and no real program runs that way, so it is a diagnostic
 rather than a headline. Turning reclamation on cost `awfy-list` a factor of
 twelve when it was first measured, and most of that has since been given back by
 eliding reference counting the compiler can prove unnecessary — see
-[`benches/README.md`](benches/README.md) for what each row is made of.
+[`benchmarks/README.md`](benchmarks/README.md) for what each row is made of.
 
 **This paragraph said "every row is marked `(rc)`" and that was not true of the
 table beneath it.** A case declares its own provider, most declare none, and a
@@ -303,7 +303,7 @@ document.
 **Products live where they are built.** An app's config names one product:
 
 ```ts
-// examples/workspace/apps/android/nts.config.ts
+// tests/workspace/apps/android/nts.config.ts
 import { defineConfig, app } from "@nts/config";
 
 export default defineConfig({
@@ -322,7 +322,7 @@ export default defineConfig({
 and a workspace root names none:
 
 ```ts
-// examples/workspace/nts.config.ts
+// tests/workspace/nts.config.ts
 import { defineConfig } from "@nts/config";
 
 export default defineConfig({
@@ -343,8 +343,8 @@ runtime/        c, jvm, node, ecmascript, web-platform, native, chromium, react,
 tooling/        cli (the `nts` binary), gate, conformance, census, bench, differential, suite, deps,
                 config, and per-platform scripts
 build/          the build model behind `nts build`
-examples/       programs the gate compiles and compares with node; native interop projects
-benches/        benchmark cases with C++ and Java references
+tests/programs/       programs the gate compiles and compares with node; native interop projects
+benchmarks/        benchmark cases with C++ and Java references
 docs/           designs, lane notebooks, ideas, and the decision records
 third_party/    typescript-go, test262, node, chromium and other pinned dependencies
 ```

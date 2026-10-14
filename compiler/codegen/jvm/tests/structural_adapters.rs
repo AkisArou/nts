@@ -76,7 +76,7 @@ fn a_covariant_bridge_shares_a_slot_only_with_a_proven_identity() {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../examples/a-method-adapted-to-a-structural-interface/tsconfig.json")
+        .join("../../../tests/programs/a-method-adapted-to-a-structural-interface/tsconfig.json")
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo)

@@ -258,7 +258,7 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
     // A selector's default is called only by a dispatch through that
     // selector. Where no surviving call reads it, the default is as
     // unreferenced as an omitted column's rows, and C rejects an unused
-    // static (`benches/cases/in-narrowing`, -Werror,-Wunused-function).
+    // static (`benchmarks/cases/in-narrowing`, -Werror,-Wunused-function).
     //
     // **One body can serve two selectors** -- a getter's and its raising
     // twin's -- so it is unreferenced only when *none* of them is read.

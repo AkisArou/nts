@@ -1064,7 +1064,7 @@ export class Socket extends EventEmitter {
     // promise is built, so `resolve` is a settle rather than a value and there is
     // nothing to pass to `close`. `Promise.withResolvers()` gives a capability
     // that survives being stored and read back -- see
-    // `examples/promise-with-resolvers` -- and the callback calls it as a
+    // `tests/programs/promise-with-resolvers` -- and the callback calls it as a
     // *member*, which is a settle with the promise as receiver. Extracting
     // `closed.resolve` and passing that would be refused for the same reason
     // `resolve` is.

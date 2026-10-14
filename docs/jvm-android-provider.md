@@ -83,7 +83,7 @@ buffer, and a stored length is right until the first `resize`.
 
 `NtsDataView` is lowered as `ManagedType::DataView` since `932a9969`, which
 carries nothing — a typed array *is* its element type, and a `DataView` has none
-because the width is chosen per access by the method called. `examples/data-view`
+because the width is chosen per access by the method called. `tests/programs/data-view`
 drives 466 cases across sixteen functions and all three backends agree with node.
 
 It is big-endian by default — the one place in the language where the
@@ -454,7 +454,7 @@ the desktop -- removing the adapter's explicit `Accept-Encoding` fails it three
 ways, on the headers and on 62 encoded bytes arriving as 52 decoded ones. What arrived most
 recently, and what it cost:
 
-- **Typed arrays lower and run.** `examples/typed-arrays` agrees with node on
+- **Typed arrays lower and run.** `tests/programs/typed-arrays` agrees with node on
   292 cases; the corpus is 115 of 115 with no refusals. Eight of the eleven
   runtime classes are reachable -- `NtsViewU8C`, `NtsViewI64` and `NtsViewU64`
   have no element in `hir::builtin` and are refused by name in two independent

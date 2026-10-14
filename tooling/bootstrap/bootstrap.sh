@@ -126,7 +126,7 @@ fi
 
 # ------------------------------------------------------------------- packages
 #
-# `examples/library` resolves a workspace dependency, and without this it fails
+# `tests/programs/library` resolves a workspace dependency, and without this it fails
 # to typecheck rather than failing to agree -- which reads like a compiler bug.
 say "node_modules"
 if have node_modules/.modules.yaml; then

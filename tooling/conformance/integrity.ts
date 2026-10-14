@@ -1,7 +1,7 @@
 // Is what the backend receives whole? Nine facts about a program, checked from
 // the compiler's own listings, each one a defect that shipped silently.
 //
-//   node tooling/conformance/integrity.ts [project ...]   (default: examples/*, blockers/*, outcomes/*)
+//   node tooling/conformance/integrity.ts [project ...]   (default: tests/programs/*, blockers/*, outcomes/*)
 //   node tooling/conformance/integrity.ts --runtime       runtime/node/* and runtime/web-platform
 //   node tooling/conformance/integrity.ts --self-test
 //   NTS_BIN=<a pinned copy> node tooling/conformance/integrity.ts
@@ -952,26 +952,26 @@ function scratch() {
 /** Every fixture (or the named ones), materialised, as their labels. */
 function outcomes(names = outcomeFixtures()) {
   return names.map((name) => {
-    const label = `tooling/conformance/outcomes/${name}`;
+    const label = `tests/outcomes/${name}`;
     pathOf.set(label, materialise(scratch(), name, join(OUTCOMES, name, "src"), runMode(name)));
     return label;
   });
 }
 // A fixture named on the command line is read through its project too, not
 // its bare directory -- which does not typecheck without the harness.
-const fixturePrefix = "tooling/conformance/outcomes/";
+const fixturePrefix = "tests/outcomes/";
 const projects = (named.length > 0
   ? named.flatMap((p) => (p.replace(/\/$/, "").startsWith(fixturePrefix) ? outcomes([p.replace(/\/$/, "").slice(fixturePrefix.length)]) : [p]))
   : process.argv.includes("--runtime")
     ? [...under("runtime/node"), "runtime/web-platform"]
-    : [...under("examples"), ...under("tooling/conformance/blockers"), ...outcomes()]
+    : [...under("examples"), ...under("tests/refusals"), ...outcomes()]
 ).sort();
 
 /**
  * Projects with no prepared program by design, each with its reason. Named,
  * never silent: one that starts typechecking has an expired reason.
  */
-const DOES_NOT_TYPECHECK = new Map([["examples/invalid", "does not typecheck on purpose"]]);
+const DOES_NOT_TYPECHECK = new Map([["tests/programs/invalid", "does not typecheck on purpose"]]);
 
 /**
  * The first entry of a known file out of byte order, as `{ at, line, before }`,

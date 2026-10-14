@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs an existing C interop example (examples/interop/<name>) for macOS: the
+# Runs an existing C interop example (tests/interop/<name>) for macOS: the
 # library built here for macos-13 x86_64, its C `caller` compiled and linked
 # here against the Apple SDK, and the caller run on the lane's Mac.
 #
@@ -40,21 +40,21 @@ apple_cc="$out/apple-cc"
 printf '#!/bin/sh\nexec clang -target x86_64-apple-macos13 -isysroot "%s" -fuse-ld=lld -Wno-unused-command-line-argument "$@"\n' \
   "$NTS_APPLE_SDK" >"$apple_cc"
 chmod +x "$apple_cc"
-mkdir -p "$mirror/examples/interop" "$mirror/runtime" "$mirror/tooling"
+mkdir -p "$mirror/tests/interop" "$mirror/runtime" "$mirror/tooling"
 ln -s "$repo/tsconfig.fixtures.json" "$mirror/tsconfig.fixtures.json"
 ln -s "$repo/node_modules" "$mirror/node_modules"
 ln -s "$repo/runtime/native" "$mirror/runtime/native"
 ln -s "$repo/tooling/config" "$mirror/tooling/config"
 ln -s "$repo/target" "$mirror/target"
 # `@nts/config` resolves from the interop directory's own install.
-ln -s "$repo/examples/interop/node_modules" "$mirror/examples/interop/node_modules"
-ln -s "$repo/examples/interop/package.json" "$mirror/examples/interop/package.json"
+ln -s "$repo/tests/interop/node_modules" "$mirror/tests/interop/node_modules"
+ln -s "$repo/tests/interop/package.json" "$mirror/tests/interop/package.json"
 
 status=0
 for name in "${names[@]}"; do
-  source="$repo/examples/interop/$name"
+  source="$repo/tests/interop/$name"
   [[ -f "$source/build.sh" ]] || { echo "no example $name" >&2; status=1; continue; }
-  copy="$mirror/examples/interop/$name"
+  copy="$mirror/tests/interop/$name"
   cp -R "$source" "$copy"
   config="$copy/nts.config.ts"
   grep -q 'target.linux({ backend: "c" })' "$config" ||

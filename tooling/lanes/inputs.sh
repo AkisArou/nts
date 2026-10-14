@@ -79,7 +79,7 @@ done
 # missed -- the workspace links inside resolve by absolute path.
 #
 # **What needs it moved, and the old reason no longer holds.** This used to say
-# `examples/library` fails to *typecheck* without it, because its
+# `tests/programs/library` fails to *typecheck* without it, because its
 # `tsconfig.json` pulled `nts.config.ts` into the program and that file imports
 # `@nts/config`. It does not any more: the config is typechecked by
 # `tsconfig.config.json` beside it, and the program is `src/` alone -- which was
@@ -93,7 +93,7 @@ done
 # still load-bearing; `backend_examples` would count its absence as a plain
 # failure with thirty other names beside it, exactly as before.
 # **The list here went stale the moment a fourth appeared.** It named three, and
-# `examples/interop` then grew an `nts.config.ts` per example: the worktree could
+# `tests/interop` then grew an `nts.config.ts` per example: the worktree could
 # not resolve `@nts/config`, every interop example died with
 # `ERR_MODULE_NOT_FOUND`, and the gate blamed `interop` for a change in the C
 # emitter. A fixed enumeration that was complete when it was written.
@@ -115,7 +115,7 @@ for modules in node_modules runtime/node/node_modules; do
   [ -d "$root/$modules" ] || continue
   # **Copied rather than linked where a workspace link lives inside it.**
   #
-  # `examples/library/node_modules/@nts/config` is a *relative*
+  # `tests/programs/library/node_modules/@nts/config` is a *relative*
   # symlink, `../../../../tooling/config`. A symlink to the whole directory
   # makes that relative path resolve from its physical location -- the main
   # tree -- so the worktree compiled `$root/tooling/config/src/*.ts`, which is

@@ -150,7 +150,7 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
 /// already resolved to the `tsconfig.json` in it, and `nts build
 /// path/to/nts.config.ts` is the same request spelled the other obvious way --
 /// it is the file a person has open. Taken literally it made the *config* the
-/// program, and `examples/library` failed with four `TS5097 An import path can
+/// program, and `tests/programs/library` failed with four `TS5097 An import path can
 /// only end with a '.ts' extension`, about `@nts/config`'s own `package.json`.
 /// Nothing in the tree built that example, so it had no observer.
 ///
@@ -4683,7 +4683,7 @@ fn compile_program(
 ///
 /// **The library Java never references the emitted classes, which is what makes
 /// the ordering simple.** Measured rather than assumed: across
-/// `examples/interop/java-from-ts` and `android-shape`, every `.java` in a
+/// `tests/interop/java-from-ts` and `android-shape`, every `.java` in a
 /// declared root has zero `nts.gen` references -- the files that do are test
 /// consumers living outside any root. So a root compiles against the platform
 /// and the runtime, and nothing here has to be built twice.
@@ -6161,7 +6161,7 @@ fn zig_triple(target: &nts_build::config::Target) -> Option<String> {
 /// The C compiler for a target, and the refusal where there is none.
 ///
 /// **Measured before it was written, because the goal said to.** `zig cc` is a
-/// drop-in for `clang` on the host -- `examples/library` builds the same
+/// drop-in for `clang` on the host -- `tests/programs/library` builds the same
 /// artifact through either -- and it cross-compiles *this compiler's generated
 /// C*, which is the question that matters and is not the same as whether zig
 /// cross-compiles. Run against `program.c` and `nts_runtime.c`:
@@ -6703,7 +6703,7 @@ fn link_c(
     // this library at all has already pulled that member in and the constructor
     // comes with it. Appended rather than written beside it for exactly that:
     // a file of its own is a member with no reason to be linked. The GTK lane
-    // found it; `examples/interop/library-module-state` is the arm that fails
+    // found it; `tests/interop/library-module-state` is the arm that fails
     // without this.
     let sources = wrote.sources.clone();
     if library && wrote.initializes {
@@ -7180,7 +7180,7 @@ fn cache_directory(
 
 /// A compiled object kept between builds, and what decides it is still valid.
 ///
-/// **Measured before built.** A build of `examples/library` is 1.10s, of which
+/// **Measured before built.** A build of `tests/programs/library` is 1.10s, of which
 /// compiling `nts_runtime.c` is **0.96s** -- the emit is 0.06, the config
 /// evaluation 0.02, the program's own compile 0.02 and the link 0.02. The
 /// runtime is the same translation unit on every build of every project, and
@@ -7200,8 +7200,8 @@ fn cache_directory(
 ///     both                 0.060s
 ///
 /// The decomposition on a *larger* project is the one that shows what each is
-/// worth, because `examples/library` is small enough that the frontend is
-/// cheap: `examples/workspace/apps/linux` goes 1.416s cold, 0.291s on this
+/// worth, because `tests/programs/library` is small enough that the frontend is
+/// cheap: `tests/workspace/apps/linux` goes 1.416s cold, 0.291s on this
 /// cache alone, 0.112s on both.
 ///
 /// # What makes an entry valid
@@ -7437,7 +7437,7 @@ fn compile_one(
 ///
 /// Appended rather than written beside it: an archive member nothing references
 /// is not linked, and a unit holding only a constructor never is. The GTK lane
-/// found it; `examples/interop/library-module-state` is the arm that fails
+/// found it; `tests/interop/library-module-state` is the arm that fails
 /// without this. For an LLVM module the constructor is `llvm.global_ctors`,
 /// which is what clang makes of the attribute.
 fn append_library_initialiser(out: &Utf8Path, sources: &[String]) -> Result<()> {
@@ -7857,7 +7857,7 @@ fn refuse_unclaimed_target(
 /// rather than at link time with a missing symbol." It was read in exactly one
 /// place, to decide which bindings to generate for a package building itself.
 ///
-/// `examples/workspace` is built around this: `biometrics` claims
+/// `tests/workspace` is built around this: `biometrics` claims
 /// `android-29` and `ios-17` only, `apps/linux` depends on it, and that is
 /// described in the fixture as the constraint being *violated* there. Nothing
 /// said so.
@@ -7998,7 +7998,7 @@ fn refuse_unwritable_integrations(resolved: &nts_build::config::Resolved) -> Res
 /// An absolute, normalised path, for a file a *different* build system reads.
 ///
 /// **Measured, not predicted.** The first `CMake` hook wrote the paths as this
-/// build saw them -- `examples/workspace/apps/linux-brownfield/./nts/sdk.ts` --
+/// build saw them -- `tests/workspace/apps/linux-brownfield/./nts/sdk.ts` --
 /// and `CMake` resolves a relative path against its own build directory. It
 /// *configured* cleanly and failed at build with `No rule to make target`,
 /// which is the exact shape of an adapter that was written and never run.

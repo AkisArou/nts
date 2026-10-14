@@ -42,7 +42,7 @@ node_modules
 /third_party/test262
 
 # Are We Fast Yet, cloned sparsely. Not vendored, for the same reason: it is
-# somebody else's repository, and the TypeScript port in `benches/awfy` is ours.
+# somebody else's repository, and the TypeScript port in `benchmarks/awfy` is ours.
 # What the clone is for is the *fidelity gate* -- running their `.js` and our
 # `.ts` on node and comparing -- and the reference C++ column.
 #   git clone --depth 1 --filter=blob:none --sparse \
@@ -78,7 +78,7 @@ tsconfig.gir.json
 tsconfig.objc.json
 tsconfig.windows.json
 
-# Declaration output from `tsc -b examples/workspace/tsconfig.solution.json`.
+# Declaration output from `tsc -b tests/workspace/tsconfig.solution.json`.
 # Composite projects must emit, so the fixture's packages emit declarations into
 # `.types/`. It is not here because it was overlooked: until the baseUrl and
 # platform-surface fixes the solution build failed on every project, so nothing

@@ -60,7 +60,7 @@ bind-c`, the witness, and `program.h` for C calling TypeScript.
 - **Linker.** `link_c` speaks ld64: `-dynamiclib`,
   `-exported_symbols_list`, `-install_name @rpath/…`, `-dead_strip`, and
   `llvm-ar --format=darwin` for archives.
-- **`examples/interop/macos-hello`** is one program built for Linux, macOS
+- **`tests/interop/macos-hello`** is one program built for Linux, macOS
   x86_64 and macOS arm64.
   - The Linux run matches node byte for byte.
   - The Mach-O slices are checked for CPU, libSystem-only loads and
@@ -110,7 +110,7 @@ what to link with `@ntsFramework Foundation`.
   managed ABI, and callbacks.
 - **Link and target:** `-lobjc` and `-framework X`. A send off Apple is refused
   by name.
-- **Measured on the VM:** `examples/interop/macos-foundation` prints exactly
+- **Measured on the VM:** `tests/interop/macos-foundation` prints exactly
   what `reference/foundation.c` prints, on both backends. That file sends the
   same messages from hand-written C against the same Foundation. A selector
   sabotage dies with `unrecognized selector`.
@@ -167,14 +167,14 @@ correctness does not depend on arm64 running by luck.
 1. **A2, a window.** Landed so far:
    - **The run-loop host (`48faceb5`).** `nts_cf_host` turns libuv inside
      the main `CFRunLoop`, with a per-task autorelease pool.
-     `examples/interop/macos-loop` runs `gtk-loop`'s four arms.
+     `tests/interop/macos-loop` runs `gtk-loop`'s four arms.
    - **Blocks (`6e177bd0`).** `Block<F>` becomes a clang-shaped stack block
      whose copy and dispose lend and give back the closure, guarded to the
-     owning thread. `examples/interop/macos-blocks` matches an ARC oracle.
+     owning thread. `tests/interop/macos-blocks` matches an ARC oracle.
    - **Classes (`fb6496c1`).** A class is made at run time through the
      runtime's C API (`objc:runtime`), and each method is
      `imp_implementationWithBlock` over a TypeScript closure whose first
-     parameter is `self`. `examples/interop/macos-subclass` matches an ARC
+     parameter is `self`. `tests/interop/macos-subclass` matches an ARC
      oracle. Ownership follows ObjC's: a method closure lives as long as its
      class, which is forever. An instance is an ordinary counted object, so a
      target or delegate that Cocoa holds weakly stays alive only while
@@ -184,13 +184,13 @@ correctness does not depend on arm64 running by luck.
      is read from the storage it points at, and a result is written into a
      frame local, with `local<T>()`'s rules. A send returning one uses
      `objc_msgSend_stret` on x86_64 when it is over 16 bytes.
-     `examples/interop/macos-geometry` matches an Objective-C oracle, and its
+     `tests/interop/macos-geometry` matches an Objective-C oracle, and its
      control shows plain `objc_msgSend` failing at the send.
-     `examples/interop/native-byvalue` covers each ABI class against C. The LLVM
+     `tests/interop/native-byvalue` covers each ABI class against C. The LLVM
      backend refuses by name until it classifies aggregates (SysV and AAPCS64,
      checked against `clang -emit-llvm`).
 
-   - **A window (C backend).** `examples/interop/macos-window` puts an
+   - **A window (C backend).** `tests/interop/macos-window` puts an
      `NSWindow` with an `NSButton` on the Mac's screen. The button's action is
      a TypeScript closure, and each press starts an `await` and a
      `setTimeout`. All of it runs inside `[NSApp run]`, in JavaScript's order,
@@ -284,7 +284,7 @@ correctness does not depend on arm64 running by luck.
      - `instanceof` is `isKindOfClass:`.
      - A class the program writes over one is an Objective-C class of its own
        (S6, below).
-     - `examples/interop/macos-classes` matches an ARC oracle on both
+     - `tests/interop/macos-classes` matches an ARC oracle on both
        backends, and its NoGc control differs only in `new`'s object living
        on.
    - **S2, labels, landed.** A parameter declared as an object type literal
@@ -856,7 +856,7 @@ correctness does not depend on arm64 running by luck.
          `_stret`.
        - `by_value.rs` compares the declarations with clang's for
          `arm64-apple-macos13`.
-       - `examples/interop/arm64-records` *runs* them. The same program is
+       - `tests/interop/arm64-records` *runs* them. The same program is
          built by both backends for arm64 Linux, which spells every admitted
          shape as Apple does, and run under qemu. The LLVM build must print
          what the C build prints. Spelling the four doubles as integers
@@ -866,7 +866,7 @@ correctness does not depend on arm64 running by luck.
          store would run past the record, and arguments over 16 bytes (a
          pointer to a caller's copy, not built yet).
    - **Against Swift, measured (2026-09-25).**
-     `examples/interop/macos-bench/bench.sh` runs the same loops in
+     `tests/interop/macos-bench/bench.sh` runs the same loops in
      TypeScript and in Swift (`reference/bench.swift`, `swiftc -O`) on the
      lane's Mac. Rounds are interleaved and the median of 7 is taken, since
      the VM's timings move by 2x.
@@ -981,7 +981,7 @@ correctness does not depend on arm64 running by luck.
        differs.
    - **iOS, on the simulator (2026-09-25).** A UIKit application written in
      TypeScript runs on the iOS simulator of the lane's Mac, from both
-     backends: `examples/interop/ios-hello`.
+     backends: `tests/interop/ios-hello`.
      - `nts build` refused every iOS target ("needs a bundle, signing and a
        simulator"). An `x86_64` iOS target can only be the simulator, on an
        Intel Mac, and needs no signing. `ios_toolchain` builds it with the

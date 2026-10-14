@@ -248,7 +248,7 @@ fn from_clang(root: &std::path::Path, flags: &[String]) -> Option<Vec<Declared>>
     // cost "the LLVM column of a whole benchmark row, with a refusal message
     // pointing at the wrong file".
     //
-    // It cost it a second time on 2026-09-05, to `examples/strings`, because
+    // It cost it a second time on 2026-09-05, to `tests/programs/strings`, because
     // regenerating for an unrelated addition silently dropped both. A generator
     // whose source of truth is narrower than the table it generates is a trap
     // that springs on whoever next has a reason to run it.

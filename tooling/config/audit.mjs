@@ -193,10 +193,10 @@ ask(
 
 const enrolled = new Set();
 for (const tc of [
-  "examples/workspace/tsconfig.configs.json",
-  "examples/library/tsconfig.config.json",
-  "examples/interop/tsconfig.configs.json",
-  "examples/gjs-corpus/tsconfig.configs.json",
+  "tests/workspace/tsconfig.configs.json",
+  "tests/programs/library/tsconfig.config.json",
+  "tests/interop/tsconfig.configs.json",
+  "tests/gjs/tsconfig.configs.json",
 ]) {
   const json = JSON.parse(readFileSync(join(repo, tc), "utf8").replace(/^\s*\/\/.*$/gm, ""));
   for (const f of [...(json.files ?? []), ...(json.include ?? [])]) {
@@ -379,7 +379,7 @@ if (process.env.NTS_AUDIT_NO_TSC || !existsSync(tsc)) {
   let out = "";
   try {
     execFileSync(tsc, ["-b", "tsconfig.solution.json", "--force"], {
-      cwd: join(repo, "examples/workspace"), encoding: "utf8", stdio: "pipe",
+      cwd: join(repo, "tests/workspace"), encoding: "utf8", stdio: "pipe",
     });
   } catch (e) {
     out = (e.stdout ?? "") + (e.stderr ?? "");

@@ -4,7 +4,7 @@
 //! throws, so this was a **wrong answer** rather than a missing feature — and
 //! it was invisible for as long as it existed, because the differential's node
 //! driver died on the first synchronous throw and every case after it went
-//! unasked. The driver was fixed and `examples/strings` went red on five cases
+//! unasked. The driver was fixed and `tests/programs/strings` went red on five cases
 //! the same day.
 //!
 //! Skips only when `tsgo` is not built.
@@ -18,11 +18,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -35,7 +35,7 @@ fn func<'a>(lowered: &'a hir::lower::Lowered, name: &str) -> &'a hir::Func {
         .funcs
         .iter()
         .find(|func| func.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is exported from examples/strings"))
+        .unwrap_or_else(|| panic!("`{name}` is exported from tests/programs/strings"))
 }
 
 /// The count is tested before the helper is reached, and both halves are there.
@@ -111,7 +111,7 @@ fn a_repeat_count_is_tested_for_both_refusals() {
 /// A `RangeError` is built and thrown, in a program that never names one.
 ///
 /// The checker interns only what the source mentions, so
-/// `type_named("RangeError")` is `None` for most programs — `examples/strings`
+/// `type_named("RangeError")` is `None` for most programs — `tests/programs/strings`
 /// has no `RangeError` in it. A class this compiler *provides* cannot depend on
 /// that, so the type comes from a reserved band when the snapshot has none.
 #[test]

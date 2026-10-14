@@ -28,7 +28,7 @@
  */
 
 // The package is read by node, at build-planning time, and only there: a
-// config is evaluated, never compiled into a program (examples/library's
+// config is evaluated, never compiled into a program (tests/programs/library's
 // tsconfig.json says why). So node's types are this module's to name.
 /// <reference types="node" />
 import { fileURLToPath } from "node:url";
@@ -124,7 +124,7 @@ export interface Target {
  * **`c`, because it is the one that produces an artifact.** This was `llvm`,
  * and the llvm lane renders to stdout -- its slice is scalar and there is no
  * runtime to place beside it -- so every native target that did not say
- * `backend: "c"` out loud refused at build time. `examples/library` carries a
+ * `backend: "c"` out loud refused at build time. `tests/programs/library` carries a
  * comment about having to say it, which is the shape of a default that does not
  * work: the workaround gets written down instead of the default getting fixed.
  * `target.windows()`, `ios()` and `macos()` did not even take the option, so a

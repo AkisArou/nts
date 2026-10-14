@@ -85,7 +85,7 @@ fi
 for product in host host-llvm; do
   config=$(mktemp -d)
   log=$(env XDG_CONFIG_HOME="$config" GDK_DEBUG=no-portals GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
-    timeout 30 "$root/examples/interop/with-display.sh" "$out/$product/linux-gnu-x86_64/$product" 2>/dev/null || true)
+    timeout 30 "$root/tests/interop/with-display.sh" "$out/$product/linux-gnu-x86_64/$product" 2>/dev/null || true)
   rmdir "$config"
   if [ "$log" != "$expected" ]; then
     printf 'FAILED react-gtk (%s): expected\n%s\ngot\n%s\n' "$product" "$expected" "$log" >&2

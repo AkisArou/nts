@@ -2,7 +2,7 @@
 // fixture's `src/main.ts` by `outcomes-check.ts`, in both runs -- nts and node --
 // so the two programs are one text.
 //
-// A compiled program has nothing to print with (`examples/standalone` says so in
+// A compiled program has nothing to print with (`tests/programs/standalone` says so in
 // as many words), so observations leave the way test262's verdicts do: as the
 // message of an uncaught throw. `observe` appends `label=value;` and `done`
 // throws the whole line as an `Observed`. nts prints it as

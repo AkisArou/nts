@@ -7,7 +7,7 @@
 //!
 //! The rest are reachable from legal TypeScript, and **those had no producer at
 //! all**. `NTS4013` appears in the tree exactly twice outside its own source: in
-//! `benches/jvm-rows.md`, which is a corpus log. Its comment in `lib.rs` says
+//! `benchmarks/jvm-rows.md`, which is a corpus log. Its comment in `lib.rs` says
 //! the shape "has never occurred outside the test that found it", and that test
 //! is not in the tree -- so the sentence reads as coverage and is a record of a
 //! sweep that happened once.

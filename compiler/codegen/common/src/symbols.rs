@@ -740,7 +740,7 @@ pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) ->
 /// Field name '__@kCount@2' cannot be represented in dex format.
 /// ```
 ///
-/// That is `benches/cases/symbol-keys`, whose symbol-keyed property becomes a
+/// That is `benchmarks/cases/symbol-keys`, whose symbol-keyed property becomes a
 /// field with the symbol's identity in its name. It verified, it ran, it agreed
 /// with node -- and it could not reach Android, which is the one thing this
 /// backend targets that the others do not. Found by dexing all sixty cases;

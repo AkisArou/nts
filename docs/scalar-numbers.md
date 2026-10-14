@@ -275,8 +275,8 @@ through the gate on its own.
 
 - **275 proven, 589 unproven.** The whole-program analysis would prove just
   6 more (281 / 583), so Q2 costs almost nothing.
-- 22 projects couldn't be measured alone: the `examples/workspace` apps need a
-  workspace build, `examples/invalid` fails to typecheck on purpose, and two
+- 22 projects couldn't be measured alone: the `tests/workspace` apps need a
+  workspace build, `tests/programs/invalid` fails to typecheck on purpose, and two
   GJS examples don't typecheck in isolation.
 
 What the 589 unproven are, and what clears each group:
@@ -459,10 +459,10 @@ projects, by a release build of the step-1 branch:
   attribute>)`): WebIDL converts a timer id with ToInt32, so that lane's
   binding takes a `double` and converts it as Blink does, as `setTimeout`'s
   timeout already was (5b3dec787).
-- The 4 not measured fail to typecheck on main too: `examples/invalid` on
+- The 4 not measured fail to typecheck on main too: `tests/programs/invalid` on
   purpose, two GJS examples alone, and a workspace package whose platform
   modules a workspace build generates. The other workspace apps and
-  `examples/library` are measured, with `@nts/config` linked as the gate links
+  `tests/programs/library` are measured, with `@nts/config` linked as the gate links
   it.
 - Step 0's 589 unproven crossings went three ways. Most were cleared by facts:
   written and binding types (the generated GTK wrappers' 452 among them),
@@ -668,14 +668,14 @@ way `written_roots` gives a root's parameters theirs.
   still an array of doubles). Arrays need a growable byte, short and int array
   on the JVM, whose runtime has only `NtsArrayD` for numbers.
 
-`examples/a-written-field-held-at-its-width` checks every kind at its edges on
+`tests/programs/a-written-field-held-at-its-width` checks every kind at its edges on
 C, LLVM, the JVM and rc. Node holds them all as doubles, so agreement cannot
 see a width; `compiler/core/tests/written_storage.rs` pins the widths, the
 global, the `Float32` that stays a float, and the shared field that keeps one
 width.
 
 Building the example also found a wrong answer that predates this:
-`tooling/conformance/outcomes/a-field-through-an-interface-its-classes-order-differently`.
+`tests/outcomes/a-field-through-an-interface-its-classes-order-differently`.
 A value whose class was lost (an erased join unerased to an interface) is read
 and written at the interface's index, whatever its class lays out, and even a
 class that agrees with the interface misses the store. That is the field half

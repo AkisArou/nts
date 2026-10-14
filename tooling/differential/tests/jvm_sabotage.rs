@@ -7,7 +7,7 @@
 //! question underneath it: *would it notice?* A harness that compared nothing,
 //! or compared it wrongly, would report the same number and go on reporting it.
 //!
-//! `examples/unsupported` is why this is not hypothetical. Its gate assertion --
+//! `tests/programs/unsupported` is why this is not hypothetical. Its gate assertion --
 //! that the fixture fails to compile -- passed for years because **node could
 //! not parse the file**, so the compiler was never asked. Removing the
 //! accidental cause turned it red. A green check that has never exercised its
@@ -262,7 +262,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
 
         assert!(
             honest,
-            "`examples/{}` has to agree with node *before* the sabotage, or it \
+            "`tests/programs/{}` has to agree with node *before* the sabotage, or it \
              proves nothing about {}",
             sabotage.example, sabotage.method,
         );
@@ -272,7 +272,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         // method is compiled into the example and still not on a path whose
         // result anybody compares.
         //
-        // That happened: `ofNumber` appears six times in `examples/unknown` and
+        // That happened: `ofNumber` appears six times in `tests/programs/unknown` and
         // the fixture still agreed under sabotage, because the middle end had
         // elided every erasure whose payload is read and the boxes that
         // survived were only ever asked for their tag. So no check on the
@@ -281,7 +281,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         // output changed", which is this assertion.
         assert!(
             !broken,
-            "breaking `{}` changed nothing that `examples/{}` reports. Either \
+            "breaking `{}` changed nothing that `tests/programs/{}` reports. Either \
              the harness is not checking {} -- or the anchor is wrong and that \
              method, though compiled in, is not on a path whose result the \
              differential compares. Read the emitted class before assuming the \

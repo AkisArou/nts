@@ -338,7 +338,7 @@ fn c_type(ty: &HirType) -> String {
         // They were `show`, `show_string`, `show_settled` and a local
         // `held`, and the harness `#include`s `program.h` -- so a program
         // exporting a function called `held` could not be checked at all.
-        // `examples/promise-with-resolvers` had one, and clang answered
+        // `tests/programs/promise-with-resolvers` had one, and clang answered
         // `called object type 'NtsPromise *' is not a function`, which is
         // a sentence about the harness pointed at the program. It fails
         // loudly rather than answering wrongly, so this is about the
@@ -365,7 +365,7 @@ fn c_type(ty: &HirType) -> String {
 /// and React's transform.
 ///
 /// **It is a parameter because this made its own frontend and therefore compiled
-/// a different program.** `nts check examples/interop/macos-spm` answered
+/// a different program.** `nts check tests/interop/macos-spm` answered
 /// `Cannot find module 'objc:Blink'` and then "the program does not typecheck",
 /// for a project `nts build` builds green: the bindings are *generated*, so a
 /// frontend with no generator cannot see them. Every `objc:` and `c:` project
@@ -412,7 +412,7 @@ pub fn check(
     //
     // Every gate script exports the variable, so the gate never saw it. What
     // did was `cargo test --workspace` outside the gate: `jvm_sabotage` failed
-    // with "`examples/bitwise` has to agree with node *before* the sabotage",
+    // with "`tests/programs/bitwise` has to agree with node *before* the sabotage",
     // which reads as a compiler regression and is the frontend never starting.
     let tsgo = std::env::var("NTS_TSGO").ok().unwrap_or_else(|| {
         nts_frontend_ts::tsgo::locate().map_or_else(|| "tsgo".to_owned(), |at| at.to_string())
@@ -511,7 +511,7 @@ pub fn check(
         // marks a root of the whole program, and node imports one file: a
         // function another module exports is a root here and `undefined` there,
         // so driving it threw `m.f is not a function` and the run died before
-        // it compared anything. `examples/nested` had never been checked.
+        // it compared anything. `tests/programs/nested` had never been checked.
         .filter(|func| importable.contains(func.name.as_str()))
         .filter(|func| {
             drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
@@ -1363,8 +1363,8 @@ fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
 ///
 /// The rule that was missing: **a program killed by a signal that printed no
 /// refusal at all is a defect**, not a decline. Both of this week's worst bugs
-/// hid exactly there. `examples/map-and-set` segfaulted on every case under
-/// reference counting and the gate counted it as passing; `examples/async`
+/// hid exactly there. `tests/programs/map-and-set` segfaulted on every case under
+/// reference counting and the gate counted it as passing; `tests/programs/async`
 /// reached 263 of 928 cases for the same reason, and the cycle collector's
 /// blind spot sat behind it. In both, stdout was buffered and lost with the
 /// crash, so there was nothing to compare and nothing to complain about.
@@ -1379,7 +1379,7 @@ const TIMED_OUT: i32 = 124;
 
 /// As [`stopped`], plus the exit code, which is the only place a timeout shows.
 ///
-/// `benches/cases/absences` found the gap. Fixing an unsigned remainder made
+/// `benchmarks/cases/absences` found the gap. Fixing an unsigned remainder made
 /// the case correct and slow -- 14.74 s for its 2.1 billion iterations -- and
 /// the harness reported **"1 case(s) the compiled program declined"**, which is
 /// the sentence it uses for a program keeping the promise its `!` made. Before
@@ -1420,7 +1420,7 @@ fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stop
     // the comment "the runner must count it as one rather than as a declined
     // case" -- but saying so was the whole of the enforcement, and this
     // function's fallthrough is `Declined`. A `VerifyError` in
-    // `examples/fluent-this` was reported as "17 case(s) the compiled program
+    // `tests/programs/fluent-this` was reported as "17 case(s) the compiled program
     // declined -- an index its `!` promised was in range and was not", about a
     // file containing no subscript at all. The lane was refusing loudly and
     // being believed about the wrong thing.
@@ -2265,7 +2265,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
                 // there about promises, and a *synchronous* throw does exactly
                 // the same thing and had no catch at all.
                 //
-                // `benches/cases/fib` is where it showed: the pool hands it
+                // `benchmarks/cases/fib` is where it showed: the pool hands it
                 // 2147483647 and node raises `RangeError: Maximum call stack
                 // size exceeded`, so the driver died at case 20 and the
                 // fourteen after it were never asked. The compiled program
@@ -2340,7 +2340,7 @@ fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<R
 /// **The oracle's output is decided by the oracle, not by the shell that
 /// launched it.** `console.log` colourises through `util.inspect` when the
 /// stream says colour is wanted, and `FORCE_COLOR` says so even into a pipe: a
-/// developer shell exporting it turned `examples/console` into 74
+/// developer shell exporting it turned `tests/programs/console` into 74
 /// disagreements that were entirely escape codes, on one machine and not
 /// another. Removed, and `NO_COLOR` set so the intent is stated rather than
 /// implied by the absence of two variables.
@@ -2363,7 +2363,7 @@ fn node_results(results_path: &Utf8Path, run: &std::process::Output) -> Result<V
         results.pop();
     } else {
         // **Said, and not fatal.** Node stopping part-way -- a pool value in a
-        // loop bound, or its heap exhausted by one (`examples/array-from` asks
+        // loop bound, or its heap exhausted by one (`tests/programs/array-from` asks
         // for an array of 2^31) -- was always tolerated: the cases it answered
         // are compared and the rest are "not reached". The `done` line's job
         // is to make that *visible* rather than a short run that looks whole,
@@ -2599,7 +2599,7 @@ mod classification {
     fn a_class_that_will_not_verify_is_a_defect() {
         assert!(
             matches!(stopped_with(None, None, VERIFY_ERROR), Stopped::Defect(_)),
-            "a VerifyError read as a declined case, which is how              `examples/fluent-this` reported seventeen bounds failures about a              file with no subscript in it"
+            "a VerifyError read as a declined case, which is how              `tests/programs/fluent-this` reported seventeen bounds failures about a              file with no subscript in it"
         );
     }
 
@@ -2751,7 +2751,7 @@ mod tests {
     /// it. A real bounds refusal therefore arrives with a stack trace attached.
     ///
     /// Found by the gate: the first version of the stack-frame rule turned nine
-    /// passing examples into failures, and `examples/arrays` was refusing
+    /// passing examples into failures, and `tests/programs/arrays` was refusing
     /// `index -0.5 is outside [0, 3)` exactly as it should.
     #[test]
     fn a_refusal_wrapped_by_reflection_is_still_a_refusal() {

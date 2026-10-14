@@ -5,7 +5,7 @@
 //! `javap -p -s`, which is what the JDK thinks the same bytes mean. That
 //! pairing has caught three things in this lane already.
 //!
-//! The fixture is `examples/interop/java-from-ts`, which is checked in and
+//! The fixture is `tests/interop/java-from-ts`, which is checked in and
 //! deliberately awkward -- statics with and without `ConstantValue`, a public
 //! field, generics, a wildcard, varargs, a `throws` clause, an enum, a static
 //! nested class and a true inner one. Sharing it means the binding project and
@@ -56,7 +56,7 @@ fn fixture() -> Option<PathBuf> {
 
 fn build_fixture() -> Option<PathBuf> {
     let javac = tool("javac")?;
-    let sources = repository().join("examples/interop/java-from-ts/java/com/example");
+    let sources = repository().join("tests/interop/java-from-ts/java/com/example");
     if !sources.exists() {
         eprintln!(
             "SKIP reads: the fixture is missing at {}",
@@ -482,7 +482,7 @@ fn android_view_carries_its_nullability_in_the_invisible_table() {
 
 /// The generator, against the same fixture the reader is tested on.
 ///
-/// The checked-in `examples/interop/java-from-ts/types/com.example.d.ts` was
+/// The checked-in `tests/interop/java-from-ts/types/com.example.d.ts` was
 /// written by hand as the **specification** for this function. Comparing the
 /// two is how the spec stops being aspirational -- where they differ, one of
 /// them is wrong, and the difference is the work list.
@@ -935,7 +935,7 @@ fn android_shape() -> Option<PathBuf> {
     BUILT
         .get_or_init(|| {
             let javac = tool("javac")?;
-            let sources = repository().join("examples/interop/android-shape/java/com/example/ui");
+            let sources = repository().join("tests/interop/android-shape/java/com/example/ui");
             if !sources.exists() {
                 return None;
             }

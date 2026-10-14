@@ -791,7 +791,7 @@ fn held_by(func: &super::Func, value: super::ValueId) -> Held {
 /// field can only hold one closure, the call is a direct call to a named
 /// function, and every one of those costs disappears.
 ///
-/// Measured on `benches/cases/optional-chain`, by patching the emitted C:
+/// Measured on `benchmarks/cases/optional-chain`, by patching the emitted C:
 /// **87.90 us to 35.16 us**, against a C++ reference at 10.01. The residue is
 /// the `double` accumulator against the reference's `int64_t`, which is a
 /// different question.
@@ -811,7 +811,7 @@ fn held_by(func: &super::Func, value: super::ValueId) -> Held {
 /// otherwise shares no storage with it there -- so the prefix join alone
 /// answered with one class's closure for an object of another, and the call
 /// ran the wrong body silently
-/// (`tooling/conformance/outcomes/an-optional-callback-read-through-an-interface-array`).
+/// (`tests/outcomes/an-optional-callback-read-through-an-interface-array`).
 /// Such a read sees the prefix join and every row's own field; a row that is
 /// not plain storage (a getter, a refusal) is any closure at all.
 #[must_use]
@@ -906,7 +906,7 @@ pub fn closures(program: &Program) -> FieldClosures {
 /// the loop around it does not vectorise -- and closure bodies are usually
 /// tiny, so not inlining them is most of what they cost.
 ///
-/// `benches/cases/optional-chain` is the measurement, taken by patching the one
+/// `benchmarks/cases/optional-chain` is the measurement, taken by patching the one
 /// line in the emitted C rather than by argument: **87.90 us to 35.16 us**,
 /// against a C++ reference at 10.01 that writes a bare function pointer. The
 /// residue after this is the `double` accumulator against the reference's

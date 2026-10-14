@@ -58,10 +58,10 @@ def main():
             if not os.path.isdir(os.path.join(ROOT, "examples", name)):
                 problems.append(f"{primitive}: no example `{name}`")
         for name in named(memory):
-            if not os.path.isdir(os.path.join(ROOT, "tooling/memory/cases", name)):
+            if not os.path.isdir(os.path.join(ROOT, "tests/memory", name)):
                 problems.append(f"{primitive}: no memory case `{name}`")
         for name in named(speed):
-            if not os.path.isdir(os.path.join(ROOT, "benches/cases", name)):
+            if not os.path.isdir(os.path.join(ROOT, "benchmarks/cases", name)):
                 problems.append(f"{primitive}: no benchmark `{name}`")
         for number in re.findall(r"\d{4}", records):
             if not any(f.startswith(number + "-") for f in os.listdir(os.path.join(ROOT, "docs/records"))):

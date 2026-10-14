@@ -171,13 +171,13 @@ index is enough to *dispatch* and not enough to *agree*.
 **The width is per program, not universal.** A closure assigned to a signature
 declares no more parameters than that signature does, and a body reads no more than
 it writes, so the entry is as wide as the widest closure in the program. A universal
-width made `benches/cases/closure-merge` marshal nine boxed values per call where
+width made `benchmarks/cases/closure-merge` marshal nine boxed values per call where
 the direct call passed one double.
 
 **Precision is recovered rather than paid for.** Where a pass can name the closure
 — a field that can hold exactly one class, a specialised parameter — the call
 becomes direct *and the erasure is undone*: the padding dropped, each `Erase`'s
-operand taken, the result read at its own type. `benches/cases/optional-chain`
+operand taken, the result read at its own type. `benchmarks/cases/optional-chain`
 keeps its direct call and its erased entry is pruned as unreachable; 55 of 61
 benchmark programs emit byte-identical code. The two programs that keep a uniform
 dispatch are the ones where a field genuinely holds more than one class, which is

@@ -3,7 +3,7 @@
 //! # Why this exists
 //!
 //! [`HirType::NUMBER`](super::HirType::NUMBER) is `f64` because that is what
-//! TypeScript's `number` conservatively is. `benches/` prices that conservatism:
+//! TypeScript's `number` conservatively is. `benchmarks/` prices that conservatism:
 //! hand-written C using `int64` runs the same `fib` **1.7x faster** than the
 //! same C in doubles, and V8 already performs the inference we do not — on the
 //! `loop` case node matches integer C while nts sits with double C. See
@@ -647,7 +647,7 @@ pub const U32_MAX: f64 = 4_294_967_295.0;
 /// counter comparing against it is one too. An `i64` induction variable is a
 /// shape neither optimiser treats as a counted loop -- no range-check
 /// elimination, no unrolling, no vectorisation -- measured on the JVM lane at
-/// **13.1x** on `benches/cases/elementwise`, writing the same loop over the
+/// **13.1x** on `benchmarks/cases/elementwise`, writing the same loop over the
 /// same `double[]` with an `int` counter against a `long` one.
 ///
 /// **Minus two, not minus one.** A counter under `i <= xs.length` reaches the

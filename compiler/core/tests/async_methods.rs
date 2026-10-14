@@ -28,11 +28,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn machine(name: &str) -> Option<hir::Program> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -44,7 +44,7 @@ fn machine(name: &str) -> Option<hir::Program> {
             .map(|diagnostic| diagnostic.message.as_str())
             .collect::<Vec<_>>(),
         Vec::<&str>::new(),
-        "nothing in examples/async-methods is refused",
+        "nothing in tests/programs/async-methods is refused",
     );
     let refusals = hir::suspend::transform(&mut lowered.program);
     assert!(refusals.is_empty(), "and nothing is refused by the split");

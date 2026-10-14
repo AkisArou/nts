@@ -6,7 +6,7 @@
 //! so the callee is not inlined — and closure bodies are usually small enough
 //! that not inlining them is most of what they cost.
 //!
-//! `benches/cases/optional-chain` went **87.98 us to 35.17 us** on this,
+//! `benchmarks/cases/optional-chain` went **87.98 us to 35.17 us** on this,
 //! against a C++ reference at 9.51 that writes a bare function pointer clang
 //! devirtualises. The prediction was taken first by patching the one line in the
 //! emitted C, at 35.16, which is the number worth trusting.
@@ -26,11 +26,11 @@ use nts_frontend_ts::SemanticSource;
 fn prepared(name: &str) -> Option<hir::Program> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -50,7 +50,7 @@ fn calls_directly(program: &hir::Program, export: &str) -> bool {
         .funcs
         .iter()
         .find(|func| func.name == export)
-        .unwrap_or_else(|| panic!("`{export}` is exported from examples/callback-fields"));
+        .unwrap_or_else(|| panic!("`{export}` is exported from tests/programs/callback-fields"));
     let mut dispatch = false;
     let mut direct = false;
     for op in &func.values {
@@ -169,7 +169,7 @@ fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
     // `Unerase`, which the JVM session measured at ~7% of `optional-chain` and
     // which was reverted: the second one was buying a borrow elision, because
     // its live range is a few operations rather than a span across the branch.
-    // `tooling/memory/cases/callback-field` went 0 of 68 to 34 of 34. The
+    // `tests/memory/callback-field` went 0 of 68 to 34 of 34. The
     // assertion outlived the change.
     for op in &func.values {
         let OpKind::Convert(value) = &op.kind else {

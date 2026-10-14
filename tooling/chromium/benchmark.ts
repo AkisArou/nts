@@ -45,7 +45,7 @@ let workload: "binding" | "rows" | "kernels" | "todo" = "binding";
 let collection: "checkpoint" | "idle" = "idle";
 // --todo-source lib-dom: TodoMVC as todo-dom.ts, typed by the stock
 // lib.dom.d.ts and bound by delegation, against the same file, types
-// stripped, as page script. nts-dom (the default): examples/todo on nts:dom
+// stripped, as page script. nts-dom (the default): tests/programs/todo on nts:dom
 // against its hand-written page script.
 let todoSource: "nts-dom" | "lib-dom" = "nts-dom";
 // --trace-gc: V8's GC trace in both launches. Oilpan collects inside V8's

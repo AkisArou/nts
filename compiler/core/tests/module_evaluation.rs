@@ -13,7 +13,7 @@
 //!
 //! # Why this is a test and not only an example
 //!
-//! `examples/module-evaluation` checks that what survives *computes what node
+//! `tests/programs/module-evaluation` checks that what survives *computes what node
 //! computes*, which is the invariant that matters and is not this one. It
 //! cannot check that anything survived: with the excision removed the harness
 //! compares two functions instead of five and reports agreement on both, which
@@ -29,9 +29,9 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn prepared() -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/module-evaluation/tsconfig.json")
+        .join("../../tests/programs/module-evaluation/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/module-evaluation is checked in");
+        .expect("tests/programs/module-evaluation is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");

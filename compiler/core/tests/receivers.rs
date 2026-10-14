@@ -188,7 +188,7 @@ fn the_two_inhabitability_proxies_disagree() {
     assert!(declared.implemented);
     // `Quiet` covers every member of `Named` and says nothing about it: visible
     // to the structural proxy and invisible to the declared one. This is the
-    // case `examples/a-structural-cast-that-is-a-prefix` crashes on, so a
+    // case `tests/programs/a-structural-cast-that-is-a-prefix` crashes on, so a
     // narrow rule keyed on `implements` would not have spared it.
     let dots = only(&census, "forDots");
     assert!(dots.satisfied);

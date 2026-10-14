@@ -95,12 +95,12 @@ cases=${*:-"array-methods symbol-keyed-map array-from arrays growth-fixed growth
 
 printf "%-24s %12s %12s %10s %6s\n" "case" "HotSpot" "ART" "objects" "avg"
 for case in $cases; do
-  entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benches/cases/$case/case.ts" 2>/dev/null \
+  entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$root/benchmarks/cases/$case/case.ts" 2>/dev/null \
     | head -1 | awk '{print $3}')
   # `elementwise` hands the same `double[]` to every call; both drivers below
   # pass one `double`, so neither can call it. Reported rather than printed as
   # a `javac` failure, which said the compiler was wrong.
-  if [ -f "$root/benches/cases/$case/driver.java" ]; then
+  if [ -f "$root/benchmarks/cases/$case/driver.java" ]; then
     printf "%-24s %12s %12s\n" "$case" "own-driver" "own-driver"
     continue
   fi
@@ -108,7 +108,7 @@ for case in $cases; do
   out=$work/$case
   mkdir -p "$out/classes" "$out/dex"
   cat > "$out/tsconfig.json" <<JSON
-{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benches/cases/$case"] }
+{ "extends": "$root/tsconfig.fixtures.json", "include": ["$root/benchmarks/cases/$case"] }
 JSON
   NTS_TSGO=${NTS_TSGO:-$root/target/tsgo} "$nts" emit-jvm "$out/tsconfig.json" \
     --out "$out/classes" --entry "$entry" --entry "module#init" > /dev/null 2>&1 \
@@ -233,7 +233,7 @@ JAVA
   # `popDiskFrom` does not (67 to 51, still over).
   #
   # `NTS_D8_DEBUG=1` goes back, for a run being compared against a figure taken
-  # before this changed. Every ART number in `benches/jvm-rows.md` older than
+  # before this changed. Every ART number in `benchmarks/jvm-rows.md` older than
   # 2026-09-12 is a debug-dexed one and is pessimistic by about that much.
   "$tools/d8" ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     "$out/classes/nts-runtime.jar" > /dev/null 2>&1 \

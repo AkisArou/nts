@@ -52,7 +52,7 @@ mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT INT TERM
 
 mismatches=0
-for dir in "$root"/benches/cases/*/; do
+for dir in "$root"/benchmarks/cases/*/; do
   case=$(basename "$dir")
   [ -f "$dir/case.ts" ] && [ -f "$dir/ref.java" ] || continue
   entry=$(grep -oE "^export function [A-Za-z0-9_]+" "$dir/case.ts" | head -1 | awk '{print $3}')
@@ -86,4 +86,4 @@ done
 echo
 echo "$mismatches case(s) where the reference computes narrower than the program."
 echo "Each is a decision with a measurement attached, not a defect: see"
-echo "benches/jvm-rows.md for what happened when \`fib\`'s was priced."
+echo "benchmarks/jvm-rows.md for what happened when \`fib\`'s was priced."

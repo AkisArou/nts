@@ -32,7 +32,7 @@ captured handle's owner must keep it alive through every use. Runtime containers
 of handles, boxing, forged object literals, phantom-property reads and `in`
 tests are refused. Node-API and JVM do not marshal raw C pointers.
 
-`examples/interop/c-from-ts` now contains a real C implementation and caller,
+`tests/interop/c-from-ts` now contains a real C implementation and caller,
 checking conversion, mutation, null, destruction and the live-handle count.
 Native tests run C and LLVM against the same separately compiled C objects,
 including a captured handle under reference counting and a pointer above the
@@ -471,8 +471,8 @@ this section credited it with more and a reader would have gone looking:
 
   | fixture | refusals |
   | --- | --- |
-  | `examples/interop/ts-from-java` | **0** — lowers, runs, prints |
-  | `examples/interop/java-from-ts` | **48** — typechecks clean, does not lower |
+  | `tests/interop/ts-from-java` | **0** — lowers, runs, prints |
+  | `tests/interop/java-from-ts` | **48** — typechecks clean, does not lower |
 
   Java calling TypeScript works end to end because the output *is* a class
   file. TypeScript calling Java is the direction that stops. Field descriptors, method descriptors, the interface-versus-class
@@ -494,7 +494,7 @@ The native-values RFC (removed; in git history) was 1,366 lines and specifies na
 values, typed pointers, field access, address-of, inline arrays, and a
 `ResourceFlow` analysis over ownership. Measured against the tree:
 
-| symbol | occurrences in `compiler/`, `runtime/`, `examples/` |
+| symbol | occurrences in `compiler/`, `runtime/`, `tests/programs/` |
 | --- | --- |
 | `ResourceFlow` | 0 |
 | `OwnedPtr` | 0 |
@@ -548,7 +548,7 @@ same answer.
 
 ## Both directions, and only one of them is hard
 
-`ts-from-c` **works today**, and `examples/interop/ts-from-c` is a C program
+`ts-from-c` **works today**, and `tests/interop/ts-from-c` is a C program
 that calls compiled TypeScript and runs:
 
     add(2, 3)        = 5
@@ -692,7 +692,7 @@ The caller writes `sumOf_o_t`, derived from the export's own name and parameter
 — both chosen by the author, so both stable. The churn stays inside, where it
 costs nobody anything, because the header is regenerated with the program.
 
-`examples/interop/ts-from-c` carries `sumOf` and `sumOfNamed` side by side, and
+`tests/interop/ts-from-c` carries `sumOf` and `sumOfNamed` side by side, and
 the point of the pair is now the *measurement* — that structural merging makes
 the internal name a whole-program fact — rather than a recommendation to write
 the second one.
@@ -744,7 +744,7 @@ example walks `counted(3)` through `0, 1, 2` and checks repeated completion.
 **5. A promise needs a checkpoint the caller must know about.** `async` returns
 `NtsPromise *`, and the runtime exposes `nts_checkpoint()`,
 `nts_promise_state()` and `nts_promise_value()`. Demonstrated end to end in
-`examples/interop/ts-from-c` — state `0` before the checkpoint, `1` after, value
+`tests/interop/ts-from-c` — state `0` before the checkpoint, `1` after, value
 `42`. The example README documents the checkpoint form.
 
 There is a trap in *demonstrating* it that the example now carries a note about:
@@ -775,7 +775,7 @@ layout change breaks the build rather than the program.
 
 ## The DX, as a file rather than a proposal
 
-`examples/interop/c-from-ts` is the native counterpart to `java-from-ts`: a
+`tests/interop/c-from-ts` is the native counterpart to `java-from-ts`: a
 small C library with one of each shape that matters (a scalar whose C types are
 not TypeScript's, an owned handle, a borrowed accessor, a callback, an
 out-parameter), the binding sketch a generator *should* produce — written by
@@ -823,7 +823,7 @@ it at a header, get a `.d.ts` a person would have been willing to write, and
 never think about the boundary again. Everything below is ordered so that the
 generator is built when it can produce something *safe*, rather than early when
 it can only produce signatures. The order is also the one
-`examples/interop/c-from-ts/README.md` tabulates against the lines it blocks, so
+`tests/interop/c-from-ts/README.md` tabulates against the lines it blocks, so
 the two agree by construction.
 
 0. **The scalar types, branded.** `c_int`, `c_long`, `c_size_t` and the rest, as
@@ -930,7 +930,7 @@ hand-audited, which is the status quo for every FFI that does this badly.
 **What this does not justify** is exposing the whole RFC surface at once.
 `c_int`, an opaque handle, `Owned`/`Ref`, and `CFn` are what make ordinary C
 libraries reachable. Inline arrays, `zeroed<T>`, struct-by-value and
-address-of-a-place are the second half, and `examples/interop/c-from-ts` marks
+address-of-a-place are the second half, and `tests/interop/c-from-ts` marks
 which of its lines need which.
 
 ## Can the `as c_int` casts go away?

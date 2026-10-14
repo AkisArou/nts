@@ -7,7 +7,7 @@
 #
 # # Why a minimum and why a separate driver
 #
-# `benches/jvm-rows.md` measured every AWFY row twice in both modes and found
+# `benchmarks/jvm-rows.md` measured every AWFY row twice in both modes and found
 # the AOT column reproducing within 0.03 and the JIT column within 0.10. Three
 # rows then sat at **1.00-1.01 in AOT** -- inside a reproducibility of 0.03 --
 # so the file's policy is that a verdict there reports rounding rather than the

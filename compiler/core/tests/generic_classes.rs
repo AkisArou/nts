@@ -32,11 +32,11 @@ use nts_frontend_ts::SemanticSource;
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
     let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -197,7 +197,7 @@ fn a_static_member_of_a_generic_class_is_emitted_once() {
 /// The fixture held three until 2026-09-22 -- a generic base at a type
 /// parameter, a class constructing itself at its own parameters, and a generic
 /// method on a generic class -- and `hir::instantiate` landed the first two,
-/// which moved to `examples/generic-classes` as the fixture's own header says
+/// which moved to `tests/programs/generic-classes` as the fixture's own header says
 /// to. The generic method is what is left: `U` is decided per call site, and
 /// the class copy per `new`, so one copy of the class is not one copy of the
 /// method.

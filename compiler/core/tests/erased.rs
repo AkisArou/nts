@@ -43,12 +43,12 @@ fn count(f: &hir::Func, want: fn(&OpKind) -> bool) -> usize {
 /// An `unknown` parameter is one erased value, not a refusal.
 #[test]
 fn an_unknown_parameter_has_a_representation() {
-    let Some(lowered) = lower_at("../../examples/unknown") else {
+    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
         return;
     };
     assert!(
         lowered.diagnostics.is_empty(),
-        "examples/unknown should lower clean: {:?}",
+        "tests/programs/unknown should lower clean: {:?}",
         lowered
             .diagnostics
             .iter()
@@ -66,7 +66,7 @@ fn an_unknown_parameter_has_a_representation() {
 /// was, and C accepts it.
 #[test]
 fn a_concrete_value_is_erased_at_the_boundary() {
-    let Some(lowered) = lower_at("../../examples/unknown") else {
+    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
         return;
     };
     assert_eq!(
@@ -95,10 +95,10 @@ fn a_concrete_value_is_erased_at_the_boundary() {
 /// tag. Nothing pins that refusal any more: a value with one absence is
 /// answered by a branch on the pointer, and one with two is erased and reaches
 /// here, so `typeof` no longer refuses anything the lowering can produce.
-/// `examples/absent` holds both.
+/// `tests/programs/absent` holds both.
 #[test]
 fn typeof_on_an_erased_value_reads_the_tag() {
-    let Some(lowered) = lower_at("../../examples/unknown") else {
+    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
         return;
     };
     assert_eq!(
@@ -118,7 +118,7 @@ fn typeof_on_an_erased_value_reads_the_tag() {
 /// has none.
 #[test]
 fn an_unerase_appears_only_inside_the_narrowed_branch() {
-    let Some(lowered) = lower_at("../../examples/unknown") else {
+    let Some(lowered) = lower_at("../../tests/programs/unknown") else {
         return;
     };
     let add_one = func(&lowered, "addOne");
@@ -155,12 +155,12 @@ fn an_unerase_appears_only_inside_the_narrowed_branch() {
 /// releasing would pass against a runtime that had never learned any of this.
 #[test]
 fn a_reference_survives_being_erased() {
-    let Some(lowered) = lower_at("../../examples/unknown-references") else {
+    let Some(lowered) = lower_at("../../tests/programs/unknown-references") else {
         return;
     };
     assert!(
         lowered.diagnostics.is_empty(),
-        "examples/unknown-references should lower clean: {:?}",
+        "tests/programs/unknown-references should lower clean: {:?}",
         lowered
             .diagnostics
             .iter()
@@ -205,10 +205,10 @@ fn a_typeof_comparison_is_folded_to_an_integer_compare() {
         return;
     };
     let tsconfig = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/unknown")
+        .join("../../tests/programs/unknown")
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/unknown is checked in");
+        .expect("tests/programs/unknown is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -324,11 +324,11 @@ fn erased_arrays(prepared: &nts_core::hir::Prepared) -> usize {
 /// to half its size moved the number by 0.1%, which is what proved it. So the
 /// win is not a smaller tag, it is no tag.
 ///
-/// `benches/cases/erasure-stored-unknown` is the same program as
+/// `benchmarks/cases/erasure-stored-unknown` is the same program as
 /// `erasure-stored-typed` but for `unknown`, and its gap closed to nothing.
 #[test]
 fn an_array_of_one_kind_is_not_erased() {
-    let Some(prepared) = prepared_at("../../benches/cases/erasure-stored-unknown") else {
+    let Some(prepared) = prepared_at("../../benchmarks/cases/erasure-stored-unknown") else {
         return;
     };
     assert_eq!(
@@ -369,7 +369,7 @@ fn an_array_of_two_kinds_keeps_its_tags() {
 
 #[test]
 fn recovering_array_storage_requires_initialized_reads() {
-    let Some(prepared) = prepared_at("../../examples/an-erased-array-read-keeps-missing-elements")
+    let Some(prepared) = prepared_at("../../tests/programs/an-erased-array-read-keeps-missing-elements")
     else {
         return;
     };
@@ -432,7 +432,7 @@ fn recovering_array_storage_requires_initialized_reads() {
 
 /// A parameter every caller reaches with the same kind stops being erased.
 ///
-/// The cross-function half. `addOne` in `examples/unknown` is called once, with
+/// The cross-function half. `addOne` in `tests/programs/unknown` is called once, with
 /// a number, so its parameter becomes a `double` and the tag it read becomes a
 /// constant.
 ///
@@ -445,7 +445,7 @@ fn recovering_array_storage_requires_initialized_reads() {
 /// `tests/identity_forwarding.rs`, through an identity with an effect.
 #[test]
 fn a_parameter_with_one_kind_of_caller_is_not_erased() {
-    let Some(prepared) = prepared_at("../../examples/unknown") else {
+    let Some(prepared) = prepared_at("../../tests/programs/unknown") else {
         return;
     };
     let parameter = |name: &str| {
@@ -480,7 +480,7 @@ fn a_parameter_with_one_kind_of_caller_is_not_erased() {
 /// than merely missed.
 #[test]
 fn a_return_of_one_kind_every_caller_unwraps_is_not_erased() {
-    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+    let Some(prepared) = prepared_at("../../tests/programs/unknown-returns") else {
         return;
     };
     let returns = |name: &str| {
@@ -524,7 +524,7 @@ fn a_return_of_one_kind_every_caller_unwraps_is_not_erased() {
 /// after the peepholes instead of before them.
 #[test]
 fn the_caller_stops_unwrapping_a_narrowed_result() {
-    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+    let Some(prepared) = prepared_at("../../tests/programs/unknown-returns") else {
         return;
     };
     let unwrapped = prepared
@@ -564,7 +564,7 @@ fn the_caller_stops_unwrapping_a_narrowed_result() {
 /// and one return between them.
 #[test]
 fn the_narrowing_count_matches_what_changed() {
-    let Some(prepared) = prepared_at("../../examples/unknown-returns") else {
+    let Some(prepared) = prepared_at("../../tests/programs/unknown-returns") else {
         return;
     };
     let narrowed_returns = prepared
@@ -584,7 +584,7 @@ fn the_narrowing_count_matches_what_changed() {
 /// Equal payload storage cannot remove the independently carried absence tag.
 #[test]
 fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
-    let Some(prepared) = prepared_at("../../examples/a-recovered-erased-value-keeps-its-absence")
+    let Some(prepared) = prepared_at("../../tests/programs/a-recovered-erased-value-keeps-its-absence")
     else {
         return;
     };
@@ -625,7 +625,7 @@ fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
 /// A callable face retains FUNCTION when its erased wrapper is removed.
 #[test]
 fn recovered_signature_faces_keep_their_runtime_callable_tag() {
-    let Some(prepared) = prepared_at("../../examples/a-recovered-callable-keeps-its-function-tag")
+    let Some(prepared) = prepared_at("../../tests/programs/a-recovered-callable-keeps-its-function-tag")
     else {
         return;
     };

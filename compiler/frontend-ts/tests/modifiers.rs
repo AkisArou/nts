@@ -18,9 +18,9 @@ use nts_semantic_schema::{
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/classes/tsconfig.json")
+        .join("../../tests/programs/classes/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/classes fixture is checked in");
+        .expect("tests/programs/classes fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .snapshot(&tsconfig)

@@ -13,7 +13,7 @@ they are corrected here rather than deleted, because what changed is the
 substance of the document.**
 
 **TS → Java works, and a Java caller now writes idiomatic Java.**
-`examples/interop/ts-from-java` compiles a `Main.java` against classes this
+`tests/interop/ts-from-java` compiles a `Main.java` against classes this
 compiler wrote and runs it under `-Xverify:all`. The surface is `s.bump()`
 rather than `Program.Session$bump(s)` -- the mangled statics are `ACC_SYNTHETIC`
 and `javac` refuses to reference them -- and a TypeScript `Map` crosses as a
@@ -238,7 +238,7 @@ another instance.
 1.01x and 0.99x against Java: three of the four rows the queue sent someone to
 fix are already at parity in the lane the row is about, and the work would have
 gone into moving an engine comparison through it. The eight `json-*` rows cannot
-enter this column at all -- they have no `ref.java` by decision, `benches/jvm-rows.md`
+enter this column at all -- they have no `ref.java` by decision, `benchmarks/jvm-rows.md`
 argues each one, and the last was priced and refused because the reference would
 need a second Grisu to stay correct. "Eight are `json-*`" is six even in the Bun
 column; "four are `erasure-*`" is exactly right there and zero here.
@@ -260,7 +260,7 @@ back, returned `refused` in the `nts (JVM)` column for all eight `awfy-*` rows:
 an override is both a member of its layout and an entry in its dispatch table,
 and since `c213fe13` two emitters had each been writing it. Fixed in `0a9ec047`.
 The eight rows this bar is *written about* had no instrument standing behind
-them -- see `benches/jvm-rows.md`.
+them -- see `benchmarks/jvm-rows.md`.
 
 **The floor is 205, not 86 of 87.** That number comes from this lane's original
 plan, when the jvm step counted a different population, and it has been quoted
@@ -917,7 +917,7 @@ removes the box when the call inlines; ART's is weaker and will not.
 ## 2. `number[]` → `int[]` — *eliminated, and it is the headline*
 
 This is the same defect as the worst Bar 1 row on ART, already measured in
-`benches/jvm-rows.md`, five interleaved rounds:
+`benchmarks/jvm-rows.md`, five interleaved rounds:
 
     A  int[]     + instance methods   8752.2 ns    AWFY as written
     B  double[]  + instance methods   9995.5 ns    +14.2%
@@ -2253,7 +2253,7 @@ call sites, the ergonomics -- rather than inferred from a design document. They
 are therefore written to be **read before they are built**, and every decision
 in this document should be visible in at least one of them.
 
-**Where they live is not mine to decide.** `examples/**` belongs to another lane,
+**Where they live is not mine to decide.** `tests/programs/**` belongs to another lane,
 and more sharply: the jvm gate line is `backend_examples 203 ... exact`, which
 fails on `passed != total`. Three new example directories change that number, so
 they cannot be added unilaterally -- the floor moves in the same commit or the
@@ -2552,7 +2552,7 @@ reason this measurement mattered to interop.
 
 The plan prices several copies and then says *"if the copy is noise next to the
 call, the cliff matters less than this document assumes"*. That sentence had no
-number under it. `benches/interop-copy` puts one there, through the same warmup,
+number under it. `benchmarks/interop-copy` puts one there, through the same warmup,
 time bound and best-of-five the rest of the suite uses.
 
 All rows are **1024 elements** or **64 map entries** per operation, on HotSpot:
@@ -2648,7 +2648,7 @@ the copy is 100% of the cost rather than 49% of one pass.
 # Build item 6: `.d.ts` generation, and what the generator does that the spec did not
 
 `compiler/jvm-emitter/src/bind.rs` turns a parsed class file into declarations.
-The hand-written `examples/interop/java-from-ts/types/com.example.d.ts` was the
+The hand-written `tests/interop/java-from-ts/types/com.example.d.ts` was the
 **specification** for it; running the generator on the same fixture is how that
 spec stopped being aspirational.
 
@@ -2658,7 +2658,7 @@ that a brand in a declared signature separates `find(int)` from `find(double)`.
 Brands were measured and removed, and the generator says so in as many words --
 `bind.rs`'s `find$int` comment reads "since brands were removed". What separates
 the overloads is a **mangled name**: `find$int` beside `find`, which
-`examples/interop/java-from-ts/src/main.ts` explains at the call site and
+`tests/interop/java-from-ts/src/main.ts` explains at the call site and
 `android-shape` exercises as `drawingOrder$int$int`. The row in the matrix said
 the same thing and is renamed; `[I` is `Int32Array` because a branded array does not lower at
 all while a typed array gives a real `managed<view<i32>>`.
@@ -2741,7 +2741,7 @@ follow it.
 package and prints the declarations. A directory rather than a jar, and an
 example rather than a binary, for the same reason the resolver is a callback: a
 jar is a zip, and the crate's dependencies are a maintenance obligation.
-`examples/interop/java-from-ts/build.sh` now generates its `.d.ts` and diffs it
+`tests/interop/java-from-ts/build.sh` now generates its `.d.ts` and diffs it
 against what is committed, so the hand-written specification has been *replaced
 by* the generator's output rather than kept beside it.
 
@@ -3082,7 +3082,7 @@ class gained is one instance method per exported method, forwarding to the
 static.
 
 **Measured, because "without performance cost" is a claim about generated
-code.** `benches/interop-facade` times the same static called directly against
+code.** `benchmarks/interop-facade` times the same static called directly against
 the same static through a forwarder:
 
 | | minimum over four sittings |
@@ -3230,7 +3230,7 @@ and it belongs to whoever owns that boundary. `ts-from-java` lowers clean today;
 
 ## Where a `java:` binding actually stops, ranked, and the second item is generics
 
-Measured on `examples/interop/java-from-ts`, which typechecks at zero TypeScript
+Measured on `tests/interop/java-from-ts`, which typechecks at zero TypeScript
 errors and does not lower:
 
     35  a method without a body

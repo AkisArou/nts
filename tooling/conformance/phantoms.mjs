@@ -1,7 +1,7 @@
 // Refusals that are not: a name `nts refusals` says was refused, which the
 // prepared program nevertheless contains. A phantom.
 //
-//   node tooling/conformance/phantoms.mjs [project-dir ...]   (default: examples/*)
+//   node tooling/conformance/phantoms.mjs [project-dir ...]   (default: tests/programs/*)
 //   NTS_BIN=<a pinned copy> node tooling/conformance/phantoms.mjs
 //
 // # Why
@@ -60,7 +60,7 @@ const under = (base) =>
 // every one of them exists to refuse, which is where a refusal row can lie.
 const projects = named.length > 0
   ? named
-  : [...under("examples"), ...under("tooling/conformance/blockers")].sort();
+  : [...under("examples"), ...under("tests/refusals")].sort();
 
 /** One nts invocation, as a promise of what spawnSync would have returned. */
 const run = (args) =>
@@ -164,7 +164,7 @@ if (process.argv.includes("--self-test")) {
  * reported, because the reason has expired.
  */
 const DOES_NOT_TYPECHECK = new Map([
-  ["examples/invalid", "does not typecheck on purpose: the fixture that the frontend refuses a program with type errors"],
+  ["tests/programs/invalid", "does not typecheck on purpose: the fixture that the frontend refuses a program with type errors"],
 ]);
 const skipped = [];
 

@@ -9,7 +9,7 @@
 //! of an exported class are functions named `Counter#bump`, which match no
 //! entry in `public_api`, and the `exported` flag had been the only thing
 //! keeping them. A consumer got a class it could construct and could not call,
-//! and `javap` on `examples/interop/ts-from-java`'s checked-in capture is what
+//! and `javap` on `tests/interop/ts-from-java`'s checked-in capture is what
 //! caught it -- `- public double bump();` against a file that exists for
 //! exactly that.
 #![allow(clippy::unwrap_used, clippy::expect_used)]

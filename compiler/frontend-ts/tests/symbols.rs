@@ -12,9 +12,9 @@ use nts_semantic_schema::{SemanticSnapshot, SymbolFlags};
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/types/tsconfig.json")
+        .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/types fixture is checked in");
+        .expect("tests/programs/types fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .snapshot(&tsconfig)
@@ -116,7 +116,7 @@ fn symbol_resolution_stays_linear_in_files() {
         return;
     }
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/types/tsconfig.json")
+        .join("../../tests/programs/types/tsconfig.json")
         .canonicalize_utf8()
         .unwrap();
     let mut source = TsgoApi::new(tsgo);

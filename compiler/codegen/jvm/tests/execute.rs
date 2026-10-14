@@ -56,7 +56,7 @@ fn tool(name: &str) -> Option<PathBuf> {
         .then(|| PathBuf::from(String::from_utf8_lossy(&found.stdout).trim().to_owned()))
 }
 
-/// Compile `examples/<example>` through this backend, run `body` against it,
+/// Compile `tests/programs/<example>` through this backend, run `body` against it,
 /// and return what it printed.
 ///
 /// `body` is the inside of a `main`, so a test reads as the Java it drives with
@@ -166,7 +166,7 @@ fn run(example: &str, body: &str) -> Option<String> {
 
 /// The five arithmetic operators, and the two that answer a boolean.
 ///
-/// Every expected value is read off `examples/arith/src/main.ts`, which is one
+/// Every expected value is read off `tests/programs/arith/src/main.ts`, which is one
 /// line per function -- `return a % b;` and so on -- so none of them is a
 /// number somebody remembered.
 #[test]

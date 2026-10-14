@@ -226,7 +226,7 @@ impl Generated for ObjcBindings {
         // binding is reused from its keyed directory unchanged, so nothing
         // else says which files this build added -- whether a framework came
         // from a platform package or was generated from the imports, which
-        // `examples/interop/apple-binding.sh` asserts. The config the program
+        // `tests/interop/apple-binding.sh` asserts. The config the program
         // was opened through said it while it was written to disk; it is
         // served to tsgo now (`open_adding`).
         if let Some(files) = &answer {

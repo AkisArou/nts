@@ -16,11 +16,11 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 fn prepared(fixture: &str) -> Option<hir::Prepared> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples")
+        .join("../../tests/programs")
         .join(fixture)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("examples/{fixture} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/programs/{fixture} is checked in"));
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
@@ -34,7 +34,7 @@ fn storage(prepared: &hir::Prepared, name: &str) -> HirType {
         .globals
         .iter()
         .find(|global| global.name == name)
-        .unwrap_or_else(|| panic!("`{name}` is a global in examples/module-numbers"))
+        .unwrap_or_else(|| panic!("`{name}` is a global in tests/programs/module-numbers"))
         .ty
         .clone()
 }
@@ -209,7 +209,7 @@ fn no_global_is_exported_and_the_narrowing_guard_is_still_waiting() {
                 .iter()
                 .position(|global| global.name == "visible")
                 .and_then(|at| u32::try_from(at).ok())
-                .expect("`visible` is a global of examples/module-numbers"),
+                .expect("`visible` is a global of tests/programs/module-numbers"),
         ),
         "`visible` is assigned outside `module#init` and must not read as settled",
     );
@@ -227,7 +227,7 @@ fn no_global_is_exported_and_the_narrowing_guard_is_still_waiting() {
 ///
 /// This is the assertion the others do not make, and it is the one the whole
 /// pass exists for. Narrowing the *storage* is nearly free of benefit on its
-/// own: measured, it moved `benches/cases/module-closures` from 17.84us to
+/// own: measured, it moved `benchmarks/cases/module-closures` from 17.84us to
 /// 16.05us against C++'s 2.30us. What moved it to 2.42us was giving a
 /// `GlobalGet` its facts, so that `(... + step) | 0` is provably whole and the
 /// operations after the read stay in a register.
@@ -243,7 +243,7 @@ fn arithmetic_on_a_global_read_stays_integer() {
         .funcs
         .iter()
         .find(|func| func.name == "reads")
-        .expect("`reads` is exported from examples/module-numbers");
+        .expect("`reads` is exported from tests/programs/module-numbers");
 
     // The reads of a global inside that function...
     let reads: Vec<u32> = func
@@ -292,9 +292,9 @@ fn a_program_records_the_provider_it_was_lowered_under() {
         return;
     };
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/module-numbers/tsconfig.json")
+        .join("../../tests/programs/module-numbers/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/module-numbers is checked in");
+        .expect("tests/programs/module-numbers is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");

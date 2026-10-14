@@ -263,7 +263,7 @@ pub struct Whole {
     /// program.
     ///
     /// A global read is otherwise TOP, and that TOP is worth more than it
-    /// looks: `benches/cases/module-closures` reads one `let step` inside a
+    /// looks: `benchmarks/cases/module-closures` reads one `let step` inside a
     /// loop body, and without this every operation after the read is floating
     /// point however narrow the slot is. Narrowing the storage alone moved that
     /// case 17.84us to 16.05us against C++'s 2.30us; the arithmetic was never
@@ -711,7 +711,7 @@ fn operand_result(
 /// `total + word.length * step` with an unbounded length is a product that can
 /// leave the exactly-representable integers, so it has to be computed in
 /// doubles and truncated back with the full wrapping `ToInt32`. With a bound it
-/// is an `int64` multiply and a cast, and on `benches/cases/substrings` that
+/// is an `int64` multiply and a cast, and on `benchmarks/cases/substrings` that
 /// difference is 27% of the benchmark.
 ///
 /// # The rule
@@ -1263,7 +1263,7 @@ fn transfer_op(
             // `int32_t` -- `[1, 2]` anywhere in the program made its
             // elements non-negative, and `x % 4093` of a negative element
             // was computed unsigned
-            // (`tooling/conformance/outcomes/a-negative-int32-element-read-as-unsigned`).
+            // (`tests/outcomes/a-negative-int32-element-read-as-unsigned`).
             super::HirType::Managed(super::ManagedType::View(element))
                 if matches!(**element, super::HirType::Int { .. }) =>
             {

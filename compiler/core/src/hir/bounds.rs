@@ -451,7 +451,7 @@ fn length_facts(
 ///
 /// **After [`eliminate_checks`], and only for what it left checked.** A read
 /// this file proved in range keeps its bare load; routing every erased read was
-/// measured to put a call in `benches/cases/erasure-stored-unknown`'s inner
+/// measured to put a call in `benchmarks/cases/erasure-stored-unknown`'s inner
 /// loop, which is the read this pass must never reach. Before `place_allocations`
 /// and `rc::insert`, because `nts_array_element` answers an owned value where
 /// an `ArrayGet` borrows, and both passes have to see the call.

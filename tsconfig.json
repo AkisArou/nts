@@ -3,7 +3,7 @@
   "files": [],
   "references": [
     { "path": "./tooling/config" },
-    { "path": "./examples/library" },
+    { "path": "./tests/programs/library" },
     { "path": "./runtime/web-platform" },
     { "path": "./runtime/ecmascript" },
     { "path": "./runtime/node" },

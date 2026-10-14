@@ -16,9 +16,9 @@ use nts_semantic_schema::{PropertyRecord, SemanticSnapshot, TypeKind};
 fn snapshot() -> Option<SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/readonly/tsconfig.json")
+        .join("../../tests/programs/readonly/tsconfig.json")
         .canonicalize_utf8()
-        .expect("examples/readonly fixture is checked in");
+        .expect("tests/programs/readonly fixture is checked in");
     Some(
         TsgoApi::new(tsgo)
             .with_decomposition(Budget::DEFAULT)

@@ -91,7 +91,7 @@ mkdirSync(join(work, "src"), { recursive: true });
 writeFileSync(
   join(work, "tsconfig.json"),
   JSON.stringify({
-    extends: join(ROOT, "tooling/conformance/blockers/tsconfig.base.json"),
+    extends: join(ROOT, "tests/refusals/tsconfig.base.json"),
     compilerOptions: { rootDir: "." },
   }, null, 2),
 );
@@ -116,7 +116,7 @@ for (const f of ["addon.c", "program.c"]) {
   if (existsSync(p)) blob += readFileSync(p, "utf8");
 }
 
-const fixtures = join(ROOT, "tooling/conformance/blockers");
+const fixtures = join(ROOT, "tests/refusals");
 const flagged = [];
 let checked = 0;
 for (const d of readdirSync(fixtures).sort()) {

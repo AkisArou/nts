@@ -484,7 +484,7 @@ an `Error` whose `name` is the DOMException's -- so `e.name` and
 
 **Requested 2026-10-13. Low priority. Blocks: `input.selectionStart` and
 `selectionEnd` (`unsigned long?`), `animation.overallProgress` (`double?`);
-fixture `tooling/conformance/blockers/a-foreign-function-answering-a-nullable-number`.**
+fixture `tests/refusals/a-foreign-function-answering-a-nullable-number`.**
 
 A foreign function's scalar result has a C type, and `null` has no value of
 it to spare, so `Float64 | null` is refused ("a type with no native ABI").

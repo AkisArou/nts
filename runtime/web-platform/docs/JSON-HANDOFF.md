@@ -228,7 +228,7 @@ were taken the wrong way and two reversed.
 `tsc -p tooling/conformance/web-platform/tsconfig.json --noEmit` before believing a refactor is
 clean; the file now says so in its own header.
 
-**`benches/tsconfig.json` typechecks the bench cases** and is easy to forget. A required parameter
+**`benchmarks/tsconfig.json` typechecks the bench cases** and is easy to forget. A required parameter
 added to `firstEscapeIndex` silently broke a bench case — `from` was `undefined`, the loop never
 ran, every string looked escape-free — and only the byte-for-byte output check caught it.
 
@@ -249,7 +249,7 @@ later run of that row.
 - **Reading emitted C beats timing**, and does not care whether the machine is busy. `grep` for
   `nts_str_char_code_at_int` versus `nts_str_char_code_at` to see which entry a read took; count
   `= 92.0;` against `= 92;` to see whether a classification is integer.
-- `benches/cases/json-stringify-doc/native.mjs` builds the identical document as ordinary objects
+- `benchmarks/cases/json-stringify-doc/native.mjs` builds the identical document as ordinary objects
   and times the engine's built-in — run it on node *and* bun, in the same window as the row.
 - `tooling/gate/wait-idle.sh` then `tooling/gate/with-lock.sh`; discard any run printing a
   variance note. The `json-scan` node column has measured 1.70 through 5.16 on identical source

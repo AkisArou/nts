@@ -11,7 +11,7 @@
  * A pure-TypeScript package needs **no config at all** -- it gets its type
  * environment from `types: [...]` in its own `tsconfig.json`. The rule is that a
  * config file is required exactly where there is a build step, which is why
- * `examples/workspace/packages/storage` has none.
+ * `tests/workspace/packages/storage` has none.
  */
 import type { Dependencies, Manifest, NativeSources } from "./native.ts";
 import type { Product } from "./product.ts";
@@ -66,9 +66,9 @@ export interface Config {
    *
    * **A root config that declares only `workspace` has no program**, so the
    * default does not apply to it. That is not a special case invented for this
-   * sentence: `examples/workspace/nts.config.ts` names its shared settings
+   * sentence: `tests/workspace/nts.config.ts` names its shared settings
    * `tsconfig.base.json` on purpose, because the gate globs every
-   * `tsconfig.json` one level under `examples/` -- so the default resolved to a
+   * `tsconfig.json` one level under `tests/programs/` -- so the default resolved to a
    * file
    * that deliberately does not exist, and the audit's path check found it.
    *
