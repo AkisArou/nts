@@ -180,7 +180,42 @@ function notMeasuredClause(unmeasured, total) {
 }
 
 // **Seen to tell renumbering from change before it is trusted.**
+/**
+ * A module's refusals: every line of its `emit-c` output naming an NTS code,
+ * sorted, duplicates kept. **Compared beside the C**, because `emit-c` prints
+ * them on stderr and exits 0 while compiling what it can: a change that moves
+ * a refusal without moving a byte of C read "byte-identical" here until
+ * 2026-10-14 (CompilerHelper2's GIR preflight, checked with a stderr capture
+ * of its own).
+ */
+export function refusalLines(text) {
+  return text.split("\n").map((l) => l.trim()).filter((l) => /\bNTS\d{4}\b/.test(l)).sort();
+}
+
+/** What moved between two sorted refusal lists, as a multiset. */
+export function refusalDelta(before, after) {
+  const count = (lines) => lines.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map());
+  const [a, b] = [count(before), count(after)];
+  const added = [];
+  const removed = [];
+  for (const line of new Set([...a.keys(), ...b.keys()])) {
+    const d = (b.get(line) ?? 0) - (a.get(line) ?? 0);
+    for (let i = 0; i < d; i++) added.push(line);
+    for (let i = 0; i < -d; i++) removed.push(line);
+  }
+  return { added, removed, moved: added.length + removed.length > 0 };
+}
+
 function selfTest() {
+  {
+    const out = "warning: x\nsrc/a.ts:3:1: NTS1001 a refused thing\nsrc/b.ts:9:2: NTS1003 `f` cannot be compiled\n";
+    const lines = refusalLines(out);
+    if (lines.length !== 2) return `refusalLines read ${lines.length} refusal(s) from two`;
+    if (refusalDelta(lines, [...lines].reverse().sort()).moved) return "the same refusals in another order read as moved";
+    const moved = refusalDelta(lines, refusalLines(out.replace("NTS1001 a refused thing", "NTS1001 another")));
+    if (!moved.moved || moved.added.length !== 1 || moved.removed.length !== 1) return "one changed refusal was not seen as one added and one removed";
+    if (!refusalDelta(lines, [...lines, lines[0]]).moved) return "a refusal printed once more was not seen";
+  }
   if (notMeasuredClause(0, 5) !== "" || !notMeasuredClause(1, 5).includes("1 of 5 project(s) NOT MEASURED")) return `the verdict's unmeasured clause: ${JSON.stringify([notMeasuredClause(0, 5), notMeasuredClause(1, 5)])}`;
   const prog = (a, b, t, extra = "") => [
     `static NtsObj_Closure${a} * g${t};`,
@@ -219,7 +254,7 @@ if (broken) {
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ; a verdict names its unmeasured projects");
+  console.log("  self-test: a renumbering is the same program and reported as renumbered, never as identical; a literal, a swapped operand, a new call and a declaration each differ; a moved refusal is seen; a verdict names its unmeasured projects");
   process.exit(0);
 }
 
@@ -310,7 +345,7 @@ async function emit(arm, project) {
   const header = existsSync(join(out, "program.h")) ? readFileSync(join(out, "program.h"), "utf8") : "";
   const summary = summarise(readFileSync(program, "utf8"), header);
   rmSync(out, { recursive: true, force: true });
-  return summary;
+  return { ...summary, refusals: refusalLines(r.out) };
 }
 
 const started = Date.now();
@@ -330,6 +365,11 @@ console.log(`  provider: ${PROVIDER}`);
 const unmeasured = [];
 const differing = [];
 const renumberedOnly = [];
+const refusalsOnly = [];
+const refusalText = (r) =>
+  `${r.removed.length} gone, ${r.added.length} new` +
+  (r.added[0] ? `; first new: ${r.added[0].slice(0, 140)}` : "") +
+  (r.removed[0] ? `; first gone: ${r.removed[0].slice(0, 140)}` : "");
 for (const project of projects) {
   const { before, after } = results.get(project);
   if (before.unmeasured || after.unmeasured) {
@@ -337,11 +377,15 @@ for (const project of projects) {
     continue;
   }
   const d = compare(before, after);
+  const refused = refusalDelta(before.refusals, after.refusals);
   if (d.renumberedOnly) {
-    renumberedOnly.push({ project, d });
+    renumberedOnly.push({ project, d, refused });
     continue;
   }
-  if (!d.differs) continue;
+  if (!d.differs) {
+    if (refused.moved) refusalsOnly.push({ project, refused });
+    continue;
+  }
   differing.push(project);
   const helpers = d.helpers.slice(0, 6).map((h) => `${h.name} ${h.before} -> ${h.after}`).join(", ");
   console.log(`\n  ${project}`);
@@ -349,6 +393,11 @@ for (const project of projects) {
   console.log(`    helpers    ${helpers || "no call count moved"}${d.helpers.length > 6 ? `, +${d.helpers.length - 6} more` : ""}`);
   console.log(`    in         ${d.names.slice(0, 8).join(", ")}${d.names.length > 8 ? `, +${d.names.length - 8} more` : ""}`);
   if (d.renumbered.length > 0) console.log(`    renumbered ${d.renumbered.slice(0, 4).join(", ")}${d.renumbered.length > 4 ? `, +${d.renumbered.length - 4} more` : ""}`);
+  if (refused.moved) console.log(`    refusals   ${refusalText(refused)}`);
+}
+for (const { project, refused } of refusalsOnly) {
+  console.log(`\n  ${project}: THE SAME C, DIFFERENT REFUSALS -- what is refused moved where the program did not`);
+  console.log(`    refusals   ${refusalText(refused)}`);
 }
 // **Renumbered only is a finding, not a "no".** The same program up to
 // renaming, and different text: a value was added or removed where no C
@@ -363,7 +412,7 @@ for (const { project, d } of renumberedOnly) {
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
 const measuredCount = projects.length - unmeasured.length;
 const notMeasured = notMeasuredClause(unmeasured.length, projects.length);
-console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "reference counting" : "no-gc"}: ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${measuredCount - differing.length - renumberedOnly.length} byte-identical${notMeasured}`);
+console.log(`\n  of ${measuredCount} measured project(s), under ${RC ? "reference counting" : "no-gc"}: ${differing.length} emit a different program, ${renumberedOnly.length} the same program renumbered, ${refusalsOnly.length} the same program refusing differently, ${measuredCount - differing.length - renumberedOnly.length - refusalsOnly.length} byte-identical with the same refusals${notMeasured}`);
 
 const axisModules = differing.filter((p) => p.startsWith("runtime/node/")).map((p) => p.slice("runtime/node/".length));
 if (!argv.includes("--axis")) {
