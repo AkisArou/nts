@@ -37,6 +37,8 @@ function openArray(kind: number): unknown {
     const xs: unknown[] = ["u", 2, undefined];
     return xs;
   }
+  // The program's only bigints: reading one through an open array boxes it.
+  if (kind === 7) return [10n, -1180591620717411303424n];
   return "not an array";
 }
 // An element of an open array, whose storage the read cannot see: one type

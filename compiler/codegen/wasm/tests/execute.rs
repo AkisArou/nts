@@ -196,7 +196,7 @@ fn source_array_element_reads_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 1377, "{output}");
+    assert_eq!(output["cases"], 1390, "{output}");
     assert_eq!(output["named_declines"], 1, "{output}");
 }
 

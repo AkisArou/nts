@@ -1717,6 +1717,12 @@ impl<'a> Builder<'a> {
         self.arrays.insert(key, id);
         self.array_elements.insert(id, element.clone());
         self.work.push(Work::Array(element.clone(), id));
+        // An element may be read as an open value (an open array's element,
+        // read through whichever storage it has), which boxes a bigint: the
+        // box is planned with its array, so no such read finds it missing.
+        if element == &HirType::BigInt {
+            self.bigint_box();
+        }
         Ok(id)
     }
 
