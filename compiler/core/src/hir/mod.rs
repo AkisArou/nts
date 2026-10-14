@@ -2077,6 +2077,15 @@ pub struct ClassIdentity {
     pub types: Vec<TypeId>,
 }
 
+/// One published constructor's semantic identity and actual emitted owner.
+/// Display names are not linkage names: two modules may declare one name.
+#[derive(Debug, Clone, Copy)]
+pub struct PublishedClass<'a> {
+    pub emitted: &'a str,
+    pub identity: &'a ClassIdentity,
+    pub receiver: ClassId,
+}
+
 /// One interface declaration, independent of its physical layouts.
 ///
 /// Instantiations belong to one declaration even when their fields have
@@ -3376,6 +3385,37 @@ pub struct Global {
 }
 
 impl Program {
+    /// Classes the entry publishes, independent of canonical layout names.
+    /// A class can share an interface's storage without sharing its identity.
+    pub fn published_classes(&self) -> impl Iterator<Item = PublishedClass<'_>> {
+        let mut seen = rustc_hash::FxHashSet::default();
+        self.public_api.iter().filter_map(move |(emitted, _)| {
+            if !seen.insert(emitted.as_str()) {
+                return None;
+            }
+            let constructor = format!("{emitted}#constructor");
+            let receiver = &self
+                .funcs
+                .iter()
+                .find(|func| func.name == constructor)?
+                .params
+                .first()?
+                .ty;
+            let HirType::Managed(ManagedType::Object(receiver)) = receiver else {
+                return None;
+            };
+            let identity = self
+                .classes
+                .iter()
+                .find(|class| class.types.contains(receiver))?;
+            Some(PublishedClass {
+                emitted,
+                identity,
+                receiver: *receiver,
+            })
+        })
+    }
+
     /// The classes of `layout` that need an identity of their own -- a C
     /// descriptor, a JVM class -- for `instanceof` to tell them apart: every
     /// class sharing the layout where two or more do, or its one class where an

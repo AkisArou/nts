@@ -347,6 +347,10 @@ pub type RootNames = FxHashSet<String>;
 /// outside, because there is no outside.
 #[must_use]
 pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
+    let published_classes: FxHashSet<&str> = program
+        .published_classes()
+        .map(|class| class.emitted)
+        .collect();
     let mut names: Vec<&str> = match roots {
         Roots::Entry(names) | Roots::Declared(names) => program
             .funcs
@@ -424,16 +428,11 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
                         // damage was downstream of the list I had instrumented
                         // and identical to it.
                         //
-                        // A class has a layout and is not itself a function;
-                        // `eachUpTo` is a function and has no layout. Both
-                        // halves, because a specialization of a published class's
-                        // method would satisfy the first alone.
-                        program.layouts.iter().any(|layout| layout.name == owner)
+                        // Class identity is recorded independently of storage.
+                        // An interface may own the canonical layout's name;
+                        // asking that name dropped the class's entire surface.
+                        published_classes.contains(owner)
                             && !program.funcs.iter().any(|func| func.name == owner)
-                            && program
-                                .public_api
-                                .iter()
-                                .any(|(emitted, _)| *emitted == owner)
                     })
             })
             .map(|func| func.name.as_str())

@@ -2007,22 +2007,21 @@ fn by_value_arguments(
 /// that allocates and returns the header, so the wrapper can construct without
 /// being handed a layout it could then misread.
 fn published_class_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
-    let classes: rustc_hash::FxHashSet<&str> = program
-        .funcs
-        .iter()
-        .filter_map(|func| func.name.split_once('#').map(|(owner, _)| owner))
-        .collect();
     program
-        .public_api
-        .iter()
-        .filter(|(emitted, _)| classes.contains(emitted.as_str()))
-        .filter_map(|(emitted, _)| {
+        .published_classes()
+        .filter_map(|class| {
             program
                 .layouts
                 .iter()
-                .position(|layout| layout.name == *emitted)
+                .position(|layout| layout.types.contains(&class.receiver))
         })
         .collect()
+}
+
+/// The class-specific factory and wrapper prefix, independent of its storage.
+#[must_use]
+pub fn class_instance_name(class: nts_core::hir::PublishedClass<'_>) -> String {
+    format!("NtsObj_{}", c_identifier(class.emitted))
 }
 
 /// Layouts allocated, published for construction, or named by a descriptor test.
@@ -3565,18 +3564,18 @@ fn emit_object_descriptors(
         );
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
         if published.contains(&index) {
-            // **The published class's identity, not the shape's.** A layout is
-            // named after the class the wrapper publishes, so that class is the
-            // one this hole builds -- and where something shares the shape, the
-            // shape's descriptor would hand the wrapper an object that answers
-            // `instanceof` as whichever class was laid out first.
-            //
-            // The second place in this emitter that names a descriptor, and it
-            // was found because the JVM lane went looking for the same thing on
-            // their side after their multi-member `instanceof` arm turned out
-            // to have the defect their single-member arm had just lost.
-            let descriptor = published_descriptor(program, layout);
-            writer.line(origin, construction_hole(&name, &descriptor));
+            // One hole per semantic class, even when their storage is shared.
+            // The constructor receiver chooses an instantiated layout; the
+            // class type chooses the descriptor carrying its own identity.
+            for class in program.published_classes() {
+                if layout.types.contains(&class.receiver) {
+                    let descriptor = descriptor_for(program, layout, Some(class.receiver));
+                    writer.line(
+                        origin,
+                        construction_hole(&class_instance_name(class), &descriptor),
+                    );
+                }
+            }
         }
 
         // A named function used as a value is one object, so it is emitted
@@ -3917,28 +3916,6 @@ fn allocate_object(
     Ok(format!(
         "{name} = ({type_name} *)nts_object_new(&{descriptor});"
     ))
-}
-
-/// The descriptor the napi wrapper's construction hole should allocate with.
-///
-/// A layout is named after the class the wrapper publishes, so that class is
-/// the one the hole builds -- and where something shares the shape, the shape's
-/// descriptor would hand the wrapper an object answering `instanceof` as
-/// whichever class was laid out first.
-fn published_descriptor(program: &Program, layout: &nts_core::hir::Layout) -> String {
-    // **Through `descriptor_for`, not beside it.** Spelling the name here
-    // instead named `nts_desc_NtsObj_Foo__Foo` for a layout nothing shares --
-    // where no such constant is emitted, because a lone class needs no identity
-    // of its own. Eight corpus cases stopped compiling with `use of undeclared
-    // identifier`, and the reference and the definition disagreeing is the
-    // third time tonight one fact had two derivations. This one I introduced
-    // while fixing the second.
-    let ty = program
-        .distinct_identities(layout)
-        .iter()
-        .find(|class| class.name == layout.name)
-        .and_then(|class| class.types.first().copied());
-    descriptor_for(program, layout, ty)
 }
 
 /// The spelling of one class's descriptor within its shape.

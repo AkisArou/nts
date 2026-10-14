@@ -1755,19 +1755,17 @@ fn publish_functions(program: &hir::Program, wrapped: &[(&str, &str)]) -> String
 /// compiled at all, which made it a permanent hole in the compiled axis rather
 /// than one module's addon failing.
 ///
-/// A `Vec` rather than an iterator because the two callers hold `program` and
-/// `classes` for different lifetimes, and a module has a handful of classes.
-fn defined_classes<'a>(
-    program: &'a hir::Program,
-    classes: &FxHashSet<String>,
-) -> Vec<(&'a str, &'a str)> {
+/// The semantic class is the published value; a canonical layout is only its
+/// storage. Matching that layout's name silently omitted shared-shape classes.
+fn defined_classes(program: &hir::Program) -> Vec<(&str, &str)> {
+    let classes: FxHashSet<&str> = program
+        .published_classes()
+        .map(|class| class.emitted)
+        .collect();
     program
         .public_api
         .iter()
-        .filter(|(emitted, _)| {
-            classes.contains(emitted)
-                && program.layouts.iter().any(|layout| layout.name == *emitted)
-        })
+        .filter(|(emitted, _)| classes.contains(emitted.as_str()))
         .map(|(emitted, publish)| (emitted.as_str(), publish.as_str()))
         .collect()
 }
@@ -1805,7 +1803,7 @@ fn emit_classes<'a>(
 ) -> (String, Vec<&'a str>) {
     let mut class_inits = String::new();
     let mut published_classes: Vec<&str> = Vec::new();
-    for (emitted, publish) in defined_classes(program, classes) {
+    for (emitted, publish) in defined_classes(program) {
         if let Some((code, init)) = class_definition(
             emitted,
             publish,
@@ -2099,9 +2097,9 @@ fn class_definition(
         });
         return None;
     };
-    // The receiver's C type is the struct the factory allocates. Taken from the
-    // signature rather than rebuilt from the layout name, so the two cannot
-    // disagree about spelling.
+    // The receiver supplies the physical struct. The semantic class supplies
+    // the callback/factory name: two classes may share that struct, but never
+    // their constructor, finalizer or field-defining callback.
     let Some(receiver) = constructor.params.first() else {
         skipped.push(Skipped {
             function: class.to_owned(),
@@ -2109,14 +2107,18 @@ fn class_definition(
         });
         return None;
     };
-    let instance = c_type(&receiver.ty, layouts)
+    let physical = c_type(&receiver.ty, layouts)
         .trim_end_matches(" *")
         .to_owned();
+    let identity = program
+        .published_classes()
+        .find(|identity| identity.emitted == class)?;
+    let instance = nts_codegen_c::class_instance_name(identity);
 
     // The field definer is emitted below the constructor and called from it, so
     // its prototype goes here with the other two.
     let mut out = format!(
-        "typedef struct {instance} {instance};\nNtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
+        "typedef struct {physical} {instance};\nNtsHeader *nts_construct_{instance}(void);\nstatic bool nts_napi_define_{instance}_fields(napi_env env, napi_value self);\n"
     );
 
     // The finalizer, which is the whole of the ownership story: the instance is
@@ -2174,9 +2176,10 @@ fn class_definition(
     // declared: behaviour first, then state.
     if let Some(at) = layouts
         .iter()
-        .position(|candidate| c_type_is(candidate, &instance))
+        .position(|candidate| c_type_is(candidate, &physical))
     {
-        let (bodies, fields) = field_accessors(&layouts[at], &instance, layouts, classes, skipped);
+        let (bodies, fields) =
+            field_accessors(&layouts[at], &instance, class, layouts, classes, skipped);
         out.push_str(&bodies);
         descriptors.extend(fields);
     }
@@ -3772,6 +3775,7 @@ fn c_type_is(layout: &hir::Layout, instance: &str) -> bool {
 fn field_accessors(
     layout: &hir::Layout,
     instance: &str,
+    class: &str,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
     skipped: &mut Vec<Skipped>,
@@ -3781,15 +3785,14 @@ fn field_accessors(
     for field in &layout.fields {
         let Some(crossing) = cross(&field.ty, layouts, classes) else {
             skipped.push(Skipped {
-                function: format!("{}.{}", layout.name, field.name),
+                function: format!("{class}.{}", field.name),
                 reason: format!("is a field of type {} and does not cross", spell(&field.ty)),
             });
             continue;
         };
         let member = c_member(&field.name);
-        // Mangle the complete symbol: a layout named `union` is not a
-        // keyword after this prefix, and must remain distinct from `union_`.
-        let symbol = c_identifier(&format!("nts_napi_get_{}_{}", layout.name, field.name));
+        // Mangle the complete symbol, including its non-keyword prefix.
+        let symbol = c_identifier(&format!("nts_napi_get_{class}_{}", field.name));
         let Some(make) = conversion(&crossing, &format!("nts_self->{member}"), layouts) else {
             continue;
         };
@@ -4155,7 +4158,7 @@ fn converted_layouts(
         // arose. Returns only: an object *parameter* is refused there as
         // crossing outward only, so a member's parameters need no helper.
         .chain(
-            defined_classes(program, classes)
+            defined_classes(program)
                 .into_iter()
                 .flat_map(|(emitted, _)| declared_members(program, emitted))
                 .filter(|(func, _)| member_crossings(func, &program.layouts, classes).is_ok())
