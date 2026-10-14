@@ -51,6 +51,10 @@ void nts_chromium_probe_install_host(NtsChromiumProbe* probe,
 /* The idle collection, callable directly where idle time cannot occur. */
 void nts_chromium_probe_collect_idle(NtsChromiumProbe* probe);
 void nts_chromium_probe_await_counter(NtsChromiumProbe* probe);
+/* What the DOM keeps alive for the program: the closures it holds for later
+   calls, each once however often it is registered, and only those the
+   runtime counts -- a closure with nothing captured is a static constant. */
+size_t nts_chromium_probe_held_objects(NtsDomContext* context);
 void nts_chromium_probe_teardown_witness(NtsChromiumProbe* probe);
 double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
                                   NtsDomContext* context);

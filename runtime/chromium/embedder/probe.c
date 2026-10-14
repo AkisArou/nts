@@ -22,6 +22,35 @@ struct NtsChromiumProbe {
   bool collector_queued;
 };
 
+/* The distinct counted closures nts_blink_dom_each_held_closure visits: a
+   handful per document, so a linear scan. */
+typedef struct HeldObjects {
+  const void** items;
+  size_t length;
+  size_t capacity;
+} HeldObjects;
+static void count_held(void* closure, void* state) {
+  HeldObjects* held = state;
+  if (((const NtsHeader*)closure)->reserved == NTS_IMMORTAL)
+    return;
+  for (size_t at = 0; at < held->length; at++)
+    if (held->items[at] == closure)
+      return;
+  if (held->length == held->capacity) {
+    held->capacity = held->capacity ? held->capacity * 2 : 16;
+    held->items = realloc(held->items, held->capacity * sizeof(*held->items));
+    if (!held->items)
+      PROBE_FAIL();
+  }
+  held->items[held->length++] = closure;
+}
+size_t nts_chromium_probe_held_objects(NtsDomContext* context) {
+  HeldObjects held = {0};
+  nts_blink_dom_each_held_closure(context, count_held, &held);
+  free(held.items);
+  return held.length;
+}
+
 typedef NtsChromiumHostScope ProbeScope;
 static ProbeScope enter(NtsChromiumProbe* probe) {
   return nts_chromium_host_enter(probe->host);
@@ -100,7 +129,7 @@ double nts_chromium_probe_dom_run(NtsChromiumProbe* probe,
      now, so what is counted is what nothing will ever free. */
   nts_collect_cycles();
   const size_t after = nts_live_count();
-  const size_t held = nts_blink_dom_held_closures(context);
+  const size_t held = nts_chromium_probe_held_objects(context);
   fprintf(stderr, "NTS_DOM_LIVE before=%zu uncollected=%zu after=%zu held=%zu\n",
           before, uncollected, after, held);
   if (after > before + held) {
@@ -192,7 +221,7 @@ static void end_checkpoint(void* state) {
   }
   /* The counter's state, beside the closures Blink holds for the program
      (the witness's observers and listeners): nothing else survives. */
-  const size_t held = nts_blink_dom_held_closures(probe->dom);
+  const size_t held = nts_chromium_probe_held_objects(probe->dom);
   if (probe->pending || nts_live_count() != 1 + held) {
     fprintf(stderr, "nts probe: at a checkpoint's end %zu objects live, %zu held, %d pending\n",
             nts_live_count(), held, (int)probe->pending);
@@ -266,7 +295,7 @@ static void finish_counter(void* state) {
   probe->pending = NULL;
   nts_release((NtsHeader*)completion);
   fprintf(stderr, "NTS_ASYNC count=%.0f live=%zu\n", count,
-          nts_live_count() - nts_blink_dom_held_closures(probe->dom));
+          nts_live_count() - nts_chromium_probe_held_objects(probe->dom));
 }
 static void drop_finish(void* state) {
   nts_release((NtsHeader*)state);

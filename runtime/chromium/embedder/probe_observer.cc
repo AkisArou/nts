@@ -200,7 +200,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
     const auto result = nts_chromium_probe_counter_increment(probe_.get());
     // The counter's state, and the closures Blink holds for the program
     // (observers and listeners it has not removed): an event adds nothing.
-    const size_t held = dom_ ? nts_blink_dom_held_closures(dom_.get()) : 0;
+    const size_t held = dom_ ? nts_chromium_probe_held_objects(dom_.get()) : 0;
     CHECK_EQ(result.live_objects_before, 1 + held);
     CHECK_EQ(result.live_objects_after, 1 + held);
     if (dom_) {

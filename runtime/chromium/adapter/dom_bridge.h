@@ -63,9 +63,16 @@ void nts_blink_dom_set_retain(NtsDomContext* context, NtsDomRetain retain);
 int32_t nts_blink_dom_entry(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);
-// The closures the context holds for the program -- listeners not yet
-// removed, frames not yet run -- each given back when it is done with.
-size_t nts_blink_dom_held_closures(NtsDomContext* context);
+// Each closure the context holds for the program -- listeners not yet
+// removed, frame, microtask and idle callbacks and timers not yet run,
+// observers' delegates -- each given back when it is done with. One
+// registered twice is visited twice; NULL is never visited. A closure with
+// nothing captured is a static constant the runtime does not count, which a
+// host counting what is alive leaves out.
+typedef void (*NtsDomClosureVisitor)(void* closure, void* state);
+void nts_blink_dom_each_held_closure(NtsDomContext* context,
+                                     NtsDomClosureVisitor visit,
+                                     void* state);
 // The program's promises Blink has not settled yet, each keeping alive what
 // awaits it until it does.
 size_t nts_blink_dom_pending_promises(NtsDomContext* context);

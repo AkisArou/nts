@@ -207,6 +207,8 @@ public:
   void Invoke(double time) override;
 
   // What gives the closure back, once; nothing after.
+  // What the context holds for the program until it runs or is taken.
+  void *closure() const { return closure_; }
   NtsDomDestroy Take(void *&closure) {
     if (!callback_)
       return nullptr;
@@ -236,6 +238,8 @@ public:
   void Run();
 
   // What gives the closure back, once; nothing after.
+  // What the context holds for the program until it runs or is taken.
+  void *closure() const { return closure_; }
   NtsDomDestroy Take(void *&closure) {
     if (!callback_)
       return nullptr;
@@ -269,6 +273,8 @@ public:
   int32_t id() const { return id_; }
 
   // What gives the closure back, once; nothing after.
+  // What the context holds for the program until it runs or is taken.
+  void *closure() const { return closure_; }
   NtsDomDestroy Take(void *&closure) {
     if (!callback_)
       return nullptr;
@@ -438,6 +444,7 @@ public:
 
   int32_t id() const { return id_; }
   int nesting() const { return nesting_; }
+  void *closure() const { return closure_; }
 
   // Each run, once the context has entered the program's environment.
   void Run() {
@@ -1599,12 +1606,25 @@ NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
 size_t nts_blink_dom_pending_promises(NtsDomContext *context) {
   return context->listeners->promises.size();
 }
-size_t nts_blink_dom_held_closures(NtsDomContext *context) {
-  return context->listeners->set.size() + context->listeners->frames.size() +
-         context->listeners->microtasks.size() +
-         context->listeners->idle.size() +
-         context->listeners->timers.size() +
-         context->listeners->held.size();
+void nts_blink_dom_each_held_closure(NtsDomContext *context,
+                                     NtsDomClosureVisitor visit, void *state) {
+  const auto &listeners = *context->listeners;
+  const auto each = [&](void *closure) {
+    if (closure)
+      visit(closure, state);
+  };
+  for (const auto &listener : listeners.set)
+    each(listener->closure());
+  for (const auto &frame : listeners.frames)
+    each(frame->closure());
+  for (const auto &task : listeners.microtasks)
+    each(task->closure());
+  for (const auto &idle : listeners.idle)
+    each(idle->closure());
+  for (const auto &timer : listeners.timers)
+    each(timer.value->closure());
+  for (const auto &held : listeners.held)
+    each(held->closure());
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // Logs each root left, as "Interface xcount": what a handle the program
