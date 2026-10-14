@@ -695,7 +695,7 @@ interface HTMLFieldSetElement {}
  */
 interface HTMLFontElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLCollection
+ * @ntsBoundBy "nts:dom" HTMLFormControlsCollection
  * @ntsIs nts_dom_is 196
  */
 interface HTMLFormControlsCollection {}
@@ -825,7 +825,7 @@ interface HTMLOptGroupElement {}
  */
 interface HTMLOptionElement {}
 /**
- * @ntsBoundBy "nts:dom" HTMLCollection
+ * @ntsBoundBy "nts:dom" HTMLOptionsCollection
  * @ntsIs nts_dom_is 229
  */
 interface HTMLOptionsCollection {}
@@ -1256,7 +1256,7 @@ interface ProgressEvent {}
  */
 interface PromiseRejectionEvent {}
 /**
- * @ntsBoundBy "nts:dom" NodeList
+ * @ntsBoundBy "nts:dom" RadioNodeList
  * @ntsIs nts_dom_is 373
  */
 interface RadioNodeList {}
@@ -1979,6 +1979,7 @@ interface URLPattern {}
  */
 interface URLSearchParams {}
 /**
+ * @ntsBoundBy "nts:dom" UserActivation
  * @ntsIs nts_dom_is 550
  */
 interface UserActivation {}

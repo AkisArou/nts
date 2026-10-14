@@ -12,13 +12,17 @@ independent of the ordinary compiler build.
 ## What a program can use
 
 `nts:dom` is generated from Blink's IDL ([docs/lib-dom.md](docs/lib-dom.md)
-lists how lib.dom.d.ts spellings map): the DOM and its events, forms and
-validation, ranges and the selection, stylesheets, shadow DOM and slots,
-the window (computed style, media queries, history, location, navigator,
-performance), URL, AbortController, parsing and serializing, drag data,
-the 2D canvas, scrolling, promise results (`await video.play()`,
-`image.decode()`, fullscreen), and IDL enums as literal unions. About 4,800
-members bind;
+lists how lib.dom.d.ts spellings map): the DOM and its events, every HTML
+element lib.dom names, SVG and DOMMatrix, forms and validation (a form's
+controls, a select's options), ranges and the selection, stylesheets,
+shadow DOM and slots, the window (computed style, media queries, history,
+location, navigator, performance), URL and URLSearchParams,
+AbortController, fetch with Request, Response and Headers, localStorage and
+sessionStorage, the clipboard, crypto's random values and UUIDs,
+the mutation, resize and intersection observers, timers and
+`queueMicrotask`, parsing and serializing, drag data, the 2D canvas,
+scrolling, promise results (`await video.play()`, `image.decode()`,
+fullscreen), and IDL enums as literal unions. About 7,000 functions bind;
 what does not yet is listed with its reason in
 `tooling/chromium/bindgen/report.json`, and every workaround in
 [contracts/workarounds.md](contracts/workarounds.md).

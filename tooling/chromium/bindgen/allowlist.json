@@ -289,7 +289,11 @@
     "SVGTSpanElement",
     "SVGUnitTypes",
     "SVGUseElement",
-    "SVGViewElement"
+    "SVGViewElement",
+    "HTMLOptionsCollection",
+    "HTMLFormControlsCollection",
+    "RadioNodeList",
+    "UserActivation"
   ],
   "sequences": [
     "MutationRecord",

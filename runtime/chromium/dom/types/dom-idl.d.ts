@@ -66,7 +66,7 @@ declare module "nts:dom" {
   export type InputEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; data: StringView; dataTransfer: DataTransfer | null; inputType: StringView; isComposing: CBool<Uint8> }, "NtsDomInputEventInit">;
   export type KeyboardEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; charCode: Float64; code: StringView; isComposing: CBool<Uint8>; key: StringView; keyCode: Float64; location: Float64; repeat: CBool<Uint8> }, "NtsDomKeyboardEventInit">;
   export type MediaQueryListEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; matches: CBool<Uint8>; media: StringView }, "NtsDomMediaQueryListEventInit">;
-  export type MessageEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; lastEventId: StringView; origin: StringView; source: EventTarget | null }, "NtsDomMessageEventInit">;
+  export type MessageEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; lastEventId: StringView; origin: StringView; source: EventTarget | null; userActivation: UserActivation | null }, "NtsDomMessageEventInit">;
   export type MouseEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64 }, "NtsDomMouseEventInit">;
   export type MutationObserverInit = Struct<{ attributeOldValue: CBool<Uint8>; attributes: CBool<Uint8>; characterData: CBool<Uint8>; characterDataOldValue: CBool<Uint8>; childList: CBool<Uint8>; subtree: CBool<Uint8> }, "NtsDomMutationObserverInit">;
   export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: Float64; iterations: Float64 }, "NtsDomOptionalEffectTiming">;
@@ -19433,6 +19433,14 @@ declare module "nts:dom" {
      */
     readonly relList: DOMTokenList;
     /**
+     * @ntsSymbol nts_dom_HTMLFormElement_get_elements
+     */
+    _get_elements(this: HTMLFormElement): HTMLFormControlsCollection;
+    /**
+     * @ntsGet _get_elements
+     */
+    readonly elements: HTMLFormControlsCollection;
+    /**
      * @ntsSymbol nts_dom_HTMLFormElement_get_length
      */
     _get_length(this: HTMLFormElement): Float64;
@@ -19568,6 +19576,14 @@ declare module "nts:dom" {
      * @ntsGet _get_type
      */
     readonly type: StringView;
+    /**
+     * @ntsSymbol nts_dom_HTMLSelectElement_get_options
+     */
+    _get_options(this: HTMLSelectElement): HTMLOptionsCollection;
+    /**
+     * @ntsGet _get_options
+     */
+    readonly options: HTMLOptionsCollection;
     /**
      * @ntsSymbol nts_dom_HTMLSelectElement_get_length
      */
@@ -27304,6 +27320,14 @@ declare module "nts:dom" {
      */
     readonly cpuPerformance: Float64;
     /**
+     * @ntsSymbol nts_dom_Navigator_get_userActivation
+     */
+    _get_userActivation(this: Navigator): UserActivation;
+    /**
+     * @ntsGet _get_userActivation
+     */
+    readonly userActivation: UserActivation;
+    /**
      * @ntsSymbol nts_dom_Navigator_get_clipboard
      */
     _get_clipboard(this: Navigator): Clipboard;
@@ -34866,6 +34890,14 @@ declare module "nts:dom" {
      */
     readonly source: EventTarget | null;
     /**
+     * @ntsSymbol nts_dom_MessageEvent_get_userActivation
+     */
+    _get_userActivation(this: MessageEvent): UserActivation | null;
+    /**
+     * @ntsGet _get_userActivation
+     */
+    readonly userActivation: UserActivation | null;
+    /**
      * @ntsSymbol nts_dom_MessageEvent_get_isTrusted
      */
     _get_isTrusted(this: MessageEvent): boolean;
@@ -42042,6 +42074,105 @@ declare module "nts:dom" {
   export type SVGViewElement = HostClass<"NtsDomSVGViewElement", SVGElement> & SVGViewElementMethods;
   /** @ntsSymbol nts_dom_as_SVGViewElement */
   export function asSVGViewElement(node: Node): SVGViewElement | null;
+  export interface HTMLOptionsCollectionOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_get_length
+     */
+    _get_length(this: HTMLOptionsCollection): Float64;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_set_length
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_length(this: HTMLOptionsCollection, value: Float64, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsGet _get_length
+     * @ntsSet _set_length
+     */
+    length: Float64;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_get_selectedIndex
+     */
+    _get_selectedIndex(this: HTMLOptionsCollection): Float64;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_set_selectedIndex
+     */
+    _set_selectedIndex(this: HTMLOptionsCollection, value: Float64): void;
+    /**
+     * @ntsGet _get_selectedIndex
+     * @ntsSet _set_selectedIndex
+     */
+    selectedIndex: Float64;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_add_1_HTMLOptGroupElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: HTMLOptionsCollection, element: HTMLOptGroupElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_add_1_HTMLOptionElement
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    add(this: HTMLOptionsCollection, element: HTMLOptionElement, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_remove
+     */
+    remove(this: HTMLOptionsCollection, index: Float64): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLOptionsCollection_named_get
+     */
+    _named_get(this: HTMLOptionsCollection, name: StringView): Element | null;
+  }
+  export type HTMLOptionsCollectionMethods = HTMLOptionsCollectionOwnMethods & HTMLCollectionMethods;
+  export type HTMLOptionsCollection = HostClass<"NtsDomHTMLOptionsCollection", HTMLCollection> & HTMLOptionsCollectionMethods;
+  /** @ntsSymbol nts_dom_as_HTMLOptionsCollection */
+  export function asHTMLOptionsCollection(object: HTMLCollection): HTMLOptionsCollection | null;
+  export interface HTMLFormControlsCollectionOwnMethods {
+  }
+  export type HTMLFormControlsCollectionMethods = HTMLFormControlsCollectionOwnMethods & HTMLCollectionMethods;
+  export type HTMLFormControlsCollection = HostClass<"NtsDomHTMLFormControlsCollection", HTMLCollection> & HTMLFormControlsCollectionMethods;
+  /** @ntsSymbol nts_dom_as_HTMLFormControlsCollection */
+  export function asHTMLFormControlsCollection(object: HTMLCollection): HTMLFormControlsCollection | null;
+  export interface RadioNodeListOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_RadioNodeList_get_value
+     */
+    _get_value(this: RadioNodeList): StringView;
+    /**
+     * @ntsSymbol nts_dom_RadioNodeList_set_value
+     */
+    _set_value(this: RadioNodeList, value: StringView): void;
+    /**
+     * @ntsGet _get_value
+     * @ntsSet _set_value
+     */
+    value: StringView;
+  }
+  export type RadioNodeListMethods = RadioNodeListOwnMethods & NodeListMethods;
+  export type RadioNodeList = HostClass<"NtsDomRadioNodeList", NodeList> & RadioNodeListMethods;
+  /** @ntsSymbol nts_dom_as_RadioNodeList */
+  export function asRadioNodeList(object: NodeList): RadioNodeList | null;
+  export interface UserActivationOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_UserActivation_get_hasBeenActive
+     */
+    _get_hasBeenActive(this: UserActivation): boolean;
+    /**
+     * @ntsGet _get_hasBeenActive
+     */
+    readonly hasBeenActive: boolean;
+    /**
+     * @ntsSymbol nts_dom_UserActivation_get_isActive
+     */
+    _get_isActive(this: UserActivation): boolean;
+    /**
+     * @ntsGet _get_isActive
+     */
+    readonly isActive: boolean;
+  }
+  export type UserActivationMethods = UserActivationOwnMethods;
+  export type UserActivation = HostClass<"NtsDomUserActivation", null, "nts_dom_retain", "nts_dom_release"> & UserActivationMethods;
   export interface ChildNodeOwnMethods {
     /**
      * @ntsSymbol nts_dom_ChildNode_after_sss

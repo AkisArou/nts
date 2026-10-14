@@ -1,5 +1,5 @@
 {
-  "bound": 6971,
+  "bound": 6990,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -1223,11 +1223,6 @@
     },
     {
       "interface": "HTMLFormElement",
-      "member": "get elements",
-      "why": "interface HTMLFormControlsCollection is not bound"
-    },
-    {
-      "interface": "HTMLFormElement",
       "member": "named get",
       "why": "result type (RadioNodeList or Element)"
     },
@@ -1235,11 +1230,6 @@
       "interface": "HTMLSelectElement",
       "member": "constructor",
       "why": "[HTMLConstructor]: a custom element's constructor"
-    },
-    {
-      "interface": "HTMLSelectElement",
-      "member": "get options",
-      "why": "interface HTMLOptionsCollection is not bound"
     },
     {
       "interface": "HTMLSelectElement",
@@ -2625,11 +2615,6 @@
       "interface": "Navigator",
       "member": "get scheduling",
       "why": "interface Scheduling is not bound"
-    },
-    {
-      "interface": "Navigator",
-      "member": "get userActivation",
-      "why": "interface UserActivation is not bound"
     },
     {
       "interface": "Navigator",
@@ -4262,11 +4247,6 @@
       "why": "dictionary member of type optional sequence<MessagePort>"
     },
     {
-      "interface": "MessageEventInit",
-      "member": "userActivation",
-      "why": "dictionary member of type optional UserActivation?"
-    },
-    {
       "interface": "MessageEvent",
       "member": "get data",
       "why": "result type any"
@@ -4275,11 +4255,6 @@
       "interface": "MessageEvent",
       "member": "get ports",
       "why": "interface MessagePort is not bound"
-    },
-    {
-      "interface": "MessageEvent",
-      "member": "get userActivation",
-      "why": "interface UserActivation is not bound"
     },
     {
       "interface": "MessageEvent",
@@ -4665,6 +4640,21 @@
       "interface": "SVGTransformList",
       "member": "createSVGTransformFromMatrix/1",
       "why": "interface SVGMatrix is not bound"
+    },
+    {
+      "interface": "HTMLOptionsCollection",
+      "member": "add/2",
+      "why": "parameter type optional (HTMLElement or long)?"
+    },
+    {
+      "interface": "HTMLFormControlsCollection",
+      "member": "namedItem/1",
+      "why": "result type (RadioNodeList or Element)?"
+    },
+    {
+      "interface": "HTMLFormControlsCollection",
+      "member": "named get",
+      "why": "result type (RadioNodeList or Element)?"
     },
     {
       "interface": "ChildNode",

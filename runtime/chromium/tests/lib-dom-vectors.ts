@@ -528,6 +528,30 @@ export function libDomTranscript(): string {
       matrix.toString() + "|" + new DOMMatrix().isIdentity);
   }
 
+  // A form's controls and a select's options, as collections of their own:
+  // counted and read by index, options added and removed through the
+  // collection with the selected index following, and the user activation
+  // the page has (none: nothing was clicked).
+  {
+    const form = document.createElement("form");
+    const who = document.createElement("input");
+    who.name = "who";
+    const pick = document.createElement("select");
+    form.append(who, pick);
+    for (const label of ["a", "b", "c"]) {
+      const option = document.createElement("option");
+      option.text = label;
+      pick.options.add(option);
+    }
+    pick.options.selectedIndex = 2;
+    pick.options.remove(0);
+    const first = pick.options.item(0);
+    const control = form.elements.item(1);
+    log("formCollections", form.elements.length + "|" + (control === null ? "none" : control.tagName) + "|" +
+      pick.options.length + "|" + (first === null ? "none" : first.text) + "|" + pick.options.selectedIndex + ":" + pick.value +
+      "|" + navigator.userActivation.hasBeenActive);
+  }
+
   // Events of the types lib.dom's event maps name, made and read: their own
   // members, a nullable string a dictionary leaves out (null) against one it
   // gives as empty, and a handle member compared by identity.

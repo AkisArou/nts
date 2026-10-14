@@ -1,15 +1,15 @@
 {
   "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3129,
-    "skipped": 246,
+    "bound": 3140,
+    "skipped": 244,
     "absent: constant": 176,
     "absent: stringifier": 4,
-    "absent: iterable": 20,
-    "absent: other": 29
+    "absent: iterable": 24,
+    "absent: other": 33
   },
   "skippedBy": {
-    "result type": 69,
+    "result type": 70,
     "defined in": 60,
     "parameter type": 16,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
@@ -38,8 +38,6 @@
     "[RuntimeEnabled=AccessKeyLabel] experimental": 1,
     "interface ElementInternals": 1,
     "[RuntimeEnabled=MediaCapture] per-platform": 1,
-    "interface HTMLFormControlsCollection": 1,
-    "interface HTMLOptionsCollection": 1,
     "interface External": 1,
     "interface Navigation": 1,
     "[RuntimeEnabled=OriginIsolationHeader] overridable": 1,
@@ -52,7 +50,6 @@
     "interface Geolocation": 1,
     "[RuntimeEnabled=FedCm] overridable": 1,
     "[RuntimeEnabled=NavigatorContentUtils] per-platform": 1,
-    "interface UserActivation": 1,
     "interface MediaList": 1,
     "interface TextTrackList": 1,
     "interface XMLDocument": 1,
@@ -1616,6 +1613,7 @@
         "action",
         "autocomplete",
         "checkValidity",
+        "elements",
         "encoding",
         "enctype",
         "length",
@@ -1630,9 +1628,7 @@
         "submit",
         "target"
       ],
-      "skipped": {
-        "elements": "interface HTMLFormControlsCollection is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLSelectElement": {
@@ -1648,6 +1644,7 @@
         "multiple",
         "name",
         "namedItem",
+        "options",
         "remove",
         "reportValidity",
         "required",
@@ -1662,9 +1659,7 @@
         "value",
         "willValidate"
       ],
-      "skipped": {
-        "options": "interface HTMLOptionsCollection is not bound"
-      },
+      "skipped": {},
       "absent": {}
     },
     "HTMLOptionElement": {
@@ -2679,6 +2674,7 @@
         "platform",
         "product",
         "productSub",
+        "userActivation",
         "userAgent",
         "vendor",
         "vendorSub",
@@ -2711,7 +2707,6 @@
         "setAppBadge": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "share": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "storage": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "userActivation": "interface UserActivation is not bound",
         "vibrate": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "wakeLock": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
@@ -5557,6 +5552,56 @@
       "bound": [
         "preserveAspectRatio",
         "viewBox"
+      ],
+      "skipped": {},
+      "absent": {}
+    },
+    "HTMLOptionsCollection": {
+      "bound": [
+        "add",
+        "length",
+        "remove",
+        "selectedIndex"
+      ],
+      "skipped": {},
+      "absent": {
+        "other": [
+          "item",
+          "namedItem"
+        ]
+      }
+    },
+    "HTMLFormControlsCollection": {
+      "bound": [],
+      "skipped": {
+        "namedItem": "result type (RadioNodeList or Element)?"
+      },
+      "absent": {
+        "other": [
+          "item",
+          "length"
+        ]
+      }
+    },
+    "RadioNodeList": {
+      "bound": [
+        "item",
+        "value"
+      ],
+      "skipped": {},
+      "absent": {
+        "iterable": [
+          "entries",
+          "forEach",
+          "keys",
+          "values"
+        ]
+      }
+    },
+    "UserActivation": {
+      "bound": [
+        "hasBeenActive",
+        "isActive"
       ],
       "skipped": {},
       "absent": {}
