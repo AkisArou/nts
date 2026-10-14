@@ -44,6 +44,7 @@ pub mod interface_fields;
 mod interface_identities;
 pub mod interprocedural;
 pub mod layout;
+pub mod linearize;
 pub mod liveness;
 pub mod loops;
 pub mod obligations;

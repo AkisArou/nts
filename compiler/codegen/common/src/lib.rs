@@ -17,13 +17,12 @@
 
 pub mod backend;
 pub mod destruct;
-pub mod linearize;
 pub mod symbols;
 pub mod writer;
 
 pub use backend::{Backend, UnknownBackend};
 pub use destruct::{Copy, edge_copies};
-pub use linearize::block_order;
+pub use nts_core::hir::linearize::block_order;
 pub use writer::CodeWriter;
 
 pub mod abi;

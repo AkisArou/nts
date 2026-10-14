@@ -8,9 +8,10 @@
 //!
 //! Decided here rather than per backend, so C and JVM cannot disagree about it —
 //! and so LLVM, which needs the order but not the SSA destruction, can take this
-//! and stop.
+//! and stop. In the core, so an analysis that must meet blocks in the order a
+//! backend emits them reads this one order rather than a copy of it.
 
-use nts_core::hir::{BlockId, Func};
+use super::{BlockId, Func};
 use rustc_hash::FxHashSet;
 
 /// Blocks in emission order. The entry is always first.
@@ -44,7 +45,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
     use super::*;
-    use nts_core::hir::{Block, HirType, Op, OpKind, Param, Terminator, ValueId};
+    use crate::hir::{Block, HirType, Op, OpKind, Param, Terminator, ValueId};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
