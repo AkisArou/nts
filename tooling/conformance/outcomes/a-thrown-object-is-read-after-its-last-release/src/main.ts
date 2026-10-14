@@ -2,6 +2,9 @@
 // provider: rc
 // sanitizer: address
 //
+// **Fixed 2026-10-14, kept as a guard**: `nts_raise` consumes its argument
+// (`own::consumes`), so the raising copy no longer releases what it raised.
+//
 // An object thrown from a method called as a value inside a `try`, read by the
 // handler: under counting, the raising copy gives back one reference more
 // than it holds. `nts_raise` stores the thrown value without a count of its

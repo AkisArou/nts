@@ -2395,9 +2395,19 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 /// where it was, and truncating the array freed it while another array still
 /// held it -- invisible to valgrind for a managed object, whose freed memory
 /// the runtime pools, and a `g_object_unref` of a freed `GObject` for a handle.
+///
+/// **`nts_raise` too**, its one argument. The raise slot takes the caller's
+/// reference, uncounted, and `nts_raise_take` hands that same reference to the
+/// handler as its own. Missing from here, the raising copy of a method released
+/// what it had just thrown: the object died while the slot still named it, and
+/// the handler read freed memory -- `throw new Oops(v)` inside `check.call(..)`
+/// in a `try`, a use after free under the address sanitizer on main and invisible
+/// without it, because the runtime pools freed objects (the JVM lane's
+/// raise-oops, 2026-10-14).
 pub(super) fn consumes(name: &str) -> Option<usize> {
     match name {
         "nts_array_push_ref" | "nts_array_unshift_ref" | "nts_array_push_value" => Some(1),
+        "nts_raise" => Some(0),
         _ => None,
     }
 }

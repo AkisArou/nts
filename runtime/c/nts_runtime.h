@@ -3001,7 +3001,11 @@ NTS_READS_ONLY const char *nts_thrown_class(NtsValue value);
  * exists beside a `jmp_buf` that would have been shorter.
  *
  * `nts_raise_take` clears the flag and hands the value over; a handler calls it
- * on entry. A raise cannot nest: see the note on the implementation. */
+ * on entry. A raise cannot nest: see the note on the implementation.
+ *
+ * **Consuming**: the slot takes the caller's reference without a count, and
+ * `nts_raise_take` hands that same reference to the handler, which owns it.
+ * The caller must not release what it raised (`own::consumes`). */
 void nts_raise(NtsValue value);
 /* Deliberately **not** `NTS_READS_ONLY`. `pure` is a promise that the result
  * depends only on arguments and memory, and this takes none -- so a compiler
