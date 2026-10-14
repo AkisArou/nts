@@ -26,7 +26,10 @@ export function work(n: number): number {
   const ledger = new Ledger(1000000007n);
   let carried = 1n;
   for (let i = 0; i < 16 + n; i = i + 1) {
-    carried = advance(ledger.step, carried);
+    // Keep the product below 2^62: this measures machine-value lifetime, not
+    // the runtime's refusal past signed 128 bits. The overflow outcome fixture
+    // a-bigint-past-128-bits-wraps covers the unbounded product.
+    carried = advance(ledger.step, carried & 0xffffffffn);
     ledger.total = ledger.total + (carried & 0xffffffffn);
   }
   // One number out, so the harness has something to compare. The conversion
