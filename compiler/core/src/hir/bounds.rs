@@ -48,7 +48,7 @@ pub fn eliminate_checks(
         // proved. See [`may_move_a_length`].
         let mut moved = false;
         for value in &block.ops {
-            if growable && may_move_a_length(&func.values[value.0 as usize].kind) {
+            if may_move_a_length(&func.values[value.0 as usize].kind) {
                 moved = true;
                 continue;
             }
@@ -71,6 +71,14 @@ pub fn eliminate_checks(
             else {
                 continue;
             };
+            // An array's length moves only where some array can change length
+            // at all; a view's, wherever a call could detach or resize its
+            // buffer, which no array-length question asks.
+            let view = matches!(
+                func.values[array.0 as usize].ty,
+                HirType::Managed(super::ManagedType::View(_) | super::ManagedType::AnyView)
+            );
+            let guards_hold = !moved || (!growable && !view);
             if !provably_in_bounds(
                 func,
                 analysis,
@@ -78,7 +86,7 @@ pub fn eliminate_checks(
                 at,
                 array,
                 index_value,
-                !moved,
+                guards_hold,
             ) {
                 continue;
             }
@@ -190,9 +198,10 @@ fn provably_in_bounds(
 /// host's, or a runtime helper not known to run none. A helper that stores
 /// nothing ([`super::runtime::stores_nothing`]), and an array helper that runs
 /// no other code ([`super::keeps_field_borrows`]) and changes no length, leave
-/// it. Asked only where some array in the program can change length at all
-/// ([`super::arrays_can_grow`]); where none can, a length read anywhere is the
-/// length everywhere.
+/// it. For an array this matters only where some array in the program can
+/// change length at all ([`super::arrays_can_grow`]); where none can, a length
+/// read anywhere is the length everywhere. A view's length moves with its
+/// buffer, detached or resized by a call, whatever arrays do.
 fn may_move_a_length(kind: &OpKind) -> bool {
     match kind {
         OpKind::Call {
@@ -311,7 +320,23 @@ fn same_array(func: &Func, a: ValueId, b: ValueId) -> bool {
 }
 
 fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: ValueId) -> bool {
+    let candidate = widened_from(func, candidate);
     if let OpKind::Length(of) = func.values[candidate.0 as usize].kind
+        && same_array(func, of, array)
+    {
+        return true;
+    }
+    // A typed array's `.length`, which lowers to the runtime's read of the
+    // view's own count, `nts_view_length`. What may change it between the
+    // guard and the read -- a buffer detached or resized -- is a call, which
+    // `may_move_a_length` already ends the guard at.
+    if let OpKind::Call {
+        callee: super::Callee::External(name),
+        args,
+        ..
+    } = &func.values[candidate.0 as usize].kind
+        && name == "nts_view_length"
+        && let [of] = args[..]
         && same_array(func, of, array)
     {
         return true;
@@ -320,6 +345,24 @@ fn names_the_length_of(func: &Func, growable: bool, array: ValueId, candidate: V
         func.values[array.0 as usize].kind,
         OpKind::ArrayNew { length, .. } if length == candidate
     ) && super::allocated_length_is_exact(func, array, growable)
+}
+
+/// The value a length was converted from, where the conversion cannot change
+/// it: to a 64-bit integer or a double, either of which holds every length
+/// exactly. The guard compares a 64-bit loop counter with the length it
+/// widened (`i < data.length` over a view, whose count is a double). A
+/// narrowing conversion is not seen through: a typed array may be longer than
+/// an `int32` holds, and the wrapped value would bound nothing.
+fn widened_from(func: &Func, value: ValueId) -> ValueId {
+    match (
+        &func.values[value.0 as usize].kind,
+        &func.values[value.0 as usize].ty,
+    ) {
+        (OpKind::Convert(from), HirType::Int { bits: 64, .. } | HirType::Float { bits: 64 }) => {
+            *from
+        }
+        _ => value,
+    }
 }
 
 /// A length the program computed for itself, refined by whatever guarded this
