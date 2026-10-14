@@ -19,6 +19,7 @@ are the gaps between them, not any single column.
 | `nts`     | `src/main.ts`, compiled by this compiler            | —                                     |
 | `nts f64` | the same, with number specialization **off**        | the gap is what the analysis is worth |
 | `node`    | the same `.ts`, run on V8                           | the thing being replaced              |
+| `nts (wasm)` | the same, as a WebAssembly module run by node    | V8's JIT against this compiler, on one engine |
 
 `nts f64` is the column that makes a speedup a measurement rather than a claim:
 one program, compiled two ways, run against each other.

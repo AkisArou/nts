@@ -89,6 +89,17 @@ enum Generated {
     /// Only the `awfy-*` cases have one, and every other case leaves the cell
     /// blank on the same bargain the LLVM column keeps.
     JavaReference,
+    /// The same program as a WebAssembly module, run by node.
+    ///
+    /// Timed by node's own harness (`benches/common/bench.mjs`), importing the
+    /// case's function from the module's generated glue rather than from
+    /// `case.ts`, so the only difference from the node column is the artifact:
+    /// `nts (Wasm)/V8` is what this compiler emitted for V8 against what V8's
+    /// own JIT made of the same source, on one engine.
+    ///
+    /// Allowed to be missing, as the LLVM column is: a case the Wasm backend
+    /// declines, at emit or at run time, is a blank cell with its reason.
+    Wasm,
 }
 
 /// What a variant is called and how it is built.
@@ -138,6 +149,12 @@ const VARIANTS: &[Variant] = &[
         label: "Java",
         source: "ref.java",
         generated: Generated::JavaReference,
+    },
+    // Last, so every other column keeps its index in a row's results.
+    Variant {
+        label: "nts (wasm)",
+        source: "case.ts",
+        generated: Generated::Wasm,
     },
 ];
 
@@ -461,22 +478,24 @@ fn main() -> Result<()> {
     }
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9}",
         "case",
         "C++",
         "nts C",
         "nts LLVM",
         "nts JVM",
         "Java",
+        "nts Wasm",
         "nts f64",
         "node",
         "bun",
         "nts/C++",
         "nts/node",
         "nts/bun",
-        "jvm/Java"
+        "jvm/Java",
+        "wasm/node"
     );
-    println!("{}", "-".repeat(158));
+    println!("{}", "-".repeat(180));
 
     let mut rows = Vec::new();
     let mut spoiled = Vec::new();
@@ -539,6 +558,15 @@ fn reading_a_ratio() -> &'static str {
 /// Split from [`write_readme`] because the two are different kinds of thing:
 /// one is the measurements, the other is the argument that they are
 /// measurements of what the heading says.
+/// What the Wasm column is, for the legend.
+const WASM_LEGEND: &str = "\n\
+    `nts (Wasm)` is the same program as a WebAssembly module, timed by node with \
+    node's own harness, importing the function from the module's glue instead of \
+    the `.ts`: `nts (Wasm)/V8` holds the engine fixed and compares what this \
+    compiler emitted for V8 with what V8's JIT made of the same source. A `--` \
+    there is a program the Wasm backend declines, and the table under the main \
+    one says why.\n";
+
 fn legend(root: &Utf8Path) -> String {
     let legend = "\n\
         Every ratio is nts divided by the other, so **lower is better and 1.00 is \
@@ -630,7 +658,7 @@ fn legend(root: &Utf8Path) -> String {
             || "an unknown commit".to_owned(),
             |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
         );
-    let legend = format!("{legend}{}", reading_a_ratio());
+    let legend = format!("{legend}{WASM_LEGEND}{}", reading_a_ratio());
     // **Which tree's binary wrote this, beside which commit it measured.**
     //
     // The sha answers "what was measured" and had been the whole of the
@@ -717,6 +745,26 @@ fn spreads(rows: &[Row]) -> String {
     )
 }
 
+/// Why each empty `nts (Wasm)` cell is empty, in the backend's own words: a
+/// blank that does not say why reads as a gap nobody looked at.
+fn wasm_absences(rows: &[Row]) -> String {
+    use std::fmt::Write as _;
+    let mut lines = String::new();
+    for row in rows {
+        if let (None, Some(reason)) = (row.wasm, &row.wasm_absence) {
+            let _ = writeln!(lines, "| {} | {} |", row.case, reason.replace('|', "\\|"));
+        }
+    }
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n**Where `nts (Wasm)` is `--`**, the reason the Wasm backend gave:\n\n\
+         | case | reason |\n\
+         | --- | --- |\n{lines}"
+    )
+}
+
 fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // Split out for the length limit, and because the two are different kinds
     // of thing: one is the numbers, the other is what a reader has to know
@@ -731,11 +779,11 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // about this compiler's insides rather than about how fast the thing is,
     // and a reader comparing against V8 does not need a column for it.
     table.push_str(if with_bun {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     } else {
-        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | V8 | nts/C++ | nts/V8 | nts (JVM)/Java |\n\
-         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
+        "| case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | V8 | nts/C++ | nts/V8 | nts (JVM)/Java | nts (Wasm)/V8 |\n\
+         | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n"
     });
     for row in rows {
         use std::fmt::Write as _;
@@ -752,25 +800,28 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         let jvm = jvm_cell(row.jvm, row.jvm_absence);
         let _ = writeln!(
             table,
-            "| {} | {} | {} | **{}** | {jvm} | {} | {} |{bun} {} | {} |{against_bun} {} |",
+            "| {} | {} | {} | **{}** | {jvm} | {} | {} | {} |{bun} {} | {} |{against_bun} {} | {} |",
             row.case,
             row.cpp.map_or_else(|| "--".to_owned(), human),
             row.nts.map_or_else(|| "--".to_owned(), human),
             row.llvm.map_or_else(|| "--".to_owned(), human),
             row.java.map_or_else(|| "--".to_owned(), human),
+            row.wasm.map_or_else(|| "--".to_owned(), human),
             human(row.node),
             row.quotable(row.against(row.cpp), ["nts (C)", "C++"]),
             row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
             row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]),
+            row.quotable(row.wasm_against_node(), ["nts (Wasm)", "node"]),
         );
     }
 
     let legend = legend(root);
     let spreads = spreads(rows);
+    let wasm_absences = wasm_absences(rows);
     // The dagger is only worth printing where one was, and a legend line that
     // explains a mark nothing carries reads as a warning about the whole table.
     let daggered = rows.iter().any(|row| {
-        ["nts (C)", "C++", "node", "nts (JVM)", "Java"]
+        ["nts (C)", "C++", "node", "nts (JVM)", "Java", "nts (Wasm)"]
             .iter()
             .any(|label| row.unstable(label))
     });
@@ -788,7 +839,7 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         ""
     };
     let updated = format!(
-        "{}{START}\n{table}{mark}{legend}{spreads}{}",
+        "{}{START}\n{table}{mark}{wasm_absences}{legend}{spreads}{}",
         &text[..from],
         &text[to..]
     );
@@ -852,6 +903,11 @@ struct Row {
     /// Bun, where it is installed. `None` skips the column rather than
     /// reporting a zero that reads like a win.
     bun: Option<f64>,
+    /// The same program as a WebAssembly module, run by node. `None` where
+    /// the Wasm backend declined it, which [`Self::wasm_absence`] says why.
+    wasm: Option<f64>,
+    /// Why [`Self::wasm`] is empty, where it is, in the backend's own words.
+    wasm_absence: Option<String>,
     /// Columns whose own five passes disagreed, and by how much.
     ///
     /// These were an `eprintln!` and nothing else, so they reached a person
@@ -924,6 +980,16 @@ impl Row {
         match (self.jvm, self.java) {
             (Some(ours), Some(theirs)) => format!("{ours_over:.2}x", ours_over = ours / theirs),
             _ => "--".to_owned(),
+        }
+    }
+
+    /// The Wasm lane against node, which runs both: the one ratio here with
+    /// the engine held fixed, so it is about the module this compiler emitted
+    /// against what V8's own JIT made of the same source.
+    fn wasm_against_node(&self) -> String {
+        match self.wasm {
+            Some(ours) => format!("{ours_over:.2}x", ours_over = ours / self.node),
+            None => "--".to_owned(),
         }
     }
 }
@@ -1061,7 +1127,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         needs_unicode,
         refused: refused.as_deref(),
     };
-    let (results, jvm_absence) = variants(
+    let (results, absences) = variants(
         root,
         case,
         out,
@@ -1075,7 +1141,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         &rendered,
         emission,
     )?;
-    finish_row(case, out, name, &shown, &results, jvm_absence, lowers)
+    finish_row(case, out, name, &shown, &results, absences, lowers)
 }
 
 /// What emitting the case established, before anything is built.
@@ -1123,11 +1189,13 @@ fn variants(
     plain: &Utf8Path,
     rendered: &Utf8Path,
     emission: Emission<'_>,
-) -> Result<(Vec<Option<Measured>>, Option<JvmAbsence>)> {
+) -> Result<(Vec<Option<Measured>>, Absences)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
+    // Why the Wasm column is empty, where it is, in the backend's own words.
+    let mut wasm_absence: Option<String> = None;
     let driver = native_driver(case, out, name, emission.initializes)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
@@ -1144,6 +1212,9 @@ fn variants(
         {
             if matches!(variant.generated, Generated::Jvm) {
                 jvm_absence = Some(JvmAbsence::NotRun);
+            }
+            if matches!(variant.generated, Generated::Wasm) {
+                wasm_absence = Some("not run: NTS_BENCH_LANES left it out".to_owned());
             }
             results.push(None);
             continue;
@@ -1232,6 +1303,13 @@ fn variants(
                 }
                 continue;
             }
+            // Its own artifact and runner, like the JVM's.
+            Generated::Wasm => {
+                let (measured, absence) = wasm_cell(case, out, name, tsconfig, entry);
+                results.push(measured);
+                wasm_absence = absence;
+                continue;
+            }
             Generated::Specialized => c.push(specialized.to_owned()),
             Generated::Unspecialized => c.push(plain.to_owned()),
             Generated::Llvm if emission.renderable => c.push(rendered.to_owned()),
@@ -1251,7 +1329,19 @@ fn variants(
             Err(error) => return Err(error),
         }
     }
-    Ok((results, jvm_absence))
+    Ok((
+        results,
+        Absences {
+            jvm: jvm_absence,
+            wasm: wasm_absence,
+        },
+    ))
+}
+
+/// Why the columns that may be missing are, for one row.
+struct Absences {
+    jvm: Option<JvmAbsence>,
+    wasm: Option<String>,
 }
 
 /// The engines, the checksum agreement, and the printed row.
@@ -1285,6 +1375,12 @@ fn work_agrees(row: &Row) -> Result<()> {
     // `nts f64` is deliberately excluded. It is the same program compiled with
     // specialization off, and being much slower is the entire reason the column
     // exists: `closures` is 26x there and that is the measurement.
+    //
+    // `nts (Wasm)` is excluded for a neighbouring reason: its gap to the native
+    // columns is a measurement of a backend still learning, not a sign of other
+    // work. `closures` read 13x node's time through it on the first run, and
+    // `awfy-nbody` 1.17x the C backend's, the same work. Its answer is still
+    // checked: every column's checksum is.
     //
     // Twenty times is far outside any codegen difference. Java can beat C++ on
     // a row and does; it cannot beat it by an order of magnitude on a numeric
@@ -1372,6 +1468,7 @@ fn lane_matches(want: &str, label: &str) -> bool {
     match want {
         "jvm" => label.contains("jvm") || label == "java",
         "llvm" => label.contains("llvm"),
+        "wasm" => label.contains("wasm"),
         "c" => label == "nts" || label == "c++",
         "f64" => label.contains("f64"),
         // **No fall-through.** `NTS_BENCH_LANES=native` is not a lane -- the C
@@ -1390,7 +1487,7 @@ fn lane_matches(want: &str, label: &str) -> bool {
 
 /// Every name `NTS_BENCH_LANES` accepts, so an unknown one is refused rather
 /// than silently selecting nothing.
-const LANES: &[&str] = &["jvm", "llvm", "c", "f64"];
+const LANES: &[&str] = &["jvm", "llvm", "c", "f64", "wasm"];
 
 /// Refuse an unknown lane name before a single case is compiled.
 fn validate_lanes() -> Result<()> {
@@ -1420,7 +1517,7 @@ fn finish_row(
     name: &str,
     shown: &str,
     results: &[Option<Measured>],
-    jvm_absence: Option<JvmAbsence>,
+    absences: Absences,
     lowers: bool,
 ) -> Result<Row> {
     let harness = node_harness(case, out, name)?;
@@ -1475,12 +1572,17 @@ fn finish_row(
             .get(4)
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
-        jvm_absence,
+        jvm_absence: absences.jvm,
         java: results
             .get(5)
             .and_then(Option::as_ref)
             .map(|it| it.ns_per_op),
         bun: bun.map(|result| result.ns_per_op),
+        wasm: results
+            .get(6)
+            .and_then(Option::as_ref)
+            .map(|it| it.ns_per_op),
+        wasm_absence: absences.wasm,
         varied: Vec::new(),
     };
     // A row whose own passes disagree has no single number, and printing one of
@@ -1490,6 +1592,7 @@ fn finish_row(
         ("nts (JVM)", results.get(4)),
         ("Java", results.get(5)),
         ("nts (C)", results.get(1)),
+        ("nts (Wasm)", results.get(6)),
     ] {
         if let Some(Some(measured)) = measured
             && measured.spread >= SPREAD_WORTH_SAYING
@@ -1507,13 +1610,14 @@ fn finish_row(
     work_agrees(&row)?;
 
     println!(
-        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9}",
+        "{:<16} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}   {:>9} {:>9} {:>9} {:>9} {:>9}",
         row.case,
         row.cpp.map_or_else(|| "--".to_owned(), human),
         row.nts.map_or_else(|| "--".to_owned(), human),
         row.llvm.map_or_else(|| "--".to_owned(), human),
         jvm_cell(row.jvm, row.jvm_absence),
         row.java.map_or_else(|| "--".to_owned(), human),
+        row.wasm.map_or_else(|| "--".to_owned(), human),
         row.unspecialized.map_or_else(|| "--".to_owned(), human),
         human(row.node),
         row.bun.map_or_else(|| "--".to_owned(), human),
@@ -1521,6 +1625,7 @@ fn finish_row(
         row.against(Some(row.node)),
         row.against(row.bun),
         row.jvm_against_java(),
+        row.wasm_against_node(),
     );
     Ok(row)
 }
@@ -1713,6 +1818,120 @@ fn node_harness(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathB
     );
     std::fs::write(&path, &text).with_context(|| format!("writing {path}"))?;
     Ok(path)
+}
+
+/// The Wasm column's cell: its measurement, or why it has none, said once on
+/// the console as well.
+fn wasm_cell(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    tsconfig: &Utf8Path,
+    entry: &[String],
+) -> (Option<Measured>, Option<String>) {
+    match wasm_case(case, out, name, tsconfig, entry) {
+        Ok(measured) => (Some(measured), None),
+        Err(error) => {
+            let reason = error.to_string().lines().next().unwrap_or("?").to_owned();
+            println!("note: {name:<16} nts (wasm) is `--`: {reason}");
+            (None, Some(reason))
+        }
+    }
+}
+
+/// The same program as a WebAssembly module, timed by node's own harness.
+///
+/// Prepared as `nts emit-wasm` prepares it (host-managed objects, interfaces
+/// materialized) and from the same roots as every other column, then run
+/// through the generated glue, so the harness differs from node's in one
+/// line: where the function is imported from. An error is the cell's reason:
+/// the backend's decline at emit, or the first `NTS5001` line of a refusal at
+/// run time.
+fn wasm_case(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    tsconfig: &Utf8Path,
+    entry: &[String],
+) -> Result<Measured> {
+    // A case's own `driver.mjs` imports `case.ts` itself; it has no line to
+    // point at the module instead.
+    if case.join("driver.mjs").exists() {
+        bail!("its own driver.mjs imports case.ts, so there is no harness to point at the module");
+    }
+    let (callee, arguments) = workload(case)?;
+    let seed = arguments
+        .first()
+        .cloned()
+        .with_context(|| format!("{case}/case.ts declares no `export const seed`"))?;
+    let mut program = prepared_program(
+        tsconfig,
+        entry,
+        true,
+        hir::Provider::HostGc,
+        hir::InterfaceAccess::Materialize,
+    )?;
+    // The harness calls one function, so that is the module's whole public
+    // surface: a benchmark is an executable whose entry is its workload, which
+    // is how `prepared_program` roots it. An export it never calls --
+    // `awfy-sieve`'s `Sieve` class -- is not part of what is measured, and
+    // publishing it would decline the program over a boundary nothing crosses.
+    program
+        .public_api
+        .retain(|(_, published)| *published == callee);
+    program.public_namespaces.clear();
+    let emitted = match nts_codegen_wasm::emit(&program) {
+        Ok(emitted) => emitted,
+        Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => bail!(
+            "declined: {}",
+            diagnostics.first().map_or_else(
+                || "no reason given".to_owned(),
+                |d| format!("{} {}", d.code, d.message)
+            )
+        ),
+        Err(error) => bail!("declined: {error}"),
+    };
+    if !emitted
+        .manifest
+        .exports
+        .iter()
+        .any(|export| export.name == callee)
+    {
+        bail!("declined: `{callee}` is not published by the module");
+    }
+    let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node)
+        .map_err(anyhow::Error::msg)?;
+    let dir = out.join(format!("{name}.wasm"));
+    std::fs::create_dir_all(&dir)?;
+    std::fs::write(dir.join("program.wasm"), &emitted.bytes)?;
+    std::fs::write(dir.join(nts_codegen_wasm::PROGRAM_FILE), glue.program)?;
+    std::fs::write(dir.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;
+    let common = case
+        .parent()
+        .and_then(Utf8Path::parent)
+        .context("a case sits two levels below `benches`")?
+        .join("common/bench.mjs");
+    let harness = dir.join("bench.mjs");
+    let program_file = dir.join(nts_codegen_wasm::PROGRAM_FILE);
+    // The seed through `process.argv`, for the reason `node_harness` gives.
+    let text = format!(
+        "// Generated from `case.ts` for the Wasm column: node's harness, the module's function.\n\
+         import {{ measure }} from \"{common}\";\n\
+         import {{ {callee} }} from \"{program_file}\";\n\n\
+         const seed = Number(process.argv[2] ?? {seed});\n\
+         measure(() => {callee}(seed));\n"
+    );
+    std::fs::write(&harness, &text).with_context(|| format!("writing {harness}"))?;
+    measure(std::process::Command::new("node").arg(&harness)).map_err(|error| {
+        let said = error.to_string();
+        let refusal = said.lines().find_map(|line| {
+            line.split_once("NTS5001: ")
+                .map(|(_, rest)| rest.trim().to_owned())
+        });
+        refusal.map_or(error, |reason| {
+            anyhow::anyhow!("refused at run time: {reason}")
+        })
+    })
 }
 
 /// The `bench_run` the native harness calls, generated from the workload.
@@ -2876,6 +3095,8 @@ mod tests {
             jvm_absence: None,
             java: None,
             bun: None,
+            wasm: None,
+            wasm_absence: None,
             varied: Vec::new(),
         }
     }
