@@ -129,7 +129,7 @@ const LARGE = [
   "net", "process", "readline", "stream", "util", "zlib",
 ].map((m) => `runtime/node/${m}`).concat("runtime/web-platform");
 const named = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-const examples = under("examples").sort();
+const examples = under("tests/programs").sort();
 const projects = named.length > 0
   ? named
   : [...LARGE, ...examples.filter((_, i) => i % 24 === 0)];

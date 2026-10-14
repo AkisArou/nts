@@ -964,7 +964,7 @@ const projects = (named.length > 0
   ? named.flatMap((p) => (p.replace(/\/$/, "").startsWith(fixturePrefix) ? outcomes([p.replace(/\/$/, "").slice(fixturePrefix.length)]) : [p]))
   : process.argv.includes("--runtime")
     ? [...under("runtime/node"), "runtime/web-platform"]
-    : [...under("examples"), ...under("tests/refusals"), ...outcomes()]
+    : [...under("tests/programs"), ...under("tests/refusals"), ...outcomes()]
 ).sort();
 
 /**

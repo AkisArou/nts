@@ -102,10 +102,10 @@ done
 # `workspace-links.ts`: each workspace package's `link:` dependencies, made as
 # the relative links pnpm makes. These were copied from the checkout this runs
 # from, which holds only while the commit has its packages where the checkout
-# does: a commit that moves a package (the corpora move puts the library
-# program one level deeper) found nothing at the new path, and a copied
-# relative link resolved outside the tree. Run from this script's own
-# directory, so a pin of an older commit is linked by its own lockfile too.
+# does -- the corpora move put the library program one level deeper, at
+# `tests/programs/library`, and a copied relative link then resolved outside
+# the tree. Run from this script's own directory, so a pin of an older commit
+# is linked by its own lockfile too.
 node "$(dirname -- "$0")/workspace-links.ts" "$tree" | while IFS="$(printf '\t')" read -r link target; do
   rm -rf "${tree:?}/$link"
   mkdir -p "$(dirname "$tree/$link")"

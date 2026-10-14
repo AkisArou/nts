@@ -1705,6 +1705,14 @@ corpus() {
 #
 # The list only shrinks.
 KNOWN_DUPLICATE_RECORDS="0099 0102 0116 0120"
+# Nothing sits or points where the corpora used to be (`tooling/migrate/table.ts`
+# lists those places): a fixture landed in an old corpus directory after the
+# move to `tests/` is run by no step, and a tool still globbing an old one
+# finds nothing and reports zero cases, which reads as green. Half a second.
+old_paths() {
+  node tooling/migrate/old-paths.ts
+}
+
 records() {
   # `tr` because the membership tests below match on spaces; a newline-
   # separated list silently matches nothing and reports every number stale.
@@ -2282,7 +2290,7 @@ interop() {
   # with the most builds in them and ran ten minutes after the others had
   # finished (2026-10-07). `flock` hands each project to exactly one lane.
   node --input-type=module -e 'import { longestFirst } from "./tooling/gate/costs.mjs"; console.log(longestFirst("interop", process.argv.slice(1), (p) => `tests/interop/${p}`).join("\n"))' $locals \
-    | sed 's|^\(.*\)$|examples/interop/\1/build.sh|' > "$lanes/local.queue"
+    | sed 's|^\(.*\)$|tests/interop/\1/build.sh|' > "$lanes/local.queue"
   echo 0 > "$lanes/local.next"
   take() {
     flock "$lanes/local.lock" sh -c '
@@ -2450,6 +2458,7 @@ step "format"  format
 step "rustfmt" rust_formatted
 step "reformat" reformatted
 step "records" records
+step "old-paths" old_paths
 step "test262" test262
 step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases

@@ -111,6 +111,7 @@ const STEPS = [
   { name: "rustfmt", slots: 1, mem: 0.2, doc: "the Rust tree is cargo-fmt formatted" },
   { name: "reformat", slots: 1, mem: 0.1, doc: "no whitespace-only diffs" },
   { name: "records", slots: 1, mem: 0.1, doc: "record numbers unique" },
+  { name: "old-paths", slots: 1, mem: 0.1, doc: "nothing sits or points where the corpora used to be" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
   { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },

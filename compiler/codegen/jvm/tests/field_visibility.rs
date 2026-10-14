@@ -78,7 +78,7 @@ fn no_generated_field_is_public() {
     for example in EXAMPLES {
         let tsconfig = Utf8PathBuf::from_path_buf(
             repository()
-                .join("examples")
+                .join("tests/programs")
                 .join(example)
                 .join("tsconfig.json")
                 .canonicalize()

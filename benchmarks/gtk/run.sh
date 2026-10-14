@@ -23,7 +23,7 @@ for tool in gjs xvfb-run hyperfine /usr/bin/time; do
 done
 # `nts.config.ts` imports `@nts/config`, which is this repository's own.
 mkdir -p "$here/node_modules/@nts"
-ln -sfn ../../../config "$here/node_modules/@nts/config"
+ln -sfn ../../../../tooling/config "$here/node_modules/@nts/config"
 "$nts" build "$here/nts/tsconfig.json" --out "$out" --rc >/dev/null
 bench="$out/bench/linux-gnu-x86_64/bench"
 [ -x "$bench" ] || { echo "FAILED gtk-bench: $bench was not built" >&2; exit 1; }

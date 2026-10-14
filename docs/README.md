@@ -10,6 +10,12 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 - [`records/`](records): one file per decision, with the evidence. Claim a number with `tooling/gate/claim-record.sh`.
 - [`workflow.md`](workflow.md): how lanes work side by side, landing with `land`, and `lane status`.
 
+## Where things are
+
+- [`../tests/`](../tests): what nts must pass, one kind per directory: programs compared with node, refusals, outcomes, memory cases, interop projects, GJS ports, the workspace. Its README says which gate steps run each kind and how to add one.
+- [`../benchmarks/`](../benchmarks): what is measured: the cases nts-bench times against C++, Java and node, and the Wasm and GTK benchmarks.
+- Before 2026-10-14 these were `examples` and `benches` at the root and four directories under `tooling`; [`../tooling/migrate/table.ts`](../tooling/migrate/table.ts) maps each old place to its new one. Records keep the paths they were written with.
+
 ## Status ledgers (where the numbers are)
 
 - [`conformance/typescript.md`](conformance/typescript.md): the TypeScript language status. Its §13 is the authority for the census's non-goals.

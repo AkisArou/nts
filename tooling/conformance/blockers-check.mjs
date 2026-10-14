@@ -56,7 +56,7 @@ process.on("exit", () => {
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const FIXTURES = join(HERE, "blockers");
+const FIXTURES = join(HERE, "../../tests/refusals");
 
 /**
  * Where `node_api.h` and `uv.h` are, or one sentence saying they are nowhere.
@@ -680,7 +680,7 @@ for (const name of names) {
   // would report every such fixture as holding on somebody else's diagnostic.
   if (holds && !viaEmit && !viaJvm && !expectsClean && !lowersOnly) {
     const carrying = output.split("\n").filter((l) => l.includes(wanted));
-    const own = carrying.filter((l) => l.includes(`blockers/${name}/src`));
+    const own = carrying.filter((l) => l.includes(`refusals/${name}/src`));
     if (carrying.length > 0 && own.length === 0) {
       unexpected++;
       console.log(`  NOT ITS OWN ${name}: the expected text appears ${carrying.length} time(s),`);
@@ -816,7 +816,7 @@ const pending = [
   ...new Set(
     spawnSync("git", ["status", "--porcelain", "--untracked-files=all", "--", "tests/refusals"], { cwd: ROOT, encoding: "utf8" })
       .stdout.split("\n")
-      .map((l) => /tooling\/conformance\/blockers\/([^/]+)\//.exec(l)?.[1])
+      .map((l) => /tests\/refusals\/([^/]+)\//.exec(l)?.[1])
       .filter((n) => n !== undefined && names.includes(n)),
   ),
 ];
@@ -831,7 +831,7 @@ if (pending.length > 0) {
   if (check.status === 0) {
     console.log(`  integrity: clean over the ${pending.length} uncommitted fixture(s)`);
   } else {
-    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tooling\/conformance\/blockers\//.test(l));
+    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tests\/refusals\//.test(l));
     console.log(`  integrity: the uncommitted fixture(s) owe ${owed.length} integrity.known entr${owed.length === 1 ? "y" : "ies"} -- add them in the same commit`);
     for (const line of owed.slice(0, 20)) console.log(`  ${line.trim()}`);
     if (owed.length === 0) console.log(`  ${said.trim().split("\n").slice(-2).join(" / ")}`);

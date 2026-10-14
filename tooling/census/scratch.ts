@@ -133,7 +133,7 @@ function worktrees() {
 
 /** Committed files that name a path under ~/.cache, for ownership by evidence. */
 function writers(rel) {
-  const hits = git(["grep", "-lF", "-e", `.cache/${rel}`, "--", "tooling", "compiler", "runtime", "examples"]);
+  const hits = git(["grep", "-lF", "-e", `.cache/${rel}`, "--", "tooling", "compiler", "runtime", "tests", "benchmarks"]);
   return hits ? hits.split("\n").filter(Boolean) : [];
 }
 

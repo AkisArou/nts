@@ -17,6 +17,12 @@
         "compiler/semantic-schema/",
         "docs/records/",
         "tests/programs/",
+        "tests/interop/",
+        "tests/workspace/",
+        "tests/refusals/",
+        "tests/outcomes/",
+        "tests/agreements/",
+        "tests/memory/",
         "runtime/c/",
         "runtime/ecmascript/",
         "tooling/bench/",
@@ -42,6 +48,8 @@
       "owns": [
         "compiler/codegen/wasm/",
         "docs/wasm.md",
+        "tests/wasm/",
+        "benchmarks/wasm/",
         "tooling/wasm/"
       ]
     },

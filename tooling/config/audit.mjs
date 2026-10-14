@@ -54,7 +54,11 @@ const walk = (dir, out = []) => {
   }
   return out;
 };
-const configPaths = walk(join(repo, "examples")).sort();
+// The four directories that were one, `examples`, until 2026-10-14: named, not
+// `tests` as a whole, so no fixture kind joins the audit by being added.
+const configPaths = ["tests/programs", "tests/interop", "tests/gjs", "tests/workspace"]
+  .flatMap((dir) => walk(join(repo, dir)))
+  .sort();
 
 // --- the package's own shape, read from source -----------------------------
 //

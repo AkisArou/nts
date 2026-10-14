@@ -589,7 +589,7 @@ if (recording && chosen.length > 0) {
   if (check.status === 0) {
     console.log(`  integrity: clean over the recorded fixture(s)`);
   } else {
-    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tooling\/conformance\/outcomes\//.test(l));
+    const owed = said.split("\n").filter((l) => /^ {2}[a-z-]+ {2,}tests\/outcomes\//.test(l));
     console.log(`  integrity: the recorded fixture(s) owe ${owed.length} integrity.known entr${owed.length === 1 ? "y" : "ies"} -- add them in this commit`);
     for (const line of owed.slice(0, 20)) console.log(`  ${line.trim()}`);
     if (owed.length === 0) console.log(`  ${said.trim().split("\n").slice(-2).join(" / ")}`);

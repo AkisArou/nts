@@ -433,8 +433,8 @@ if (!existsSync(tsgo)) {
   process.exit(2);
 }
 
-const examples = readdirSync(join(ROOT, "examples"), { withFileTypes: true })
-  .filter((e) => e.isDirectory() && existsSync(join(ROOT, "examples", e.name, "tsconfig.json")))
+const examples = readdirSync(join(ROOT, "tests/programs"), { withFileTypes: true })
+  .filter((e) => e.isDirectory() && existsSync(join(ROOT, "tests/programs", e.name, "tsconfig.json")))
   .map((e) => e.name)
   .filter((name) => !NOT_DIFFERENTIAL.has(name))
   .filter((name) => !only || only.includes(name))
@@ -465,7 +465,7 @@ const JOBS = Number(process.env.NTS_AGREE_JOBS ??
 /** One `nts check`, classified. */
 const check = (pinned, example) =>
   new Promise((done) => {
-    const child = spawn(pinned.pinned, ["check", join("examples", example, "tsconfig.json")], {
+    const child = spawn(pinned.pinned, ["check", join("tests/programs", example, "tsconfig.json")], {
       cwd: ROOT,
       env: { ...env, NTS_SNAPSHOT_CACHE: pinned.snapshots },
     });
@@ -484,7 +484,7 @@ const check = (pinned, example) =>
 // which examples only this tree has.
 const tracked = new Set(
   execFileSync("git", ["ls-files", "-z", "tests/programs/*/tsconfig.json"], { cwd: ROOT, encoding: "utf8" })
-    .split("\0").filter(Boolean).map((path) => path.split("/")[1]),
+    .split("\0").filter(Boolean).map((path) => path.split("/")[2]),
 );
 const untracked = examples.filter((name) => !tracked.has(name));
 

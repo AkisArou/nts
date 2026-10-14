@@ -58,9 +58,9 @@ fn a_field_adapter_survives_preparation_and_cannot_be_omitted_as_identity() {
 
 #[test]
 fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
-    let Some(snapshot) = snapshot(
-        "tests/refusals/a-literal-method-call-through-two-faces-loses-absence",
-    ) else {
+    let Some(snapshot) =
+        snapshot("tests/refusals/a-literal-method-call-through-two-faces-loses-absence")
+    else {
         return;
     };
     let prepared = hir::prepare(&snapshot).unwrap();
@@ -92,8 +92,7 @@ fn identical_storage_with_different_input_absence_keeps_two_field_bodies() {
 
 #[test]
 fn an_erased_alias_to_the_literal_blocks_its_method_edge() {
-    let Some(snapshot) =
-        snapshot("tests/refusals/an-erased-alias-can-write-a-literal-method")
+    let Some(snapshot) = snapshot("tests/refusals/an-erased-alias-can-write-a-literal-method")
     else {
         return;
     };
@@ -145,8 +144,7 @@ fn a_private_helper_proves_every_incoming_replacement() {
 
 #[test]
 fn one_narrowing_caller_invalidates_a_private_helpers_supply_proof() {
-    let Some(snapshot) =
-        snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller")
+    let Some(snapshot) = snapshot("tests/refusals/a-literal-method-helper-has-a-narrowing-caller")
     else {
         return;
     };

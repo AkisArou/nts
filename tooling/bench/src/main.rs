@@ -1798,7 +1798,7 @@ fn node_harness(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathB
     let common = case
         .parent()
         .and_then(Utf8Path::parent)
-        .context("a case sits two levels below `benches`")?
+        .context("a case sits two levels below `benchmarks`")?
         .join("common/bench.mjs");
     let path = out.join(format!("{name}.bench.mjs"));
     // The seed arrives through `process.argv`, not by importing the `const`.

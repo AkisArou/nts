@@ -133,8 +133,9 @@ fn a_provided_error_upcast_keeps_the_existing_representation() {
     let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
-    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json");
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../tests/programs/a-native-error-assertion-keeps-provided-ancestry/tsconfig.json",
+    );
     let snapshot = TsgoApi::for_compilation(frontend)
         .snapshot(&config)
         .expect("snapshot");

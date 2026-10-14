@@ -431,7 +431,7 @@ if (!FRONTEND.exists) {
       ...under("runtime/node"),
       { corpus: "runtime", label: "runtime/web-platform", at: "runtime/web-platform" },
       ...react(),
-      ...under("examples"),
+      ...under("tests/programs"),
       ...outcomeFixtures().map((n) => ({ corpus: "outcomes", label: `outcomes/${n}`, at: materialise(scratch, n, join(OUTCOMES, n, "src"), runMode(n)) })),
       ...test262(rowsFiles),
     ];

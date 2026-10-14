@@ -369,7 +369,8 @@ fn an_array_of_two_kinds_keeps_its_tags() {
 
 #[test]
 fn recovering_array_storage_requires_initialized_reads() {
-    let Some(prepared) = prepared_at("../../tests/programs/an-erased-array-read-keeps-missing-elements")
+    let Some(prepared) =
+        prepared_at("../../tests/programs/an-erased-array-read-keeps-missing-elements")
     else {
         return;
     };
@@ -584,7 +585,8 @@ fn the_narrowing_count_matches_what_changed() {
 /// Equal payload storage cannot remove the independently carried absence tag.
 #[test]
 fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
-    let Some(prepared) = prepared_at("../../tests/programs/a-recovered-erased-value-keeps-its-absence")
+    let Some(prepared) =
+        prepared_at("../../tests/programs/a-recovered-erased-value-keeps-its-absence")
     else {
         return;
     };
@@ -625,7 +627,8 @@ fn nullable_reference_recovery_keeps_its_tags_at_every_boundary() {
 /// A callable face retains FUNCTION when its erased wrapper is removed.
 #[test]
 fn recovered_signature_faces_keep_their_runtime_callable_tag() {
-    let Some(prepared) = prepared_at("../../tests/programs/a-recovered-callable-keeps-its-function-tag")
+    let Some(prepared) =
+        prepared_at("../../tests/programs/a-recovered-callable-keeps-its-function-tag")
     else {
         return;
     };

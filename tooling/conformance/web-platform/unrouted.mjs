@@ -29,7 +29,7 @@ import { join } from "node:path";
 
 const SOURCE = "runtime/web-platform/src";
 /** Every place a caller could live. Add to this rather than narrowing it. */
-const CORPUS = ["runtime", "tooling", "examples"];
+const CORPUS = ["runtime", "tooling", "tests", "benchmarks"];
 /** Generated: it declares what source no longer has. */
 const GENERATED = new Set(["node_modules", ".tsbuild", "dist", "target", "build"]);
 const BARRELS = [join(SOURCE, "index.ts"), join(SOURCE, "provider.ts")];

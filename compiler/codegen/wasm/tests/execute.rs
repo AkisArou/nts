@@ -1020,7 +1020,7 @@ fn scalar_typescript_agrees_with_node_exactly() {
 #[test]
 fn existing_loops_and_bitwise_examples_agree_with_node() {
     for (name, expected) in [("loops", 102), ("bitwise", 136)] {
-        let fixture = common::repository().join("examples").join(name);
+        let fixture = common::repository().join("tests/programs").join(name);
         let emitted = emit_project(&fixture);
         let output = common::run(
             name,

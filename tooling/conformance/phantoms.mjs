@@ -60,7 +60,7 @@ const under = (base) =>
 // every one of them exists to refuse, which is where a refusal row can lie.
 const projects = named.length > 0
   ? named
-  : [...under("examples"), ...under("tests/refusals")].sort();
+  : [...under("tests/programs"), ...under("tests/refusals")].sort();
 
 /** One nts invocation, as a promise of what spawnSync would have returned. */
 const run = (args) =>

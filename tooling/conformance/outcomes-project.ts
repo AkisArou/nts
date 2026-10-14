@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-export const OUTCOMES = join(HERE, "outcomes");
+export const OUTCOMES = join(HERE, "../../tests/outcomes");
 
 /**
  * How a fixture reaches the runtime's own sources: `@nts/runtime/<path>` is

@@ -253,7 +253,7 @@ fn every_sabotage_of_the_jvm_runtime_is_noticed() {
         // whole point is to observe the harness from outside.
         let Some(binary) = binary() else { return };
         let tsconfig = root
-            .join("examples")
+            .join("tests/programs")
             .join(sabotage.example)
             .join("tsconfig.json");
 

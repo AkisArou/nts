@@ -8,8 +8,8 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 #[test]
 fn host_gc_keeps_logical_layouts_without_native_placement_or_counting() {
     let tsgo = std::env::var("NTS_TSGO").expect("NTS_TSGO required for provider acceptance");
-    let config =
-        Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/programs/objects/tsconfig.json");
+    let config = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/objects/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
     assert!(!snapshot.has_errors());
     let native = hir::prepare_with(

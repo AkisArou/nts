@@ -190,8 +190,9 @@ fn a_recovered_array_reads_past_its_end_as_nan() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
-    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json");
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../tests/programs/a-closed-call-recovers-an-erased-object-parameter/tsconfig.json",
+    );
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");

@@ -55,7 +55,7 @@ def main():
 
     for primitive, correctness, memory, speed, records in rows():
         for name in named(correctness):
-            if not os.path.isdir(os.path.join(ROOT, "examples", name)):
+            if not os.path.isdir(os.path.join(ROOT, "tests", "programs", name)):
                 problems.append(f"{primitive}: no example `{name}`")
         for name in named(memory):
             if not os.path.isdir(os.path.join(ROOT, "tests/memory", name)):

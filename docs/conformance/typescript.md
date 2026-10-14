@@ -55,7 +55,7 @@ which.
     taken        2026-09-15
 
       awk '/^\| ✅ \|/ { rows++
-             if ($0 ~ /examples\//) cited++
+             if ($0 ~ /tests\/programs\//) cited++
              if ($0 ~ /no example/) gap++ }
            END { print rows, cited, gap }' docs/conformance/typescript.md
 

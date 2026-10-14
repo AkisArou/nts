@@ -248,7 +248,7 @@ const under = (dir) =>
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, dir, e.name, "tsconfig.json")))
     .map((e) => `${dir}/${e.name}`);
 const named = argv.filter((a) => !a.startsWith("--"));
-const projects = (named.length > 0 ? named : argv.includes("--examples") ? under("examples") : [...under("runtime/node"), "runtime/web-platform"]).sort();
+const projects = (named.length > 0 ? named : argv.includes("--examples") ? under("tests/programs") : [...under("runtime/node"), "runtime/web-platform"]).sort();
 
 const run = (args) =>
   new Promise((done) => {

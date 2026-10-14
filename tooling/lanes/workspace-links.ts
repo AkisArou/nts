@@ -9,7 +9,7 @@
 // **Read from the tree being prepared, not the checkout it is prepared from.**
 // These links used to be copied from the shared checkout, package by package.
 // That holds only while both have their packages at the same paths: when a
-// commit moves one (the corpora move puts the library program one level
+// commit moves one (the corpora move put the library program one level
 // deeper, at `tests/programs/library`), the checkout has nothing at the
 // new path and the copied links, being relative, resolve to the wrong place.
 // The lockfile at the commit says exactly which links each package has, as

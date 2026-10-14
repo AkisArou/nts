@@ -46,7 +46,7 @@ def main():
     binary = args.nts.resolve()
     output = args.out.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    projects = sorted((root / "examples").glob("*/tsconfig.json"))
+    projects = sorted((root / "tests" / "programs").glob("*/tsconfig.json"))
     if args.only:
         selected = set(args.only.split(","))
         projects = [p for p in projects if p.parent.name in selected]
