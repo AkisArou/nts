@@ -1,4 +1,4 @@
-// expect: emits-c nts_dom_ResizeObserverSizeSequence_item(
+// expect: emit-c --rc -> emits-c nts_dom_ResizeObserverSizeSequence_item(
 //
 // **Fixed 2026-10-13, kept as a guard**: the read is the sequence copied into
 // a new array through `item`, as a method's result is (`call_bound_method`),
