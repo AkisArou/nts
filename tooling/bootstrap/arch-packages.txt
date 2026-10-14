@@ -1,0 +1,41 @@
+# The packages a machine needs to build, run, measure and inspect nts, on Arch
+# Linux. One per line: <package> <repository> <what it is for>.
+#
+# `tooling/bootstrap/bootstrap.sh` reports the missing ones and prints the
+# `paru -S --needed` line that installs them; it never installs anything itself.
+# These are the toolchains and instruments around nts. nts itself depends on
+# none of them at run time, and a program it compiles depends on none of them.
+#
+# Lines starting with `manual` are things no repository packages; bootstrap
+# checks for them and says how to get them.
+
+# Compiling what nts emits
+clang              extra  the C backend's compiler and the LLVM backend's assembler and linker driver
+llvm               extra  opt, llc, llvm-mca, FileCheck, llvm-objdump: reading and measuring LLVM output
+lld                extra  the linker clang drives
+binaryen           extra  wasm-opt: Wasm size, and an optimised baseline to compare the Wasm backend with
+go                 extra  builds the tsgo frontend (target/tsgo)
+
+# The Wasm backend's comparators and second engine
+wabt               extra  wasm2wat, wasm-objdump: reading what the Wasm backend emits
+wasmtime           extra  a second Wasm engine, to tell an engine effect from ours
+wasi-libc          extra  C compiled to Wasm: the Wasm backend's comparator
+wasi-compiler-rt   extra  the same, its compiler runtime
+wasi-libc++        extra  C++ compiled to Wasm (Are We Fast Yet's C++ versions)
+wasi-libc++abi     extra  the same, its ABI library
+
+# Measuring and profiling
+perf               extra  counters (cycles, instructions, IPC, cache and branch misses), perf record
+valgrind           extra  callgrind and cachegrind: load-insensitive instruction counts
+hyperfine          extra  command timing with statistics
+heaptrack          extra  allocation profiles of native programs
+samply             extra  sampling profiler with a timeline view, native and JVM
+inferno            extra  flamegraphs from perf
+async-profiler-bin aur    JVM CPU and allocation profiles, with native frames
+
+# Tracing, when a run hangs or is slow outside our own code
+strace             extra  system calls
+bpftrace           extra  kernel-side tracing
+
+manual jdk21       a Java 21 for the JVM backend, with jfr, jcmd and javap: `jdk21-openjdk` (extra), or any JDK 21 asdf provides
+manual hsdis       the JVM's machine code for -XX:+PrintAssembly. Build https://github.com/liuzhengyang/hsdis (commit f0bffb7): `tar -zxvf binutils-2.26.tar.gz && make BINUTILS=binutils-2.26 ARCH=amd64`, then copy build/linux-amd64/hsdis-amd64.so into the JDK's lib/

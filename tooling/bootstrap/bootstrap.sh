@@ -62,6 +62,35 @@ clone_sparse() {
 node_pin=$(awk '/^nodejs /{print $2}' "$root/.tool-versions" 2>/dev/null)
 [ -n "$node_pin" ] || { echo "no 'nodejs <version>' in .tool-versions" >&2; exit 1; }
 
+# ----------------------------------------------------------------- the machine
+#
+# The toolchains and instruments around nts, listed in arch-packages.txt so a
+# second machine gets the same set. Reported, never installed: installing is the
+# person's decision, and nts itself depends on none of them.
+say "machine packages (tooling/bootstrap/arch-packages.txt)"
+packages="$root/tooling/bootstrap/arch-packages.txt"
+if command -v pacman >/dev/null 2>&1; then
+  missing=$(awk '!/^#/ && NF && $1 != "manual" { print $1 }' "$packages" | while read -r package; do
+    pacman -Q "$package" >/dev/null 2>&1 || printf '%s ' "$package"
+  done)
+  if [ -n "$missing" ]; then
+    echo "  missing: $missing"
+    echo "  install: paru -S --needed $missing"
+  else
+    echo "  all present"
+  fi
+else
+  echo "  not an Arch machine: install the equivalents of the list by hand"
+fi
+# A JDK is "a Java 21", not one package: asdf provides it on some machines.
+java_major=$(java -version 2>&1 | awk -F'"' '/version/ { split($2, v, "."); print v[1]; exit }')
+[ "$java_major" = 21 ] || echo "  jdk21: \`java\` is ${java_major:-absent}, not 21 -- see the 'manual jdk21' line of arch-packages.txt"
+# hsdis lives in the JDK the JVM backend runs, so it is asked of that JDK.
+java_home=$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.home/ { print $2 }')
+if [ -n "$java_home" ] && ! ls "$java_home"/lib/hsdis-*.so >/dev/null 2>&1; then
+  echo "  hsdis: not in $java_home/lib -- see the 'manual hsdis' line of arch-packages.txt"
+fi
+
 # ---------------------------------------------------------------- the frontend
 #
 # `typescript-go` is a real submodule, and the *only* one. Cloning it
