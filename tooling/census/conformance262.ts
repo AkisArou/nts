@@ -4,6 +4,7 @@
 //   node tooling/census/conformance262.ts [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
+//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv>]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
 // die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
@@ -16,6 +17,13 @@
 // rather than the full run's quarter hour, and it answers the question a floor
 // asks: did anything that ran stop running, or change its answer? A full run
 // re-records, and is what finds new passes.
+//
+// `--backend` runs the cases on another backend, and a record names the
+// backend that wrote it: `--recorded` refuses another backend's. Off C, a
+// parse or resolution negative is skipped, because the frontend decides it
+// before any backend runs. `--paths-from <tsv>` selects the cases another
+// record names without comparing against it, which is how a backend's first
+// record is made from C's.
 //
 // # Why this exists beside `run262.ts`
 //
@@ -132,6 +140,10 @@ const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
 const recordedFile = flag("--recorded", null);
 const checkFile = flag("--check", recordedFile);
+// The cases another record names, run without comparing against it: how a
+// backend's first record is made from C's, so the two cover the same cases and
+// "passes on C and not here" is a row-for-row question.
+const pathsFromFile = flag("--paths-from", null);
 
 function cannotMeasure(why) {
   console.log(`  INSTRUMENT FAILURE: ${why}`);
@@ -263,6 +275,13 @@ if (!(BACKEND in BACKENDS)) {
   process.stderr.write(`conformance262: --backend ${BACKEND} is none of ${Object.keys(BACKENDS).join(", ")}\n`);
   process.exit(2);
 }
+// Before anything runs: comparing against another backend's record would spend
+// the whole run to report a mismatch nothing could act on.
+for (const file of [recordedFile, checkFile]) {
+  if (file && existsSync(file) && recordedBackendOf(file) !== BACKEND) {
+    cannotMeasure(`${file} records the ${recordedBackendOf(file)} backend and this run is ${BACKEND}: a record answers for the backend that wrote it`);
+  }
+}
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND };
 
 // --- the population --------------------------------------------------------
@@ -304,9 +323,16 @@ const recordedPaths = (file) =>
 let population = sample > 0
   ? [...records].sort((a, b) => a.source_hash.localeCompare(b.source_hash)).slice(0, sample)
   : records;
-if (recordedFile) {
-  const wanted = new Set(recordedPaths(recordedFile));
+if (recordedFile || pathsFromFile) {
+  const wanted = new Set(recordedPaths(recordedFile ?? pathsFromFile));
   population = records.filter((record) => wanted.has(record.path));
+}
+// **A parse or resolution negative is judged before any backend runs**: the
+// frontend rejects it or the case is "accepted", whatever happens next. So it
+// runs on C alone; every other backend would pay the frontend to repeat C's
+// verdict. 4,049 of the 8,318 recorded language rows are such negatives.
+if (BACKEND !== "c") {
+  population = population.filter((record) => !record.negative || record.negative.phase === "runtime");
 }
 const partial = sample > 0 || recordedFile !== null;
 
@@ -806,6 +832,15 @@ function recordCommit() {
   return record?.sha && record.clean && !record.applied ? `, commit ${record.sha}` : "";
 }
 
+/**
+ * The backend a record was written on. A record written before records named
+ * one is C's: every record was, until the runner took `--backend`.
+ */
+function recordedBackendOf(file) {
+  const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
+  return /, backend ([a-z]+)/.exec(header ?? "")?.[1] ?? "c";
+}
+
 /** The record's commit, from its header, or null for one written before records named it. */
 function recordedCommitOf(file) {
   const header = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("# compiler "));
@@ -817,7 +852,7 @@ if (recordFile) {
     recordFile,
     `# Test262 ${under} cases that ran, and what each did. Written by\n` +
       `# tooling/census/conformance262.ts --record; compared by --check.\n` +
-      `# compiler ${FINGERPRINT}${recordCommit()}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
+      `# compiler ${FINGERPRINT}${recordCommit()}, backend ${BACKEND}, harness ${HARNESS_HASH}${FRONTEND.moved ? `, frontend moved since the pin (${FRONTEND.moved})` : ""}; machine at start: ${describeMachine(machineAtStart)}; ${jobs} worker(s)\n` +
       ranRows.map(recordedRow).sort().join("\n") + "\n",
   );
 }
