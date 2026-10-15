@@ -17,6 +17,9 @@ use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 pub(crate) enum Helper {
     At,
     AtValue,
+    /// `at` on a `(T | null)[]`, erased: a stored null is `null` and past the
+    /// end is `undefined`, the two answers one null pointer cannot be.
+    AtElement,
     IndexOf,
     Includes,
     LastIndexOf,
@@ -37,11 +40,13 @@ pub(crate) struct Method {
 pub(crate) fn external(name: &str) -> Option<Method> {
     use Family::{Number, Reference, String};
     use Helper::{
-        At, AtValue, Includes, IncludesStringValue, IndexOf, IndexOfStringValue, LastIndexOf,
+        At, AtElement, AtValue, Includes, IncludesStringValue, IndexOf, IndexOfStringValue,
+        LastIndexOf,
     };
     let (helper, family) = match name {
         "nts_array_at" => (At, Number),
         "nts_array_at_ref" => (At, Reference),
+        "nts_array_at_element" => (AtElement, Reference),
         // This suffix denotes a number-array result, not erased element storage.
         "nts_array_at_value" => (AtValue, Number),
         "nts_array_index_of" => (IndexOf, Number),
@@ -59,7 +64,12 @@ pub(crate) fn external(name: &str) -> Option<Method> {
 }
 impl Helper {
     pub(crate) fn indexed(self) -> bool {
-        matches!(self, Self::At | Self::AtValue)
+        matches!(self, Self::At | Self::AtValue | Self::AtElement)
+    }
+    /// Its arguments in HIR: the array and the needle, and for `AtElement`
+    /// the tag a null slot reads as.
+    fn arity(self) -> usize {
+        if self == Self::AtElement { 3 } else { 2 }
     }
     pub(crate) fn erased_needle(self) -> bool {
         matches!(self, Self::IndexOfStringValue | Self::IncludesStringValue)
@@ -91,7 +101,7 @@ impl Helper {
                 ..slot
             }),
             (Self::At, element) => element,
-            (Self::AtValue, _) => Physical::Reference(RefType::ANYREF),
+            (Self::AtValue | Self::AtElement, _) => Physical::Reference(RefType::ANYREF),
             (Self::Includes | Self::IncludesStringValue, _) => Physical::Scalar(Slot::I32),
             (Self::IndexOf | Self::LastIndexOf | Self::IndexOfStringValue, _) => {
                 Physical::Scalar(Slot::F64)
@@ -120,10 +130,20 @@ fn inner(
     method: Method,
     args: &[ValueId],
 ) -> Result<(), Failure> {
-    if args.len() != 2 {
+    let helper = method.helper;
+    if args.len() != helper.arity() {
         return Err("lookup arity mismatch".into());
     }
-    let helper = method.helper;
+    // A null slot of a `(T | null)[]` reads as `null`, the one tag its
+    // declaration admits; any other is a shape this helper was not made for.
+    if helper == Helper::AtElement
+        && !matches!(
+            b.func.value(args[2]).kind,
+            nts_core::hir::OpKind::ConstInt(tag) if tag == i128::from(erased::NULL)
+        )
+    {
+        return Err("`at` on an array whose null slot reads as other than `null`".into());
+    }
     let shape = b.types().array(b.ty(args[0]))?;
     let accepted = match method.family {
         Family::Number => shape.element == HirType::NUMBER,
@@ -160,7 +180,7 @@ fn inner(
     b.call(target);
     let actual = if helper == Helper::At {
         shape.element.clone()
-    } else if helper == Helper::AtValue {
+    } else if matches!(helper, Helper::AtValue | Helper::AtElement) {
         HirType::Erased
     } else if helper.boolean() {
         HirType::Bool
@@ -229,7 +249,12 @@ fn body(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Functi
     }
 }
 fn indexed(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
-    let mut f = Function::new([ValType::I32, ValType::F64]);
+    let mut locals = vec![ValType::I32, ValType::F64];
+    if helper == Helper::AtElement {
+        // The element read, held while its null is told apart.
+        locals.push(m.types.value_slot(&shape.element)?.wasm());
+    }
+    let mut f = Function::new(locals);
     length(&mut f, shape);
     crate::indexing::integer(&mut f, 1);
     f.instructions(&[
@@ -270,6 +295,19 @@ fn indexed(helper: Helper, shape: &gc::Array, m: &mut Builder<'_>) -> Result<Fun
         let boxed = erased::callee(m, erased::Helper::BoxNumber)?;
         f.call(boxed);
     }
+    if helper == Helper::AtElement {
+        // A stored null is the program's `null`; anything else is the
+        // element, erased as itself.
+        f.instructions(&[
+            I::LocalTee(5),
+            I::RefIsNull,
+            I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
+        ]);
+        f.global_get(erased::singleton(m, erased::Singleton::Null)?);
+        f.instructions(&[I::Else, I::LocalGet(5)]);
+        erased::erase_in(m, &mut f, &shape.element)?;
+        f.instruction(&I::End);
+    }
     f.instruction(&I::Else);
     match absent {
         Absent::Undefined(undefined) => f.global_get(undefined),
@@ -292,7 +330,7 @@ fn absent(
     shape: &gc::Array,
     m: &mut Builder<'_>,
 ) -> Result<Option<(ValType, Absent)>, Failure> {
-    if helper == Helper::AtValue {
+    if matches!(helper, Helper::AtValue | Helper::AtElement) {
         let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
         return Ok(Some((
             ValType::Ref(RefType::ANYREF),

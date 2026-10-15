@@ -594,6 +594,24 @@ fn source_absent_string_results_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// `at` on a `(T | null)[]` tells a stored `null` from the `undefined` past
+/// its end, as node does.
+#[test]
+fn source_at_on_null_slots_agrees_with_node() {
+    let fixture = common::repository().join("tests/wasm/at-null-slots");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "at-null-slots",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

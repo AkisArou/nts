@@ -10,10 +10,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("native memory/provider contract"),
     ),
     ("nts_array_at", Support::WasmHelper),
-    (
-        "nts_array_at_element",
-        Support::Decline("array helper not yet implemented"),
-    ),
+    ("nts_array_at_element", Support::WasmHelper),
     (
         "nts_array_at_foreign",
         Support::Decline("foreign/native ABI or ownership"),
