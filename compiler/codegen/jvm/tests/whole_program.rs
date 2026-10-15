@@ -19,6 +19,16 @@ mod common;
 /// Compile `source` as a one-file program, run it through the launcher, and
 /// return `(status, stdout, stderr)`.
 fn run_whole(name: &str, source: &str) -> Option<(i32, String, String)> {
+    run_whole_file(name, "main.ts", source)
+}
+
+/// `run_whole` for a JavaScript script, compiled as test262's cases are
+/// (`allowJs`, unchecked): a top-level `var` is hoisted, and erased.
+fn run_whole_script(name: &str, source: &str) -> Option<(i32, String, String)> {
+    run_whole_file(name, "main.js", source)
+}
+
+fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, String)> {
     let Ok(tsgo) = std::env::var("NTS_TSGO").map(Utf8PathBuf::from) else {
         eprintln!("SKIP whole_program/{name}: NTS_TSGO is not set");
         return None;
@@ -31,15 +41,23 @@ fn run_whole(name: &str, source: &str) -> Option<(i32, String, String)> {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).expect("a temp dir");
     let fixtures = common::repository().join("tsconfig.fixtures.json");
+    let script = if std::path::Path::new(file)
+        .extension()
+        .is_some_and(|it| it.eq_ignore_ascii_case("js"))
+    {
+        ", \"compilerOptions\": {\"allowJs\": true, \"checkJs\": false}"
+    } else {
+        ""
+    };
     std::fs::write(
         dir.join("tsconfig.json"),
         format!(
-            "{{\"extends\": {:?}, \"include\": [\"src\"]}}\n",
+            "{{\"extends\": {:?}{script}, \"include\": [\"src\"]}}\n",
             fixtures.display().to_string()
         ),
     )
     .expect("write tsconfig");
-    std::fs::write(dir.join("src/main.ts"), source).expect("write the program");
+    std::fs::write(dir.join("src").join(file), source).expect("write the program");
 
     let tsconfig = Utf8PathBuf::from_path_buf(dir.join("tsconfig.json")).expect("a UTF-8 path");
     let snapshot = TsgoApi::for_compilation(tsgo)
@@ -175,6 +193,114 @@ fn a_program_with_nothing_to_evaluate_exits_zero() {
     assert_eq!(status, 0, "nothing to run: {stderr}");
     assert_eq!(stdout, "");
     assert_eq!(stderr, "");
+}
+
+/// A top-level `var` read before anything assigns it is `undefined`, which is
+/// test262's `var x; x--;` and node's answer.
+///
+/// Free on C, where the variable is an erased global, a zeroed `NtsValue` is
+/// tag 0 and tag 0 is `undefined`. A JVM static field zeroes to Java `null`,
+/// which is no erased value at all, so the first conversion refused at run
+/// time -- "`Number()` on a value that is not there", exit 134 -- in eight
+/// `++`/`--` cases and a `String(x)` one that pass on C. `given` is the control:
+/// its declaration stores `undefined` itself, and it always answered.
+#[test]
+fn a_var_read_before_anything_assigns_it_is_undefined() {
+    let Some((status, stdout, stderr)) = run_whole_script(
+        "hoisted",
+        "var held;\nconsole.log(String(held));\nheld--;\nconsole.log(held);\n\
+         held = null;\nheld--;\nconsole.log(held);\n\
+         var given = undefined;\nconsole.log(String(given));\ngiven--;\nconsole.log(given);\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "undefined\nNaN\n-1\nundefined\nNaN\n");
+}
+
+/// A global folded to `-0` starts as `-0`: `<clinit>` skipped every global whose
+/// initial value compared equal to zero, and `-0.0 == 0.0`, so it read Java's
+/// `+0`. Test262's `S8.5_A11_T1` (`1 / n_zero`) and `-0 ** 1` failed on the JVM
+/// alone. `p_zero` is the control.
+#[test]
+fn a_global_initialised_to_negative_zero_keeps_its_sign() {
+    let Some((status, stdout, stderr)) = run_whole_script(
+        "negative-zero",
+        "var p_zero = +0;\nvar n_zero = -0;\nconsole.log(1 / p_zero, 1 / n_zero);\n\
+         var base = -0;\nconsole.log(1 / (base ** 1), 1 / (base ** 111));\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "Infinity -Infinity\n-Infinity -Infinity\n");
+}
+
+/// A shift the IR types `i64` is JavaScript's: the value's low 32 bits, by a
+/// count masked to five. A shift compared with `4294967295` is typed `i64`, and
+/// the JVM shifted all 64 bits by a count masked to six: `4294967295 >>> -32.1`
+/// was a shift by 32 and answered 0 (test262 `S11.7.3_A5.2_T1`), and so did
+/// `>>> -31.1` and `7 >>> -32.1`. The rest are the control -- counts the two
+/// masks agree on -- and held before.
+#[test]
+fn a_shift_typed_i64_takes_the_low_32_bits() {
+    let Some((status, stdout, stderr)) = run_whole_script(
+        "shift",
+        "console.log(4294967295 >>> -32.1 === 4294967295, 4294967295 >>> -31.1 === 2147483647, \
+         4294967295 >>> 33 === 2147483647);\n\
+         var big = 4294967295;\n\
+         console.log(big >>> 0 === 4294967295, big >> 1 === -1, big << 1 === -2);\n\
+         var small = 7;\nconsole.log(small >>> -32.1 === 7, small << 30 === -1073741824);\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "true true true\ntrue true true\ntrue true\n");
+}
+
+/// `Math.exp` and `Math.hypot` answer node's bits. fdlibm's `exp(1)` is one bit
+/// off `Math.E`, which V8 special-cases and `StrictMath` does not (test262's
+/// staging `sm/Math/exp-exact`), and fdlibm's `hypot` is not V8's algorithm:
+/// this pair differed in the last place. `exp(2)` is the control, on which
+/// fdlibm and V8 always agreed.
+#[test]
+fn exp_and_hypot_answer_as_node_does() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "math",
+        "let one: number = 1;\nlet two: number = 2;\n\
+         console.log(Math.exp(one) === Math.E, Math.exp(two), \
+         Math.hypot(2.657729685306549, -11.75147533416748));\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "true 7.38905609893065 12.048265419125958\n");
+}
+
+/// A buffer the language allows and the machine cannot give is node's
+/// catchable `RangeError: Array buffer allocation failed`, as on C, where
+/// `calloc` fails and the lowering throws on the null. The JVM refused at run
+/// time, which aborts, so test262's two `allocation-limit` cases -- an
+/// `assert.throws(RangeError, ...)` each -- passed on C and failed here. The
+/// eight-byte buffer is the control.
+#[test]
+fn a_buffer_too_large_for_the_machine_throws_a_range_error() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "buffer-limit",
+        "function attempt(make: () => ArrayBuffer): string {\n\
+         \x20 try { return String(make().byteLength); }\n\
+         \x20 catch (e) { return e instanceof RangeError ? \"RangeError: \" + e.message : \"other\"; }\n\
+         }\n\
+         console.log(attempt(() => new ArrayBuffer(8)));\n\
+         console.log(attempt(() => new ArrayBuffer(7 * 1125899906842624)));\n\
+         console.log(attempt(() => new ArrayBuffer(0, { maxByteLength: 7 * 1125899906842624 })));\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(
+        stdout,
+        "8\nRangeError: Array buffer allocation failed\nRangeError: Array buffer allocation failed\n"
+    );
 }
 
 /// The program the refusal test used to run, now that it compiles: a `bigint`

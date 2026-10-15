@@ -5577,25 +5577,11 @@ impl Emitter<'_> {
             }
             return Ok(Placed::OnStack);
         }
+        if counts_as_shift && kind == Kind::Long {
+            return self.wide_shift(code, pool, op, (lhs, rhs), right, &origin);
+        }
         self.load(code, pool, lhs)?;
         self.load(code, pool, rhs)?;
-        // **A `long` shift takes an `int` count**, which is the one place the
-        // JVM's arithmetic is not shaped like the IR's. HIR types a shift's
-        // count to match the value being shifted, which is right for C -- where
-        // `a >> b` is fine with both 64-bit -- and right for LLVM, whose `lshr`
-        // requires the two to agree. `lushr` requires the opposite: a `long` and
-        // an `int`.
-        //
-        // Emitting it without this pushed four words where the accounting
-        // expected three, which `Code::shift` is right about and the operand
-        // loading was wrong about. It showed up as the emitter's own balance
-        // check -- "emitting %24 moved the operand stack from 0 to 1" -- in
-        // `hpack-huffman.ts`, found by the shared lane compiling that module on
-        // its own. It is invisible in the whole-project run, because the module
-        // is refused at a language gap first.
-        if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::UShr) && kind == Kind::Long {
-            code.convert(&origin, insn::L2I, Kind::Long, Kind::Int);
-        }
         match op {
             BinOp::Add => code.arithmetic(&origin, insn::ADD, kind),
             BinOp::Sub => code.arithmetic(&origin, insn::SUB, kind),
@@ -5657,6 +5643,45 @@ impl Emitter<'_> {
             BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
                 unreachable!("comparisons are handled above")
             }
+        }
+        Ok(Placed::OnStack)
+    }
+
+    /// A shift whose result the IR types `i64`, which is JavaScript's at every
+    /// width: the value's low 32 bits, the count masked to five, and `>>>`'s
+    /// result a `uint32`. C's `nts_shl`, `nts_shr` and `nts_ushr` take
+    /// `int32_t` operands whatever the IR's width, and an `i64` here is a value
+    /// that left `int32` -- a `uint32` past 2^31, most often.
+    ///
+    /// This was `lshl`/`lshr`/`lushr`, which shift all 64 bits by a count
+    /// masked to *six*: `4294967295 >>> -32.1` shifted by 32 and answered 0
+    /// where node and C answer 4294967295 (test262 `S11.7.3_A5.2_T1`). The
+    /// `int` shifts mask to five on their own. A `long` count is narrowed too:
+    /// HIR types a count like the value it shifts, and `ishl` takes an `int`.
+    fn wide_shift(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        op: BinOp,
+        (lhs, rhs): (ValueId, ValueId),
+        count: Kind,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        self.load(code, pool, lhs)?;
+        code.convert(origin, insn::L2I, Kind::Long, Kind::Int);
+        self.load(code, pool, rhs)?;
+        if count == Kind::Long {
+            code.convert(origin, insn::L2I, Kind::Long, Kind::Int);
+        }
+        match op {
+            BinOp::Shl => code.shift(origin, insn::SHL, Kind::Int),
+            BinOp::Shr => code.shift(origin, insn::SHR, Kind::Int),
+            _ => code.shift(origin, insn::USHR, Kind::Int),
+        }
+        if op == BinOp::UShr {
+            code.invoke_static(origin, pool, "java/lang/Integer", "toUnsignedLong", "(I)J");
+        } else {
+            code.convert(origin, insn::I2L, Kind::Int, Kind::Long);
         }
         Ok(Placed::OnStack)
     }

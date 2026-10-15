@@ -3780,8 +3780,8 @@ pub(crate) fn template_field(site: u32) -> String {
     format!("template${site}")
 }
 
-/// `<clinit>` for nonzero globals and immutable singleton caches.
-/// No method is needed where Java's zeroed static storage suffices.
+/// `<clinit>` for nonzero globals, erased globals and immutable singleton
+/// caches. No method is needed where Java's zeroed static storage suffices.
 fn class_initializer(
     package: &str,
     program: &JvmProgram<'_>,
@@ -3789,15 +3789,9 @@ fn class_initializer(
     erased: &[(String, String)],
     pool: &mut Pool,
 ) -> Result<Option<nts_jvm_emitter::Body>, Diagnostic> {
-    let interesting: Vec<_> = program
-        .globals
-        .iter()
-        .filter(|global| {
-            global.initial != 0.0
-                && types::descriptor(types::Shape::packaged(program, package), &global.ty).is_some()
-        })
-        .collect();
+    let (interesting, undefined) = globals_to_write(package, program);
     if interesting.is_empty()
+        && undefined.is_empty()
         && singletons.is_empty()
         && erased.is_empty()
         && nts_core::hir::templates::objects(program).is_empty()
@@ -3849,7 +3843,61 @@ fn class_initializer(
             types::VALUE_DESCRIPTOR,
         );
     }
-    for global in interesting {
+    write_globals(package, program, &interesting, &undefined, pool, &mut code)?;
+    let origin = program_origin(program);
+    code.ret(&origin, None);
+    code.finish(pool)
+        .map(Some)
+        .map_err(|error| initializer_refusal(program, &error.to_string()))
+}
+
+/// The module globals `<clinit>` writes, because Java's zeroed static is not
+/// their zero: those whose initial value is not `+0`, and every erased one.
+fn globals_to_write<'p>(
+    package: &str,
+    program: &'p JvmProgram<'_>,
+) -> (
+    Vec<&'p nts_core::hir::Global>,
+    Vec<&'p nts_core::hir::Global>,
+) {
+    let interesting: Vec<_> = program
+        .globals
+        .iter()
+        .filter(|global| {
+            // Java's zero is `+0`, by its bits: `-0.0 != 0.0` is false, so a
+            // global folded to `-0` -- test262's `var n_zero = -0;` -- went
+            // unwritten and read `+0`, and `1 / n_zero` was `Infinity`.
+            global.initial.to_bits() != 0.0f64.to_bits()
+                && !matches!(global.ty, nts_core::hir::HirType::Erased)
+                && types::descriptor(types::Shape::packaged(program, package), &global.ty).is_some()
+        })
+        .collect();
+    // **An erased global's zero is `undefined`, and Java's is `null`.** The
+    // object fields' rule (`FieldFromStatic` in the constructor), for module
+    // scope: on C a zeroed `NtsValue` is tag 0, which is `undefined`, so a
+    // `var x;` read before anything assigns it -- hoisting makes that legal --
+    // reads `undefined`. Here the static was Java `null`, which no erased value
+    // is: `Number(x)` refused at run time ("Number() on a value that is not
+    // there") in eight test262 `++`/`--` cases, `String(x)` in a ninth, and
+    // `strictEq` threw `NullPointerException` in two more, all passing on C.
+    let undefined: Vec<_> = program
+        .globals
+        .iter()
+        .filter(|global| matches!(global.ty, nts_core::hir::HirType::Erased))
+        .collect();
+    (interesting, undefined)
+}
+
+/// Each of [`globals_to_write`], with its initial value.
+fn write_globals(
+    package: &str,
+    program: &JvmProgram<'_>,
+    interesting: &[&nts_core::hir::Global],
+    undefined: &[&nts_core::hir::Global],
+    pool: &mut Pool,
+    code: &mut Code,
+) -> Result<(), Diagnostic> {
+    for global in interesting.iter().copied() {
         let origin = global.origin.clone();
         let descriptor = types::descriptor(types::Shape::packaged(program, package), &global.ty)
             .ok_or_else(|| initializer_refusal(program, "an unrepresentable global initializer"))?;
@@ -3881,11 +3929,24 @@ fn class_initializer(
             &descriptor,
         );
     }
-    let origin = program_origin(program);
-    code.ret(&origin, None);
-    code.finish(pool)
-        .map(Some)
-        .map_err(|error| initializer_refusal(program, &error.to_string()))
+    for global in undefined.iter().copied() {
+        let origin = global.origin.clone();
+        code.get_static(
+            &origin,
+            pool,
+            types::VALUE,
+            "UNDEFINED_VALUE",
+            types::VALUE_DESCRIPTOR,
+        );
+        code.put_static(
+            &origin,
+            pool,
+            &body::program_class(package),
+            &body::method_name(&global.name),
+            types::VALUE_DESCRIPTOR,
+        );
+    }
+    Ok(())
 }
 
 /// Build each template once, without exposing its writable construction array.

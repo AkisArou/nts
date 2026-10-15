@@ -50,10 +50,36 @@ public final class NtsBuffer {
         this.resizable = resizable;
     }
 
-    /** `new ArrayBuffer(n)`. Zero filled, and fixed. */
+    /**
+     * `new ArrayBuffer(n)`. Zero filled, and fixed; null where this machine
+     * cannot hold `n` bytes, as {@link #block} says.
+     */
     public static NtsBuffer allocate(double byteLength) {
-        int n = size(byteLength, "byteLength");
-        return new NtsBuffer(reserve(n), n, n, false);
+        byte[] bytes = block(byteLength, "byteLength");
+        return bytes == null ? null : new NtsBuffer(bytes, bytes.length, bytes.length, false);
+    }
+
+    /**
+     * A new buffer's block, or null where the machine cannot give one: what
+     * `nts_buffer_make` answers when `calloc` fails, and what the lowering
+     * turns into node's `RangeError: Array buffer allocation failed`, a catchable
+     * throw. A length past what a Java array holds is that case here, as 7 PiB
+     * is in C. Both were run-time refusals, which abort, so test262's
+     * `allocation-limit` cases passed on C and failed here: their
+     * `assert.throws(RangeError, ...)` had nothing to catch.
+     *
+     * <p>The constructors' own: a length the language refuses never arrives
+     * (the lowering checks it first), and growing an existing buffer keeps
+     * {@link #reserve}'s answer.
+     */
+    private static byte[] block(double length, String what) {
+        long n = wholeIndex(length, what);
+        if (n > Integer.MAX_VALUE) { return null; }
+        try {
+            return new byte[(int) n];
+        } catch (OutOfMemoryError exhausted) {
+            return null;
+        }
     }
 
     /**
@@ -92,13 +118,14 @@ public final class NtsBuffer {
      * semantics.
      */
     public static NtsBuffer allocateResizable(double byteLength, double maxByteLength) {
-        int n = size(byteLength, "byteLength");
-        int max = size(maxByteLength, "maxByteLength");
-        if (n > max) {
+        byte[] bytes = block(maxByteLength, "maxByteLength");
+        if (bytes == null) { return null; }
+        long n = wholeIndex(byteLength, "byteLength");
+        if (n > bytes.length) {
             throw new NtsRefusal(
-                "a RangeError: byteLength " + n + " exceeds maxByteLength " + max);
+                "a RangeError: byteLength " + n + " exceeds maxByteLength " + bytes.length);
         }
-        return new NtsBuffer(reserve(max), n, max, true);
+        return new NtsBuffer(bytes, (int) n, bytes.length, true);
     }
 
     public static double byteLength(NtsBuffer buffer) { return buffer.length; }
@@ -239,17 +266,23 @@ public final class NtsBuffer {
     }
 
     static int toIndex(double value, String what) {
+        long integer = wholeIndex(value, what);
+        if (integer > Integer.MAX_VALUE) {
+            throw new NtsRefusal(what + " " + NtsRuntime.numberText(value)
+                + " is larger than this runtime can allocate");
+        }
+        return (int) integer;
+    }
+
+    /** `ToIndex`, without a Java array's bound: what the language allows. */
+    private static long wholeIndex(double value, String what) {
         double integer = Double.isNaN(value) ? 0.0
             : value < 0.0 ? Math.ceil(value) : Math.floor(value);
         if (integer < 0.0 || integer > 9007199254740991.0) {
             throw new NtsRefusal("a RangeError: " + what + " "
                 + NtsRuntime.numberText(value) + " is not an index");
         }
-        if (integer > Integer.MAX_VALUE) {
-            throw new NtsRefusal(what + " " + NtsRuntime.numberText(value)
-                + " is larger than this runtime can allocate");
-        }
-        return (int) integer;
+        return (long) integer;
     }
 
     private static int size(double value, String what) { return toIndex(value, what); }
