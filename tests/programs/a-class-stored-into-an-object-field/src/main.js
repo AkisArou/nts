@@ -1,4 +1,4 @@
-// The control for `tests/outcomes/a-class-stored-into-a-module-global`: the
+// The control for `tests/programs/a-class-stored-into-a-module-global`: the
 // class is stored into an object's field, which `relate_tokens_to_the_slot_they_reach`
 // notes, so `Ctor_C` extends the slot's layout. It differs in one thing, the
 // slot, and agrees with node on every backend.

@@ -1,3 +1,6 @@
+// **Fixed 2026-10-15, and now its guard:** a class token stored into a module
+// global reaches the global's type (63e6cc0d7). What it was:
+//
 // **A class stored into a module global gets no base, so the JVM cannot store it.**
 // A class used as a value is an empty token (`Ctor_C`), and
 // `relate_tokens_to_the_slot_they_reach` gives a token the layout of the one
