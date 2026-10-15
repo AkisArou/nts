@@ -40,6 +40,7 @@ mod indexing;
 mod inline;
 mod ir;
 mod module;
+mod never_null;
 mod numeric;
 mod object_plan;
 mod objects;

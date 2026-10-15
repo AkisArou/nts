@@ -85,6 +85,8 @@ pub(crate) struct Body<'b, 'p> {
     /// The entry reads held as the type their collection stores, by that
     /// type (`collections::typed_reads`).
     typed_reads: BTreeMap<ValueId, HirType>,
+    /// The values that cannot be null (`never_null`).
+    never_null: std::collections::BTreeSet<ValueId>,
     scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
@@ -176,6 +178,7 @@ impl<'b, 'p> Body<'b, 'p> {
         }
         let typed_gets = crate::collections::typed_gets(func, types);
         let typed_reads = crate::collections::typed_reads(func, types);
+        let never_null = crate::never_null::values(func);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
             let b = &func.blocks[block.0 as usize];
@@ -238,6 +241,7 @@ impl<'b, 'p> Body<'b, 'p> {
             values,
             typed_gets,
             typed_reads,
+            never_null,
             scratch,
             pc,
             cases,
@@ -265,6 +269,10 @@ impl<'b, 'p> Body<'b, 'p> {
     /// The collection a get reads, where its value is the entry it found.
     pub(crate) fn typed_get(&self, value: ValueId) -> Option<ValueId> {
         self.typed_gets.get(&value).copied()
+    }
+    /// Whether `value` cannot be null.
+    pub(crate) fn never_null(&self, value: ValueId) -> bool {
+        self.never_null.contains(&value)
     }
     /// The type an entry read is held as, where it is not erased.
     pub(crate) fn typed_read(&self, value: ValueId) -> Option<&HirType> {
