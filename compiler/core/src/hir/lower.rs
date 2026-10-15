@@ -62852,6 +62852,58 @@ impl<'a> FuncBuilder<'a> {
         Err(self.unsupported(id, &format!("`{name}` on a number")))
     }
 
+    /// `ToIntegerOrInfinity` after the caller has performed `ToNumber`.
+    ///
+    /// Truncation preserves infinities. A zero or NaN becomes positive zero;
+    /// comparing the truncated magnitude with zero handles both without any
+    /// float-to-integer cast. Domain checks must read this result, and the
+    /// runtime receives the same integer that was checked.
+    fn lower_to_integer_or_infinity(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+        let whole = self.push(
+            OpKind::Unary {
+                op: UnOp::Trunc,
+                operand: value,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let magnitude = self.push(
+            OpKind::Unary {
+                op: UnOp::Abs,
+                operand: whole,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let nonzero = self.push(
+            OpKind::Binary {
+                op: BinOp::Gt,
+                lhs: magnitude,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let keep = self.new_block();
+        let carry_on = self.new_block();
+        let integer = self.push_block_param(carry_on, HirType::NUMBER, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: nonzero,
+            then_target: keep,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: vec![zero],
+        });
+        self.switch_to(keep);
+        self.terminate(Terminator::Jump {
+            target: carry_on,
+            args: vec![whole],
+        });
+        self.switch_to(carry_on);
+        integer
+    }
+
     /// `n.toFixed(d)`, with the domain the specification gives it.
     ///
     /// The same shape as [`Self::lower_radix_to_string`] and for the same
@@ -62870,6 +62922,7 @@ impl<'a> FuncBuilder<'a> {
         origin: &Origin,
     ) -> Result<ValueId, Diagnostic> {
         let origin = origin.clone();
+        let digits = self.lower_to_integer_or_infinity(digits, &origin);
         let throwing = self.new_block();
         let carry_on = self.new_block();
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
