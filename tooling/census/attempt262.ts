@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
+import { jvmRun } from "../jvm/launch.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -364,28 +365,16 @@ export const BACKENDS = {
   },
   // `emit-jvm` writes `nts/gen/*.class` and `nts-runtime.jar`, nothing to
   // link; `nts.rt.NtsMain` runs `Program.module$init()`, drains the loop and
-  // exits with C's statuses (the JVM lane, measured on openjdk 21). Its heap
-  // is capped by `-Xmx`, never `ulimit -v`, which the JVM's reservations
-  // exceed at start-up; a deep test262 recursion needs more than the default
-  // 1 MB stack to reach the answer C's stack does; and the flags after that
-  // keep a JVM start per test cheap without changing an answer.
+  // exits with C's statuses (the JVM lane, measured on openjdk 21). How a run
+  // starts is `tooling/jvm/launch.ts`'s: the flags (a fixed `-Xmx`, never
+  // `ulimit -v`, which the JVM's reservations exceed at start-up; a deep
+  // stack for test262's recursions; C1 only and the serial collector, so a
+  // start is cheap) and an AppCDS archive of the runtime jar, made once per
+  // jar and shared by every case.
   jvm: {
     emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out],
     prepare: () => ({ objects: undefined }),
-    run: (out, tools) => [
-      "java",
-      [
-        ...(tools.memoryCapKb ? [`-Xmx${Math.floor(Number(tools.memoryCapKb) / 2)}k`] : []),
-        "-Xss512m",
-        "-XX:TieredStopAtLevel=1",
-        "-XX:+UseSerialGC",
-        "-Xshare:auto",
-        "-cp",
-        `${out}:${join(out, "nts-runtime.jar")}`,
-        "nts.rt.NtsMain",
-        "nts.gen.Program",
-      ],
-    ],
+    run: (out) => jvmRun(out),
     capsItself: true,
   },
   // `emit-wasm --host node` writes `program.mjs` and its module, or nothing:
