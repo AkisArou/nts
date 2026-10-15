@@ -61,3 +61,38 @@ fn a_signature_call_is_typed_only_where_every_arriving_closure_agrees() {
         program.typed_signatures
     );
 }
+
+/// A typed signature every call through which passes a whole number, and every
+/// closure under which answers one, is narrowed with its closures: the entry
+/// takes and returns `i32` (closure-merge's shape). Typed but not narrowed, the
+/// call kept a double loop counter that clang spilled across it every
+/// iteration, and the row ran slower than the uniform entry it replaced.
+#[test]
+fn a_typed_signature_over_whole_numbers_is_narrowed_with_its_closures() {
+    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/typed-signature-narrowed/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(frontend)
+        .snapshot(&config)
+        .expect("snapshot");
+    assert!(!snapshot.has_errors());
+    let prepared = hir::prepare(&snapshot).expect("prepared HIR");
+    let program = &prepared.program;
+    let [signature] = program.typed_signatures.iter().collect::<Vec<_>>()[..] else {
+        panic!("one typed signature: {:?}", program.typed_signatures);
+    };
+    let entry = format!("{signature}#call");
+    let declared = program
+        .funcs
+        .iter()
+        .find(|func| func.name == entry)
+        .unwrap_or_else(|| panic!("{entry} is declared"));
+    let int = hir::HirType::Int {
+        bits: 32,
+        signed: true,
+    };
+    assert_eq!(declared.params[1].ty, int, "{entry}'s parameter");
+    assert_eq!(declared.return_type, int, "{entry}'s result");
+}

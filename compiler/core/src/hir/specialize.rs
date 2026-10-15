@@ -1306,6 +1306,17 @@ fn insert_conversions(
                         Callee::Direct(name) | Callee::Virtual { declared: name, .. } => {
                             expected.get(name)
                         }
+                        // A call through a typed signature, whose entry
+                        // `signatures` may have narrowed with every closure
+                        // under it: the receiver's type names which.
+                        Callee::Closure { slot } => args.first().and_then(|receiver| {
+                            match &func.values[receiver.0 as usize].ty {
+                                HirType::Managed(super::ManagedType::Object(ty)) => {
+                                    expected.of_slot(*ty, *slot)
+                                }
+                                _ => None,
+                            }
+                        }),
                         _ => None,
                     };
                     // **A callee whose arguments are converted exactly is not
