@@ -36965,6 +36965,30 @@ impl<'a> FuncBuilder<'a> {
         self.build_array_from(id, argument, false)
     }
 
+    /// The append helper for a collected array's element width.
+    fn collection_push(
+        &self,
+        id: NodeId,
+        element_ty: &HirType,
+    ) -> Result<&'static str, Diagnostic> {
+        Ok(match *element_ty {
+            ref counted if holds_counted(counted) => "nts_array_push_ref",
+            HirType::Float { bits: 64 } => "nts_array_push",
+            // An erased rest tail, or an Array.from result whose elements
+            // have no particular type, uses the tagged-value push.
+            HirType::Erased => "nts_array_push_value",
+            // A narrower element is a typed array being built, which
+            // Uint8Array.from handles separately from Array.from.
+            _ => {
+                return Err(self.unsupported(
+                    id,
+                    "a walk collected into a typed array, whose elements are narrower than a \
+                     double and are pushed one width at a time",
+                ));
+            }
+        })
+    }
+
     /// Keep the table cursor test, then test the output position on the body's
     /// incoming edge. Both comparisons read only compiler-owned values.
     ///
@@ -37035,25 +37059,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a walk collected into a value that is not an array"));
         };
         let element_ty = element_ty.as_ref();
-        let append = match *element_ty {
-            ref counted if holds_counted(counted) => "nts_array_push_ref",
-            HirType::Float { bits: 64 } => "nts_array_push",
-            // **An erased element**, which is what a rest element's tail usually has: `[...x]`
-            // in JavaScript collects values of no particular type, and `[...[x, y, z]]` gives
-            // the tail a pattern rather than a declared array. `nts_array_push_value` is the
-            // push for one and has been in the runtime since arrays of tagged values existed;
-            // this arm was missing only because `Array.from`'s own result type is rarely erased.
-            HirType::Erased => "nts_array_push_value",
-            // A narrower element is a *typed* array being built, which `Array.from` does not do
-            // -- `Uint8Array.from` does, and is its own question.
-            _ => {
-                return Err(self.unsupported(
-                    id,
-                    "a walk collected into a typed array, whose elements are narrower than a \
-                     double and are pushed one width at a time",
-                ));
-            }
-        };
+        let append = self.collection_push(id, element_ty)?;
 
         // How many elements are coming, where that is known before the walk
         // starts. Three of the five shapes know: an array and a typed array
