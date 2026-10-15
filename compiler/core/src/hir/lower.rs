@@ -16753,6 +16753,17 @@ fn declaration_shell(body: &Func, name: &str, receiver: HirType) -> Func {
     shell.exported = false;
     shell.initializes_receiver = false;
     shell.async_result = None;
+    // **And no frame.** A generator's `#call` carries the frame its body
+    // allocates, and `suspend` takes any function with a frame for one to
+    // split: so a signature's declaration made from a generator closure's
+    // `#call` became that generator's entry once anything reached it -- a body
+    // storing the signature value into the frame's field for the closure,
+    // which the JVM's verifier refused (NTS4001) and C stored unchecked
+    // (tests/programs/a-generator-as-an-array-pattern-default-on-jvm). Typed
+    // signatures made it reachable; a declaration is a signature whoever
+    // reaches it, and `suspend`'s own shells clear the frame for the same
+    // reason.
+    shell.frame = None;
     shell.abstract_declaration = true;
     shell
 }
