@@ -2245,7 +2245,7 @@ __int128 nts_bigint_from_number(double value) {
   return (__int128)value;
 }
 
-void nts_bounds(double index, uint32_t length) {
+_Noreturn void nts_bounds(double index, uint32_t length) {
   fprintf(stderr, NTS_REFUSED "index %g is outside [0, %u)\n", index, length);
   abort();
 }

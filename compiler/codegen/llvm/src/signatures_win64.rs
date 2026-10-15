@@ -597,7 +597,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_bounds",
         returns: "void",
         params: &["double", "i32"],
-        attributes: &[],
+        attributes: &["noreturn"],
     },
     Signature {
         name: "nts_boxed_new",

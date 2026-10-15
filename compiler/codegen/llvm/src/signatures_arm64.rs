@@ -605,7 +605,7 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         name: "nts_bounds",
         returns: "void",
         params: &["double", "i32"],
-        attributes: &[],
+        attributes: &["noreturn"],
     },
     Signature {
         name: "nts_boxed_new",

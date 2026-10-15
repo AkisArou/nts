@@ -1377,7 +1377,8 @@ NTS_ALLOCATES NtsArray *nts_array_of_numbers(double length);
 NTS_ALLOCATES NtsArray *
 nts_array_new_uninitialized(const NtsDescriptor *descriptor, double length);
 NTS_ALLOCATES NtsHeader *nts_object_new(const NtsDescriptor *descriptor);
-void nts_bounds(double index, uint32_t length);
+/* Refuses an index outside an array's elements, and never returns. */
+_Noreturn void nts_bounds(double index, uint32_t length);
 /* A fresh symbol. Every call makes a new identity, however equal the
  * descriptions: `Symbol("a") === Symbol("a")` is false in JavaScript. */
 NTS_ALLOCATES NtsSymbol *nts_symbol_new(NtsString *description);
