@@ -4894,10 +4894,18 @@ fn binary_text(
     // giving the specializer a *second* site that computes it is enough to
     // narrow the first --- so the bug disappeared whenever the reduction added
     // a direct shift to check the arithmetic.
+    //
+    // **A `bool` is passed through too.** It is already 0 or 1, which is what
+    // ToInt32 makes of `false` and `true`; sent to `nts_to_uint32` it was
+    // promoted to a double and converted back, twice per `or` of two tests --
+    // `?? 1` over a call's absence is one -- and with the loop's other
+    // conversions gone that round trip was what `optional-chain`'s loop
+    // waited on (an integer accumulator alone 2.1x, both together 4.8x, on
+    // the emitted C hand-edited).
     let cast = |value: ValueId| {
         if matches!(
             func.values[value.0 as usize].ty,
-            HirType::Int { .. } | HirType::BigInt
+            HirType::Int { .. } | HirType::BigInt | HirType::Bool
         ) {
             value_name(value)
         } else {
