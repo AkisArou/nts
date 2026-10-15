@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: an object converted to a number, whose ToPrimitive conversion this compiler does not yet perform",
+  "node": null,
+  "measured_with": "e90bf7fd4288ff40",
+  "source": "measured"
+}
