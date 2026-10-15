@@ -39,6 +39,7 @@ mod host;
 mod indexing;
 mod inline;
 mod ir;
+mod literals;
 mod module;
 mod never_null;
 mod numeric;

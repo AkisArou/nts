@@ -97,6 +97,38 @@ pub(crate) fn plan(func: &Func) -> Result<Plan, String> {
     })
 }
 
+/// Whether each block lies in a loop: in the natural loop of a back edge, the
+/// header and every block that reaches the edge's source without passing
+/// through the header. A dispatched body is one loop around every block.
+pub(crate) fn loop_blocks(func: &Func, plan: &Plan) -> Vec<bool> {
+    let mut inside = vec![false; func.blocks.len()];
+    let Some(structure) = &plan.structure else {
+        for id in &plan.order {
+            inside[id.0 as usize] = true;
+        }
+        return inside;
+    };
+    let reached: Set = plan.order.iter().copied().collect();
+    let preds = predecessors(func, &reached);
+    for from in &plan.order {
+        for to in func.blocks[from.0 as usize].terminator.successors() {
+            if structure.rank[to.0 as usize] > structure.rank[from.0 as usize] {
+                continue;
+            }
+            let mut seen = Set::from([to]);
+            inside[to.0 as usize] = true;
+            let mut stack = vec![*from];
+            while let Some(at) = stack.pop() {
+                if seen.insert(at) {
+                    inside[at.0 as usize] = true;
+                    stack.extend(preds[at.0 as usize].iter().copied());
+                }
+            }
+        }
+    }
+    inside
+}
+
 fn predecessors(func: &Func, reached: &Set) -> Vec<Set> {
     let mut preds = vec![Set::new(); func.blocks.len()];
     for from in reached {

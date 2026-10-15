@@ -87,6 +87,9 @@ pub(crate) struct Body<'b, 'p> {
     typed_reads: BTreeMap<ValueId, HirType>,
     /// The values that cannot be null (`never_null`).
     never_null: std::collections::BTreeSet<ValueId>,
+    /// The literals a loop reads, each in its own local from entry
+    /// (`literals::hoisted`).
+    hoisted: std::collections::BTreeSet<ValueId>,
     scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
@@ -119,6 +122,7 @@ pub(crate) fn lower(
         reason,
     })?;
     let mut body = Body::new(func, m, &plan)?;
+    body.hoist_literals()?;
     if let Some(structure) = &plan.structure {
         body.tree(BlockId(0), structure)?;
     } else {
@@ -179,6 +183,7 @@ impl<'b, 'p> Body<'b, 'p> {
         let typed_gets = crate::collections::typed_gets(func, types);
         let typed_reads = crate::collections::typed_reads(func, types);
         let never_null = crate::never_null::values(func);
+        let hoisted = crate::literals::hoisted(func, plan);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
             let b = &func.blocks[block.0 as usize];
@@ -242,6 +247,7 @@ impl<'b, 'p> Body<'b, 'p> {
             typed_gets,
             typed_reads,
             never_null,
+            hoisted,
             scratch,
             pc,
             cases,
@@ -290,6 +296,21 @@ impl<'b, 'p> Body<'b, 'p> {
         self.instruction(&I::LocalGet(local));
         Ok(())
     }
+    /// Set each literal a loop reads into its own local, once, at entry; its
+    /// reads then load the local (`constant`).
+    fn hoist_literals(&mut self) -> Result<(), EmitError> {
+        for value in self.hoisted.clone() {
+            let OpKind::ConstString(text) = &self.func.value(value).kind else {
+                continue;
+            };
+            crate::strings::constant(self, &text.clone());
+            let local = self
+                .local(value)
+                .map_err(|failure| failure.at(&self.func.name, &self.func.value(value).origin))?;
+            self.instruction(&I::LocalSet(local));
+        }
+        Ok(())
+    }
     /// Emit `value` itself where it is a constant, and say whether it was.
     ///
     /// A constant is written where it is used rather than set into a local
@@ -304,6 +325,7 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::ConstInt(_) if crate::bigints::is_bigint(&op.ty) => return Ok(false),
             OpKind::ConstInt(it) => numeric::constant_int(self, *it, &op.ty)?,
             OpKind::ConstFloat(it) => numeric::constant_float(self, *it, &op.ty)?,
+            OpKind::ConstString(_) if self.hoisted.contains(&value) => return Ok(false),
             OpKind::ConstString(it) => crate::strings::constant(self, it),
             OpKind::ConstNull => crate::erased::constant(self, value, crate::erased::NULL)?,
             _ => return Ok(false),
