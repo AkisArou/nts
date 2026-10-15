@@ -20434,6 +20434,9 @@ enum CallbackResult {
     /// `map`: it is stored at the current index of the array allocated before
     /// the loop.
     Store { array: ValueId, index: u32 },
+    /// `Array.from` maps during its source walk. The private output's length
+    /// before the callback is its dense index, and the checked store grows it.
+    Append { array: ValueId, index: ValueId },
     /// `some` and `every`: it decides whether to stop.
     ///
     /// Both are the same loop asking the same question and differ only in
@@ -37001,55 +37004,101 @@ impl<'a> FuncBuilder<'a> {
     /// with no elements. That second one refuses, and refuses as itself: a
     /// `for...of` over an object type, which is what it is.
     ///
-    /// # Built and then mapped, rather than fused
-    ///
-    /// `Array.from(xs, f)` is specified as `f` applied to each element with its
-    /// index, and `Array.from(xs).map(f)` calls `f` with the same two arguments
-    /// in the same order over the same elements. `map`'s third argument is the
-    /// array, which the specification gives it and this compiler does not pass
-    /// to either. `Array.from` produces no holes, so the one thing `map` does
-    /// differently -- skipping them -- cannot arise.
-    ///
-    /// So this is two proven paths composed rather than a third written: the
-    /// walk that `Array.from` already does over every shape `for...of` knows,
-    /// and the callback inlining `map` already does, which allocates nothing
-    /// and calls nothing indirectly.
-    ///
-    /// **The cost is one intermediate array, and it is stated rather than
-    /// hidden.** Fusing the callback into the walk removes it and is what the
-    /// ledger row asks for; it needs the delivery machinery to write into a
-    /// destination that is being grown rather than indexed, which is a third
-    /// shape of `iteration_delivery`. Nothing regresses by composing first --
-    /// the construct was refused outright -- and the fused version has a
-    /// measurement to beat rather than an argument to win.
+    /// The mapper runs before the next iterator step. Collecting first and
+    /// applying `map` later loses additions, deletions and changes the mapper
+    /// makes to the source, and reorders a generator's own effects. The source
+    /// walk and callback-body delivery stay shared with their existing users.
     fn lower_array_from_mapped(
         &mut self,
         id: NodeId,
         argument: NodeId,
         callback: NodeId,
     ) -> Result<ValueId, Diagnostic> {
-        let built = self.build_array_from(id, argument, true)?;
-        let HirType::Managed(ManagedType::Array(element_ty)) =
-            self.values[built.0 as usize].ty.clone()
-        else {
+        let (sequence, forced) = self.sequence_source(argument);
+        let sequence_value = self.lower_expression(sequence)?;
+        let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
+        if !self.inlines_as_a_callback(callback) {
+            return Err(self.unsupported(
+                callback,
+                "a `map` callback that reads its own `this`, whose body is not inlined",
+            ));
+        }
+        let (names, body) = self.callback_shape(callback, Iteration::Map, "map")?;
+        self.map_a_walk(id, sequence_value, walk, &names, body)
+    }
+
+    /// Map one element before asking the source for its next one. A mapper
+    /// can change the source, so the result starts empty and grows; its length
+    /// is the callback index, independently of table holes or UTF-16 cursors.
+    fn map_a_walk(
+        &mut self,
+        id: NodeId,
+        sequence: ValueId,
+        walk: Walk,
+        names: &[u32],
+        body: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        let element_symbol = names.first().copied().ok_or_else(|| {
+            self.unsupported(id, "an `Array.from` mapper without an element parameter")
+        })?;
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `map` result"))?;
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
-        };
-        self.lower_iteration(
-            id,
-            built,
-            &element_ty,
-            callback,
-            Walked {
-                kind: Iteration::Map,
-                direction: Direction::Forward,
-                method: "map",
+        }
+        let origin = self.origin(id);
+        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+        let out = self.push(
+            OpKind::ArrayNew {
+                length: zero,
+                fill: ArrayFill::Filled,
             },
-            None,
-        )
+            ty,
+            origin.clone(),
+        );
+        let (sequence, cursor, lent) = self.walk_start(&walk, sequence, &origin)?;
+        let synthetic: Vec<u32> = cursor.into_iter().collect();
+        let carried = self.carried_across(body, &synthetic, names);
+        let steps = !matches!(walk, Walk::Protocol { .. } | Walk::Generator { .. });
+        let record = self.begin_loop(id, &carried, steps, &origin)?;
+        let (stepped, at) = if let Some(cursor) = cursor {
+            (None, self.bindings[&cursor])
+        } else {
+            let (step, done) = self.protocol_step(id, &walk, &origin)?;
+            (Some(step), done)
+        };
+        let cond = self.walk_condition(&walk, at, sequence, &origin)?;
+        self.test_loop(cond, &record);
+        self.switch_to(record.body);
+        let value = self.walk_element(&walk, sequence, at, stepped, &origin)?;
+        self.bindings.insert(element_symbol, value);
+        let position = self.push(OpKind::Length(out), HirType::NUMBER, origin.clone());
+        if let Some(symbol) = names.get(1) {
+            self.bindings.insert(*symbol, position);
+        }
+        self.lower_callback_body(
+            id,
+            body,
+            CallbackResult::Append {
+                array: out,
+                index: position,
+            },
+            record.depth,
+            "map",
+        )?;
+        let step = cursor.map_or(Step::None, |cursor| Step::Walk {
+            cursor,
+            walk,
+            sequence,
+        });
+        self.end_loop(&record, step)?;
+        self.unlend_walked(lent, &origin);
+        Ok(out)
     }
 
     fn lower_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
-        self.build_array_from(id, argument, false)
+        self.build_array_from(id, argument)
     }
 
     /// The append helper for a collected array's element width.
@@ -37139,7 +37188,6 @@ impl<'a> FuncBuilder<'a> {
         sequence_value: ValueId,
         walk: Walk,
         ty: &HirType,
-        mapped: bool,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let HirType::Managed(ManagedType::Array(element_ty)) = ty else {
@@ -37214,13 +37262,13 @@ impl<'a> FuncBuilder<'a> {
             (Some(step), done)
         };
         let cond = self.walk_condition(&walk, at, sequence_value, &origin)?;
-        let cond = if !mapped && matches!(walk, Walk::Table { .. } | Walk::Entries { .. }) {
+        let cond = if matches!(walk, Walk::Table { .. } | Walk::Entries { .. }) {
             // This walk invokes no source callback: its live entry count is
             // the number of slots allocated in `out`. Keep both halves of
             // `filled < out.length && cursor >= 0`: the first exposes the
             // output counter's bound to flow/bounds; the second still refuses
-            // to read an exhausted table cursor. A mapper may add entries and
-            // does not have this fixed-count contract.
+            // to read an exhausted table cursor. Mappers use `map_a_walk`,
+            // whose result grows as its callback changes the source.
             self.collection_bound(cond, self.bindings[&filled], out, &record, &origin)
         } else {
             cond
@@ -37275,24 +37323,9 @@ impl<'a> FuncBuilder<'a> {
         Ok(out)
     }
 
-    /// The walk that builds the array, whose element type has two sources.
-    ///
-    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
-    /// declared to produce exactly what it walks. With one it cannot be, and
-    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
-    /// expression type `number[]` while the walk produces strings, so taking
-    /// the element from the expression coerced a string into a double and said
-    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
-    /// wanted`, from the one arm of four that changed the element's type.
-    ///
-    /// So where a callback follows, the element comes from the **walk**, which
-    /// is what is actually going into the array this builds.
-    fn build_array_from(
-        &mut self,
-        id: NodeId,
-        argument: NodeId,
-        mapped: bool,
-    ) -> Result<ValueId, Diagnostic> {
+    /// The callback-free collection. A mapper has to run during iteration,
+    /// which is `map_a_walk`; this path can retain its array-copy fast path.
+    fn build_array_from(&mut self, id: NodeId, argument: NodeId) -> Result<ValueId, Diagnostic> {
         // An array source keeps its `slice`, and the reason is measured rather
         // than assumed. 256 elements copied two thousand times, against a C++
         // reference at 41.65 us:
@@ -37331,8 +37364,10 @@ impl<'a> FuncBuilder<'a> {
         let (sequence, forced) = self.sequence_source(argument);
         let sequence_value = self.lower_expression(sequence)?;
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
-        let ty = self.array_from_type(id, &walk, mapped)?;
-        self.collect_a_walk(id, sequence, sequence_value, walk, &ty, mapped)
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"))?;
+        self.collect_a_walk(id, sequence, sequence_value, walk, &ty)
     }
 
     /// The one value a walk hands the body, whichever kind of walk it is.
@@ -40623,54 +40658,6 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         Ok((step, answered))
-    }
-
-    /// The array `Array.from` builds, whose element type has two sources.
-    ///
-    /// Without a callback it is the *expression's* type: `Array.from(xs)` is
-    /// declared to produce exactly what it walks. With one it cannot be, and
-    /// that is the whole of `mapped`: `Array.from("abc", (c) => c.length)` has
-    /// expression type `number[]` while the walk produces strings, so taking
-    /// the element from the expression coerced a string into a double and said
-    /// so -- `a value of type Managed(String) where Float { bits: 64 } is
-    /// wanted`, from the one arm of four that changes the element's type.
-    fn array_from_type(
-        &mut self,
-        id: NodeId,
-        walk: &Walk,
-        mapped: bool,
-    ) -> Result<HirType, Diagnostic> {
-        if !mapped {
-            return self
-                .type_of(id)
-                .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"));
-        }
-        let element = Self::walk_element_type(walk)
-            .ok_or_else(|| self.unsupported(id, "an `Array.from` whose walk has no element"))?;
-        Ok(HirType::Managed(ManagedType::Array(Box::new(element))))
-    }
-
-    /// What a walk produces per iteration, as a representation.
-    ///
-    /// Every walk already carries it; this is the one place that asks all six at
-    /// once. `Entries` has two and answers `None`, because a walk binding a pair
-    /// is not one this can hand a single element to.
-    fn walk_element_type(walk: &Walk) -> Option<HirType> {
-        Some(match walk {
-            // Two values per step, for the same reason `Entries` is: a walk
-            // binding a pair is not one this can hand a single element to.
-            Walk::Counted {
-                binds: Binds::PositionAndElement,
-                ..
-            }
-            | Walk::Entries { .. } => return None,
-            Walk::Native(native) => native.element.clone(),
-            Walk::Counted { element, .. }
-            | Walk::Table { element, .. }
-            | Walk::Protocol { element, .. }
-            | Walk::Generator { element, .. } => element.clone(),
-            Walk::Text => HirType::Managed(ManagedType::String),
-        })
     }
 
     /// Whether a type is a generator frame, and what it yields.
@@ -62557,7 +62544,7 @@ impl<'a> FuncBuilder<'a> {
                 ));
             };
             let walk = self.walk_of(element, value, None, 1)?;
-            return self.collect_a_walk(element, element, value, walk, &built, false);
+            return self.collect_a_walk(element, element, value, walk, &built);
         }
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
@@ -77731,10 +77718,30 @@ impl<'a> FuncBuilder<'a> {
 
         let result =
             Self::iteration_delivery(kind, produced, accumulator, index, value, element_ty);
-        self.callback_returns.push(CallbackReturn {
-            depth: record.depth,
-            result,
-        });
+        self.lower_callback_body(id, body, result, record.depth, method)?;
+        self.end_loop(
+            &record,
+            Step::Count {
+                name: index,
+                by: if backwards { -1.0 } else { 1.0 },
+            },
+        )?;
+
+        self.iteration_result(id, receiver, kind, produced, accumulator, origin)
+    }
+
+    /// One callback body, shared by array methods and a mapped source walk.
+    /// Both concise results and explicit returns deliver through the same
+    /// result policy before the caller advances its own iteration.
+    fn lower_callback_body(
+        &mut self,
+        id: NodeId,
+        body: NodeId,
+        result: CallbackResult,
+        depth: usize,
+        method: &str,
+    ) -> Result<(), Diagnostic> {
+        self.callback_returns.push(CallbackReturn { depth, result });
         let concise = self.kind_of(body) != Some(syntax::BLOCK);
         let lowered = if concise {
             self.lower_expression(body).map(Some)
@@ -77747,8 +77754,8 @@ impl<'a> FuncBuilder<'a> {
         // A concise body *is* its value, so it is delivered here rather than by
         // a `return` that cannot appear in one.
         if let Some(value) = produced_value {
-            self.deliver(id, &result, record.depth, Some(value))?;
-        } else if !self.is_terminated() && !matches!(kind, Iteration::ForEach) {
+            self.deliver(id, &result, depth, Some(value))?;
+        } else if !self.is_terminated() && !matches!(result, CallbackResult::Discard) {
             // A block body that can reach its end without returning has no
             // value for this iteration. TypeScript rejects it before this,
             // because the callback's inferred return type would include
@@ -77760,15 +77767,7 @@ impl<'a> FuncBuilder<'a> {
                 &format!("a `{method}` callback that can finish without returning a value"),
             ));
         }
-        self.end_loop(
-            &record,
-            Step::Count {
-                name: index,
-                by: if backwards { -1.0 } else { 1.0 },
-            },
-        )?;
-
-        self.iteration_result(id, receiver, kind, produced, accumulator, origin)
+        Ok(())
     }
 
     /// What the whole call evaluates to, once the loop has run.
@@ -77976,6 +77975,9 @@ impl<'a> FuncBuilder<'a> {
                 self.keep_element(id, *array, *element, push, cond);
                 Ok(())
             }
+            CallbackResult::Append { array, index } => {
+                self.append_callback_value(id, *array, *index, value)
+            }
             CallbackResult::Store { array, index } => {
                 let value = value.ok_or_else(|| {
                     self.unsupported(
@@ -77998,6 +78000,41 @@ impl<'a> FuncBuilder<'a> {
                 Ok(())
             }
         }
+    }
+
+    /// The output array is private, so its pre-callback length is still the
+    /// append position. Keep this store checked: the source may have grown,
+    /// and each backend already knows how this element width grows.
+    fn append_callback_value(
+        &mut self,
+        id: NodeId,
+        array: ValueId,
+        index: ValueId,
+        value: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
+        let value = value.ok_or_else(|| {
+            self.unsupported(
+                id,
+                "a bare `return` in a callback that must produce a value",
+            )
+        })?;
+        let HirType::Managed(ManagedType::Array(element)) =
+            self.values[array.0 as usize].ty.clone()
+        else {
+            return Err(self.unsupported(id, "a mapping callback whose result is not an array"));
+        };
+        let value = self.coerce(value, &element, id)?;
+        self.push(
+            OpKind::ArraySet {
+                array,
+                index,
+                value,
+                checked: true,
+            },
+            HirType::Void,
+            self.origin(id),
+        );
+        Ok(())
     }
 
     /// What the body's value does, which is the whole difference between the

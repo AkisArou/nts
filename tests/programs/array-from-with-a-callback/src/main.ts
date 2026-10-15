@@ -6,38 +6,16 @@
 // `undefined`s out of an object with no elements. That half still refuses, and
 // refuses as itself: `a for...of over an object type`, which is what it is.
 //
-// # Built and then mapped, rather than fused
+// The mapper runs between source steps, so additions, deletions and changed
+// elements are observed by the next step. Collecting first and mapping later
+// would lose those effects. The walk shares callback-body delivery with array
+// methods and appends each result to a private, growing output array.
 //
-// `Array.from(xs, f)` is specified as `f` applied to each element with its
-// index. `Array.from(xs).map(f)` calls `f` with the same two arguments in the
-// same order over the same elements — `map`'s third argument is the array,
-// which this compiler passes to neither — and `Array.from` produces no holes,
-// so the one thing `map` does differently cannot arise.
-//
-// So this is two proven paths composed rather than a third written: the walk
-// `Array.from` already does over every shape `for...of` knows, and the callback
-// inlining `map` already does, which allocates nothing per element and calls
-// nothing indirectly.
-//
-// **The cost is one intermediate array and it is stated rather than hidden.**
-// Fusing the callback into the walk removes it; it needs the delivery machinery
-// to write into a destination being *grown* rather than indexed, which is a
-// third shape of `iteration_delivery`. Nothing regresses by composing first —
-// the construct was refused outright — and the fused version now has a
-// measurement to beat rather than an argument to win.
-//
-// # The element type has two sources, and that is the whole of the bug found here
-//
-// Without a callback the built array's element is the *expression's* type:
-// `Array.from(xs)` produces exactly what it walks. With one it cannot be.
+// The source and result have independent element types.
 // `Array.from("abc", (c) => c.length)` has expression type `number[]` while the
-// walk produces strings, so taking the element from the expression coerced a
-// string into a double and said so — `a value of type Managed(String) where
-// Float { bits: 64 } is wanted`.
-//
-// One of the four arms below changes the element's type, and it is the only one
-// that could have caught it. The other three would have agreed with node
-// forever.
+// walk produces strings. Bind the callback from the walk's element and coerce
+// its return to the result's element, rather than collecting an intermediate
+// array at the result's width.
 
 /** Control: no callback, which already worked. */
 export function noCallback(n: number): number {
@@ -61,8 +39,8 @@ export function withIndex(n: number): number {
  * Under test: a source whose element type is **not** the result's.
  *
  * A string walks by code point, so the walk produces strings and the callback
- * produces numbers. This is the arm that fails when the intermediate array
- * takes its element from the expression's type.
+ * produces numbers. This arm fails if the source element takes its width
+ * from the expression's result type.
  */
 export function changesTheElementType(n: number): number {
   const xs = Array.from("abcd", (c) => c.length + (n & 1));

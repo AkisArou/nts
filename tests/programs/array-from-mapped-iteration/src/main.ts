@@ -222,3 +222,16 @@ export function blockReturns(n: number): string {
 export function conciseChangesType(n: number): string {
   return Array.from([n, n + 1], (value, index) => "v" + value + ":" + index).join("|");
 }
+
+// Rebinding a callback parameter must not change the private append position
+// or the source element: both were read before that invocation's body ran.
+export function reassignedParameters(n: number): string {
+  const first = n & 15;
+  const source = [first, first + 1];
+  const result = Array.from(source, (value, index) => {
+    value = value + 5;
+    index = index + 7;
+    return value * 10 + index;
+  });
+  return result.join(",") + ":" + source[0];
+}

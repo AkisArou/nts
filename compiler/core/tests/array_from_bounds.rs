@@ -26,8 +26,8 @@ fn prepared() -> Option<hir::Prepared> {
     Some(prepared)
 }
 
-/// Only stores into an array allocated at a table's live count. In the mapped
-/// control this is the intermediate collection, not the mapper's output.
+/// Only stores into an array allocated at a table's live count. A mapped
+/// collection must grow instead, because its callback can change that count.
 fn collection_stores(program: &hir::Program, name: &str) -> String {
     let function = program
         .funcs
@@ -78,11 +78,38 @@ fn callback_free_table_collections_use_an_integer_unchecked_write() {
 }
 
 #[test]
-fn supplying_a_mapper_keeps_the_collection_write_checked() {
+fn supplying_a_mapper_keeps_a_growing_write_checked() {
     let Some(prepared) = prepared() else { return };
     assert_eq!(
         collection_stores(&prepared.program, "fromMappedSet"),
-        "index: Float { bits: 64 }, checked: true",
-        "a mapped collection must not acquire the callback-free bound"
+        "",
+        "a mapped collection must not allocate at the source's initial live count"
+    );
+    let function = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|function| function.name == "fromMappedSet")
+        .expect("the mapped control compiles");
+    let appends: Vec<bool> = function
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter_map(|value| match function.value(*value).kind {
+            OpKind::ArraySet {
+                array,
+                index,
+                checked,
+                ..
+            } if matches!(function.value(index).kind, OpKind::Length(source) if source == array) => {
+                Some(checked)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        appends,
+        [true],
+        "the mapped result appends with a checked write"
     );
 }
