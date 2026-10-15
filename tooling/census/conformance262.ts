@@ -691,7 +691,14 @@ const rows = await runAll(toAttempt);
 // language directory is where the syntax lives; a built-ins run that rewrote it
 // would move the judging of 4,122 language negatives as a side effect of
 // measuring `Array.prototype`. Other directories read the committed set.
-const derivesEvidence = !partial && under === "test/language";
+//
+// **And from a whole run on C only.** The positives are what the checker draws
+// from valid JavaScript, and off C a run skips the parse and resolution
+// negatives and runs only what another record names (`--paths-from`), so its
+// "whole" is not the whole: the JVM lane's first record run rewrote the set as
+// `"validJsCodes": {}` with its own machine facts, which would have moved how
+// C's negatives are judged at the gate as a side effect of recording the JVM.
+const derivesEvidence = !partial && under === "test/language" && BACKEND === "c" && pathsFromFile === null;
 let evidenceNote;
 if (derivesEvidence) {
   validJsCodes = deriveValidJsCodes(rows);
