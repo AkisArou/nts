@@ -1411,7 +1411,18 @@ impl<'a> Builder<'a> {
             if !layout.fields.is_empty() {
                 return Err(format!("signature `{}` declares fields", layout.name));
             }
-            let id = self.callable_root()?;
+            // A typed signature's values are stored at its own group, whose typed
+            // entry every closure reaching it fills (`Program::typed_signatures`),
+            // so a call through one is a `call_ref` at its written types. Every
+            // other signature's values are the callable root's: uniform entries
+            // alone, since what reaches them need not agree.
+            let id = if self.program.typed_signatures.contains(&layout.name)
+                && self.callable_plan.groups.contains_key(&at)
+            {
+                self.callable(at)?
+            } else {
+                self.callable_root()?
+            };
             self.objects.insert(at, id);
             return Ok(id);
         }

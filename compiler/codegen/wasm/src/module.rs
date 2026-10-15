@@ -88,7 +88,9 @@ pub(crate) enum FuncKey {
     RowEntry(u32, u32),
     ArrayLookup(u32, crate::array_lookup::Helper),
     Thunk(crate::callables::Face, u32, u32),
-    UnfilledUniform(u32),
+    /// A closure entry its class does not fill, by the entry's function type:
+    /// a uniform slot every function value carries, or a typed signature's.
+    Unfilled(u32),
     /// A slot whose method has no body, by its signature and the method.
     AbstractEntry(u32, String),
     /// A function's named refusal, by the function and the cause.

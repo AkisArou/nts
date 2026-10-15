@@ -197,14 +197,7 @@ fn thunk_func(m: &mut Builder<'_>, face: Face, class: ClassId, slot: u32) -> Res
         .program
         .layout(class)
         .ok_or_else(|| Failure::Invariant(format!("unplanned allocation {class:?}")))?;
-    if face == Face::Closure
-        && crate::callable_plan::is_uniform(m.program, slot)
-        && layout
-            .methods
-            .get(slot as usize)
-            .and_then(Option::as_ref)
-            .is_none()
-    {
+    if face == Face::Closure && unfills(m.program, layout, storage, slot) {
         return unfilled(m, resolved);
     }
     if let Some(target) = abstract_target(m.program, layout, slot) {
@@ -242,10 +235,29 @@ fn thunk_body(thunk: &Thunk, m: &mut Builder<'_>) -> Result<Function, Failure> {
 /// closure no call could reach by its signature. Like the JVM backend's stub,
 /// it refuses by name if a call ever does, rather than declining the
 /// allocation.
+/// Whether `layout` leaves closure entry `slot` unfilled: a uniform entry it
+/// has no function for, or a typed signature's entry whose `#call` lowering
+/// refused, so the slot names a function the program does not have
+/// (`Program::typed_signatures`). Either refuses by name if it is ever called,
+/// as C's `a_closure_with_nothing_to_call` does, rather than the allocation
+/// declining.
+fn unfills(program: &Program, layout: &nts_core::hir::Layout, storage: &Object, slot: u32) -> bool {
+    let target = layout.methods.get(slot as usize).and_then(Option::as_ref);
+    if crate::callable_plan::is_uniform(program, slot) {
+        return target.is_none();
+    }
+    let typed = storage.callable.is_some_and(|root| {
+        program
+            .typed_signatures
+            .contains(&program.layouts[root].name)
+    });
+    typed && target.is_none_or(|name| !program.funcs.iter().any(|f| &f.name == name))
+}
+
 fn unfilled(m: &mut Builder<'_>, entry: &ResolvedEntry) -> Result<Func, Failure> {
     m.helper_typed(
-        FuncKey::UnfilledUniform(entry.slot),
-        format!("closure.unfilled<{}>", entry.slot),
+        FuncKey::Unfilled(entry.signature),
+        format!("closure.unfilled<{},{}>", entry.slot, entry.signature),
         entry.signature,
         |m| {
             let decline = crate::contract::decline(m)?;
