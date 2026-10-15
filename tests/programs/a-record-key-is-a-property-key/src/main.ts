@@ -146,19 +146,26 @@ export function storeOrder(n: number): string {
   const record = values();
   trace = "";
   record[keyEffect()] = rhsEffect(n);
-  return trace + String(record.true);
+  const result = trace + String(record.true);
+  trace = "";
+  return result;
 }
 export function compoundOrder(n: number): string {
   const record = values();
   trace = "";
   record[keyEffect()] += rhsEffect(n);
-  return trace + String(record.true);
+  const result = trace + String(record.true);
+  trace = "";
+  return result;
 }
 export function deleteNullable(n: number): string {
   const record: Record<string, unknown> | null = (n & 1) === 0 ? unknownValues() : null;
   trace = "";
-  try { return String(delete record![keyEffect()]) + ";" + trace; }
-  catch (error) { return (error as Error).name + ": " + (error as Error).message + ";" + trace; }
+  let result: string;
+  try { result = String(delete record![keyEffect()]) + ";" + trace; }
+  catch (error) { result = (error as Error).name + ": " + (error as Error).message + ";" + trace; }
+  trace = "";
+  return result;
 }
 export function mapKeepsItsKeys(n: number): number {
   const map = new Map<any, number>();
