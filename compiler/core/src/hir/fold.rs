@@ -39,7 +39,7 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         }
         // A read that may stop the program is not its value: an all-zero array
         // read at an unproven index is `0` only when it returns.
-        if super::may_stop(&func.values[index].kind) {
+        if super::may_stop(&func.values[index]) {
             continue;
         }
 

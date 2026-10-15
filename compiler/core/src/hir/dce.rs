@@ -117,7 +117,7 @@ fn has_effects(op: &Op) -> bool {
         // A checked read may stop the program out of range, which is the whole
         // of what stands for that path once a consumer has been folded away
         // (`super::may_stop`). A bounds proof makes it unchecked and removable.
-        OpKind::ArrayGet { .. } => super::may_stop(&op.kind),
+        OpKind::ArrayGet { .. } => super::may_stop(op),
         // A copy writes memory, which is the whole of what it does: nothing
         // reads its result, so without this it would be dropped as unused.
         OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. } | OpKind::NativeCopy { .. } => true,

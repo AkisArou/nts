@@ -4827,9 +4827,16 @@ fn reconcile(program: &mut Program) -> usize {
 /// Marking the read's *value* as maybe-`NaN` instead kept the fold sound and
 /// cost every integer read its integer arithmetic: `total + xs[k]` added in
 /// doubles, 6.3x slower in Wasm's typed-array bench (2026-10-14).
+///
+/// **Not a read of a `void` element.** The stop exists because `undefined`,
+/// the answer out of range, is not an element where the element type cannot
+/// hold it -- and a `void` element *is* `undefined`, in range or out. So such a
+/// read never needs to stop, and kept anyway it left `FormData`'s
+/// `args[0] !== undefined` (`args: [] | [form: undefined]`) as a load of type
+/// `void`, which LLVM does not assemble (17 runtime modules, 2026-10-15).
 #[must_use]
-pub fn may_stop(kind: &OpKind) -> bool {
-    matches!(kind, OpKind::ArrayGet { checked: true, .. })
+pub fn may_stop(op: &Op) -> bool {
+    matches!(op.kind, OpKind::ArrayGet { checked: true, .. }) && op.ty != HirType::Void
 }
 
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {

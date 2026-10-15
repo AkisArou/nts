@@ -56,3 +56,11 @@ export function assignedRead(index: number): number {
   if (index > 0) v = values[index | 0]!;
   return v;
 }
+
+// A read of a `void` element answers `undefined` in range or out, so it never
+// needs to stop, and a read nothing uses is removed. FormData's constructor is
+// this shape; kept, it was a load of type `void` LLVM does not assemble.
+export function voidElement(...args: [] | [form: undefined]): number {
+  if (args.length !== 0 && args[0] !== undefined) return -1;
+  return args.length;
+}

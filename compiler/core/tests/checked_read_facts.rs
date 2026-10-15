@@ -40,6 +40,7 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
         "holeInAssignment",
         "restInAssignment",
         "assignedRead",
+        "voidElement",
     ] {
         let (index, body) = prepared
             .program
@@ -67,6 +68,13 @@ fn checked_reads_survive_and_unused_reads_remain_removable() {
                 reads.len(),
                 1,
                 "{name}: only the element that takes a value is read: {body:#?}"
+            );
+            continue;
+        }
+        if name == "voidElement" {
+            assert!(
+                reads.is_empty(),
+                "a read of a `void` element nothing uses is removable: {body:#?}"
             );
             continue;
         }
