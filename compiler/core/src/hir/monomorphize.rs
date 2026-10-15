@@ -128,7 +128,7 @@ pub fn monomorphize(program: &mut Program) -> usize {
                 .map(|func| {
                     (
                         target,
-                        func.params.len(),
+                        func.params.iter().map(|param| param.ty.clone()).collect(),
                         func.return_type.clone(),
                         takes_this,
                     )
@@ -276,7 +276,7 @@ fn retype_parameter(
     slot: u32,
     concrete: TypeId,
     erased_slot: Option<u32>,
-    written: (String, usize, HirType, bool),
+    written: (String, Vec<HirType>, HirType, bool),
     result_absent: super::Absent,
 ) {
     let Some(param) = clone
@@ -302,7 +302,7 @@ fn retype_parameter(
     // surgery, shared with `fields::devirtualize` because both arrive at the same
     // question from different evidence. The receiver needs no re-typing here: the
     // parameter *is* the class, which is what this pass just decided.
-    let (name, arity, returns, takes_this) = written;
+    let (name, params, returns, takes_this) = written;
     let sites: Vec<(usize, bool)> = clone
         .values
         .iter()
@@ -330,7 +330,8 @@ fn retype_parameter(
     for (index, uniform) in sites {
         let written = super::Written {
             name: name.clone(),
-            arity,
+            arity: params.len(),
+            params: &params,
             returns: &returns,
             result_absent,
             takes_this,

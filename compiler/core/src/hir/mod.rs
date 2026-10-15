@@ -4431,9 +4431,77 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 pub(super) struct Written<'a> {
     pub name: String,
     pub arity: usize,
+    /// The written entry's parameter types, the closure first: what each
+    /// argument a uniform site passed erased has to be read back as.
+    pub params: &'a [HirType],
     pub returns: &'a HirType,
     pub result_absent: Absent,
     pub takes_this: bool,
+}
+
+/// A uniform site's arguments as the written entry takes them, with the
+/// read-backs that needs: `(arguments, [(position, read-back)])`.
+///
+/// The receiver keeps its place; a caller's `receiver` op replaces it. The
+/// `this` is kept, erased as the body takes it, where the entry takes one, and
+/// dropped with the padding where it does not.
+///
+/// **Each other argument is passed as the written entry takes it**, which is
+/// what the uniform entry's own body did with it. A value the site erased is
+/// passed unerased where the verifier lets it stand for the parameter
+/// ([`verify::compatible`]: two object pointers are, however their classes
+/// relate, so a class goes to a face it satisfies as it would at a direct
+/// call); an erased parameter takes the argument as it is; anything else is
+/// read back at the parameter's type, checked as the body's read-back was.
+/// Undoing every `Erase` and passing the rest through assumed the site's
+/// signature named the closure's own types; `(t as Render<unknown>)(props)`
+/// names `unknown`, and the direct `Closure0#call` was then handed an erased
+/// `props` where it takes `{ n: number }`
+/// (tests/outcomes/a-component-called-on-its-props-through-unknown). Requiring
+/// the *same* type instead read a `Reordered` back as the `Shape` it was
+/// already acceptable as, an unerase to a face nothing builds
+/// (tests/outcomes/a-class-passed-to-a-callback-at-a-structural-type-in-
+/// another-field-order, which `integrity` measures).
+fn written_arguments(
+    func: &Func,
+    index: usize,
+    args: &[ValueId],
+    params: &[HirType],
+    arity: usize,
+    takes_this: bool,
+) -> (Vec<ValueId>, Vec<(usize, Op)>) {
+    let leading = if takes_this { UNIFORM_ARGUMENTS } else { 1 };
+    let written = args.get(UNIFORM_ARGUMENTS..).unwrap_or_default();
+    let mut direct: Vec<ValueId> = args.iter().take(leading).copied().collect();
+    let mut read_backs = Vec::new();
+    for (k, arg) in written
+        .iter()
+        .take(arity.saturating_sub(leading))
+        .enumerate()
+    {
+        let unerased = match func.values[arg.0 as usize].kind {
+            OpKind::Erase { value, .. } => value,
+            _ => *arg,
+        };
+        match params.get(leading + k) {
+            Some(want) if verify::compatible(&func.values[unerased.0 as usize].ty, want) => {
+                direct.push(unerased);
+            }
+            None | Some(HirType::Erased) => direct.push(*arg),
+            Some(want) => {
+                read_backs.push((
+                    direct.len(),
+                    Op {
+                        kind: OpKind::Unerase { value: *arg },
+                        ty: want.clone(),
+                        origin: func.values[index].origin.clone(),
+                    },
+                ));
+                direct.push(*arg);
+            }
+        }
+    }
+    (direct, read_backs)
 }
 
 pub(super) fn call_directly(
@@ -4446,6 +4514,7 @@ pub(super) fn call_directly(
     let Written {
         name,
         arity,
+        params,
         returns,
         result_absent,
         takes_this,
@@ -4454,29 +4523,12 @@ pub(super) fn call_directly(
     let OpKind::Call { args, .. } = &func.values[index].kind else {
         return false;
     };
-    let mut args: Vec<ValueId> = if uniform {
-        // The receiver keeps its place; a caller's `receiver` op replaces it
-        // below. The `this` is kept, erased as the body takes it, where the
-        // entry takes one, and dropped with the padding where it does not. An
-        // argument the site left erased -- because the parameter was erased
-        // already -- has no `Erase` to undo.
-        let leading = if takes_this { UNIFORM_ARGUMENTS } else { 1 };
-        let written = args.get(UNIFORM_ARGUMENTS..).unwrap_or_default();
-        args.iter()
-            .take(leading)
-            .copied()
-            .chain(
-                written
-                    .iter()
-                    .take(arity.saturating_sub(leading))
-                    .map(|arg| match func.values[arg.0 as usize].kind {
-                        OpKind::Erase { value, .. } => value,
-                        _ => *arg,
-                    }),
-            )
-            .collect()
+    // Read-backs the direct call needs, by argument position: see
+    // [`written_arguments`].
+    let (mut args, read_backs) = if uniform {
+        written_arguments(func, index, args, params, arity, takes_this)
     } else {
-        args.clone()
+        (args.clone(), Vec::new())
     };
 
     // **A live read-back, not merely one in the arena.** A `ValueId` is an index,
@@ -4535,6 +4587,16 @@ pub(super) fn call_directly(
         at += 1;
         if let Some(first) = args.first_mut() {
             *first = pushed;
+        }
+    }
+    // The arguments' read-backs, in front of the call like the receiver's.
+    for (slot, op) in read_backs {
+        let pushed = id(func.values.len());
+        func.values.push(op);
+        func.blocks[block].ops.insert(at, pushed);
+        at += 1;
+        if let Some(arg) = args.get_mut(slot) {
+            *arg = pushed;
         }
     }
     let call = OpKind::Call {

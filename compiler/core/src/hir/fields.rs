@@ -952,7 +952,7 @@ type Rewrite = (
     super::ValueId,
     super::TypeId,
     bool,
-    (usize, HirType, bool),
+    (Vec<HirType>, HirType, bool),
 );
 
 /// Every erased or slot dispatch this pass can turn into a direct call.
@@ -1040,7 +1040,11 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
                 continue;
             };
             let shape = (
-                written.params.len(),
+                written
+                    .params
+                    .iter()
+                    .map(|param| param.ty.clone())
+                    .collect(),
                 written.return_type.clone(),
                 receiving.is_some(),
             );
@@ -1074,7 +1078,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     // Four errors, in a C file no unit test reads. The example caught it and the
     // three tests over the HIR did not, because the shape they check was right.
     let mut count = 0;
-    for (func, index, name, erased, class, uniform, (arity, returns, takes_this)) in rewrites {
+    for (func, index, name, erased, class, uniform, (params, returns, takes_this)) in rewrites {
         let origin = program.funcs[func].values[index].origin.clone();
         let result_absent = super::erased_entry_absent(program, class);
         // The receiver read back at the class, which is the cast this pass is
@@ -1089,7 +1093,8 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
             index,
             super::Written {
                 name,
-                arity,
+                arity: params.len(),
+                params: &params,
                 returns: &returns,
                 result_absent,
                 takes_this,
