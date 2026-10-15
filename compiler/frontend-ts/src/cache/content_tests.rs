@@ -32,6 +32,7 @@ impl Project {
             captures: 0,
             files: vec![self.root.join("project/main.ts")],
             identity: Some("counting-source-v1".into()),
+            mutate: None,
         }
     }
 
@@ -50,12 +51,13 @@ struct CountingSource {
     captures: usize,
     files: Vec<Utf8PathBuf>,
     identity: Option<String>,
+    mutate: Option<String>,
 }
 
 impl SemanticSource for CountingSource {
     fn snapshot(&mut self, _: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
         self.captures += 1;
-        Ok(SemanticSnapshot {
+        let snapshot = SemanticSnapshot {
             schema_version: SCHEMA_VERSION,
             sources: self
                 .files
@@ -69,7 +71,11 @@ impl SemanticSource for CountingSource {
                 })
                 .collect(),
             ..SemanticSnapshot::default()
-        })
+        };
+        if let Some(text) = self.mutate.take() {
+            std::fs::write(&self.files[0], text).expect("concurrent edit");
+        }
+        Ok(snapshot)
     }
 
     fn stats(&self) -> FrontendStats {
@@ -162,7 +168,17 @@ fn executable_bytes_belong_to_the_producer_identity() {
     let first = crate::TsgoApi::new(tool.clone()).cache_identity();
     assert!(first.is_some());
     assert_eq!(first, crate::TsgoApi::new(copy).cache_identity());
+    let modified = std::fs::metadata(&tool)
+        .expect("metadata")
+        .modified()
+        .expect("mtime");
     std::fs::write(&tool, "tool B").expect("replace same path, same length");
+    std::fs::File::options()
+        .write(true)
+        .open(&tool)
+        .expect("open")
+        .set_modified(modified)
+        .expect("restore mtime");
     assert_ne!(first, crate::TsgoApi::new(tool).cache_identity());
     assert_eq!(
         crate::TsgoApi::new(project.root.join("missing")).cache_identity(),
@@ -337,4 +353,104 @@ fn concurrent_publications_leave_complete_entries_and_no_partials() {
             entry.snapshot.validate().expect("valid snapshot");
         }
     }
+}
+
+#[test]
+fn an_input_edited_during_capture_is_not_published_under_the_old_question() {
+    let project = Project::new("concurrent-edit");
+    let mut source = project.source();
+    source.mutate = Some("export const a = 2;".into());
+    let captured = project.ask(&mut source);
+    assert!(
+        !project.cache.exists(),
+        "an unstable local question is not stored"
+    );
+    let current = project.ask(&mut source);
+    assert_ne!(
+        captured.digest().expect("digest"),
+        current.digest().expect("digest")
+    );
+    project.ask(&mut source);
+    assert_eq!(
+        source.captures, 2,
+        "the stable second capture becomes reusable"
+    );
+}
+
+#[test]
+fn failed_publication_keeps_the_fresh_answer_and_costs_only_reuse() {
+    let project = Project::new("unwritable-cache");
+    std::fs::write(&project.cache, "not a directory").expect("blocked cache");
+    let mut source = project.source();
+    let first = project.ask(&mut source);
+    assert_eq!(
+        first.digest().expect("digest"),
+        project.ask(&mut source).digest().expect("digest")
+    );
+    assert_eq!(source.captures, 2);
+}
+
+fn age(path: &Utf8Path, now: std::time::SystemTime) {
+    std::fs::File::options()
+        .write(true)
+        .open(path)
+        .expect("open")
+        .set_modified(now - std::time::Duration::from_secs(8 * 86400))
+        .expect("age");
+}
+
+#[test]
+fn unused_entries_hints_and_partials_are_collected_by_age() {
+    let project = Project::new("age-collection");
+    std::fs::create_dir_all(project.cache.join("manifests")).expect("hints");
+    let now = std::time::SystemTime::now();
+    let old = [
+        project.cache.join("old.postcard"),
+        project.cache.join("abandoned.partial"),
+        project.cache.join("manifests/old.manifest"),
+    ];
+    for path in &old {
+        std::fs::write(path, "old").expect("file");
+        age(path, now);
+    }
+    let fresh = project.cache.join("fresh.postcard");
+    std::fs::write(&fresh, "recent").expect("file");
+    collect_old(&project.cache, now);
+    assert!(old.iter().all(|p| !p.exists()));
+    assert!(fresh.exists());
+}
+
+#[test]
+fn collection_claim_is_shared_between_short_lived_processes() {
+    const CHILD: &str = "NTS_CACHE_COLLECTION_TEST_ROOT";
+    if let Some(dir) = std::env::var_os(CHILD) {
+        bound_the_cache(&Utf8PathBuf::from_path_buf(dir.into()).expect("utf8"));
+        return;
+    }
+    let project = Project::new("collection-claim");
+    std::fs::create_dir_all(&project.cache).expect("cache");
+    let run = || {
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "cache::content_tests::collection_claim_is_shared_between_short_lived_processes",
+            ])
+            .env(CHILD, &project.cache)
+            .output()
+            .expect("child");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    run();
+    let old = project.cache.join("miss-after-collection.postcard");
+    std::fs::write(&old, "old").expect("file");
+    age(&old, std::time::SystemTime::now());
+    run();
+    assert!(
+        old.exists(),
+        "the second process must not sweep again in this hour"
+    );
 }
