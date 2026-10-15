@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS4001 storing a `Ctor_C` where a `Fn__3` is declared, and the first does not extend the second here -- the IR relates them and `Layout.base` does not, so the JVM would refuse the class (in `module#init`)",
+  "node": null,
+  "measured_with": "433e9f3f226ac880",
+  "source": "measured"
+}

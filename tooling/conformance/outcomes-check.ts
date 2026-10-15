@@ -342,12 +342,21 @@ function runCheck(dir, backend, options) {
   const declined = /\bcase\(s\) the compiled program declined\b/;
   const lines = said.filter(
     (l) =>
-      /^(checked|agreed|disagree|declined|refused:|nothing to check|invalid HIR)/i.test(l) ||
+      /^(checked|agreed|disagree|declined|refused:|not emitted:|nothing to check|invalid HIR)/i.test(l) ||
       /\bdisagree/i.test(l) ||
       declined.test(l),
   ).map(stableCheckText);
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
+  // **A backend's refusal by name is a refusal**, as a lowering's is: `nts
+  // check` lists each function it did not emit and checks nothing. Before the
+  // disagreement test, which a decline's own message can trip -- the JVM
+  // emitter's "the emitter and its own accounting disagree" was recorded as a
+  // wrong answer -- and which nothing compared can earn.
+  const notEmitted = lines.find((l) => l.startsWith("not emitted:"));
+  if (notEmitted && said.some((l) => /\bthe backend declined\b/.test(l))) {
+    return { category: "refused", nts: notEmitted };
+  }
   if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
   // A stop by name, as a `build` fixture's `aborted`: the first reason, without
   // the counts, which move with the case pool. Below a disagreement, which is
