@@ -10,6 +10,11 @@ use crate::source::SemanticSource;
 const FORMAT: u32 = 1;
 type Manifest = Vec<(String, u128)>;
 
+mod budget;
+use budget::touch;
+#[cfg(test)]
+use budget::{collect_at as bound_the_cache_at, collect_old, sweep};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Question {
     format: u32,
@@ -114,16 +119,14 @@ fn snapshot_in<S: SemanticSource>(
             snapshot: snapshot.clone(),
         };
         if let Ok(bytes) = postcard::to_allocvec(&entry)
-            && atomic_write(&entry_path(dir, key), &bytes).is_ok()
             && let Ok(hint) = postcard::to_allocvec(&Hint {
                 format: FORMAT,
                 paths,
             })
         {
-            let _ = atomic_write(&hint_path, &hint);
+            let _ = budget::publish(dir, (&entry_path(dir, key), &bytes), (&hint_path, &hint));
         }
     }
-    bound_the_cache(dir);
     Ok(snapshot)
 }
 
@@ -188,101 +191,6 @@ pub(crate) fn atomic_write(path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()>
     })();
     let _ = std::fs::remove_file(partial);
     result
-}
-
-fn touch(path: &Utf8Path) {
-    let now = std::time::SystemTime::now();
-    if std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .is_ok_and(|at| {
-            now.duration_since(at)
-                .is_ok_and(|age| age > std::time::Duration::from_hours(1))
-        })
-        && let Ok(file) = std::fs::File::options().write(true).open(path)
-    {
-        let _ = file.set_modified(now);
-    }
-}
-
-/// One cross-process collection per hour; short-lived case workers do not each
-/// scan the directory. A crashed claimant costs one missed collection only.
-fn bound_the_cache(dir: &Utf8Path) {
-    bound_the_cache_at(dir, std::time::SystemTime::now());
-}
-
-fn bound_the_cache_at(dir: &Utf8Path, now: std::time::SystemTime) {
-    let Some(hour) = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()
-        .map(|d| d.as_secs() / 3600)
-    else {
-        return;
-    };
-    let claim = dir.join(format!(".collection-{hour}"));
-    if std::fs::File::options()
-        .write(true)
-        .create_new(true)
-        .open(claim)
-        .is_err()
-    {
-        return;
-    }
-    let cap = std::env::var("NTS_SNAPSHOT_CACHE_MAX")
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(2 * 1024 * 1024 * 1024);
-    sweep(dir, cap);
-    collect_old(dir, now);
-}
-
-fn collect_old(dir: &Utf8Path, now: std::time::SystemTime) {
-    let old = |path: &std::path::Path| {
-        std::fs::metadata(path)
-            .and_then(|m| m.modified())
-            .is_ok_and(|at| {
-                now.duration_since(at)
-                    .is_ok_and(|age| age > std::time::Duration::from_hours(7 * 24))
-            })
-    };
-    for directory in [dir.to_owned(), dir.join("manifests")] {
-        let Ok(entries) = std::fs::read_dir(directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            if entry.file_type().is_ok_and(|ty| ty.is_file()) && old(&entry.path()) {
-                let _ = std::fs::remove_file(entry.path());
-            }
-        }
-    }
-}
-
-fn sweep(dir: &Utf8Path, cap: u64) {
-    let Ok(listing) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut found: Vec<(std::time::SystemTime, u64, std::path::PathBuf)> = Vec::new();
-    let mut total: u64 = 0;
-    for entry in listing.flatten() {
-        let Ok(meta) = entry.metadata() else { continue };
-        if !meta.is_file() {
-            continue;
-        }
-        let when = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-        total = total.saturating_add(meta.len());
-        found.push((when, meta.len(), entry.path()));
-    }
-    if total <= cap {
-        return;
-    }
-    found.sort_by_key(|(when, _, _)| *when);
-    for (_, size, path) in found {
-        if total <= cap {
-            break;
-        }
-        if std::fs::remove_file(&path).is_ok() {
-            total = total.saturating_sub(size);
-        }
-    }
 }
 
 /// Where entries live, or `None` when the cache is switched off.
@@ -599,8 +507,13 @@ mod bounding {
                 .write(true)
                 .open(&path)
                 .expect("open");
-            file.set_modified(now - Duration::from_secs(3600 * (4 - index)))
-                .expect("stamp");
+            let last_use = now - Duration::from_secs(3600 * (4 - index));
+            file.set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(last_use)
+                    .set_accessed(last_use),
+            )
+            .expect("stamp");
             made.push(path);
         }
         made

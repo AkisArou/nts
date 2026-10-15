@@ -428,7 +428,11 @@ fn age(path: &Utf8Path, now: std::time::SystemTime) {
         .write(true)
         .open(path)
         .expect("open")
-        .set_modified(now - std::time::Duration::from_hours(8 * 24))
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_modified(now - std::time::Duration::from_hours(8 * 24))
+                .set_accessed(now - std::time::Duration::from_hours(8 * 24)),
+        )
         .expect("age");
 }
 
@@ -530,7 +534,11 @@ fn payload_files(dir: &Utf8Path) -> Vec<std::path::PathBuf> {
 fn payload_bytes(dir: &Utf8Path) -> u64 {
     payload_files(dir)
         .iter()
-        .map(|p| std::fs::metadata(p).expect("size").len())
+        .filter_map(|p| match std::fs::metadata(p) {
+            Ok(meta) => Some(meta.len()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => panic!("payload metadata: {error}"),
+        })
         .sum()
 }
 
@@ -661,7 +669,11 @@ fn parallel_publishers_keep_the_bound_and_a_just_hit_entry() {
             .write(true)
             .open(path)
             .expect("file")
-            .set_modified(now - std::time::Duration::from_hours(2))
+            .set_times(
+                std::fs::FileTimes::new()
+                    .set_modified(now - std::time::Duration::from_hours(2))
+                    .set_accessed(now - std::time::Duration::from_hours(2)),
+            )
             .expect("old use");
     }
     snapshot_in(&mut source, &project.config, "baseline-000", &project.cache).expect("hot hit");
