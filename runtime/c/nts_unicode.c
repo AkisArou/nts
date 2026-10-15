@@ -117,27 +117,45 @@ static void nts_build_tables(void) {
   nts_tables_built = 1;
 }
 
-/* The three one-byte characters whose uppercase form is not one byte.
+/* Whether a one-byte string is ASCII: one OR-reduce, which vectorises.
  *
- * Every one of them is above ASCII, so a string with no high byte has none of
- * them -- and that is what ordinary text is. Ruling the whole question out with
- * one OR-reduce, which vectorises, beats three `memchr` calls looking for
- * characters that are not there: on `benches/cases/case-convert` those three
- * passes over a forty-five byte string were 7.3% of the program.
- *
- * The `memchr`s stay for the case that reaches them, where the C library's
- * vectorised search is still the right way to ask. */
-static int nts_upper_escapes(const unsigned char *bytes, uint32_t length) {
+ * It decides how the string converts (`nts_ascii_case`), and it also answers
+ * `nts_upper_escapes` for ordinary text: the three characters that question
+ * looks for are all above ASCII, and three `memchr` calls looking for
+ * characters that are not there were 7.3% of `benchmarks/cases/case-convert`
+ * over a forty-five byte string. */
+static int nts_bytes_ascii(const unsigned char *bytes, uint32_t length) {
   unsigned char high = 0;
   for (uint32_t at = 0; at < length; at++) {
     high |= bytes[at];
   }
-  if ((high & 0x80u) == 0) {
-    return 0;
-  }
+  return (high & 0x80u) == 0;
+}
+
+/* The three one-byte characters whose uppercase form is not one byte, asked
+ * only of a string with a byte above ASCII (`nts_bytes_ascii`), where the C
+ * library's vectorised search is the right way to ask. */
+static int nts_upper_escapes(const unsigned char *bytes, uint32_t length) {
   return memchr(bytes, 0xB5, length) != NULL ||
          memchr(bytes, 0xDF, length) != NULL ||
          memchr(bytes, 0xFF, length) != NULL;
+}
+
+/* An ASCII letter's two cases differ in one bit, 0x20, and nothing else in
+ * ASCII has a case, so ASCII converts by arithmetic: flip that bit where the
+ * byte is a letter of the case being converted from. Clang vectorises it,
+ * where the Latin-1 table it would otherwise read is one load per byte. */
+static uint32_t nts_ascii_flip(uint32_t unit, int conv_type) {
+  const uint32_t first = conv_type == NTS_CASE_LOWER ? 'A' : 'a';
+  return unit ^ ((uint32_t)(unit - first < 26u) << 5);
+}
+
+static void nts_ascii_case(unsigned char *restrict into,
+                           const unsigned char *restrict from, uint32_t length,
+                           int conv_type) {
+  for (uint32_t at = 0; at < length; at++) {
+    into[at] = (unsigned char)nts_ascii_flip(from[at], conv_type);
+  }
 }
 
 /* Whether every unit is ASCII, which decides whether the general path runs. */
@@ -240,43 +258,51 @@ __attribute__((aligned(64))) static NtsString *
 nts_str_case_convert(const NtsString *s, int conv_type) {
   nts_build_tables();
 
-  /* One byte in, one byte out, one allocation, one pass.
+  /* One byte in, one byte out, one allocation.
    *
-   * No pre-scan: for lowercasing there is nothing to find out, and for
-   * uppercasing the only three characters that would escape one byte are found
-   * with `memchr`, which the C library vectorises. */
+   * ASCII converts by arithmetic after one OR-reduce says it is ASCII, both
+   * vectorised. Anything else one byte wide takes the Latin-1 table, unless an
+   * uppercase would escape one byte, which `memchr` finds. The length is read
+   * once and the two strings are `restrict`: a byte store may alias anything,
+   * and without them the loop reloaded `s->length` after every byte. */
+  const uint32_t length = s->length;
   if ((s->flags & NTS_TWO_BYTE) == 0) {
-    const unsigned char *bytes = NTS_ELEMENTS(s, unsigned char);
-    if (conv_type == NTS_CASE_LOWER || !nts_upper_escapes(bytes, s->length)) {
+    const unsigned char *restrict bytes = NTS_ELEMENTS(s, unsigned char);
+    if (nts_bytes_ascii(bytes, length)) {
+      NtsString *out = nts_str_raw(length, 0);
+      nts_ascii_case(NTS_ELEMENTS(out, unsigned char), bytes, length,
+                     conv_type);
+      return out;
+    }
+    if (conv_type == NTS_CASE_LOWER || !nts_upper_escapes(bytes, length)) {
       const unsigned char *table =
           conv_type == NTS_CASE_LOWER ? nts_latin1_lower : nts_latin1_upper;
-      NtsString *out = nts_str_raw(s->length, 0);
-      unsigned char *into = NTS_ELEMENTS(out, unsigned char);
-      for (uint32_t at = 0; at < s->length; at++) {
+      NtsString *out = nts_str_raw(length, 0);
+      unsigned char *restrict into = NTS_ELEMENTS(out, unsigned char);
+      for (uint32_t at = 0; at < length; at++) {
         into[at] = table[bytes[at]];
       }
       return out;
     }
   } else if (nts_all_ascii(s)) {
     /* A two-byte string holding only ASCII, whose result is one byte. */
-    const uint16_t *units = NTS_ELEMENTS(s, uint16_t);
-    const unsigned char *table =
-        conv_type == NTS_CASE_LOWER ? nts_latin1_lower : nts_latin1_upper;
-    NtsString *out = nts_str_raw(s->length, 0);
-    unsigned char *into = NTS_ELEMENTS(out, unsigned char);
-    for (uint32_t at = 0; at < s->length; at++) {
-      into[at] = table[(unsigned char)units[at]];
+    const uint16_t *restrict units = NTS_ELEMENTS(s, uint16_t);
+    NtsString *out = nts_str_raw(length, 0);
+    unsigned char *restrict into = NTS_ELEMENTS(out, unsigned char);
+    for (uint32_t at = 0; at < length; at++) {
+      into[at] = (unsigned char)nts_ascii_flip(units[at], conv_type);
     }
     return out;
   }
 
-  uint32_t length = nts_case_pass(s, conv_type, NULL);
-  uint16_t *units = (uint16_t *)malloc((size_t)length * sizeof(uint16_t) + 2u);
+  const uint32_t converted = nts_case_pass(s, conv_type, NULL);
+  uint16_t *units =
+      (uint16_t *)malloc((size_t)converted * sizeof(uint16_t) + 2u);
   if (!units) {
     return nts_str_alloc(NULL, 0);
   }
   nts_case_pass(s, conv_type, units);
-  NtsString *out = nts_str_alloc(units, length);
+  NtsString *out = nts_str_alloc(units, converted);
   free(units);
   return out;
 }
