@@ -20420,7 +20420,7 @@ impl Iteration {
 
 /// An append either writes a new slot through a helper, or uses a known
 /// append position for scalar storage. Counted elements require the helper:
-/// a growing ArraySet would first load an old reference that does not exist.
+/// a growing `ArraySet` would first load an old reference that does not exist.
 #[derive(Clone, Copy)]
 enum CollectionAppend {
     Push(&'static str),
