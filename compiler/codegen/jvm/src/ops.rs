@@ -155,6 +155,9 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
         "unshift" | "unshift_ref" => ("unshift", format!("(L{class};{element})D")),
         "at" => ("at", format!("(L{class};D){element}")),
         "at_value" | "at_ref" => ("atValue", format!("(L{class};D){VALUE}")),
+        // `(T | null)[]`'s `at`, erased: a stored `null` and the `undefined` past
+        // the end are both a null element here, and the tag says which.
+        "at_element" => ("atElement", format!("(L{class};DI){VALUE}")),
         // `_ref` and `_str` are not the same helper: `===` between two objects
         // is identity and between two strings is value, and two equal strings
         // need not be one object.
@@ -306,6 +309,11 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
             RUNTIME,
             "arrayAtRef",
             format!("({array}D)Ljava/lang/Object;"),
+        ),
+        "nts_array_at_element" => (
+            RUNTIME,
+            "arrayAtElement",
+            format!("({array}DI)Lnts/rt/NtsValue;"),
         ),
         // **The `_ref` spelling too, which is the same Java method.** C has one
         // entry point per element width and names the reference one

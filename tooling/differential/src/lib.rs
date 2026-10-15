@@ -1998,10 +1998,20 @@ fn run_jvm(
         // a parameter the compiler proved is `j`" -- the `j` being the middle of
         // the descriptor. Found by `representable`, which is a check about
         // something else entirely refusing to believe a type it had never seen.
+        //
+        // After the return descriptor, what a null result stands for, which the
+        // descriptor cannot say: `Ljava/lang/String;` is both `string | null`
+        // and `string | undefined`, and node prints the two differently. C's
+        // harness is told the same at `nts_check_show_string`.
         let _ = write!(
             cases,
-            "{} {at} {returns} {}",
+            "{} {at} {returns} {} {}",
             nts_codegen_jvm::body::method_name(&one.name),
+            if one.result_absent == nts_core::hir::Absent::Null {
+                "null"
+            } else {
+                "-"
+            },
             if parameters.is_empty() {
                 "-".to_owned()
             } else {

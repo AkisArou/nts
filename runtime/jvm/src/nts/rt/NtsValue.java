@@ -718,7 +718,7 @@ public final class NtsValue {
      * answer `"object"` for a string read out of an erased array. The three
      * cases are separated here rather than at each caller so they cannot drift.
      */
-    private static NtsValue held(Object element, int nullSlot) {
+    static NtsValue held(Object element, int nullSlot) {
         if (element == null) {
             return nullSlot == NULL ? NULL_VALUE : UNDEFINED_VALUE;
         }

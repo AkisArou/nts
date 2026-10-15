@@ -1899,6 +1899,11 @@ public final class NtsRuntime {
     public static Object arrayAtRef(Object[] a, double index) {
         int at = NtsArrays.offset(index, a.length); return at < 0 ? null : a[at];
     }
+    /** {@link NtsArrayL#atElement} on a bare array. */
+    public static NtsValue arrayAtElement(Object[] a, double index, int nullSlot) {
+        int at = NtsArrays.offset(index, a.length);
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.held(a[at], nullSlot);
+    }
     public static double arrayAt(double[] a, double index) {
         int at = NtsArrays.offset(index, a.length); return at < 0 ? Double.NaN : a[at];
     }

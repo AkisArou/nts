@@ -367,8 +367,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// struct's `StringView` field: native calls again.
 ///
 /// 125 for `nts_array_at_element`, `at` on a `(T | null)[]` as an erased value
-/// so a stored `null` and `undefined` past the end are two answers. Refused
-/// until the JVM lane maps it (`NtsArrays`, beside `arrayElement`), so the
-/// JVM declines such a call by name rather than answering through a pointer
-/// that cannot tell the two apart.
-const REFUSED_FLOOR: usize = 125;
+/// so a stored `null` and `undefined` past the end are two answers, and 124
+/// again once the JVM lane mapped it: `NtsRuntime.arrayAtElement` on a bare
+/// array and `NtsArrayL.atElement` on a growable one, both reading a null slot
+/// through `NtsValue.held` as `arrayElement` does.
+const REFUSED_FLOOR: usize = 124;

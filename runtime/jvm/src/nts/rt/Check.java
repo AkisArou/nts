@@ -117,7 +117,10 @@ public final class Check {
     }
     private static void one(Class<?> program, Map<String, Map<String, Plan>> plans, String line) throws Exception {
         String[] parts = line.split(" ");
-        String name = parts[0], returns = parts[2], descriptors = parts[3];
+        // `parts[3]` is what a null result stands for (`Func::result_absent`):
+        // `null` for a `string | null` return, `-` for every other.
+        String name = parts[0], returns = parts[2], descriptors = parts[4];
+        boolean nullIsNull = parts[3].equals("null");
         int at = Integer.parseInt(parts[1]);
         Map<String, Plan> overloads = plans.get(name);
         if (overloads == null) {
@@ -127,14 +130,14 @@ public final class Check {
         if (plan == null) { plan = new Plan(program, name, descriptors); overloads.put(descriptors, plan); }
         Object result;
         try {
-            for (int i = 0; i < plan.parameters.length; ++i) { plan.arguments[i] = coerce(plan.parameters[i], parts[4 + i]); }
+            for (int i = 0; i < plan.parameters.length; ++i) { plan.arguments[i] = coerce(plan.parameters[i], parts[5 + i]); }
             result = plan.method.invoke(null, plan.arguments);
         } finally {
             // A cached plan must not retain the last case's reference arguments.
             java.util.Arrays.fill(plan.arguments, null);
         }
         if (result instanceof NtsPromise) { showSettled(name, at, (NtsPromise) result); }
-        else if (returns.equals("Ljava/lang/String;")) { showString(name, at, (String) result); }
+        else if (returns.equals("Ljava/lang/String;")) { showString(name, at, (String) result, nullIsNull); }
         else { show(name, at, widen(returns, result)); }
     }
     private static void showSettled(String name, int at, NtsPromise promise) {
@@ -148,7 +151,7 @@ public final class Check {
         if (!NtsPromise.isSettled(promise)) { say(name + " " + at + " pending"); }
         else if (NtsPromise.isRejected(promise)) { say(name + " " + at + " rejected"); }
         else if (value.tag == NtsValue.NUMBER) { show(name, at, value.num); }
-        else if (value.tag == NtsValue.STRING) { showString(name, at, (String) value.ref); }
+        else if (value.tag == NtsValue.STRING) { showString(name, at, (String) value.ref, false); }
         else { say(name + " " + at + " undefined"); }
     }
     /** One result line, to the results file when there is one and stdout otherwise. */
@@ -184,9 +187,13 @@ public final class Check {
             default: return (int) value;
         }
     }
-    private static void showString(String name, int at, String value) {
-        // An absent string is `null` here, which is what a `string | undefined`
-        // return produces -- `String.prototype.at` past the end, for one.
+    private static void showString(String name, int at, String value, boolean nullIsNull) {
+        // An absent string is `null` here, which a `string | undefined` return
+        // produces -- `String.prototype.at` past the end, for one -- and a
+        // `string | null` one too. Which absence it is, the export says
+        // (`nullIsNull`, from `Func::result_absent`), and node prints the two
+        // differently: printing `undefined` for both was the one wrong answer
+        // `an-exported-null-crosses-as-undefined` pinned on every backend.
         // Reading `.length()` threw, and the differential scores a throw as
         // *the program aborted* rather than as an answer, so every export that
         // could answer `undefined` was not merely unchecked but reported as a
@@ -198,7 +205,7 @@ public final class Check {
         // `nts_str_relative_at` gave the backend something that legitimately
         // answers nothing.
         if (value == null) {
-            say(name + " " + at + " undefined");
+            say(name + " " + at + (nullIsNull ? " null" : " undefined"));
             return;
         }
         StringBuilder out = new StringBuilder();

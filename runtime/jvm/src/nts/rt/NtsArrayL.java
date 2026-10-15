@@ -361,6 +361,16 @@ public final class NtsArrayL {
         int i = NtsArrays.offset(index, a.length);
         return i < 0 ? NtsValue.UNDEFINED_VALUE : wrap(a.items[i]);
     }
+    /**
+     * `nts_array_at_element`: `xs.at(i)` on an array whose element admits
+     * `null` and not `undefined`, answered erased, so a stored `null` and the
+     * `undefined` past the end are two answers. `nullSlot` is the tag a null
+     * slot reads as, as for {@link NtsValue#arrayElement}.
+     */
+    public static NtsValue atElement(NtsArrayL a, double index, int nullSlot) {
+        int i = NtsArrays.offset(index, a.length);
+        return i < 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.held(a.items[i], nullSlot);
+    }
     private static NtsValue wrap(Object element) {
         return element instanceof NtsValue ? (NtsValue) element : NtsValue.ofObject(element);
     }
