@@ -29,7 +29,7 @@
 
 use super::facts::Facts;
 use super::flow::Analysis;
-use super::{BlockId, Func, HirType, OpKind, ValueId};
+use super::{BlockId, Func, HirType, OpKind, Program, ValueId};
 
 /// Turn off the checks that cannot fail, and report how many.
 pub fn eliminate_checks(
@@ -38,14 +38,73 @@ pub fn eliminate_checks(
     field_lengths: &super::fields::FieldFacts,
 ) -> usize {
     let mut removed = 0;
-    let blocks = std::mem::take(&mut func.blocks);
-    let growable = analysis.growable();
+    for access in checked_accesses(func, analysis.growable()) {
+        let Access {
+            at,
+            value,
+            array,
+            index,
+            guards_hold,
+        } = access;
+        if !provably_in_bounds(func, analysis, field_lengths, at, array, index, guards_hold) {
+            continue;
+        }
+        match &mut func.values[value.0 as usize].kind {
+            OpKind::ArrayGet { checked, .. } | OpKind::ArraySet { checked, .. } => {
+                *checked = false;
+                removed += 1;
+            }
+            // A code unit is retyped where it stops being able to be NaN.
+            //
+            // `charCodeAt` is `f64` because out of range it answers NaN, and
+            // that is the whole of why: in range it is a `uint16`, and
+            // `nts_unit` returns one. This is the line that proves the index
+            // is in range, so it is the line where the double stops being
+            // the honest type.
+            //
+            // `specialize` already believes this -- its `usable` arm says a
+            // `checked: false` read "is a `uint16`: integral, in range, and
+            // not NaN" -- but it can only act through a class that *pays*,
+            // and a comparison does not pay. `quoteJSONString` classifies
+            // every unit against `92`, `32`, `34` and `55296` and does no
+            // arithmetic at all, so the class was declined and every
+            // comparison stayed floating point. The fact does not depend on
+            // what the value is later used for.
+            OpKind::StringUnitAt { checked, .. } => {
+                *checked = false;
+                func.values[value.0 as usize].ty = HirType::Int {
+                    bits: 32,
+                    signed: true,
+                };
+                removed += 1;
+            }
+            _ => {}
+        }
+    }
+    removed
+}
 
-    for (index, block) in blocks.iter().enumerate() {
+/// A checked array or string access, where it is, and whether the guards
+/// that let control into its block still hold there.
+struct Access {
+    at: BlockId,
+    value: ValueId,
+    array: ValueId,
+    index: ValueId,
+    guards_hold: bool,
+}
+
+/// Every checked access in `func`, in block order.
+///
+/// Whether anything since the top of a block may have changed an array's
+/// length, and with it what the guard that let control in proved, is tracked
+/// per block. See [`may_move_a_length`]. An array's length moves only where
+/// some array can change length at all; a view's, wherever a call could detach
+/// or resize its buffer, which no array-length question asks.
+fn checked_accesses(func: &Func, growable: bool) -> Vec<Access> {
+    let mut accesses = Vec::new();
+    for (index, block) in func.blocks.iter().enumerate() {
         let at = BlockId(u32::try_from(index).unwrap_or(0));
-        // Whether anything since the top of this block may have changed an
-        // array's length, and with it what the guard that let control in
-        // proved. See [`may_move_a_length`].
         let mut moved = false;
         for value in &block.ops {
             if may_move_a_length(&func.values[value.0 as usize].kind) {
@@ -71,61 +130,91 @@ pub fn eliminate_checks(
             else {
                 continue;
             };
-            // An array's length moves only where some array can change length
-            // at all; a view's, wherever a call could detach or resize its
-            // buffer, which no array-length question asks.
             let view = matches!(
                 func.values[array.0 as usize].ty,
                 HirType::Managed(super::ManagedType::View(_) | super::ManagedType::AnyView)
             );
-            let guards_hold = !moved || (!growable && !view);
+            accesses.push(Access {
+                at,
+                value: *value,
+                array,
+                index: index_value,
+                guards_hold: !moved || (!growable && !view),
+            });
+        }
+    }
+    accesses
+}
+
+/// Prove a program's growing index stores in range, as though none of them
+/// grew, and unchecked them all if every one is; how many it unchecked.
+///
+/// `arrays_can_grow` is whole-program: one store that might append, and no
+/// allocated length is trusted anywhere -- not in this function, not through a
+/// parameter, not as the JVM's bare array. `new Array(n)` filled and updated by
+/// `for (i = 0; i < n; i++) xs[i] = ...` is such a store, because its index is
+/// not a constant, and `growth-fixed` paid for it on every element: checked
+/// reads, a store that may call out to grow, and a loop clang could neither keep
+/// `xs[i - 1]` in a register for nor stop vectorizing into a store-forwarding
+/// stall. 4.2x on that loop.
+///
+/// **The assumption proves itself or is dropped.** Where the stores are the
+/// only thing in the program that could change a length, the program is
+/// analyzed as though nothing does, and each store asked whether it is in range
+/// under that analysis, by the same predicate [`eliminate_checks`] uses. If all
+/// of them are, no execution can grow an array: the first store that would grow
+/// one runs in a prefix of the execution where nothing has grown yet, every fact
+/// the analysis derived holds over that prefix, and those facts put its index
+/// in range. So every store is unchecked, `arrays_can_grow` answers no from then
+/// on, and every later pass trusts allocated lengths. If any store is not
+/// proven, nothing changes. A call that can change a length -- `push`, a native
+/// call handed an array -- leaves the program as it was, unanalyzed here.
+pub fn prove_stores_cannot_grow(
+    program: &mut Program,
+    roots: super::reachable::Roots<'_>,
+) -> usize {
+    let mut stores = false;
+    for func in &program.funcs {
+        for op in &func.values {
+            if super::call_may_grow(&op.kind) {
+                return 0;
+            }
+            stores |= super::store_may_grow(func, &op.kind);
+        }
+    }
+    if !stores {
+        return 0;
+    }
+    let analyses = super::interprocedural::analyze_assuming(program, roots, false);
+    let field_lengths = super::fields::lengths(program, &analyses);
+    let mut proven = Vec::new();
+    for (at, (func, analysis)) in program.funcs.iter().zip(&analyses).enumerate() {
+        for access in checked_accesses(func, false) {
+            if !super::store_may_grow(func, &func.values[access.value.0 as usize].kind) {
+                continue;
+            }
             if !provably_in_bounds(
                 func,
                 analysis,
-                field_lengths,
-                at,
-                array,
-                index_value,
-                guards_hold,
+                &field_lengths,
+                access.at,
+                access.array,
+                access.index,
+                access.guards_hold,
             ) {
-                continue;
+                return 0;
             }
-            match &mut func.values[value.0 as usize].kind {
-                OpKind::ArrayGet { checked, .. } | OpKind::ArraySet { checked, .. } => {
-                    *checked = false;
-                    removed += 1;
-                }
-                // A code unit is retyped where it stops being able to be NaN.
-                //
-                // `charCodeAt` is `f64` because out of range it answers NaN, and
-                // that is the whole of why: in range it is a `uint16`, and
-                // `nts_unit` returns one. This is the line that proves the index
-                // is in range, so it is the line where the double stops being
-                // the honest type.
-                //
-                // `specialize` already believes this -- its `usable` arm says a
-                // `checked: false` read "is a `uint16`: integral, in range, and
-                // not NaN" -- but it can only act through a class that *pays*,
-                // and a comparison does not pay. `quoteJSONString` classifies
-                // every unit against `92`, `32`, `34` and `55296` and does no
-                // arithmetic at all, so the class was declined and every
-                // comparison stayed floating point. The fact does not depend on
-                // what the value is later used for.
-                OpKind::StringUnitAt { checked, .. } => {
-                    *checked = false;
-                    func.values[value.0 as usize].ty = HirType::Int {
-                        bits: 32,
-                        signed: true,
-                    };
-                    removed += 1;
-                }
-                _ => {}
-            }
+            proven.push((at, access.value));
         }
     }
-
-    func.blocks = blocks;
-    removed
+    for &(at, value) in &proven {
+        if let OpKind::ArraySet { checked, .. } =
+            &mut program.funcs[at].values[value.0 as usize].kind
+        {
+            *checked = false;
+        }
+    }
+    proven.len()
 }
 
 /// Whether an index is provably a valid slot of an array.

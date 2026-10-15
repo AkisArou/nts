@@ -476,7 +476,10 @@ pub(super) fn parameter_lengths(
                 .collect()
         })
         .collect();
-    if super::arrays_can_grow(program) {
+    // The analyses' own answer rather than asking again: under
+    // `bounds::prove_stores_cannot_grow` they were run assuming nothing grows,
+    // and a second opinion here would undo the assumption for parameters only.
+    if analyses.iter().any(Analysis::growable) {
         return program
             .funcs
             .iter()

@@ -86,6 +86,23 @@ struct Crossing {
 /// Analyze every function, letting facts cross between them.
 #[must_use]
 pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) -> Vec<Analysis> {
+    analyze_assuming(program, roots, super::arrays_can_grow(program))
+}
+
+/// [`analyze_program`], told whether any array in the program can change
+/// length rather than asking.
+///
+/// The one caller that tells it otherwise is
+/// [`super::bounds::prove_stores_cannot_grow`]: it analyses a program whose
+/// only possible growth is its own checked stores as though none of them grew,
+/// and keeps the answer only if every one of those stores is then proven in
+/// range. A property of the whole program rather than of a round.
+#[must_use]
+pub fn analyze_assuming(
+    program: &Program,
+    roots: super::reachable::Roots<'_>,
+    growable: bool,
+) -> Vec<Analysis> {
     let in_slot = program.slot_targets();
     // The exports, **and every closure the runtime can call**. Both are the
     // same wall: a function whose callers are not in the compiled set has no
@@ -103,7 +120,7 @@ pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) ->
     let mut caps: Vec<FxHashMap<ValueId, Facts>> =
         program.funcs.iter().map(|_| FxHashMap::default()).collect();
     let written = flow::Written::of(program);
-    let mut analyses = settle(program, &in_slot, &outward, &written, &caps);
+    let mut analyses = settle(program, &in_slot, &outward, &written, &caps, growable);
 
     for _ in 0..FEEDBACK_CAP {
         let next: Vec<_> = program
@@ -116,7 +133,7 @@ pub fn analyze_program(program: &Program, roots: super::reachable::Roots<'_>) ->
             break;
         }
         caps = next;
-        analyses = settle(program, &in_slot, &outward, &written, &caps);
+        analyses = settle(program, &in_slot, &outward, &written, &caps, growable);
     }
     analyses
 }
@@ -128,6 +145,7 @@ fn settle(
     outward: &rustc_hash::FxHashSet<&str>,
     written: &flow::Written,
     caps: &[FxHashMap<ValueId, Facts>],
+    growable: bool,
 ) -> Vec<Analysis> {
     let by_name: FxHashMap<&str, usize> = program
         .funcs
@@ -137,9 +155,6 @@ fn settle(
         .collect();
 
     let exposed = super::exposure::analyze(program, outward);
-    // A property of the whole program rather than of a round: whether anything
-    // in it can change an array's length.
-    let growable = super::arrays_can_grow(program);
     let mut crossing = Crossing {
         params: seed(program, outward),
         param_lengths: no_lengths(program),

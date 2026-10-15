@@ -4163,52 +4163,70 @@ const KEEPS_FIELD_BORROWS: &[&str] = &[
 #[must_use]
 pub fn arrays_can_grow(program: &Program) -> bool {
     program.funcs.iter().any(|func| {
-        func.values.iter().any(|op| {
-            match &op.kind {
-                // **A growing index write changes a length without being a
-                // call.** `xs[xs.length] = v` appends, and the rule below reads
-                // helper *names* -- so this was invisible to it, and every
-                // `.length` on an allocation kept folding to the size the
-                // literal was made with. `[1].length` answered 1 after a store
-                // that made it 2, which is precisely the wrong answer
-                // `changes_array_length`'s own comment warns about one function
-                // up.
-                OpKind::ArraySet {
-                    array,
-                    index,
-                    checked: true,
-                    ..
-                } => {
-                    array_write_may_grow(func, *array)
-                        && !store_names_a_slot_that_exists(func, *array, *index)
-                }
-                OpKind::Call {
-                    callee: Callee::External(name),
-                    ..
-                } => changes_array_length(name),
-                // The host may keep an array or invoke a closure which mutates
-                // one. There is no proof of no mutation on an authored ABI.
-                OpKind::Call {
-                    callee: Callee::Native(target),
-                    ..
-                } => target.parameters.iter().any(|ty| {
-                    matches!(
-                        ty,
-                        native::Type::Erased
-                            | native::Type::Managed(
-                                ManagedType::Array(_)
-                                    | ManagedType::Object(_)
-                                    | ManagedType::Promise(_)
-                                    | ManagedType::Map(..)
-                                    | ManagedType::Table(..)
-                                    | ManagedType::Set(_)
-                            )
-                    )
-                }),
-                _ => false,
-            }
-        })
+        func.values
+            .iter()
+            .any(|op| store_may_grow(func, &op.kind) || call_may_grow(&op.kind))
     })
+}
+
+/// Whether an op is an index write that can append to its array.
+///
+/// **A growing index write changes a length without being a call.**
+/// `xs[xs.length] = v` appends, and the rule [`call_may_grow`] keeps reads
+/// helper *names* -- so this was invisible to it, and every `.length` on an
+/// allocation kept folding to the size the literal was made with. `[1].length`
+/// answered 1 after a store that made it 2, which is precisely the wrong answer
+/// [`changes_array_length`]'s own comment warns about.
+///
+/// A store the bounds pass proved in range is unchecked, and names a slot that
+/// exists by construction; [`bounds::prove_stores_cannot_grow`] is where a
+/// loop's stores become that.
+#[must_use]
+pub fn store_may_grow(func: &Func, kind: &OpKind) -> bool {
+    match kind {
+        OpKind::ArraySet {
+            array,
+            index,
+            checked: true,
+            ..
+        } => {
+            array_write_may_grow(func, *array)
+                && !store_names_a_slot_that_exists(func, *array, *index)
+        }
+        _ => false,
+    }
+}
+
+/// Whether an op is a call that can change some array's length: a runtime
+/// helper that does, or a native call handed something that can reach an array.
+#[must_use]
+pub fn call_may_grow(kind: &OpKind) -> bool {
+    match kind {
+        OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } => changes_array_length(name),
+        // The host may keep an array or invoke a closure which mutates
+        // one. There is no proof of no mutation on an authored ABI.
+        OpKind::Call {
+            callee: Callee::Native(target),
+            ..
+        } => target.parameters.iter().any(|ty| {
+            matches!(
+                ty,
+                native::Type::Erased
+                    | native::Type::Managed(
+                        ManagedType::Array(_)
+                            | ManagedType::Object(_)
+                            | ManagedType::Promise(_)
+                            | ManagedType::Map(..)
+                            | ManagedType::Table(..)
+                            | ManagedType::Set(_)
+                    )
+            )
+        }),
+        _ => false,
+    }
 }
 
 /// Where a uniform closure entry ([`Program::erased_call_slot`] and its raising
@@ -6946,6 +6964,10 @@ fn specialize_numbers_of(
     roots: reachable::Roots<'_>,
 ) -> (usize, usize, usize) {
     let (mut specialized, mut conversions, mut checks_removed) = (0, 0, 0);
+    // Before anything is analyzed: where it succeeds, every analysis below
+    // starts from a program whose arrays cannot grow, which is what lets it
+    // trust an allocated length at all.
+    checks_removed += bounds::prove_stores_cannot_grow(program, roots);
     // Analyzed as a program rather than a function at a time: a parameter is
     // written by callers and a call's result by the callee, and neither is
     // visible from inside.
