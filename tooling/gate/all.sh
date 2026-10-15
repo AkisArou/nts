@@ -1631,7 +1631,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # says cannot be absent -- each one the parity list's work, and the ceiling
 # holds them.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 518 "through the Wasm backend" exact 14 ); }
+  backend_examples 522 "through the Wasm backend" exact 14 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
