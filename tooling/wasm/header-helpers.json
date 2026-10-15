@@ -64,6 +64,7 @@
     "nts_array_slice",
     "nts_array_slice_foreign",
     "nts_array_slice_ref",
+    "nts_array_slice_value",
     "nts_array_sort_str",
     "nts_array_splice",
     "nts_array_splice_ref",

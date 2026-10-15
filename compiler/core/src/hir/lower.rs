@@ -56989,32 +56989,7 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(inner, "a copy of something that is not an array"));
         };
-        let helper = match *element {
-            ref counted if holds_counted(counted) => counted_helper(counted, Counts::Slice),
-            HirType::Float { bits: 64 } => "nts_array_slice",
-            // **An erased element is not a typed array**, and saying so cost a
-            // reader nothing until arrays of them existed. `[...xs]` where
-            // `xs` is `(number | undefined)[]` -- which is what an array
-            // literal with a hole in it now is -- landed on the arm below and
-            // was reported as a copy of a typed array, a construct the program
-            // does not contain.
-            //
-            // The phrasing is the one the array methods already use for this
-            // element, so the family reads as one thing: `forEach`, `map` and
-            // `join` all refuse an array of erased elements with the same
-            // sentence.
-            HirType::Erased => {
-                return Err(self.unsupported(
-                    inner,
-                    "a copy of an array of erased elements, which needs a `_value` helper this \
-                     runtime does not have",
-                ));
-            }
-            // `slice` reads the elements as doubles or as pointers, and a
-            // narrower one is neither. The array methods refuse the same shape
-            // for the same reason.
-            _ => return Err(self.unsupported(inner, "a copy of a typed array")),
-        };
+        let helper = self.slice_helper(inner, &element, "a copy")?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
         Ok(self.runtime_call(
@@ -57023,6 +56998,33 @@ impl<'a> FuncBuilder<'a> {
             ty.clone(),
             origin.clone(),
         ))
+    }
+
+    /// The runtime's slice of an array of `element`s: what a copy (`[...xs]`,
+    /// `Array.from(xs)`) and a rest element (`[first, ...rest] = xs`) both are.
+    ///
+    /// One decision, because the slice helpers come in widths and a slice at
+    /// the wrong one reads the elements wrongly: `nts_array_slice` copies eight
+    /// bytes an element, and the rest element called it for every array, so a
+    /// rest over an `unknown[]` held halves of sixteen-byte values (the Wasm
+    /// lane's test262 parity run; tests/outcomes/a-rest-element-copies-erased-
+    /// elements-as-numbers).
+    fn slice_helper(
+        &self,
+        at: NodeId,
+        element: &HirType,
+        what: &str,
+    ) -> Result<&'static str, Diagnostic> {
+        Ok(match *element {
+            ref counted if holds_counted(counted) => counted_helper(counted, Counts::Slice),
+            HirType::Float { bits: 64 } => "nts_array_slice",
+            // An erased element is an `NtsValue`, each retained as its tag says.
+            HirType::Erased => "nts_array_slice_value",
+            // `slice` reads the elements as doubles, pointers or values, and a
+            // narrower one is none of them. The array methods refuse the same
+            // shape for the same reason.
+            _ => return Err(self.unsupported(at, &format!("{what} of a typed array"))),
+        })
     }
 
     /// `s[i]` where `s` is a string, which is a one-unit string rather than an
@@ -62491,11 +62493,17 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
+        let helper = match &ty {
+            HirType::Managed(ManagedType::Array(items)) => {
+                self.slice_helper(element, items, "a rest element")?
+            }
+            _ => "nts_array_slice",
+        };
         let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
         let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
         Ok(self.push(
             OpKind::Call {
-                callee: Callee::External("nts_array_slice".to_owned()),
+                callee: Callee::External(helper.to_owned()),
                 args: vec![value, from, to],
                 frame: None,
             },

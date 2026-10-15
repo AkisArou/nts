@@ -247,6 +247,15 @@ static SIGNATURES: &[Declared] = &[
         None,
     ),
     (
+        "nts_array_slice_value",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
         "nts_array_sort_str",
         &[
             None,

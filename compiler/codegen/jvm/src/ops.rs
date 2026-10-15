@@ -324,7 +324,7 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         // which is what the diagnostic predicts in so many words: "the helper
         // may exist in `runtime/jvm` already and be missing from the tables
         // `external` consults".
-        "nts_array_slice" | "nts_array_slice_ref" => {
+        "nts_array_slice" | "nts_array_slice_ref" | "nts_array_slice_value" => {
             (RUNTIME, "arraySlice", format!("({array}DD){result}"))
         }
         // All three widths, and one method each. The bare path had no concat at

@@ -473,6 +473,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_slice_value",
+        returns: "ptr",
+        params: &["ptr", "double", "double"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_sort_str",
         returns: "ptr",
         params: &["ptr", "i32"],

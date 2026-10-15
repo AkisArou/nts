@@ -2810,6 +2810,11 @@ NtsArray *nts_array_fill_foreign(NtsArray *a, void *value);
 /* The same for an array of tagged values, which neither of the other two can
  * copy: sixteen bytes each, and a reference only when the tag says so. */
 NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b);
+/* A slice of an array of erased values, each retained as its tag says: the
+ * `_value` width beside `nts_array_slice` (doubles) and `nts_array_slice_ref`
+ * (references), which read eight bytes an element where an `NtsValue` is
+ * sixteen. */
+NtsArray *nts_array_slice_value(const NtsArray *a, double from, double to);
 NtsArray *nts_array_splice_ref(NtsArray *a, double start, double count);
 double nts_array_unshift(NtsArray *a, double value);
 /* `pop` and `at` with the `undefined` the checker already gave them. A number

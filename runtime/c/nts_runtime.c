@@ -4667,6 +4667,27 @@ NtsArray *nts_array_concat_value(const NtsArray *a, const NtsArray *b) {
   return out;
 }
 
+/* `[first, ...rest] = xs` over an `unknown[]` -- a rest element is a slice --
+ * and the `_value` width of the family above. `nts_array_slice` copied eight
+ * bytes an element at eight-byte offsets, so `rest` held halves of sixteen-byte
+ * values: tags read from payloads, and payloads a later release would follow
+ * (the Wasm lane's test262 parity run found it, and declined the same call by
+ * name). Each copy owns what it holds, as `nts_array_concat_value`'s do. */
+NtsArray *nts_array_slice_value(const NtsArray *a, double from, double to) {
+  uint32_t start = nts_str_clamp(from, a->header.length, 1);
+  uint32_t end = nts_str_clamp(to, a->header.length, 1);
+  uint32_t count = end > start ? end - start : 0u;
+  NtsArray *out =
+      nts_array_new_uninitialized(a->header.descriptor, (double)count);
+  const NtsValue *items = NTS_ITEMS(a, NtsValue);
+  NtsValue *into = NTS_ITEMS(out, NtsValue);
+  for (uint32_t at = 0; at < count; at++) {
+    into[at] = items[start + at];
+    nts_value_retain(into[at]);
+  }
+  return out;
+}
+
 NtsArray *nts_array_slice(const NtsArray *a, double from, double to) {
   /* Negative counts from the end, as `String.prototype.slice` does. */
   uint32_t start = nts_str_clamp(from, a->header.length, 1);
