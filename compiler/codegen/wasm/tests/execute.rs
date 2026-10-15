@@ -576,6 +576,24 @@ fn calls_from(bytes: &[u8], at: usize) -> Vec<usize> {
     panic!("no function body {at}");
 }
 
+/// A `string | null` export answers node's `null`, a `string | undefined`
+/// one `undefined`, by the declaration's absence.
+#[test]
+fn source_absent_string_results_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/absent-string-results");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "absent-string-results",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 25, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

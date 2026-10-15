@@ -722,6 +722,22 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     })
 }
 
+/// What an export answers: its return type at the boundary, a string's
+/// absence included where its declaration admits one.
+fn export_result(func: &HirFunc) -> Result<BoundaryType, String> {
+    let ty = BoundaryType::from_hir(&func.return_type)?;
+    let absent = match func.result_absent {
+        nts_core::hir::Absent::Null => crate::types::Absence::Null,
+        nts_core::hir::Absent::Undefined => crate::types::Absence::Undefined,
+        nts_core::hir::Absent::Impossible => return Ok(ty),
+    };
+    Ok(if ty == BoundaryType::String {
+        BoundaryType::OptionalString { absent }
+    } else {
+        ty
+    })
+}
+
 fn preflight(program: &Program) -> Result<(), EmitError> {
     if let Some((name, _)) = program.public_namespaces.first() {
         return Err(EmitError::UnsupportedSurface {
@@ -886,7 +902,7 @@ fn manifest(
             exports.push(FunctionExport {
                 name: published.clone(),
                 params,
-                result: BoundaryType::from_hir(&func.return_type)
+                result: export_result(func)
                     .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?,
             });
         } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {

@@ -87,6 +87,32 @@ pub enum BoundaryType {
     /// An open value (`unknown`, `any`): a JS primitive, converted by value
     /// (`boundary`). Never a global.
     Value,
+    /// A string or the one absence its type admits -- `string | null`,
+    /// `string | undefined` -- which `Func::result_absent` says: the two share
+    /// a representation, a null reference, and only the declaration knows which
+    /// absence it is. An export's result only.
+    #[serde(rename = "optionalString")]
+    OptionalString {
+        absent: Absence,
+    },
+}
+
+/// Which absent value a null reference stands for at a boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Absence {
+    Null,
+    Undefined,
+}
+
+impl Absence {
+    /// The JS value, as glue writes it.
+    pub(crate) const fn js(self) -> &'static str {
+        match self {
+            Self::Null => "null",
+            Self::Undefined => "undefined",
+        }
+    }
 }
 
 impl BoundaryType {

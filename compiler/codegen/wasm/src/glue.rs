@@ -568,7 +568,11 @@ fn parameter(
             );
             arg.clone()
         }
-        BoundaryType::Void | BoundaryType::Float { .. } | BoundaryType::Promise => {
+        // An optional string is a result's type only.
+        BoundaryType::Void
+        | BoundaryType::Float { .. }
+        | BoundaryType::Promise
+        | BoundaryType::OptionalString { .. } => {
             return Err(format!(
                 "public parameter {at} of `{}` has no JS boundary type",
                 export.name
@@ -617,6 +621,10 @@ fn deliver(ty: &BoundaryType, value: &str, name: &str, captures: &mut Captures) 
         ),
         BoundaryType::String => format!(
             "const result = {value};\n      if (typeof result !== 'string') declineResult({name}, 'result is outside primitive-string boundary');\n      return result;"
+        ),
+        BoundaryType::OptionalString { absent } => format!(
+            "const result = {value};\n      if (result === null) return {};\n      if (typeof result !== 'string') declineResult({name}, 'result is outside primitive-string boundary');\n      return result;",
+            absent.js()
         ),
         BoundaryType::Int { bits: 64, signed } => {
             let to_number = captures.get("toNumber", "Number");

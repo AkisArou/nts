@@ -70,7 +70,7 @@ use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
 use serde::{Deserialize, Serialize};
 pub use support::{Support, helper_support};
-pub use types::BoundaryType;
+pub use types::{Absence, BoundaryType};
 
 /// A complete artifact; failed/declined programs never return partial bytes.
 #[derive(Debug)]
