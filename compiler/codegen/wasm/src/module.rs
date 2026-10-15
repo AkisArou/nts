@@ -93,6 +93,8 @@ pub(crate) enum FuncKey {
     AbstractEntry(u32, String),
     /// A function's named refusal, by the function and the cause.
     Refusal(String, String),
+    /// A function's cold region out of line, by the function and its place.
+    Cold(String, usize),
     Raising(crate::raising::Helper),
     DeclineInput,
     ValueText,
@@ -568,6 +570,11 @@ impl<'p> Builder<'p> {
         self.set_body(func, body);
     }
 
+    /// A function's name, as the name section gives it.
+    pub(crate) fn func_name(&self, func: Func) -> &str {
+        &self.funcs[func.0 as usize].name
+    }
+
     /// A global. Its initializer is built first, so every global it reads is
     /// interned, and therefore indexed, before it.
     pub(crate) fn global(
@@ -709,6 +716,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     if !declines.is_empty() {
         return Err(EmitError::Declined(declines));
     }
+    crate::outline::program(&mut m);
     crate::inline::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;

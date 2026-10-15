@@ -63,7 +63,7 @@ pub(crate) fn run(code: &Code, initial: Vec<bool>, flow: &mut impl Flow) {
 }
 
 /// For each structure's opening instruction, the position of its `end`.
-fn matching_ends(code: &Code) -> Vec<usize> {
+pub(crate) fn matching_ends(code: &Code) -> Vec<usize> {
     let mut ends = vec![0; code.insts.len()];
     let mut open = Vec::new();
     for (at, inst) in code.insts.iter().enumerate() {

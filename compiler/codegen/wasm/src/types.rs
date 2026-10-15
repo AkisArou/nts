@@ -34,6 +34,17 @@ pub(crate) enum Physical {
 }
 
 impl Physical {
+    /// The physical type of a wasm value type, where this backend has one.
+    pub(crate) const fn of(ty: ValType) -> Self {
+        match ty {
+            ValType::I32 => Self::Scalar(Slot::I32),
+            ValType::I64 => Self::Scalar(Slot::I64),
+            ValType::F32 => Self::Scalar(Slot::F32),
+            ValType::F64 => Self::Scalar(Slot::F64),
+            ValType::V128 => Self::Scalar(Slot::V128),
+            ValType::Ref(reference) => Self::Reference(reference),
+        }
+    }
     pub(crate) const fn wasm(self) -> ValType {
         match self {
             Self::Scalar(slot) => slot.wasm(),

@@ -43,6 +43,7 @@ mod module;
 mod numeric;
 mod object_plan;
 mod objects;
+mod outline;
 mod owned_views;
 mod presence;
 mod printed;
