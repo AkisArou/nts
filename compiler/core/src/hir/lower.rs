@@ -75735,6 +75735,13 @@ impl<'a> FuncBuilder<'a> {
     /// `null` wrong and sorted one as a dereference. An element with no
     /// absence, or a type this cannot read, is `undefined`, which a slot of it
     /// never holds.
+    /// The receiver of a method call whose name is `member`: `xs` in
+    /// `xs.sort()` and in `xs["sort"]()`, the first child of the access.
+    fn receiver_of_member(&self, member: NodeId) -> Option<NodeId> {
+        self.syntactic_parent(member)
+            .and_then(|access| self.children(access).first().copied())
+    }
+
     fn null_slot(&mut self, array_node: Option<NodeId>, origin: &Origin) -> ValueId {
         let only_null = array_node
             .and_then(|node| self.read_type(node))
@@ -75966,7 +75973,10 @@ impl<'a> FuncBuilder<'a> {
         } else {
             receiver
         };
-        let null_slot = self.null_slot(self.children(member).first().copied(), &origin);
+        // The receiver's node: `member` is the method's *name*, which has no
+        // children, so asking it read every array as one whose null slots are
+        // `undefined` and sorted a stored `null` last instead of as "null".
+        let null_slot = self.null_slot(self.receiver_of_member(member), &origin);
         Ok(self.call_runtime(
             "nts_array_sort_str",
             vec![target, null_slot],
@@ -76613,9 +76623,21 @@ impl<'a> FuncBuilder<'a> {
         } else {
             name
         };
+        // **`at` on a `(T | null)[]` answers erased.** Its result can be the
+        // stored `null` or `undefined` past the end, and one null pointer is
+        // not both: `nts_array_at_ref`'s was read as `undefined` either way.
+        // Only this element kind -- one with no absence, or `undefined` alone,
+        // has one answer per null pointer and keeps the pointer.
+        let null_only = name == "at"
+            && matches!(element, HirType::Managed(_))
+            && self
+                .receiver_of_member(member)
+                .and_then(|node| self.read_type(node))
+                .is_some_and(|ty| self.null_only_element(ty));
         let (helper, arity, ty) = match name {
             "pop" => ("nts_array_pop_ref", 0, of_element),
             "shift" => ("nts_array_shift_ref", 0, of_element),
+            "at" if null_only => ("nts_array_at_element", 1, HirType::Erased),
             "at" => (counted_helper(element, Counts::At), 1, of_element),
             // The needle's own type picks the variant, not only the array's.
             //
@@ -76654,6 +76676,10 @@ impl<'a> FuncBuilder<'a> {
         self.fill_array_arguments((id, name), arity, &mut args, &origin)?;
         if args.len() != arity + 1 {
             return Err(self.unsupported(id, "an array method with this many arguments"));
+        }
+        if null_only {
+            let tag = self.null_slot(self.receiver_of_member(member), &origin);
+            args.push(tag);
         }
         Ok(self.push(
             OpKind::Call {

@@ -131,6 +131,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_array_at_element",
+        returns: "{ i32, i64 }",
+        params: &["ptr", "double", "i32"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_at_foreign",
         returns: "ptr",
         params: &["ptr", "double"],

@@ -7,6 +7,7 @@
     "nts_alloc",
     "nts_append_slot",
     "nts_array_at",
+    "nts_array_at_element",
     "nts_array_at_foreign",
     "nts_array_at_ref",
     "nts_array_at_value",

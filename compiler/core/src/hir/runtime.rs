@@ -53,6 +53,18 @@ static SIGNATURES: &[Declared] = &[
         Some(HirType::Float { bits: 64 }),
     ),
     (
+        "nts_array_at_element",
+        &[
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Int {
+                bits: 32,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
         "nts_array_at_foreign",
         &[None, Some(HirType::Float { bits: 64 })],
         None,

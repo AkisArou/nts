@@ -365,4 +365,10 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 ///
 /// 124 for `nts_string_unlend`, which ends a string's loan through a C
 /// struct's `StringView` field: native calls again.
-const REFUSED_FLOOR: usize = 124;
+///
+/// 125 for `nts_array_at_element`, `at` on a `(T | null)[]` as an erased value
+/// so a stored `null` and `undefined` past the end are two answers. Refused
+/// until the JVM lane maps it (`NtsArrays`, beside `arrayElement`), so the
+/// JVM declines such a call by name rather than answering through a pointer
+/// that cannot tell the two apart.
+const REFUSED_FLOOR: usize = 125;

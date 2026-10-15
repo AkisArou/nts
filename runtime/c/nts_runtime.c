@@ -2720,6 +2720,20 @@ void *nts_array_at_ref(const NtsArray *a, double at) {
 void *nts_array_at_foreign(const NtsArray *a, double at) {
   return nts_array_at_counted(a, at, nts_array_family(a)->retain);
 }
+NtsValue nts_array_at_element(const NtsArray *a, double at,
+                              uint32_t null_slot) {
+  double offset = nts_array_offset(a, at);
+  if (offset < 0) {
+    return nts_value_of_undefined();
+  }
+  NtsHeader *element = NTS_ITEMS(a, NtsHeader *)[(uint32_t)offset];
+  if (!element) {
+    return null_slot == NTS_TAG_NULL ? nts_value_of_null()
+                                     : nts_value_of_undefined();
+  }
+  nts_retain(element);
+  return nts_value_of_reference(element, nts_tag_of_reference(element));
+}
 
 /* `indexOf` and `includes` by identity, which is what `===` is for an object.
  *

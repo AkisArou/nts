@@ -4096,6 +4096,7 @@ impl Cycles {
 const KEEPS_FIELD_BORROWS: &[&str] = &[
     // Reads, and arrays made new. Nothing is written.
     "nts_array_at",
+    "nts_array_at_element",
     "nts_array_at_ref",
     "nts_array_at_value",
     "nts_array_element",
@@ -7658,6 +7659,7 @@ mod tests {
             // `NTS_READS_ONLY` and takes `const NtsArray *`, which is the
             // contract rather than the name.
             "nts_array_at",
+            "nts_array_at_element",
             "nts_array_at_ref",
             "nts_array_at_foreign",
             "nts_array_at_value",

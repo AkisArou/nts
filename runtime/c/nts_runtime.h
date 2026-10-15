@@ -2823,6 +2823,12 @@ double nts_array_unshift_ref(NtsArray *a, void *value);
  * released and was retained again to be returned, one object leaked per call
  * of `return xs.find(...)` (the Chromium lane's board app). */
 void *nts_array_at_ref(const NtsArray *a, double at);
+/* `xs.at(i)` on an array of references whose element admits `null` and not
+ * `undefined` -- `(string | null)[]` -- as an erased value, RETAINED like
+ * `nts_array_at_ref`'s. One null pointer cannot be both answers `at` has
+ * there: a stored `null`, and `undefined` past the end. `null_slot` is the tag
+ * a null slot reads as, as for `nts_array_element`. */
+NtsValue nts_array_at_element(const NtsArray *a, double at, uint32_t null_slot);
 NTS_READS_ONLY double nts_array_index_of_ref(const NtsArray *a,
                                              const void *needle);
 NTS_READS_ONLY bool nts_array_includes_ref(const NtsArray *a,
