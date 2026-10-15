@@ -121,14 +121,22 @@ test("the highest claim among waiting steps gets the freed token", async () => {
   // `long` claims more, but `short` has waited: the claim decides, so the
   // policy run.mjs passes (work left per token held, plus seconds waited) is
   // what orders them.
+  //
+  // The holder lets go only once both are queued. A fixed half-second hold
+  // raced the second client's start: on a loaded machine `long` was not yet
+  // waiting when the token came free, so `short` took it unopposed and the
+  // test failed on landings that never touched the gate (2026-10-15).
   const order = [];
   const p = await pool(1, { claim: (step) => (step === "long" ? 100 : 1) });
-  const holder = spawn(TOKEN, ["sleep", "0.5"], { env: { ...process.env, ...tokenEnv(p, "other") }, stdio: "ignore" });
+  const holder = spawn(TOKEN, ["sh", "-c", "read _"], { env: { ...process.env, ...tokenEnv(p, "other") }, stdio: ["pipe", "ignore", "ignore"] });
+  const released = new Promise((r) => holder.on("close", r));
   while (p.total === 0) await settle();
   const a = run(TOKEN, ["sh", "-c", "echo short"], tokenEnv(p, "short")).then((r) => order.push(r.out.trim()));
   await settle();
   const b = run(TOKEN, ["sh", "-c", "echo long"], tokenEnv(p, "long")).then((r) => order.push(r.out.trim()));
-  await Promise.all([a, b, new Promise((r) => holder.on("close", r))]);
+  while (p.waiting.length < 2) await settle();
+  holder.stdin.end();
+  await Promise.all([a, b, released]);
   assert.deepEqual(order, ["long", "short"]);
   p.close();
 });
