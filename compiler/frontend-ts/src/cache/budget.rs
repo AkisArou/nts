@@ -14,6 +14,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{atomic_write, read_value};
 
+/// Payloads are flat: `entry_path` writes in the cache root and hints write
+/// only in `manifests`. These are also exactly the directories Pool inventories.
+/// Moving either namespace into subdirectories must update both together.
 #[derive(Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Directories {
     root: Option<u128>,
