@@ -1,9 +1,11 @@
 //! `sort()` with no comparator over a string array: in place, stable, in
-//! UTF-16 code unit order, one module-local helper per storage shape.
+//! UTF-16 code unit order, one module-local helper per storage shape. A null
+//! slot is what the read site's tag names: `undefined` sorts last, uncompared,
+//! and `null` as the text "null", as C's `nts_array_sort_str` sorts them.
 use crate::{
     arrays,
     body::Body,
-    contract,
+    contract, erased,
     error::Failure,
     gc,
     ir::Function,
@@ -32,9 +34,8 @@ pub(crate) fn call(
     })
 }
 fn inner(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> Result<(), Failure> {
-    // The second argument is the tag a null slot reads as; a null slot is
-    // still refused by name (`no_null_slot`).
-    let [array, _null_slot] = args else {
+    // The second argument is the tag a null slot reads as.
+    let [array, null_slot] = args else {
         return Err("sort arity mismatch".into());
     };
     let shape = b.types().array(b.ty(*array))?;
@@ -44,6 +45,7 @@ fn inner(b: &mut Body<'_, '_>, result: ValueId, args: &[ValueId]) -> Result<(), 
     contract::nonnull(b, *array, "sorting a null array")?;
     b.load(*array)?;
     strings::constant(b, &b.func.name.clone());
+    b.load(*null_slot)?;
     let target = callee(b.m, shape)?;
     b.call(target);
     if b.ty(result) == &HirType::Void {
@@ -61,31 +63,39 @@ fn callee(m: &mut Builder<'_>, shape: &gc::Array) -> Result<Func, Failure> {
     m.helper(
         FuncKey::ArraySort(shape.wrapper),
         format!("array.sort<{:?}>", shape.element),
-        vec![array, strings::STRING],
+        vec![
+            array,
+            strings::STRING,
+            Physical::Scalar(crate::types::Slot::I32),
+        ],
         Some(array),
         |m| body(shape, m),
     )
 }
-// Params: the array, and the caller's name for a refusal. Then the locals.
-const LENGTH: u32 = 2;
+// Params: the array, the caller's name for a refusal, and the tag a null slot
+// reads as. Then the locals.
+const NULL_SLOT: u32 = 2;
+const LENGTH: u32 = 3;
 /// The runs being read.
-const FROM: u32 = 3;
+const FROM: u32 = 4;
 /// The runs being written.
-const INTO: u32 = 4;
-const WIDTH: u32 = 5;
+const INTO: u32 = 5;
+const WIDTH: u32 = 6;
 /// One merge: `[START, MIDDLE)` and `[MIDDLE, END)` into `[START, END)`.
-const START: u32 = 6;
-const MIDDLE: u32 = 7;
-const END: u32 = 8;
-const LEFT: u32 = 9;
-const RIGHT: u32 = 10;
+const START: u32 = 7;
+const MIDDLE: u32 = 8;
+const END: u32 = 9;
+const LEFT: u32 = 10;
+const RIGHT: u32 = 11;
 /// The slot being scanned or written.
-const AT: u32 = 11;
+const AT: u32 = 12;
+/// One element, while it is tested for a null slot.
+const ELEMENT: u32 = 13;
 
-/// A null slot is refused by name: node sorts `undefined` last and `null` as
-/// the text "null", and one storage holds both. Then a bottom-up merge sort,
-/// as the C runtime's: widths double until one run covers the array. A width
-/// doubles only while twice it is below the length, so it cannot overflow.
+/// Null slots that are `undefined` are moved last first (`undefined_last`).
+/// Then a bottom-up merge sort, as the C runtime's: widths double until one
+/// run covers the array. A width doubles only while twice it is below the
+/// length, so it cannot overflow.
 fn body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let run = ValType::Ref(RefType {
         nullable: true,
@@ -102,6 +112,7 @@ fn body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
         ValType::I32,
         ValType::I32,
         ValType::I32,
+        ValType::Ref(RefType::EXTERNREF),
     ]);
     let backing = I::StructGet {
         struct_type_index: shape.wrapper,
@@ -124,7 +135,7 @@ fn body(shape: &gc::Array, m: &mut Builder<'_>) -> Result<Function, Failure> {
         backing.clone(),
         I::LocalSet(FROM),
     ]);
-    no_null_slot(&mut f, shape, m)?;
+    undefined_last(&mut f, shape)?;
     f.instructions(&[
         I::RefNull(HeapType::EXTERN),
         I::LocalGet(LENGTH),
@@ -214,8 +225,21 @@ fn min(f: &mut Function, width: u32, from: u32) {
     f.instructions(&rest);
     f.instructions(&[I::I32LtU, I::Select]);
 }
-fn no_null_slot(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(), Failure> {
+/// Where a null slot is `undefined`, the present elements move to the front
+/// in order and the null slots follow, uncompared, as `SortCompare` never sees
+/// `undefined`; the sort then covers the present ones only, and returns early
+/// where fewer than two are. `LEFT` is where the next present one goes.
+fn undefined_last(f: &mut Function, shape: &gc::Array) -> Result<(), Failure> {
+    let get = arrays::get_instruction(shape)?;
     f.instructions(&[
+        I::LocalGet(NULL_SLOT),
+        I::I32Const(erased::NULL),
+        I::I32Ne,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::LocalSet(LEFT),
+        I::I32Const(0),
+        I::LocalSet(AT),
         I::Block(BlockType::Empty),
         I::Loop(BlockType::Empty),
         I::LocalGet(AT),
@@ -224,23 +248,41 @@ fn no_null_slot(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Res
         I::BrIf(1),
         I::LocalGet(FROM),
         I::LocalGet(AT),
-        arrays::get_instruction(shape)?,
+        get,
+        I::LocalTee(ELEMENT),
         I::RefIsNull,
+        I::I32Eqz,
         I::If(BlockType::Empty),
-    ]);
-    contract::refuse_in(
-        f,
-        m,
-        1,
-        "sorting a null slot: undefined sorts last and null as \"null\", and the slot does not say which",
-    )?;
-    f.instructions(&[
+        I::LocalGet(FROM),
+        I::LocalGet(LEFT),
+        I::LocalGet(ELEMENT),
+        I::ArraySet(shape.backing),
+        I::LocalGet(LEFT),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(LEFT),
         I::End,
         I::LocalGet(AT),
         I::I32Const(1),
         I::I32Add,
         I::LocalSet(AT),
         I::Br(0),
+        I::End,
+        I::End,
+        I::LocalGet(FROM),
+        I::LocalGet(LEFT),
+        I::RefNull(HeapType::EXTERN),
+        I::LocalGet(LENGTH),
+        I::LocalGet(LEFT),
+        I::I32Sub,
+        I::ArrayFill(shape.backing),
+        I::LocalGet(LEFT),
+        I::LocalTee(LENGTH),
+        I::I32Const(2),
+        I::I32LtU,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+        I::Return,
         I::End,
         I::End,
     ]);
@@ -252,6 +294,20 @@ fn no_null_slot(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Res
 fn merge(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(), Failure> {
     let compare = strings::callee(m, strings::Helper::Compare)?;
     let get = arrays::get_instruction(shape)?;
+    // A null slot left to compare is `null`, which sorts as its text.
+    let text = m.literal("null");
+    let compared = |f: &mut Function, cursor| {
+        f.instructions(&[
+            I::LocalGet(FROM),
+            I::LocalGet(cursor),
+            get.clone(),
+            I::LocalTee(ELEMENT),
+            I::RefIsNull,
+            I::If(BlockType::Result(ValType::Ref(RefType::EXTERNREF))),
+        ]);
+        f.global_get(text);
+        f.instructions(&[I::Else, I::LocalGet(ELEMENT), I::End]);
+    };
     let take = |cursor| {
         [
             I::LocalGet(FROM),
@@ -288,13 +344,9 @@ fn merge(f: &mut Function, shape: &gc::Array, m: &mut Builder<'_>) -> Result<(),
         I::If(BlockType::Result(ValType::I32)),
         I::I32Const(1),
         I::Else,
-        I::LocalGet(FROM),
-        I::LocalGet(LEFT),
-        get.clone(),
-        I::LocalGet(FROM),
-        I::LocalGet(RIGHT),
-        get.clone(),
     ]);
+    compared(f, LEFT);
+    compared(f, RIGHT);
     f.call(compare);
     f.instructions(&[
         I::I32Const(0),

@@ -263,8 +263,7 @@ fn source_array_sorts_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 328, "{output}");
-    assert_eq!(output["named_declines"], 1, "{output}");
+    assert_eq!(output["cases"], 330, "{output}");
 }
 
 /// A run-time refusal names its function and its cause.
@@ -662,6 +661,24 @@ fn source_erased_null_slots_agree_with_node() {
         &["--experimental-transform-types"],
     );
     assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
+/// `sort()` over a `(string | null)[]` sorts a null as its text, stably beside
+/// the string "null"; over its `(string | undefined)[]` control, last.
+#[test]
+fn source_sorted_null_slots_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/sorted-null-slots");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "sorted-null-slots",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 85, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }

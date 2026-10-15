@@ -20,8 +20,8 @@ export function sortsInPlace(n: number, seed: number): boolean {
   const xs = filled(n, seed);
   return xs.sort() === xs;
 }
-// node sorts `undefined` last and `null` as the text "null"; one storage holds
-// both, so Wasm refuses the absent slot by name.
+// node sorts `undefined` last and `null` as the text "null"; the read site's
+// type says which a null slot is, here `undefined`.
 export function withAbsent(n: number): string {
   const xs: (string | undefined)[] = ['b', undefined, 'a'];
   return xs.sort().join('|') + n;
