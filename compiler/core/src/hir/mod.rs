@@ -5805,6 +5805,21 @@ fn relate_tokens_to_the_slot_they_reach(program: &mut Program) {
                     };
                     note(token, &slot.ty.clone(), &mut reaches);
                 }
+                // `let probe; class C {} probe = C;`: a module global is a
+                // declared slot like a field, and a token stored into one
+                // reaches its type the same way. Missing, `Ctor_C` kept no base
+                // for `typeof C`, and the JVM declined the store by name.
+                OpKind::GlobalSet { global, value } => {
+                    let Some(token) =
+                        layout_of(&func.values[value.0 as usize].ty).filter(|at| is_token[*at])
+                    else {
+                        continue;
+                    };
+                    let Some(slot) = program.globals.get(*global as usize) else {
+                        continue;
+                    };
+                    note(token, &slot.ty.clone(), &mut reaches);
+                }
                 OpKind::Call {
                     callee: Callee::Direct(name),
                     args,
