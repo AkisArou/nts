@@ -62,14 +62,22 @@ impl SemanticSource for CountingSource {
             sources: self
                 .files
                 .iter()
-                .map(|path| SourceFile {
-                    uri: format!("test://{}", path.file_name().expect("file")),
-                    digest: Digest(hash_of(&std::fs::read(path).expect("input")).to_le_bytes()),
-                    display_path: path.clone(),
-                    rewritten_by: None,
-                    rewritten_map: vec![],
+                .map(|path| {
+                    Ok(SourceFile {
+                        uri: format!("test://{}", path.file_name().expect("file")),
+                        digest: Digest(
+                            hash_of(
+                                &std::fs::read(path)
+                                    .map_err(|error| SnapshotError::Transport(error.to_string()))?,
+                            )
+                            .to_le_bytes(),
+                        ),
+                        display_path: path.clone(),
+                        rewritten_by: None,
+                        rewritten_map: vec![],
+                    })
                 })
-                .collect(),
+                .collect::<Result<_, SnapshotError>>()?,
             ..SemanticSnapshot::default()
         };
         if let Some(text) = self.mutate.take() {
@@ -145,6 +153,31 @@ fn restored_external_input_reuses_the_original_capture() {
     assert_eq!(
         source.captures, 2,
         "external bytes belong to the full content key"
+    );
+}
+
+#[test]
+fn a_missing_external_input_cannot_reuse_a_previous_success() {
+    let project = Project::new("missing-dependency");
+    let mut source = project.source();
+    let external = project.root.join("dependency.ts");
+    std::fs::write(&external, "export const x = 1;").expect("dependency");
+    source.files.push(external.clone());
+    let first = project.ask(&mut source);
+    std::fs::remove_file(&external).expect("remove dependency");
+    assert!(snapshot_in(&mut source, &project.config, "test", &project.cache).is_err());
+    assert_eq!(
+        source.captures, 2,
+        "the failed manifest read must ask the producer"
+    );
+    std::fs::write(external, "export const x = 1;").expect("restore dependency");
+    assert_eq!(
+        first.digest().expect("digest"),
+        project.ask(&mut source).digest().expect("digest")
+    );
+    assert_eq!(
+        source.captures, 2,
+        "the unchanged original content entry survives the failed attempt"
     );
 }
 
