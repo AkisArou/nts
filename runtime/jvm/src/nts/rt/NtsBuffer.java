@@ -191,8 +191,14 @@ public final class NtsBuffer {
         // passes a real number. An absent argument is the caller's to resolve,
         // and the middle end resolves it by passing the current length.
         int n = size(newLength, "newLength");
+        // The maximum carries over only from a resizable buffer to a resizable
+        // one, and past it the transfer is a `RangeError` raised before the
+        // source is detached. Null is how it says so, as `nts_buffer_transfer`
+        // does: the lowering raises that as the catchable error, where a
+        // refusal would abort a program node lets catch it.
         boolean stays = buffer.resizable && !fixed;
-        int max = stays ? Math.max(n, buffer.maxLength) : n;
+        if (stays && n > buffer.maxLength) { return null; }
+        int max = stays ? buffer.maxLength : n;
         byte[] moved;
         if (buffer.bytes.length == max) {
             // The reserved block is already the size the result reserves, so
