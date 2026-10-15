@@ -241,7 +241,7 @@ fn collect_old(dir: &Utf8Path, now: std::time::SystemTime) {
             .and_then(|m| m.modified())
             .is_ok_and(|at| {
                 now.duration_since(at)
-                    .is_ok_and(|age| age > std::time::Duration::from_secs(7 * 86400))
+                    .is_ok_and(|age| age > std::time::Duration::from_hours(7 * 24))
             })
     };
     for directory in [dir.to_owned(), dir.join("manifests")] {

@@ -115,3 +115,78 @@ fn stamp_names_content_and_configuration_but_not_copy_metadata() {
     assert_ne!(first, build_support::stamp(&changed, &cfg));
     assert_ne!(first, build_support::stamp(&input, &[]));
 }
+
+#[test]
+fn source_discovery_tracks_files_and_ignores_checkout_and_mtime() {
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let scratch =
+        Scratch(std::env::temp_dir().join(format!("nts-stamp-inputs-{}", std::process::id())));
+    let _ = std::fs::remove_dir_all(&scratch.0);
+    let a = scratch.0.join("a");
+    let b = scratch.0.join("b");
+    std::fs::create_dir_all(&a).expect("workspace");
+    for name in ["Cargo.toml", "Cargo.lock"] {
+        std::fs::write(a.join(name), name).expect("manifest");
+    }
+    for &(name, dir) in build_support::CRATES {
+        std::fs::create_dir_all(a.join(dir).join("src")).expect("crate");
+        std::fs::write(a.join(dir).join("Cargo.toml"), name).expect("manifest");
+        std::fs::write(a.join(dir).join("src/one.rs"), name).expect("source");
+    }
+    for name in ["build.rs", "build_support.rs"] {
+        std::fs::write(a.join("compiler/frontend-ts").join(name), name).expect("build source");
+    }
+    let first = build_support::inputs(&a).expect("inputs");
+    let stamp = build_support::stamp(&first, &[]);
+    // Reverse creation order, another absolute root, and new inode/timestamps.
+    for (path, bytes) in first.iter().rev() {
+        let path = b.join(path);
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("directory");
+        std::fs::write(path, bytes).expect("copy");
+    }
+    assert_eq!(first, build_support::inputs(&b).expect("copied inputs"));
+    let source = a.join("compiler/frontend-ts/src/one.rs");
+    let bytes = std::fs::read(&source).expect("source");
+    std::fs::File::options()
+        .write(true)
+        .open(&source)
+        .expect("open")
+        .set_modified(std::time::SystemTime::now() - std::time::Duration::from_hours(24))
+        .expect("mtime");
+    assert_eq!(
+        stamp,
+        build_support::stamp(&build_support::inputs(&a).expect("inputs"), &[])
+    );
+    std::fs::write(&source, "changed producer").expect("edit");
+    assert_ne!(
+        stamp,
+        build_support::stamp(&build_support::inputs(&a).expect("inputs"), &[])
+    );
+    std::fs::write(&source, &bytes).expect("restore");
+    let added = a.join("compiler/frontend-ts/src/added.rs");
+    std::fs::write(&added, "a new module").expect("add");
+    assert_ne!(
+        stamp,
+        build_support::stamp(&build_support::inputs(&a).expect("inputs"), &[])
+    );
+    std::fs::remove_file(added).expect("remove addition");
+    assert_eq!(
+        stamp,
+        build_support::stamp(&build_support::inputs(&a).expect("inputs"), &[])
+    );
+    std::fs::remove_file(&source).expect("remove source");
+    assert_ne!(
+        stamp,
+        build_support::stamp(&build_support::inputs(&a).expect("inputs"), &[])
+    );
+    std::fs::remove_file(a.join("Cargo.lock")).expect("missing declared input");
+    assert!(
+        build_support::inputs(&a).is_err(),
+        "a missing declared input must not produce a stamp"
+    );
+}

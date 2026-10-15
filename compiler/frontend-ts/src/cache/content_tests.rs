@@ -395,7 +395,7 @@ fn age(path: &Utf8Path, now: std::time::SystemTime) {
         .write(true)
         .open(path)
         .expect("open")
-        .set_modified(now - std::time::Duration::from_secs(8 * 86400))
+        .set_modified(now - std::time::Duration::from_hours(8 * 24))
         .expect("age");
 }
 

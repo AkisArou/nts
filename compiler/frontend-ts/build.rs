@@ -22,12 +22,13 @@ fn main() {
     cfg.sort();
     let inputs = build_support::inputs(root).expect("all frontend stamp inputs must be readable");
     let stamp = build_support::stamp(&inputs, &cfg);
+    let stamp_bytes = stamp.to_le_bytes();
     let output = std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("output"));
     std::fs::write(
         output.join("frontend_stamp.rs"),
         format!(
             "/// Content stamp of the code and configuration that produce snapshots.\n\
-         pub const FRONTEND_STAMP: u128 = {stamp};\n"
+         pub const FRONTEND_STAMP: u128 = u128::from_le_bytes({stamp_bytes:?});\n"
         ),
     )
     .expect("write frontend stamp");

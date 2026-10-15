@@ -33,8 +33,12 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
         "set NTS_TSGO; this test must measure the frontend"
     );
     let repo = repository();
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
     let base = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("live-case-root-{}", std::process::id()));
+        .join(format!("live-case-root-{}-{unique}", std::process::id()));
     let roots = base.join("inputs");
     let cache = base.join("snapshots");
     let script = "import {caseRoot,workspace,materialise} from './tooling/census/project.ts';\n\
