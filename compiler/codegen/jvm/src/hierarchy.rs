@@ -538,7 +538,8 @@ pub fn claimed_without_extending(program: &JvmProgram<'_>, layout: &Layout) -> b
 /// number }` -- is named by nothing, and a class that fits it by shape arrives
 /// unannounced: an erased `Both` narrowed to `Circle` by `"radius" in s`
 /// compiled to `checkcast nts/gen/Circle` and threw `ClassCastException`
-/// (`outcomes/an-interface-arm-read-after-in-on-a-class-of-another-layout`).
+/// (`tests/programs/an-interface-arm-read-after-in-on-a-class-of-another-layout`,
+/// which a split face answers now).
 /// The accessor families record who holds such a face -- the owners whose rows
 /// native dispatch fills -- and this backend preserves the field access, so an
 /// owner that does not extend the face is a value the cast cannot take.
