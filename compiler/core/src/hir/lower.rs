@@ -80825,16 +80825,25 @@ impl<'a> FuncBuilder<'a> {
         }
         let receiver = self.lower_expression(object)?;
         let origin = self.origin(id);
-        let erased = match self.values[receiver.0 as usize].ty {
-            HirType::Erased => receiver,
-            _ => self.push(
+        let have = self.values[receiver.0 as usize].ty.clone();
+        let erased = if have == HirType::Erased {
+            receiver
+        } else {
+            // What a null receiver means comes from its source type, as at
+            // every other erase. `this.socket?.uncork?.()` reads a `Corkable |
+            // undefined` field, whose null pointer is the `undefined` this test
+            // must find no class in; `Impossible` said it could not be null,
+            // which the Wasm backend refuses and C only survived by tagging it
+            // an object no class matches.
+            let absent = self.absence_at_excluding(object, &have, false);
+            self.push(
                 OpKind::Erase {
                     value: receiver,
-                    absent: Absent::Impossible,
+                    absent,
                 },
                 HirType::Erased,
                 origin.clone(),
-            ),
+            )
         };
         let present = self.push(
             OpKind::InstanceOf {
