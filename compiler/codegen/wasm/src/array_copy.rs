@@ -34,6 +34,7 @@ pub(crate) fn external(name: &str) -> Option<Method> {
     let (helper, family) = match name {
         "nts_array_slice" => (Slice, Number),
         "nts_array_slice_ref" => (Slice, Reference),
+        "nts_array_slice_value" => (Slice, Value),
         "nts_array_splice" => (Splice, Number),
         "nts_array_splice_ref" => (Splice, Reference),
         "nts_array_concat" => (Concat, Number),
