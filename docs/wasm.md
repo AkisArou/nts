@@ -1051,7 +1051,14 @@ numeric globals and module initialization. It supports f32/f64 and signed or
 unsigned 8/16/32/64-bit integer slots. Integer storage conversions consume HIR's
 range and zero-sign proofs; they do not implement JavaScript's coercions.
 `ToInt32`/`ToUint32` have a separate total wasm algorithm using IEEE exponent and
-significand bits. `Math.round` uses floor plus a fractional comparison and keeps
+significand bits. **It has no in-range fast path, on purpose.** C's
+`nts_to_int32` tests `-2^31 - 1 < x < 2^31` first and truncates. The same test
+in the Wasm helper, or in front of it at each call site, made V8 slower
+(P-core A/B, 2026-10-15): `closure-merge` 61.5 to 88.8 us, `symbol-keyed-map`
+and `user-iterable` 11-26% slower, and `optional-chain` itself 800 to 947 us
+with the test at the site. V8 runs the bit-level helper faster than any test
+in front of it, so don't add one back without a P-core A/B of every row.
+`Math.round` uses floor plus a fractional comparison and keeps
 negative zero. Floating remainder imports the host's exact `%` implementation;
 it is the only host import in the comprehensive scalar fixture. Integral
 division/remainder use signed or unsigned wasm instructions under the same
