@@ -3434,9 +3434,18 @@ impl Program {
     /// descriptor, a JVM class -- for `instanceof` and its reported name:
     /// every class sharing the layout where two or more do, or its one class
     /// where a plain object is allocated in it too ([`Program::plain_records`])
-    /// or the layout has another name. Even a private class must report its
-    /// declared name when thrown. Empty where the layout's own identity and
-    /// name answer for its one class.
+    /// or where another type shares the layout -- a private class laid out as
+    /// the interface it implements, whose layout is that interface's. Even a
+    /// private class must report its declared name when thrown. Empty where
+    /// the layout's own identity and name answer for its one class.
+    ///
+    /// **Another type, not another name.** A generic class's instance is laid
+    /// out as `OutgoingMessage<12346>`, a name its class `OutgoingMessage` never
+    /// matches, and asked by name every specialised class split off an
+    /// identity it did not need: in every backend an extra descriptor, and on
+    /// the JVM an identity subclass that `runtime/node/http`'s virtual calls
+    /// then named as their owner over a receiver typed by the base, which the
+    /// verifier rejects.
     ///
     /// One per declaration: a class laid out through two paths carries one
     /// symbol in two entries, and two of them would be one constant defined
@@ -3449,7 +3458,9 @@ impl Program {
             .types
             .iter()
             .any(|ty| self.plain_records.contains(ty));
-        if found.len() >= 2 || (found.len() == 1 && (plain || found[0].name != layout.name)) {
+        let shared =
+            |class: &ClassIdentity| layout.types.iter().any(|ty| !class.types.contains(ty));
+        if found.len() >= 2 || (found.len() == 1 && (plain || shared(found[0]))) {
             found
         } else {
             Vec::new()
