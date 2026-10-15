@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "java.lang.VerifyError: Bad type on operand stack",
+  "node": null,
+  "measured_with": "c563812151908158",
+  "source": "measured"
+}

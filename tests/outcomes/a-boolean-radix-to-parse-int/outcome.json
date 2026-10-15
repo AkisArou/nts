@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "not emitted: /home/akisarou/.cache/nts/outcomes/1118482/a-boolean-radix-to-parse-int/src/case.js:19:1: NTS4001 emitting %3 moved the operand stack from 0 to -1, and an operation must leave it as it found it -- the emitter and its own accounting disagree about this one (in `radixFalse`)",
+  "node": null,
+  "measured_with": "c563812151908158",
+  "source": "measured"
+}

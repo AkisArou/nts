@@ -370,9 +370,13 @@ function runCheck(dir, backend, options) {
   return { category: "not-measured", nts: text || `nts check exited ${ran.status} and said nothing that decides` };
 }
 
-/** The construct, not its scratch directory or moved source location. */
+/**
+ * The construct, not its scratch directory or moved source location: a
+ * lowering's `refused:` line, and a backend's `not emitted:` one, which names
+ * the same scratch path (a JVM decline, `a-boolean-radix-to-parse-int`).
+ */
 function stableCheckText(text) {
-  return text.replace(/\brefused:\s*\S+:\d+:\d+:\s+/g, "refused: ");
+  return text.replace(/\b(refused|not emitted):\s*\S+:\d+:\d+:\s+/g, "$1: ");
 }
 
 function memoryOptions(name) {
@@ -417,6 +421,18 @@ function selfCheck() {
   if (judge(before, summary("/scratch/200/source.ts:8:53:", 28)).ok
       || judge(before, { ...before, nts: before.nts.replace("missing method", "wrong contract") }).ok) {
     return "check location normalization hid a changed count or refusal";
+  }
+  // A backend's decline names the scratch path the same way.
+  const declined = (site, code) => ({
+    run: "check", category: "wrong-answer", node: null,
+    nts: `not emitted: ${site} ${code} emitting %3 moved the operand stack | Error: the backend declined 1 function(s)`,
+  });
+  const once = declined("/scratch/100/case.js:19:1:", "NTS4001");
+  if (!judge(once, declined("/scratch/200/case.js:19:1:", "NTS4001")).ok) {
+    return "check decline locations changed an identical observation";
+  }
+  if (judge(once, declined("/scratch/200/case.js:19:1:", "NTS4002")).ok) {
+    return "check decline normalization hid a changed decline";
   }
   const dir = join(SCRATCH, "self");
   const probe = (text, compilerOptions) => {
