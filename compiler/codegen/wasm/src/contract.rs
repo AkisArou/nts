@@ -7,7 +7,7 @@ use crate::{
     module::{Builder, Func, FuncKey},
     strings,
 };
-use nts_core::hir::ValueId;
+use nts_core::hir::{OpKind, ValueId};
 use wasm_encoder::{BlockType, Instruction as I};
 
 pub(crate) const IMPORT: &str = "inputDecline";
@@ -111,6 +111,13 @@ fn refusal(m: &mut Builder<'_>, function: &str, why: &str) -> Result<Func, Failu
     )
 }
 pub(crate) fn nonnull(b: &mut Body<'_, '_>, value: ValueId, why: &str) -> Result<(), Failure> {
+    // A string literal and an object just built are never null.
+    if matches!(
+        b.func.value(value).kind,
+        OpKind::ConstString(_) | OpKind::ObjectNew { .. }
+    ) {
+        return Ok(());
+    }
     b.load(value)?;
     b.instruction(&I::RefIsNull);
     b.instruction(&I::If(BlockType::Empty));

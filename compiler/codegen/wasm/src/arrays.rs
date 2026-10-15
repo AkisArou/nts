@@ -144,9 +144,10 @@ pub(crate) fn valid_index(
 /// Whether `value` is a whole index below the `i32` length `length` pushes,
 /// or at it when appending: an array's or a typed array's.
 ///
-/// **Every such length counts the elements of GC-array storage**, which the
-/// engine caps under 2^30 bytes, so it is a nonnegative `i32`; a narrow index
-/// is checked by one unsigned comparison on that premise. A length that is
+/// **Every such length counts the elements of GC-array storage, or the code
+/// units of a JS string**, which the engine caps under 2^30, so it is a
+/// nonnegative `i32`; a narrow index is checked by one unsigned comparison on
+/// that premise. A length that is
 /// not GC storage -- a view of linear memory, a buffer past 2^31 -- breaks it:
 /// the comparison would accept a negative index wrapped past the length. A
 /// debug build of this compiler checks the premise in what it emits.

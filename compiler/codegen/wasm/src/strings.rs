@@ -244,30 +244,19 @@ pub(crate) fn unit(
     numeric::convert(b, &index_type, &b.ty(result).clone())
 }
 
+/// Whether `index` names a code unit of `string`, as an array's index is
+/// checked: one unsigned comparison for a 32-bit index, where the whole,
+/// nonnegative and below-the-length tests in `f64` cost AWFY-shaped loops
+/// over a string's characters five conversions per character.
 fn unit_index_contract(
     b: &mut Body<'_, '_>,
     string: ValueId,
     index: ValueId,
 ) -> Result<(), Failure> {
-    let ty = b.ty(index).clone();
-    b.load(index)?;
-    numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.load(index)?;
-    numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.instruction(&I::F64Trunc);
-    b.instruction(&I::F64Eq);
-    b.load(index)?;
-    numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.instruction(&I::F64Const(0.0.into()));
-    b.instruction(&I::F64Ge);
-    b.instruction(&I::I32And);
-    b.load(index)?;
-    numeric::convert(b, &ty, &HirType::NUMBER)?;
-    b.load(string)?;
-    call(b, Helper::Length)?;
-    b.instruction(&I::F64ConvertI32U);
-    b.instruction(&I::F64Lt);
-    b.instruction(&I::I32And);
+    crate::arrays::within(b, index, false, |b| {
+        b.load(string)?;
+        call(b, Helper::Length)
+    })?;
     crate::contract::require(b, "a character index outside the string")
 }
 
