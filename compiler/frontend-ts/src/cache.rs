@@ -80,6 +80,16 @@ pub fn snapshot<S: SemanticSource>(
     let Some(dir) = cache_dir() else {
         return source.snapshot(tsconfig);
     };
+    snapshot_in(source, tsconfig, tool, &dir)
+}
+
+/// Explicit storage keeps independent cache controls out of the process environment.
+fn snapshot_in<S: SemanticSource>(
+    source: &mut S,
+    tsconfig: &Utf8Path,
+    tool: &str,
+    dir: &Utf8Path,
+) -> Result<SemanticSnapshot, SnapshotError> {
     // A source transform answers too: its version and options decide the
     // snapshot as much as the files do, so they are part of the question.
     let identity = source.identity();
@@ -605,6 +615,10 @@ fn read_entry(path: &Utf8Path) -> Option<Entry> {
     let bytes = std::fs::read(path).ok()?;
     postcard::from_bytes(&bytes).ok()
 }
+
+#[cfg(test)]
+#[path = "cache/content_tests.rs"]
+mod content_tests;
 
 #[cfg(test)]
 mod tests {

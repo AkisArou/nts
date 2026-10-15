@@ -29,6 +29,13 @@ pub trait SemanticSource {
     fn identity(&self) -> String {
         String::new()
     }
+
+    /// Identity suitable for persistent reuse, or `None` when a producer
+    /// cannot identify all of its inputs. An unavailable identity bypasses
+    /// the cache rather than sharing an anonymous producer's answers.
+    fn cache_identity(&self) -> Option<String> {
+        Some(self.identity())
+    }
 }
 
 /// What the frontend cost.
