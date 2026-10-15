@@ -54,3 +54,29 @@ export function numericDomainsControl(n: number): string {
   }
   return result + String(n & 3);
 }
+
+// String and erased inputs reach the same digit conversion after ToNumber.
+// Each control changes only the supplied digits to their integer value.
+function stringDigits(n: number): string {
+  return (n & 1) === 0 ? "-0.9" : "100.9";
+}
+function erasedDigits(n: number): any {
+  return (n & 1) === 0 ? -0.9 : "100.9";
+}
+
+export function stringEndpoints(n: number): string {
+  try { return (1.25).toFixed(stringDigits(n) as any); }
+  catch (error) { return (error as Error).name + ": " + (error as Error).message; }
+}
+export function stringEndpointsControl(n: number): string {
+  try { return (1.25).toFixed((n & 1) === 0 ? 0 : 100); }
+  catch (error) { return (error as Error).name + ": " + (error as Error).message; }
+}
+export function erasedEndpoints(n: number): string {
+  try { return (1.25).toFixed(erasedDigits(n)); }
+  catch (error) { return (error as Error).name + ": " + (error as Error).message; }
+}
+export function erasedEndpointsControl(n: number): string {
+  try { return (1.25).toFixed((n & 1) === 0 ? 0 : 100); }
+  catch (error) { return (error as Error).name + ": " + (error as Error).message; }
+}
