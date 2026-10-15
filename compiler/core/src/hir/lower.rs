@@ -28372,6 +28372,18 @@ impl<'a> FuncBuilder<'a> {
         let [target] = children.as_slice() else {
             return Err(self.unsupported(id, "a `delete` of unexpected shape"));
         };
+        if matches!(
+            self.kind_of(*target),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) && self
+            .children(*target)
+            .first()
+            .and_then(|receiver| self.type_of(*receiver))
+            .is_some_and(|ty| property_keys::string_record_type(&ty))
+        {
+            let place = self.place_of(*target)?;
+            return property_keys::delete(self, id, &place);
+        }
         let origin = self.origin(id);
         // A property access only. `delete o[k]` for a computed `k` is a
         // question about a value, and the slot it names is not known here.
@@ -38604,17 +38616,15 @@ impl<'a> FuncBuilder<'a> {
             self.values[table.0 as usize].ty,
             HirType::Managed(ManagedType::Table(_, _))
         ) {
-            let origin = self.origin(id);
-            let key = self.lower_expression(key)?;
-            let key = self.erased_for_table(key, &origin);
-            return Ok(self.push(
-                OpKind::Call {
-                    callee: Callee::External("nts_map_has".to_owned()),
-                    args: vec![table, key],
-                    frame: None,
-                },
-                HirType::Bool,
-                origin,
+            let source = key;
+            let key = self.lower_expecting(source, &HirType::Erased)?;
+            let key = property_keys::capture(self, source, key)?;
+            return Ok(property_keys::apply(
+                self,
+                id,
+                table,
+                key,
+                property_keys::Action::Has,
             ));
         }
         let Some(wanted) = self.literal_name(key) else {
@@ -43367,6 +43377,27 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_in(&mut self, id: NodeId, lhs: NodeId, rhs: NodeId) -> Result<ValueId, Diagnostic> {
+        if self.private_name_key(lhs).is_none()
+            && self.literal_key(lhs).is_none()
+            && self
+                .type_of(rhs)
+                .is_some_and(|ty| property_keys::string_record_type(&ty))
+        {
+            // Evaluate both operands before applying ToPropertyKey to the left.
+            let raw = self.lower_expecting(lhs, &HirType::Erased)?;
+            let (table, guard) = access::receiver(self, rhs)?;
+            if let Some(guard) = guard {
+                access::require_record_membership(self, id, &guard);
+            }
+            let key = property_keys::capture(self, lhs, raw)?;
+            return Ok(property_keys::apply(
+                self,
+                id,
+                table,
+                key,
+                property_keys::Action::In,
+            ));
+        }
         if self.type_of(rhs) == Some(HirType::Managed(ManagedType::Template)) {
             return Err(
                 self.unsupported(id, "property membership on a cooked-only template object")
@@ -43446,21 +43477,7 @@ impl<'a> FuncBuilder<'a> {
                 ManagedType::Object(_) | ManagedType::Array(_) | ManagedType::Table(_, _)
             ))
         ) || self.is_the_object_type(ty))
-            && matches!(
-                key.as_str(),
-                "constructor"
-                    | "hasOwnProperty"
-                    | "isPrototypeOf"
-                    | "propertyIsEnumerable"
-                    | "toLocaleString"
-                    | "toString"
-                    | "valueOf"
-                    | "__proto__"
-                    | "__defineGetter__"
-                    | "__defineSetter__"
-                    | "__lookupGetter__"
-                    | "__lookupSetter__"
-            )
+            && property_keys::OBJECT_PROTOTYPE_MEMBERS.contains(&key.as_str())
         {
             // **Lowered for its effect, even though the answer is a constant.**
             // `in` evaluates its right operand before it looks anything up, and
@@ -43521,11 +43538,12 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Erased,
                 origin.clone(),
             );
-            return Ok(self.runtime_call(
-                "nts_map_has",
-                vec![receiver, erased],
-                HirType::Bool,
-                origin,
+            return Ok(property_keys::apply(
+                self,
+                id,
+                receiver,
+                erased,
+                property_keys::Action::Has,
             ));
         }
         if let Some(answer) = self.in_on_a_native(id, rhs, &key, ty)? {
@@ -47340,8 +47358,11 @@ impl<'a> FuncBuilder<'a> {
                 self.values[array.0 as usize].ty,
                 HirType::Managed(ManagedType::Table(_, _))
             ) {
-                let origin = self.origin(target);
-                let key = self.erased_for_table(index, &origin);
+                let source = *self
+                    .children(target)
+                    .last()
+                    .expect("element access has an index");
+                let key = property_keys::capture(self, source, index)?;
                 return Ok(access::protect(
                     Place::Entry { table: array, key },
                     guard,
@@ -47689,15 +47710,7 @@ impl<'a> FuncBuilder<'a> {
                 )
             }
             Place::Entry { table, key } => {
-                let read = self.push(
-                    OpKind::Call {
-                        callee: Callee::External("nts_map_get".to_owned()),
-                        args: vec![table, key],
-                        frame: None,
-                    },
-                    HirType::Erased,
-                    origin,
-                );
+                let read = property_keys::apply(self, id, table, key, property_keys::Action::Get);
                 self.narrowed(id, read)?
             }
             Place::Global(global) => {
@@ -48718,15 +48731,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Place::Entry { table, key } => {
                 let erased = self.erased_for_table(value, &origin);
-                self.push(
-                    OpKind::Call {
-                        callee: Callee::External("nts_map_set".to_owned()),
-                        args: vec![table, key, erased],
-                        frame: None,
-                    },
-                    HirType::Void,
-                    origin,
-                );
+                property_keys::apply(self, id, table, key, property_keys::Action::Set(erased));
             }
             Place::Global(global) => {
                 self.push(OpKind::GlobalSet { global, value }, HirType::Void, origin);
@@ -56604,17 +56609,12 @@ impl<'a> FuncBuilder<'a> {
             self.values[array.0 as usize].ty,
             HirType::Managed(ManagedType::Table(_, _))
         ) {
-            let origin = self.origin(id);
-            let key = self.erased_for_table(index, &origin);
-            let read = self.push(
-                OpKind::Call {
-                    callee: Callee::External("nts_map_get".to_owned()),
-                    args: vec![array, key],
-                    frame: None,
-                },
-                HirType::Erased,
-                origin,
-            );
+            let source = *self
+                .children(id)
+                .last()
+                .expect("element access has an index");
+            let key = property_keys::capture(self, source, index)?;
+            let read = property_keys::apply(self, id, array, key, property_keys::Action::Get);
             return self.narrowed(id, read);
         }
 
@@ -57086,7 +57086,12 @@ impl<'a> FuncBuilder<'a> {
         {
             return Err(self.not_an_array(id));
         }
-        let index_value = self.lower_expression(*index)?;
+        let index_value = if property_keys::string_record(self, array_value) {
+            // Null and undefined are key values, not absent string pointers.
+            self.lower_expecting(*index, &HirType::Erased)?
+        } else {
+            self.lower_expression(*index)?
+        };
         Ok((array_value, index_value, guard))
     }
 
@@ -58258,15 +58263,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         let key = self.erased_for_table(key, &origin);
-        let read = self.push(
-            OpKind::Call {
-                callee: Callee::External("nts_map_get".to_owned()),
-                args: vec![value, key],
-                frame: None,
-            },
-            HirType::Erased,
-            origin,
-        );
+        let read = property_keys::apply(self, id, value, key, property_keys::Action::Get);
         self.narrowed(id, read)
     }
 
@@ -83146,6 +83143,7 @@ mod layout_collection;
 mod literal_methods;
 mod native_memory;
 mod printed;
+mod property_keys;
 mod virtual_returns;
 
 /// An Objective-C property: its declaration, and the selectors that read and

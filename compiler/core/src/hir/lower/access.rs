@@ -184,6 +184,60 @@ pub(super) fn protect(place: Place, guard: Option<Guard>, key: Key) -> Place {
     }
 }
 
+/// Computed record membership never treats a null table as an empty object.
+/// The absent branch needs its own `TypeError` protocol in a later slice.
+pub(super) fn require_record_membership(builder: &mut FuncBuilder<'_>, at: NodeId, guard: &Guard) {
+    let rejected = builder.new_block();
+    let accepted = builder.new_block();
+    builder.terminate(Terminator::Branch {
+        cond: guard.absent,
+        then_target: rejected,
+        then_args: Vec::new(),
+        else_target: accepted,
+        else_args: Vec::new(),
+    });
+    builder.switch_to(rejected);
+    let origin = builder.origin(at);
+    let message = builder.push(
+        OpKind::ConstString(
+            "property membership on an absent record, whose TypeError this compiler does not yet lower".to_owned(),
+        ),
+        HirType::Managed(ManagedType::String),
+        origin.clone(),
+    );
+    builder.runtime_call("nts_refused", vec![message], HirType::Void, origin);
+    builder.terminate(Terminator::Unreachable);
+    builder.switch_to(accepted);
+}
+
+/// Deletion converts the receiver to an object but does not read a property.
+/// Its absent-receiver diagnostic neither describes nor coerces the key.
+pub(super) fn require_delete(
+    builder: &mut FuncBuilder<'_>,
+    at: NodeId,
+    guard: &Guard,
+) -> Result<(), Diagnostic> {
+    let rejected = builder.new_block();
+    let accepted = builder.new_block();
+    builder.terminate(Terminator::Branch {
+        cond: guard.absent,
+        then_target: rejected,
+        then_args: Vec::new(),
+        else_target: accepted,
+        else_args: Vec::new(),
+    });
+    builder.switch_to(rejected);
+    let origin = builder.origin(at);
+    let message = builder.push(
+        OpKind::ConstString("Cannot convert undefined or null to object".to_owned()),
+        HirType::Managed(ManagedType::String),
+        origin,
+    );
+    builder.throw_provided_error_text(at, "TypeError", message)?;
+    builder.switch_to(accepted);
+    Ok(())
+}
+
 pub(super) fn require(
     builder: &mut FuncBuilder<'_>,
     at: NodeId,

@@ -17,6 +17,70 @@ fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
 }
 
 #[test]
+fn record_string_keys_bypass_the_primitive_formatter() {
+    let Some((_dir, prepared)) = prepare(
+        "record-string-key",
+        r"
+        export function read(values: Record<string, unknown>, key: string): unknown {
+            return values[key];
+        }
+    ",
+    ) else {
+        return;
+    };
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(!text.contains("nts_value_to_string("), "{text}");
+    assert!(!text.contains("nts_value_tag("), "{text}");
+
+    let Some((_dir, prepared)) = prepare(
+        "record-erased-key",
+        r"
+        export function read(values: Record<string, unknown>, key: any): unknown {
+            return values[key];
+        }
+    ",
+    ) else {
+        return;
+    };
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(text.contains("nts_value_tag("), "{text}");
+    assert!(text.contains("nts_value_to_string("), "{text}");
+    let func = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "read")
+        .unwrap();
+    let calls = |block: &hir::Block, name: &str| {
+        block.ops.iter().any(|id| {
+            matches!(
+                &func.values[id.0 as usize].kind,
+                OpKind::Call { callee: Callee::External(callee), .. } if callee == name
+            )
+        })
+    };
+    let lookup = func
+        .blocks
+        .iter()
+        .position(|block| calls(block, "nts_map_get"))
+        .unwrap();
+    assert!(!calls(&func.blocks[lookup], "nts_value_to_string"));
+    // The string-tag branch enters the lookup directly; the conversion call
+    // is in a different block on the other arm, not before that branch.
+    assert!(func.blocks.iter().any(|block| {
+        let hir::Terminator::Branch { cond, then_target, .. } = &block.terminator else { return false; };
+        if then_target.0 as usize != lookup { return false; }
+        let OpKind::Binary { op: hir::BinOp::Eq, lhs, rhs } = func.values[cond.0 as usize].kind else { return false; };
+        matches!(func.values[lhs.0 as usize].kind, OpKind::TagOf { .. })
+            && matches!(func.values[rhs.0 as usize].kind, OpKind::ConstInt(tag) if tag == i128::from(hir::tags::STRING))
+    }), "string path did not enter the lookup directly: {func:?}");
+}
+
+#[test]
 fn non_null_array_accesses_emit_no_receiver_guard() {
     let source = r"
         export function read(values: number[]): number { return values[3]; }
