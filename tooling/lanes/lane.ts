@@ -149,7 +149,10 @@ function start(name: string | undefined, topic: string | undefined): void {
     const args = exists(branch) ? ["worktree", "add", tree, branch] : ["worktree", "add", "-b", branch, tree, "main"];
     execFileSync("git", args, { cwd: root, stdio: "inherit" });
   } else {
-    const dirty = spawnSync("git", ["status", "--porcelain"], { cwd: tree, encoding: "utf8" });
+    // `=dirty`: the carried patches inputs.sh applies are uncommitted changes
+    // inside `typescript-go`, and they are the tree's setup, not its work. A
+    // moved submodule pointer still counts.
+    const dirty = spawnSync("git", ["status", "--porcelain", "--ignore-submodules=dirty"], { cwd: tree, encoding: "utf8" });
     if (dirty.status !== 0 || dirty.stdout.trim()) {
       throw new Error(`${tree} has uncommitted work: commit it (\`WIP:\` is fine), then start again`);
     }

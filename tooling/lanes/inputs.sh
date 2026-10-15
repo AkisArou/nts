@@ -32,6 +32,30 @@ case $mode in
   *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
 esac
 
+# The carried patches (third_party/patches/), on or off a lane tree's
+# `typescript-go`. `bootstrap.sh` applies them in the shared checkout, and the
+# tsgo binary every tree runs is built there, so a lane tree's own checkout
+# was the pin as upstream wrote it: the frontend's tests that read the pin
+# (`the_pin_reports_object_flags_for_every_type`, and the plain-JS one) failed
+# in every lane tree and passed in the gate. Idempotent both ways: a patch
+# already in the state asked for is left alone, and one that applies neither
+# way stops the setup, because the pin has moved under it.
+carried() {
+  for patch in "$tree"/third_party/patches/*.patch; do
+    [ -e "$patch" ] || continue
+    if [ "$1" = on ]; then
+      git -C "$tree/$submodule" apply --reverse --check "$patch" 2>/dev/null && continue
+      git -C "$tree/$submodule" apply "$patch" || {
+        echo "inputs.sh: ${patch##*/} applies neither way: the pin has moved under it (third_party/patches/README.md)" >&2
+        exit 1
+      }
+    else
+      git -C "$tree/$submodule" apply --check --reverse "$patch" 2>/dev/null || continue
+      git -C "$tree/$submodule" apply --reverse "$patch"
+    fi
+  done
+}
+
 if [ "$mode" = lane ]; then
   submodule=third_party/typescript-go
   wanted=$(git -C "$tree" ls-files -s -- "$submodule" | awk '{ print $2 }')
@@ -40,8 +64,12 @@ if [ "$mode" = lane ]; then
     if [ -L "$tree/$submodule" ]; then rm "$tree/$submodule"; else rmdir "$tree/$submodule" 2>/dev/null || true; fi
     git -C "$root/$submodule" worktree add -q --detach "$tree/$submodule" "$wanted"
   elif [ -n "$wanted" ] && [ "$(git -C "$tree/$submodule" rev-parse HEAD)" != "$wanted" ]; then
+    # Off first: they are uncommitted changes, which a checkout that touches
+    # the same files refuses.
+    carried off
     git -C "$tree/$submodule" checkout -q --detach "$wanted"
   fi
+  [ -n "$wanted" ] && carried on
 fi
 
 # The tsgo binary the frontend runs, built once in the shared checkout. A
