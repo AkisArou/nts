@@ -279,7 +279,8 @@ impl Pool {
     }
 
     fn evict(&mut self, target: u64, protected: &[&Utf8Path]) -> io::Result<()> {
-        self.files.sort_by(|a, b| b.used_at.cmp(&a.used_at));
+        self.files
+            .sort_by_key(|file| std::cmp::Reverse(file.used_at));
         for index in (0..self.files.len()).rev() {
             if self.total <= target {
                 break;
