@@ -18,6 +18,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 xxhash-rust.workspace = true
 
+[build-dependencies]
+xxhash-rust.workspace = true
+
 [dev-dependencies]
 nts-diagnostics.workspace = true
 nts-semantic-schema.workspace = true

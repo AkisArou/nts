@@ -28,6 +28,7 @@
 pub mod ast;
 mod bound;
 pub mod decompose;
+mod executable_identity;
 pub mod generated;
 pub mod proto;
 pub mod symbols;
@@ -1663,6 +1664,11 @@ impl SemanticSource for TsgoApi {
     /// was stored first. Written as the question rather than as the command, so
     /// two commands that ask the same thing still share an entry -- which is the
     /// point of the cache.
+    fn cache_identity(&self) -> Option<String> {
+        let binary = executable_identity::fingerprint(&self.executable)?;
+        Some(format!("tsgo:{binary:032x}+{}", self.identity()))
+    }
+
     fn identity(&self) -> String {
         // v2 resolves tagged calls and retains undefined cooked template
         // entries. Older decoded snapshots cannot answer those questions.

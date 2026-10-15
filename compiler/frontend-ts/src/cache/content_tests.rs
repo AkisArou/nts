@@ -169,3 +169,172 @@ fn executable_bytes_belong_to_the_producer_identity() {
         None
     );
 }
+
+#[test]
+fn independent_configuration_and_producer_variants_survive() {
+    for dimension in ["config", "base-config", "identity", "tool"] {
+        let project = Project::new(dimension);
+        let mut source = project.source();
+        if dimension == "base-config" {
+            std::fs::write(&project.config, "{\"extends\":\"./base.json\"}").expect("extends");
+            std::fs::write(project.root.join("project/base.json"), "{}").expect("base");
+        }
+        project.ask(&mut source);
+        let path = if dimension == "base-config" {
+            project.root.join("project/base.json")
+        } else {
+            project.config.clone()
+        };
+        let original = std::fs::read(&path).expect("config");
+        match dimension {
+            "identity" => source.identity = Some("different transform or generated surface".into()),
+            "tool" => {
+                snapshot_in(&mut source, &project.config, "other tool", &project.cache)
+                    .expect("other tool");
+            }
+            _ => std::fs::write(&path, "{\"compilerOptions\":{\"strict\":true}}")
+                .expect("new config"),
+        }
+        if dimension != "tool" {
+            project.ask(&mut source);
+        }
+        source.identity = Some("counting-source-v1".into());
+        std::fs::write(path, original).expect("restore config");
+        project.ask(&mut source);
+        assert_eq!(source.captures, 2, "{dimension}: A/B/A captures twice");
+    }
+}
+
+#[test]
+fn incomplete_configs_bypass_reuse_instead_of_hiding_options() {
+    let project = Project::new("incomplete-configs");
+    let mut source = project.source();
+    for config in [
+        "{\"extends\":\"missing-package\"}",
+        "{\"extends\":\"./missing.json\"}",
+        "{\"extends\":\"./tsconfig.json\"}",
+        "{bad json}",
+    ] {
+        std::fs::write(&project.config, config).expect("config");
+        let before = source.captures;
+        project.ask(&mut source);
+        project.ask(&mut source);
+        assert_eq!(source.captures - before, 2, "{config}");
+    }
+    std::fs::write(&project.config, "{/* comment with an ignored \\\"extends\\\" */ \"compilerOptions\": {\"paths\":{\"x\":[\"//string\",],},},}").expect("JSONC");
+    let before = source.captures;
+    project.ask(&mut source);
+    project.ask(&mut source);
+    assert_eq!(
+        source.captures - before,
+        1,
+        "supported JSONC must still hit"
+    );
+}
+
+#[test]
+fn truncated_entries_and_hints_cost_captures_not_wrong_hits() {
+    let project = Project::new("corruption");
+    let mut source = project.source();
+    let original = project.ask(&mut source).digest().expect("digest");
+    let entry = std::fs::read_dir(&project.cache)
+        .expect("cache")
+        .map(Result::unwrap)
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "postcard"))
+        .expect("entry")
+        .path();
+    std::fs::write(entry, [0, 1, 2]).expect("truncate");
+    assert_eq!(project.ask(&mut source).digest().expect("digest"), original);
+    assert_eq!(source.captures, 2);
+    let hint = std::fs::read_dir(project.cache.join("manifests"))
+        .expect("hints")
+        .next()
+        .expect("hint")
+        .expect("file")
+        .path();
+    std::fs::write(hint, [255]).expect("truncate hint");
+    assert_eq!(project.ask(&mut source).digest().expect("digest"), original);
+    assert_eq!(source.captures, 3);
+}
+
+#[test]
+fn a_hint_cannot_hide_a_snapshots_external_dependency() {
+    let project = Project::new("hint-validation");
+    let mut source = project.source();
+    let external = project.root.join("external.ts");
+    std::fs::write(&external, "export const x = 1").expect("external");
+    source.files.push(external);
+    project.ask(&mut source);
+    let asked = question(&source, &absolute(&project.config), "test").expect("question");
+    let mut paths = required_paths(&project.ask(&mut source), &asked);
+    paths.retain(|p| !p.ends_with("external.ts"));
+    let read = manifest(paths.clone()).expect("incomplete manifest");
+    let key = encoded_hash(&(&asked, &read)).expect("key");
+    let snapshot = project.ask(&mut source);
+    let entry = Entry {
+        question: asked.clone(),
+        read,
+        snapshot,
+    };
+    atomic_write(
+        &entry_path(&project.cache, key),
+        &postcard::to_allocvec(&entry).expect("encode"),
+    )
+    .expect("forged entry");
+    let local = encoded_hash(&asked).expect("local");
+    let hint = project
+        .cache
+        .join("manifests")
+        .join(format!("{local:032x}.manifest"));
+    atomic_write(
+        &hint,
+        &postcard::to_allocvec(&Hint {
+            format: FORMAT,
+            paths,
+        })
+        .expect("hint"),
+    )
+    .expect("forged hint");
+    project.ask(&mut source);
+    assert_eq!(
+        source.captures, 2,
+        "a hint chooses a candidate but cannot grant freshness"
+    );
+}
+
+#[test]
+fn concurrent_publications_leave_complete_entries_and_no_partials() {
+    let project = Project::new("publication-race");
+    let mut threads = Vec::new();
+    for _ in 0..8 {
+        let config = project.config.clone();
+        let cache = project.cache.clone();
+        let mut source = project.source();
+        threads.push(std::thread::spawn(move || {
+            snapshot_in(&mut source, &config, "test", &cache)
+                .expect("capture")
+                .digest()
+                .expect("digest")
+        }));
+    }
+    let results: Vec<_> = threads
+        .into_iter()
+        .map(|t| t.join().expect("thread"))
+        .collect();
+    assert!(results.iter().all(|r| *r == results[0]));
+    let mut source = project.source();
+    project.ask(&mut source);
+    assert_eq!(source.captures, 0, "a completed publication is reusable");
+    for entry in std::fs::read_dir(&project.cache).expect("cache") {
+        let entry = entry.expect("file");
+        assert_ne!(
+            entry.path().extension().and_then(|s| s.to_str()),
+            Some("partial")
+        );
+        if entry.path().extension().is_some_and(|e| e == "postcard") {
+            let entry: Entry = postcard::from_bytes(&std::fs::read(entry.path()).expect("read"))
+                .expect("whole entry");
+            entry.snapshot.validate().expect("valid snapshot");
+        }
+    }
+}

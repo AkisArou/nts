@@ -15,6 +15,8 @@ pub mod tsgo;
 pub use source::{FrontendStats, SemanticSource};
 pub use tsgo::TsgoApi;
 
+include!(concat!(env!("OUT_DIR"), "/frontend_stamp.rs"));
+
 /// The source files a project named as its roots, as `SourceFile::uri`.
 ///
 /// TypeScript's `files` array is the only place a project says which modules
