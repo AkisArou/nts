@@ -467,28 +467,40 @@ pub fn main_for(shape: MainShape) -> String {
     )
 }
 
-/// Every value some operation or terminator in a function reads.
 /// The operands a value reads *in C*.
 ///
-/// Everything `operands_of` says, less a bridge's closure. A bridge is emitted
-/// as the name of a generated function, so nothing reads the closure at run
-/// time -- but it is a real operand in the HIR, where it is what identifies the
-/// function and what keeps the body reachable. Counting it here would declare a
-/// local that is assigned and never read, which is `-Wunused-but-set-variable`
-/// and an error under the flags this file is compiled with.
-fn operands_in_c(kind: &OpKind) -> Vec<ValueId> {
-    match kind {
+/// Everything `operands_of` says, less what the C answers without reading.
+/// Counting one of those would declare a local that is assigned and never
+/// read, which is `-Wunused-but-set-variable` and an error under the flags this
+/// file is compiled with. Two of them:
+///
+/// - **A bridge's closure.** A bridge is emitted as the name of a generated
+///   function, so nothing reads the closure at run time -- but it is a real
+///   operand in the HIR, where it is what identifies the function and what
+///   keeps the body reachable.
+/// - **A remainder's converts, when it is over two `i32`s.** `float_remainder`
+///   answers it from the integers beneath them
+///   ([`nts_core::hir::specialize::integral_remainder`]), and the HIR keeps the
+///   converts as its operands so the analyses read it unchanged. Counted, they
+///   were two locals assigned and never read, and `event-state` stopped
+///   compiling.
+fn operands_in_c(func: &Func, op: &nts_core::hir::Op) -> Vec<ValueId> {
+    match &op.kind {
         OpKind::NativeBridge { .. } => Vec::new(),
-        other => nts_core::hir::operands_of(other),
+        other => nts_core::hir::specialize::integral_remainder(func, op).map_or_else(
+            || nts_core::hir::operands_of(other),
+            |(dividend, divisor)| vec![dividend, divisor],
+        ),
     }
 }
 
+/// Every value some operation or terminator in a function reads, in C.
 fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut read = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
         read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
         for value in &block.ops {
-            read.extend(operands_in_c(&func.values[value.0 as usize].kind));
+            read.extend(operands_in_c(func, &func.values[value.0 as usize]));
         }
     }
     read
@@ -4661,19 +4673,16 @@ fn emit_body(
     // behind. The arena keeps dead entries on purpose: a `ValueId` is an index
     // into it, and compacting would invalidate every reference in the function.
     let mut declared = rustc_hash::FxHashSet::default();
-    let mut read = rustc_hash::FxHashSet::default();
     for block in &func.blocks {
         declared.extend(block.params.iter().copied());
         declared.extend(block.ops.iter().copied());
-        read.extend(nts_core::hir::operands_of_terminator(&block.terminator));
-        for value in &block.ops {
-            read.extend(operands_in_c(&func.values[value.0 as usize].kind));
-        }
     }
+    let read = values_read(func);
 
     // A call whose result nobody reads is emitted as a bare statement, so it has
     // nothing to declare. `c.advance();` written for its effect is exactly that,
-    // and a local assigned by nobody is `-Wunused-variable`.
+    // and a local assigned by nobody is `-Wunused-variable`. A convert nobody
+    // reads in C is not emitted at all (`operands_in_c`).
     declared.retain(|value| {
         read.contains(value)
             || !matches!(
@@ -4682,6 +4691,7 @@ fn emit_body(
                     | OpKind::Call { .. }
                     | OpKind::NativeMalloc { .. }
                     | OpKind::ArrayGet { .. }
+                    | OpKind::Convert(_)
             )
     });
 
@@ -5875,6 +5885,10 @@ fn emit_op(
             let target = c_type_of(context.program, &op.ty, &op.origin)?;
             format!("{name} = ({target}){};", value_name(*operand))
         }
+        // A cast has no effect, so one nothing reads in C is not emitted: the
+        // remainder `float_remainder` answers from the integers beneath its
+        // operands leaves exactly that behind (`operands_in_c`).
+        OpKind::Convert(_) if !context.read.contains(&value) => return Ok(()),
         OpKind::Convert(operand) => {
             // A C cast. Between an integer and a double this is one instruction,
             // and every one is a place specialization decided two adjacent
