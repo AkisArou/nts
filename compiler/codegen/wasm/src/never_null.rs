@@ -1,8 +1,8 @@
 //! The values of a function that cannot be null, so a null check of one
 //! refuses nothing and is not emitted.
 //!
-//! A string literal, an object or array just built, and a string concatenation
-//! are never null, and a block parameter is never null when every edge into its
+//! A string literal, an object or array just built, a capture-free named
+//! function and a string concatenation are never null, and a block parameter is never null when every edge into its
 //! block passes one that is not. The parameters are the greatest set that holds
 //! of: every one is assumed so, and one is struck while an edge passes it
 //! something that may be null. A string built up in a loop is such a parameter:
@@ -53,10 +53,16 @@ pub(crate) fn values(func: &Func) -> BTreeSet<ValueId> {
     never
 }
 
-/// Whether an operation's value is a reference it has just made.
+/// Whether an operation's value is a reference it has just made. A
+/// capture-free named function is one instance its global is initialized with
+/// (`callables::static_value`), so it is never null either: `h.fn = plusOne`
+/// checked it for null before erasing it, every round of `optional-chain`.
 fn built(kind: &OpKind) -> bool {
     match kind {
-        OpKind::ConstString(_) | OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => true,
+        OpKind::ConstString(_)
+        | OpKind::ObjectNew { .. }
+        | OpKind::ArrayNew { .. }
+        | OpKind::ClosureStatic => true,
         OpKind::Call {
             callee: Callee::External(name),
             ..
@@ -127,5 +133,14 @@ mod tests {
     fn one_built_from_a_parameter_may_be() {
         let (f, text) = appending(|f| value(f, OpKind::Param(0), string()));
         assert!(!values(&f).contains(&text));
+    }
+
+    #[test]
+    fn a_static_closure_is_never_null() {
+        let ty = HirType::Managed(ManagedType::Object(nts_core::hir::ClassId(0)));
+        let mut f = function("named", &[], ty.clone());
+        let named = value(&mut f, OpKind::ClosureStatic, ty);
+        f.blocks = vec![block(&[], &[named], Terminator::Return(Some(named)))];
+        assert!(values(&f).contains(&named));
     }
 }
