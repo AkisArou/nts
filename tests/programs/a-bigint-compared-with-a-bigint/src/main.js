@@ -1,4 +1,4 @@
-// The control for `tests/outcomes/a-bigint-compared-with-a-symbol`: the right
+// The control for `tests/programs/a-bigint-compared-with-a-symbol`: the right
 // operand is a `bigint`. It differs in one thing, that operand's type, and
 // agrees with node on every backend.
 

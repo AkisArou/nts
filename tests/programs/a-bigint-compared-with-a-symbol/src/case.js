@@ -1,3 +1,7 @@
+// **Fixed 2026-10-15, and now its guard:** a strict comparison of two values whose
+// checker types are of different `typeof` kinds compares them erased, and the
+// erased comparison answers `false` by their tags. What it was:
+//
 // **`===` between a `bigint` and a symbol is one `eq` of two types.** The
 // answer is `false` whatever the values, since strict equality of two
 // different types is false. The prepared HIR compares them as they are:

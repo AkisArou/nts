@@ -24,6 +24,10 @@ use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
 use layout_collection::{BuilderLayouts, LayoutCollector};
 
+/// The checker's `TypeFlagsUniqueESSymbol`: a `unique symbol`, one name
+/// distinguishable from every other, which the decoder leaves `Structured`.
+const UNIQUE_SYMBOL: u32 = 1 << 14;
+
 /// Closures crossing the type they were written at, recorded where that is known.
 ///
 /// **Recorded rather than checked, because the two halves of the question are
@@ -19873,7 +19877,6 @@ fn representation_of(
             // read `a parameter of unrepresentable type (a structured type
             // (flags 0x20000))`.
             const NON_PRIMITIVE: u32 = 0x0002_0000;
-            const UNIQUE_SYMBOL: u32 = 1 << 14;
             if *flags == NON_PRIMITIVE {
                 return Some(HirType::Erased);
             }
@@ -26945,7 +26948,6 @@ impl<'a> FuncBuilder<'a> {
     /// the fact that its *spelling* could be read as a name is a coincidence of
     /// how identifiers are stored rather than anything about the program.
     fn names_one_member(&self, index: NodeId) -> bool {
-        const UNIQUE_SYMBOL: u32 = 1 << 14;
         let Some(ty) = self.snapshot.node_types.get(&index) else {
             return false;
         };
@@ -28505,8 +28507,13 @@ impl<'a> FuncBuilder<'a> {
                 | TypeKind::Literal(LiteralValue::String(_))
                 | TypeKind::TemplateLiteral { .. } => Some("string"),
                 TypeKind::Boolean | TypeKind::Literal(LiteralValue::Boolean(_)) => Some("boolean"),
-                TypeKind::BigInt => Some("bigint"),
+                // A literal's type too: `0n === Symbol("1")` is test262's
+                // bigint against a symbol, and the literal is what it spells.
+                TypeKind::BigInt | TypeKind::Literal(LiteralValue::BigInt(_)) => Some("bigint"),
                 TypeKind::Symbol => Some("symbol"),
+                // `const s = Symbol("s")` is a `unique symbol`, which is still
+                // a symbol to `typeof`.
+                TypeKind::Structured { flags } if flags & UNIQUE_SYMBOL != 0 => Some("symbol"),
                 // **`typeof null` is `"object"`**, which is the language's
                 // oldest quirk and a constant either way. Both of these are
                 // answered here rather than below, because below begins by
@@ -80212,6 +80219,40 @@ impl<'a> FuncBuilder<'a> {
                 (left, right),
                 (HirType::Erased, HirType::BigInt) | (HirType::BigInt, HirType::Erased)
             )
+        {
+            return Ok((
+                self.coerce(lhs, &HirType::Erased, nodes[0])?,
+                self.coerce(rhs, &HirType::Erased, nodes[1])?,
+            ));
+        }
+        // **Two values of different `typeof` kinds are compared erased too.**
+        // Unchecked JavaScript reaches `===` with any pair -- test262 compares
+        // a bigint with a symbol, and `1 === true` is a `number` against a
+        // `boolean` -- and neither side is erased, so this returned them as
+        // they were: an `Eq` the verifier refuses as mixed operands for the
+        // scalars, and for a bigint against a reference one it accepted, which
+        // C answered by luck and the JVM could not load. Erased, the comparison
+        // reads the tags first and answers `false`, as node does.
+        //
+        // The kinds are the *checker's*, not the representations': a `c_long`
+        // is a bigint held as an `i64`, which the representation calls a
+        // number, and `slot.value === low` between one and a branded bigint is
+        // a comparison of values that `relational_operands` widens. A branded
+        // scalar is an intersection, which names no single kind, so it never
+        // reaches this. Two pointers keep the identity comparison below.
+        let kinds = (
+            self.typeof_from_the_checkers_type(nodes[0]),
+            self.typeof_from_the_checkers_type(nodes[1]),
+        );
+        let (left, right) = (
+            &self.values[lhs.0 as usize].ty,
+            &self.values[rhs.0 as usize].ty,
+        );
+        if strict
+            && matches!(kinds, (Some(a), Some(b)) if a != b)
+            && *left != HirType::Erased
+            && *right != HirType::Erased
+            && !(left.holds_a_pointer() && right.holds_a_pointer())
         {
             return Ok((
                 self.coerce(lhs, &HirType::Erased, nodes[0])?,
