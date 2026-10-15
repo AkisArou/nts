@@ -303,11 +303,9 @@ export function pinCompiler(nts, scratch) {
 /**
  * The environment every compiler invocation needs.
  *
- * `NTS_NO_SNAPSHOT_CACHE=1` because the snapshot cache keys on the tsconfig
- * *path*, and one scratch path carries thousands of different programs.
- * `cache.rs` records what that costs: two projects hashing to one entry, the
- * second handed the first's program, surfacing only because an unrelated check
- * happened to catch it.
+ * Mutable worker scratch defaults to no cache. A caller using immutable case
+ * roots opts in explicitly so the frontend can reuse the same inputs across
+ * workers, backends and compiler rebuilds.
  */
 export function environment({ snapshotCache = false } = {}) {
   return { ...process.env, NTS_NO_SNAPSHOT_CACHE: snapshotCache ? "0" : "1" };

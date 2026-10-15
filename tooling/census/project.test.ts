@@ -108,6 +108,20 @@ test("collection is explicit, by last use, and removes only owned roots", (t) =>
   assert.equal(existsSync(foreign), true);
 });
 
+test("a hit refreshes old use records without rewriting the published tree", (t) => {
+  const base = scratch(t);
+  const first = caseRoot((dir) => fill(dir), { base });
+  const manifest = join(first.root, ".nts-case-root.json");
+  const before = lstatSync(manifest).mtimeMs;
+  const use = join(base, "uses", first.key);
+  const ago = new Date(Date.now() - 10 * 86400_000);
+  utimesSync(use, ago, ago);
+  assert.equal(caseRoot((dir) => fill(dir), { base }).created, false);
+  assert.equal(lstatSync(manifest).mtimeMs, before);
+  assert.ok(lstatSync(use).mtimeMs > ago.getTime());
+  assert.equal(collectCaseRoots({ base }).removed, 0);
+});
+
 test("body, harness, include and fixture diagnostics keep their classification", (t) => {
   const base = scratch(t);
   const { root } = caseRoot((dir) => fill(dir), { base });
