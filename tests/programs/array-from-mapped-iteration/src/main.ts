@@ -235,3 +235,22 @@ export function reassignedParameters(n: number): string {
   });
   return result.join(",") + ":" + source[0];
 }
+
+// These result widths already work through the old collect-then-map path.
+// Fusing the walk must preserve them while appending into an empty result.
+export function booleanResults(n: number): number {
+  const first = n & 15;
+  const source = new Set<number>();
+  source.add(first);
+  source.add(first + 1);
+  const result = Array.from(source, (value) => value % 2 === 0);
+  return result.length * 100 + (result[0] ? 10 : 0) + (result[1] ? 1 : 0);
+}
+
+export function erasedResults(n: number): string {
+  const source = new Set<unknown>();
+  source.add("v" + (n & 15));
+  source.add(n & 15);
+  const result = Array.from(source, (value) => value);
+  return result.length + ":" + typeof result[0] + ":" + typeof result[1];
+}

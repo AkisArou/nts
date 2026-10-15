@@ -20418,11 +20418,19 @@ impl Iteration {
     }
 }
 
+/// An append either writes a new slot through a helper, or uses a known
+/// append position for scalar storage. Counted elements require the helper:
+/// a growing ArraySet would first load an old reference that does not exist.
+#[derive(Clone, Copy)]
+enum CollectionAppend {
+    Push(&'static str),
+    Store(ValueId),
+}
+
 /// What becomes of the value an inlined callback body produces.
 ///
-/// The whole difference between the three methods, which is why it is one type
-/// rather than a branch in three places -- and why a `return` inside a block
-/// body works the same in all three: it delivers through this before it jumps.
+/// A return inside a block delivers through this policy before it jumps to
+/// the iteration's latch, as a concise callback's value does.
 #[derive(Clone, Copy)]
 enum CallbackResult {
     /// `forEach`, whose callback returns `void`. TypeScript still allows
@@ -37101,20 +37109,23 @@ impl<'a> FuncBuilder<'a> {
         self.build_array_from(id, argument)
     }
 
-    /// The append helper for a collected array's element width.
-    fn collection_push(
+    /// One append policy for collected and mapped walks. A mapper already
+    /// has the private output's pre-call length, so scalar elements can use a
+    /// growing store at that position. Counted and erased elements use push:
+    /// its ownership contract knows the slot is new and loads no old value.
+    fn collection_append(
         &self,
         id: NodeId,
         element_ty: &HirType,
-    ) -> Result<&'static str, Diagnostic> {
-        Ok(match *element_ty {
-            ref counted if holds_counted(counted) => "nts_array_push_ref",
-            HirType::Float { bits: 64 } => "nts_array_push",
-            // An erased rest tail, or an Array.from result whose elements
-            // have no particular type, uses the tagged-value push.
-            HirType::Erased => "nts_array_push_value",
-            // A narrower element is a typed array being built, which
-            // Uint8Array.from handles separately from Array.from.
+        position: Option<ValueId>,
+    ) -> Result<CollectionAppend, Diagnostic> {
+        let helper = match (element_ty, position) {
+            (counted, _) if holds_counted(counted) => "nts_array_push_ref",
+            (HirType::Erased, _) => "nts_array_push_value",
+            (HirType::Float { .. } | HirType::Int { .. } | HirType::Bool, Some(index)) => {
+                return Ok(CollectionAppend::Store(index));
+            }
+            (HirType::Float { bits: 64 }, None) => "nts_array_push",
             _ => {
                 return Err(self.unsupported(
                     id,
@@ -37122,7 +37133,36 @@ impl<'a> FuncBuilder<'a> {
                      double and are pushed one width at a time",
                 ));
             }
-        })
+        };
+        Ok(CollectionAppend::Push(helper))
+    }
+
+    /// Apply the append policy after its caller has coerced the value to the
+    /// array's element type. This is shared by ordinary and mapped walks.
+    fn append_collection_value(
+        &mut self,
+        append: CollectionAppend,
+        array: ValueId,
+        value: ValueId,
+        origin: &Origin,
+    ) {
+        match append {
+            CollectionAppend::Push(helper) => {
+                self.runtime_call(helper, vec![array, value], HirType::Void, origin.clone());
+            }
+            CollectionAppend::Store(index) => {
+                self.push(
+                    OpKind::ArraySet {
+                        array,
+                        index,
+                        value,
+                        checked: true,
+                    },
+                    HirType::Void,
+                    origin.clone(),
+                );
+            }
+        }
     }
 
     /// Keep the table cursor test, then test the output position on the body's
@@ -37194,7 +37234,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a walk collected into a value that is not an array"));
         };
         let element_ty = element_ty.as_ref();
-        let append = self.collection_push(id, element_ty)?;
+        let append = self.collection_append(id, element_ty, None)?;
 
         // How many elements are coming, where that is known before the walk
         // starts. Three of the five shapes know: an array and a typed array
@@ -37307,7 +37347,7 @@ impl<'a> FuncBuilder<'a> {
             );
             self.bindings.insert(filled, next);
         } else {
-            self.runtime_call(append, vec![out, element], HirType::Void, origin.clone());
+            self.append_collection_value(append, out, element, &origin);
         }
 
         let step = match index {
@@ -78003,8 +78043,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The output array is private, so its pre-callback length is still the
-    /// append position. Keep this store checked: the source may have grown,
-    /// and each backend already knows how this element width grows.
+    /// append position. The common policy chooses the new-slot helper for a
+    /// counted value, and a checked growing store for a scalar value.
     fn append_callback_value(
         &mut self,
         id: NodeId,
@@ -78024,16 +78064,8 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a mapping callback whose result is not an array"));
         };
         let value = self.coerce(value, &element, id)?;
-        self.push(
-            OpKind::ArraySet {
-                array,
-                index,
-                value,
-                checked: true,
-            },
-            HirType::Void,
-            self.origin(id),
-        );
+        let append = self.collection_append(id, &element, Some(index))?;
+        self.append_collection_value(append, array, value, &self.origin(id));
         Ok(())
     }
 
