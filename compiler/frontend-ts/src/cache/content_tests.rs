@@ -509,3 +509,187 @@ fn collection_claim_is_shared_between_short_lived_processes() {
         "the second process must not sweep again in this hour"
     );
 }
+
+// Separate child processes set the cap without racing Rust's process-wide env.
+const BUDGET_CHILD: &str = "NTS_CACHE_BUDGET_TEST";
+
+fn payload_files(dir: &Utf8Path) -> Vec<std::path::PathBuf> {
+    [dir.to_owned(), dir.join("manifests")]
+        .into_iter()
+        .flat_map(|directory| {
+            std::fs::read_dir(directory)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|entry| entry.file_type().is_ok_and(|ty| ty.is_file()))
+                .map(|entry| entry.path())
+        })
+        .collect()
+}
+
+fn payload_bytes(dir: &Utf8Path) -> u64 {
+    payload_files(dir)
+        .iter()
+        .map(|p| std::fs::metadata(p).expect("size").len())
+        .sum()
+}
+
+fn budget_child() -> bool {
+    let Ok(description) = std::env::var(BUDGET_CHILD) else {
+        return false;
+    };
+    let (root, worker, count) = description
+        .split_once('|')
+        .and_then(|(root, rest)| {
+            rest.split_once('|')
+                .map(|(worker, count)| (root, worker, count))
+        })
+        .expect("child parameters");
+    let root = Utf8Path::new(root);
+    let cache = root.join("cache");
+    let config = root.join("project/tsconfig.json");
+    let mut source = CountingSource {
+        captures: 0,
+        files: vec![root.join("project/main.ts")],
+        identity: Some("counting-source-v1".into()),
+        mutate: None,
+    };
+    let cap: u64 = std::env::var("NTS_SNAPSHOT_CACHE_MAX")
+        .expect("cap")
+        .parse()
+        .expect("number");
+    for index in 0..count.parse::<usize>().expect("count") {
+        snapshot_in(
+            &mut source,
+            &config,
+            &format!("worker-{worker}-{index:03}"),
+            &cache,
+        )
+        .expect("snapshot");
+        // A publisher may currently hold one atomic-write partial. It must not
+        // accumulate all of this hour's publications before the next sweep.
+        let largest = payload_files(&cache)
+            .iter()
+            .filter_map(|p| std::fs::metadata(p).ok())
+            .map(|m| m.len())
+            .max()
+            .unwrap_or(0);
+        let held = payload_bytes(&cache);
+        assert!(
+            held <= cap + largest,
+            "held {held}, cap {cap}, largest {largest}"
+        );
+    }
+    assert_eq!(source.captures, count.parse::<usize>().expect("count"));
+    true
+}
+
+fn spawn_budget_child(
+    project: &Project,
+    test: &str,
+    worker: usize,
+    count: usize,
+    cap: u64,
+) -> std::process::Child {
+    std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args(["--exact", test])
+        .env(BUDGET_CHILD, format!("{}|{worker}|{count}", project.root))
+        .env("NTS_SNAPSHOT_CACHE_MAX", cap.to_string())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("budget child")
+}
+
+fn assert_budget_child(child: std::process::Child) {
+    let output = child.wait_with_output().expect("child output");
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("1 passed;"),
+        "child must execute its guard"
+    );
+}
+
+#[test]
+fn publications_within_one_hour_obey_the_byte_cap() {
+    if budget_child() {
+        return;
+    }
+    let project = Project::new("within-hour-budget");
+    assert_budget_child(spawn_budget_child(
+        &project,
+        "cache::content_tests::publications_within_one_hour_obey_the_byte_cap",
+        0,
+        80,
+        12 * 1024,
+    ));
+    assert!(
+        payload_bytes(&project.cache) <= 12 * 1024,
+        "completed publications fit the cap"
+    );
+    assert!(
+        !payload_files(&project.cache).is_empty(),
+        "small entries must be reusable"
+    );
+}
+
+#[test]
+fn parallel_publishers_keep_the_bound_and_a_just_hit_entry() {
+    if budget_child() {
+        return;
+    }
+    let project = Project::new("parallel-budget");
+    let mut source = project.source();
+    for index in 0..9 {
+        snapshot_in(
+            &mut source,
+            &project.config,
+            &format!("baseline-{index:03}"),
+            &project.cache,
+        )
+        .expect("seed");
+    }
+    let cap = payload_bytes(&project.cache) * 4 / 3;
+    let now = std::time::SystemTime::now();
+    for path in payload_files(&project.cache) {
+        std::fs::File::options()
+            .write(true)
+            .open(path)
+            .expect("file")
+            .set_modified(now - std::time::Duration::from_hours(2))
+            .expect("old use");
+    }
+    snapshot_in(&mut source, &project.config, "baseline-000", &project.cache).expect("hot hit");
+    assert_eq!(source.captures, 9, "the hot control is a real hit");
+    let children: Vec<_> = (0..4)
+        .map(|worker| {
+            spawn_budget_child(
+                &project,
+                "cache::content_tests::parallel_publishers_keep_the_bound_and_a_just_hit_entry",
+                worker,
+                1,
+                cap,
+            )
+        })
+        .collect();
+    for child in children {
+        assert_budget_child(child);
+    }
+    assert!(payload_bytes(&project.cache) <= cap);
+    let remaining = payload_files(&project.cache).len();
+    assert!(
+        remaining < 26,
+        "the parallel publications must actually force eviction"
+    );
+    snapshot_in(&mut source, &project.config, "baseline-000", &project.cache)
+        .expect("hot survivor");
+    assert_eq!(
+        source.captures, 9,
+        "last use must protect the just-hit entry"
+    );
+}

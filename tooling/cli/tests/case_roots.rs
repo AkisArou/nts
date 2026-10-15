@@ -28,6 +28,15 @@ fn content_addressed_case_roots_obey_their_contracts() {
 
 #[test]
 fn a_materialised_case_reuses_the_real_frontend_capture() {
+    assert_frontend_reuse("assert.sameValue(1, 1);", 0);
+}
+
+#[test]
+fn cached_checker_errors_keep_their_count_diagnostics_and_exit() {
+    assert_frontend_reuse("const value = 1; value(); missingName;", 2);
+}
+
+fn assert_frontend_reuse(text: &str, errors: usize) {
     assert!(
         nts_frontend_ts::tsgo::locate().is_some(),
         "set NTS_TSGO; this test must measure the frontend"
@@ -42,11 +51,12 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
     let roots = base.join("inputs");
     let cache = base.join("snapshots");
     let script = "import {caseRoot,workspace,materialise} from './tooling/census/project.ts';\n\
-                  const result=caseRoot(d=>{workspace(d);materialise(d,'assert.sameValue(1, 1);');},{base:process.argv[1]});\n\
+                  const result=caseRoot(d=>{workspace(d);materialise(d,process.argv[2]);},{base:process.argv[1]});\n\
                   process.stdout.write(JSON.stringify(result));";
     let output = Command::new("node")
         .args(["--input-type=module", "-e", script])
         .arg(&roots)
+        .arg(text)
         .current_dir(&repo)
         .output()
         .expect("materialise");
@@ -68,7 +78,7 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
             .output()
             .expect("frontend");
         assert!(
-            output.status.success(),
+            output.status.success() == (errors == 0),
             "{}\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -82,7 +92,26 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
                 .to_owned()
         };
         let trips = field("round trips").parse::<u64>().expect("trip count");
-        (trips, field("snapshot digest"))
+        let diagnostics = text
+            .lines()
+            .filter(|line| line.starts_with("  Error TS"))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(diagnostics.len(), errors, "all subject errors are reached");
+        let stderr = String::from_utf8(output.stderr).expect("stderr");
+        if errors > 0 {
+            assert_eq!(
+                stderr,
+                format!("Error: {errors} type error(s); refusing to proceed\n")
+            );
+        }
+        (
+            trips,
+            field("snapshot digest"),
+            output.status.code(),
+            diagnostics,
+            stderr,
+        )
     };
     let cold = run(true);
     let warm = run(true);
@@ -92,6 +121,11 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
     assert!(disabled.0 > 0, "disabling reuse must ask again");
     assert_eq!(cold.1, warm.1);
     assert_eq!(cold.1, disabled.1);
+    assert_eq!((&cold.2, &cold.3, &cold.4), (&warm.2, &warm.3, &warm.4));
+    assert_eq!(
+        (&cold.2, &cold.3, &cold.4),
+        (&disabled.2, &disabled.3, &disabled.4)
+    );
     let cleanup = "import {collectCaseRoots} from './tooling/census/project.ts'; collectCaseRoots({base:process.argv[1],now:Date.now()+60000,maxAge:0});";
     let status = Command::new("node")
         .args(["--input-type=module", "-e", cleanup])
