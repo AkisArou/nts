@@ -331,15 +331,38 @@ pub(crate) fn set(
     }
     let shape = storage(b, array)?;
     contract::nonnull(b, array, "writing an element of a null array")?;
-    let append = checked && nts_core::hir::array_write_may_grow(b.func, array);
-    valid_index(b, array, at, append)?;
-    contract::require(
-        b,
-        "a write past the end, which would leave holes this array cannot hold",
-    )?;
-    if append {
-        append_slot(b, array, at, shape.wrapper)?;
+    valid_index(b, array, at, false)?;
+    if !(checked && nts_core::hir::array_write_may_grow(b.func, array)) {
+        contract::require(b, PAST_THE_END)?;
+        return store(b, shape, array, at, value);
     }
+    // A write inside the array is the one a loop makes nearly every time, so
+    // it is tested alone and guards the store alone. Growing by the slot at
+    // the end, and refusing past it, are the other arm. In line, their
+    // comparisons and the call to grow ran on every write, and the call kept
+    // the engine reloading the length and the storage each iteration: AWFY's
+    // sieve took 13.1 us on V8 against 6.2 for its C++ as WebAssembly.
+    b.instruction(&I::If(BlockType::Empty));
+    store(b, shape, array, at, value)?;
+    b.instruction(&I::Else);
+    valid_index(b, array, at, true)?;
+    contract::require(b, PAST_THE_END)?;
+    append_slot(b, array, shape.wrapper)?;
+    store(b, shape, array, at, value)?;
+    b.instruction(&I::End);
+    Ok(())
+}
+/// Why a write that is not inside the array and not at its end refuses.
+const PAST_THE_END: &str = "a write past the end, which would leave holes this array cannot hold";
+/// Store `value` in the slot `at` of `array`, an index already known to be in
+/// its storage.
+fn store(
+    b: &mut Body<'_, '_>,
+    shape: &gc::Array,
+    array: ValueId,
+    at: ValueId,
+    value: ValueId,
+) -> Result<(), Failure> {
     backing(b, array, shape.wrapper)?;
     index(b, at)?;
     b.load(value)?;
@@ -347,17 +370,14 @@ pub(crate) fn set(
     b.instruction(&I::ArraySet(shape.backing));
     Ok(())
 }
-fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Result<(), Failure> {
+/// Grow the array by the slot at its end, which the index is known to name.
+fn append_slot(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     let shape = b
         .types()
         .arrays
         .get(&ty)
         .ok_or_else(|| Failure::Invariant(format!("unplanned array growth for type {ty}")))?;
     let helper = grow(b.m, shape)?;
-    index(b, at)?;
-    logical_length(b, array, ty)?;
-    b.instruction(&I::I32Eq);
-    b.instruction(&I::If(BlockType::Empty));
     logical_length(b, array, ty)?;
     b.instruction(&I::I32Const(capacity(&shape.element)));
     b.instruction(&I::I32LtU);
@@ -375,7 +395,6 @@ fn append_slot(b: &mut Body<'_, '_>, array: ValueId, at: ValueId, ty: u32) -> Re
         struct_type_index: ty,
         field_index: crate::gc::ARRAY_LENGTH,
     });
-    b.instruction(&I::End);
     Ok(())
 }
 /// Growth past [`capacity`]: the engine would trap allocating the storage.
