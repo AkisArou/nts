@@ -1457,7 +1457,7 @@ impl<'a> Builder<'a> {
         // the callable root's, so every function value extends the root.
         let callable = match callable {
             Some(group) => Some(group),
-            None if crate::callable_plan::is_callable_storage(self.program, layout) => {
+            None if crate::callable_plan::extends_callable(self.program, layout) => {
                 Some(self.callable_root()?)
             }
             None => None,
@@ -2103,7 +2103,7 @@ impl<'a> Builder<'a> {
         for &at in self.objects.keys() {
             let layout = &self.program.layouts[at];
             let root = self.callable_plan.members.get(&at).copied();
-            if root.is_none() && !crate::callable_plan::is_callable_storage(self.program, layout) {
+            if root.is_none() && !crate::callable_plan::extends_callable(self.program, layout) {
                 continue;
             }
             let typed = root.map_or(Ok(0), |root| {

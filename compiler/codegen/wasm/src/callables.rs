@@ -319,7 +319,7 @@ pub(crate) fn entries(
         .program
         .layout(class)
         .ok_or_else(|| Failure::Invariant(format!("unplanned allocation {class:?}")))?;
-    if !crate::callable_plan::is_callable_storage(m.program, layout) {
+    if !crate::callable_plan::extends_callable(m.program, layout) {
         return Ok(Vec::new());
     }
     let mut slots: Vec<u32> = types

@@ -45,6 +45,28 @@ pub(crate) fn is_callable_storage(program: &Program, layout: &nts_core::hir::Lay
         })
 }
 
+/// Whether a layout's storage extends the callable root: it is callable
+/// storage, or a base it extends is. A class whose base is a signature is
+/// one: `TypeError`'s constructor value under `Error`'s, where a constructor
+/// type (`new (message: string) => unknown`) holds `Error`. Its storage is the
+/// callable root's, entries and all, though no closure fills them, or it would
+/// not be a subtype of the base it declares. The walk ends at a layout it has
+/// seen: a cyclic ancestry is declined by name where the types are planned.
+pub(crate) fn extends_callable(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut next = Some(layout);
+    while let Some(layout) = next {
+        if is_callable_storage(program, layout) {
+            return true;
+        }
+        next = program
+            .base_layout(layout)
+            .filter(|&base| seen.insert(base))
+            .map(|base| &program.layouts[base]);
+    }
+    false
+}
+
 /// Whether a layout is a signature: callable storage that is no closure's own
 /// class. A value of it is whichever closure the program stored there, so its
 /// storage is the callable root itself.

@@ -683,6 +683,25 @@ fn source_sorted_null_slots_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A built-in error's constructor passed as a constructor-typed value, as
+/// `assert.throws(TypeError, fn)` passes it: its storage extends the callable
+/// root and the module validates; a class of the program's own is the control.
+#[test]
+fn source_constructor_values_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/constructor-values");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "constructor-values",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.
