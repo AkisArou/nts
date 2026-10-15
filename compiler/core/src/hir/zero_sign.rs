@@ -262,6 +262,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         }
     }
@@ -391,6 +392,7 @@ mod rounding_tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
             };
             let seen = observed(&func);

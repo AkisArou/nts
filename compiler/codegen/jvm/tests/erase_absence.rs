@@ -61,6 +61,7 @@ fn eraser(name: &str, ty: &HirType, absent: Absent) -> hir::Func {
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        result_absent: nts_core::hir::Absent::Impossible,
         written_return_elements: Vec::new(),
     }
 }

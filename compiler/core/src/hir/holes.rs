@@ -486,6 +486,7 @@ mod tests {
                     params: Vec::new(),
                     return_type: F64,
                     written_return: None,
+                    result_absent: crate::hir::Absent::Impossible,
                     written_return_elements: Vec::new(),
                     values: Vec::new(),
                     blocks: Vec::new(),

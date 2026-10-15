@@ -215,6 +215,10 @@ impl Drop for Scratch {
 struct Testable {
     name: String,
     returns: HirType,
+    /// What a null result stands for (`Func::result_absent`): the driver prints
+    /// `null` for a `string | null` export's null pointer, and `undefined`
+    /// otherwise, where it printed `undefined` for both.
+    result_absent: nts_core::hir::Absent,
     params: Vec<(HirType, Facts)>,
 }
 
@@ -515,6 +519,7 @@ pub fn check(
         .map(|func| Testable {
             name: func.name.clone(),
             returns: func.return_type.clone(),
+            result_absent: func.result_absent,
             params: func
                 .params
                 .iter()
@@ -924,15 +929,17 @@ const HARNESS_PRELUDE: &str =
           * string is. Printing them beats printing the text: it needs no\n\
           * escaping rules, and a surrogate pair shows up as the two units\n\
           * `length` counts rather than as one character. */\n\
-         static void nts_check_show_string(const char *name, int at, const NtsString *s) {\n\
-         \x20   /* An absent string is the null pointer, which is what a\n\
-         \x20    * `string | undefined` return produces. Reading `s->length`\n\
-         \x20    * there segfaulted the whole run -- so every export that could\n\
-         \x20    * answer `undefined` was not merely unchecked but fatal, and a\n\
-         \x20    * crash is the one outcome that reports nothing about the case\n\
-         \x20    * it happened on. */\n\
+         static void nts_check_show_string(const char *name, int at, const NtsString *s,\n\
+         \x20                                 int null_is_null) {\n\
+         \x20   /* An absent string is the null pointer, which a `string | undefined`\n\
+         \x20    * return and a `string | null` one both produce: which absence it\n\
+         \x20    * is, the export says (`Func::result_absent`), and node prints the\n\
+         \x20    * two differently. Reading `s->length` there segfaulted the whole\n\
+         \x20    * run once -- a crash is the one outcome that reports nothing about\n\
+         \x20    * the case it happened on. */\n\
          \x20   if (s == NULL) {\n\
-         \x20       fprintf(nts_check_out, \"%s %d undefined\\n\", name, at);\n\
+         \x20       fprintf(nts_check_out, null_is_null ? \"%s %d null\\n\" : \"%s %d undefined\\n\",\n\
+         \x20               name, at);\n\
          \x20       fflush(nts_check_out);\n\
          \x20       return;\n\
          \x20   }\n\
@@ -995,10 +1002,12 @@ const HARNESS_PRELUDE: &str =
          \x20   if (p->state == NTS_PROMISE_FULFILLED\n\
          \x20       && NTS_TAG_IS_MANAGED(nts_value_tag(p->value))) {\n\
          \x20       nts_check_show_string(name, at,\n\
-         \x20                   (const NtsString *)nts_value_reference(p->value));\n\
+         \x20                   (const NtsString *)nts_value_reference(p->value), 0);\n\
          \x20       return;\n\
          \x20   }\n\
-         \x20   if (p->state == NTS_PROMISE_PENDING) {\n\
+         \x20   if (p->state == NTS_PROMISE_FULFILLED && nts_value_tag(p->value) == NTS_TAG_NULL) {\n\
+         \x20       fprintf(nts_check_out, \"%s %d null\\n\", name, at);\n\
+         \x20   } else if (p->state == NTS_PROMISE_PENDING) {\n\
          \x20       fprintf(nts_check_out, \"%s %d pending\\n\", name, at);\n\
          \x20   } else if (p->state == NTS_PROMISE_REJECTED) {\n\
          \x20       fprintf(nts_check_out, \"%s %d rejected\\n\", name, at);\n\
@@ -1096,9 +1105,10 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             } else if is_string(&one.returns) {
                 format!(
                     "{{ NtsString *nts_check_held = {call}; \
-                     nts_check_show_string(\"{}\", {at}, nts_check_held); \
+                     nts_check_show_string(\"{}\", {at}, nts_check_held, {}); \
                      nts_release((NtsHeader *)nts_check_held); }}",
-                    one.name
+                    one.name,
+                    i32::from(one.result_absent == nts_core::hir::Absent::Null)
                 )
             } else {
                 format!("nts_check_show(\"{}\", {at}, (double){call});", one.name)
@@ -3094,6 +3104,7 @@ mod pairing {
         vec![Testable {
             name: "f".to_owned(),
             returns: HirType::Void,
+            result_absent: nts_core::hir::Absent::Impossible,
             params: Vec::new(),
         }]
     }

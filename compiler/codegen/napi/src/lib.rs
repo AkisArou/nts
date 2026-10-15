@@ -765,6 +765,17 @@ static inline napi_status nts_to_napi_string(napi_env env, const NtsString *s,
         (size_t)s->length, out);
 }
 
+/* The same, for a result whose null pointer is `null` (`string | null`):
+ * which absence a null string is, the export's type says and the pointer
+ * cannot. */
+static inline napi_status nts_to_napi_string_or_null(napi_env env, const NtsString *s,
+                                                     napi_value *out) {
+    if (s == NULL) {
+        return napi_get_null(env, out);
+    }
+    return nts_to_napi_string(env, s, out);
+}
+
 /* The same crossing outward: whichever JavaScript value the tag names.
  *
  * A reference that is not a string is refused rather than handed over as an
@@ -1924,7 +1935,7 @@ fn member_callback(
     let call = format!("{symbol}({})", args.join(", "));
     out.push_str(&marshal(
         &ret,
-        &func.return_type,
+        &Returned::of(func),
         &call,
         "",
         layouts,
@@ -2486,7 +2497,7 @@ fn wrapper(
         forget_consumed_arguments(&crossings, &args, release_managed, consumed_parameters);
     out.push_str(&marshal(
         &ret,
-        &func.return_type,
+        &Returned::of(func),
         &call,
         &after_call,
         layouts,
@@ -2759,9 +2770,25 @@ fn numeric_guard(ty: &HirType, name: &str) -> String {
 }
 
 /// Handing the result back to JavaScript.
+/// What a wrapper hands back: the result's type, and what its null pointer
+/// stands for (`Func::result_absent`).
+struct Returned<'a> {
+    ty: &'a HirType,
+    absent: hir::Absent,
+}
+
+impl<'a> Returned<'a> {
+    fn of(func: &'a hir::Func) -> Self {
+        Self {
+            ty: &func.return_type,
+            absent: func.result_absent,
+        }
+    }
+}
+
 fn marshal(
     ret: &Cross,
-    return_type: &HirType,
+    returned: &Returned<'_>,
     call: &str,
     after_call: &str,
     layouts: &[hir::Layout],
@@ -2769,6 +2796,7 @@ fn marshal(
     return_is_borrowed: bool,
 ) -> String {
     let release_result = should_release_result(release_managed, return_is_borrowed);
+    let return_type = returned.ty;
     match ret {
         Cross::Void => format!(
             "    {call};\n{after_call}    if (!nts_napi_check(env, napi_get_undefined(env, &out), \"could not create undefined\")) goto nts_napi_cleanup;\n"
@@ -2816,8 +2844,15 @@ fn marshal(
             "    __int128 result = {call};\n{after_call}    if (!nts_napi_check(env, nts_to_napi_bigint(env, result, &out), \"could not create a bigint\")) goto nts_napi_cleanup;\n"
         ),
         Cross::Str => {
+            // A `string | null` export's null pointer is node's `null`; any
+            // other string result's is `undefined` (`Func::result_absent`).
+            let convert = if returned.absent == hir::Absent::Null {
+                "nts_to_napi_string_or_null"
+            } else {
+                "nts_to_napi_string"
+            };
             let mut text = format!(
-                "    NtsString *result = {call};\n{after_call}    napi_status result_status = nts_to_napi_string(env, result, &out);\n"
+                "    NtsString *result = {call};\n{after_call}    napi_status result_status = {convert}(env, result, &out);\n"
             );
             if release_result {
                 text.push_str("    nts_release((NtsHeader *)result);\n");
@@ -4424,11 +4459,24 @@ mod tests {
         assert!(!should_release_result(false, false));
 
         let string = HirType::Managed(ManagedType::String);
-        let owned = marshal(&Cross::Str, &string, "make()", "", &[], true, false);
+        let returned = Returned {
+            ty: &string,
+            absent: hir::Absent::Impossible,
+        };
+        let owned = marshal(&Cross::Str, &returned, "make()", "", &[], true, false);
         assert!(owned.contains("nts_release((NtsHeader *)result)"));
 
-        let borrowed = marshal(&Cross::Str, &string, "echo(a0)", "", &[], true, true);
+        let borrowed = marshal(&Cross::Str, &returned, "echo(a0)", "", &[], true, true);
         assert!(!borrowed.contains("nts_release((NtsHeader *)result)"));
+        assert!(owned.contains("nts_to_napi_string(env, result, &out)"));
+
+        // A `string | null` result's null pointer is node's `null`.
+        let or_null = Returned {
+            ty: &string,
+            absent: hir::Absent::Null,
+        };
+        let nullable = marshal(&Cross::Str, &or_null, "make()", "", &[], true, false);
+        assert!(nullable.contains("nts_to_napi_string_or_null(env, result, &out)"));
     }
 
     #[test]

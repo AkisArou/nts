@@ -38,6 +38,7 @@ pub(crate) fn function(name: &str, params: &[HirType], result: HirType) -> Func 
             .collect(),
         return_type: result,
         written_return: None,
+        result_absent: nts_core::hir::Absent::Impossible,
         written_return_elements: Vec::new(),
         values: Vec::new(),
         blocks: Vec::new(),

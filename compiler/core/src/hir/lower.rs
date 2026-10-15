@@ -4358,6 +4358,7 @@ fn passing_undefined(name: String, body: &Func, this_at: usize) -> Func {
         frame: None,
         obligations: Vec::new(),
         written_return: body.written_return,
+        result_absent: crate::hir::Absent::Impossible,
         written_return_elements: body.written_return_elements.clone(),
     }
 }
@@ -17060,6 +17061,7 @@ fn erased_call(
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        result_absent: crate::hir::Absent::Impossible,
         written_return_elements: Vec::new(),
     })
 }
@@ -17185,6 +17187,7 @@ fn refuses_to_cross(
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        result_absent: crate::hir::Absent::Impossible,
         written_return_elements: Vec::new(),
     }
 }
@@ -17569,6 +17572,7 @@ fn declare_erased_entries(
                 frame: None,
                 obligations: Vec::new(),
                 written_return: None,
+                result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
             },
         ));
@@ -25977,6 +25981,7 @@ impl<'a> FuncBuilder<'a> {
         // every field it writes is writing over a zero.
         func.initializes_receiver = is_constructor;
         func.written_return = self.written_return(member);
+        func.result_absent = self.result_absent(member);
         func.written_return_elements = self.written_tuple_return(member);
         // A signature and nothing else. `body` is `None` exactly when the
         // method is `abstract`, which `method_body` is the only decider of.
@@ -29892,6 +29897,7 @@ impl<'a> FuncBuilder<'a> {
                 .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         let mut func = self.finish(name, params, return_type, origin, exported);
         func.written_return = self.written_return(id);
+        func.result_absent = self.result_absent(id);
         func.written_return_elements = self.written_tuple_return(id);
         Ok(func)
     }
@@ -30448,6 +30454,7 @@ impl<'a> FuncBuilder<'a> {
         // the same way it decides an override's fate.
         let mut func = self.finish(name, params, return_type, origin, false);
         func.written_return = self.written_return(id);
+        func.result_absent = self.result_absent(id);
         func.written_return_elements = self.written_tuple_return(id);
         Ok(func)
     }
@@ -32840,6 +32847,7 @@ impl<'a> FuncBuilder<'a> {
             frame: self.generator.clone(),
             obligations: std::mem::take(&mut self.obligations),
             written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         }
     }
@@ -35094,6 +35102,52 @@ impl<'a> FuncBuilder<'a> {
             return self.written_scalar(payload);
         }
         self.written_scalar(returns)
+    }
+
+    /// What a function's null result stands for, from its declared result
+    /// type: see [`super::Func::result_absent`]. An `async` function's is its
+    /// promise's payload's, as [`Self::written_return`] reads the kind.
+    ///
+    /// One absence only. A type admitting both `null` and `undefined` is not a
+    /// nullable reference at all -- it is held erased, and its tag says which --
+    /// so it answers `Impossible`, as a type admitting neither does.
+    fn result_absent(&self, declaration: NodeId) -> super::Absent {
+        let Some(returns) = self.declared_result_type(declaration) else {
+            return super::Absent::Impossible;
+        };
+        let returns = if self
+            .node(declaration)
+            .modifiers
+            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        {
+            match self
+                .snapshot
+                .type_arguments
+                .get(&returns)
+                .and_then(|arguments| arguments.first())
+            {
+                Some(payload) => *payload,
+                None => return super::Absent::Impossible,
+            }
+        } else {
+            returns
+        };
+        let members = match self.snapshot.types.get(returns.0 as usize).map(|r| &r.kind) {
+            Some(TypeKind::Union(members)) => members.clone(),
+            _ => vec![returns],
+        };
+        let absences: Vec<Absence> = members
+            .iter()
+            .filter_map(|member| absence_of_member(self.snapshot, *member))
+            .collect();
+        match (
+            absences.contains(&Absence::Null),
+            absences.contains(&Absence::Undefined),
+        ) {
+            (true, false) => super::Absent::Null,
+            (false, true) => super::Absent::Undefined,
+            _ => super::Absent::Impossible,
+        }
     }
 
     /// An override's string argument, lent by the Windows Runtime as its
@@ -82621,6 +82675,7 @@ mod tests {
             frame: None,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         });
 

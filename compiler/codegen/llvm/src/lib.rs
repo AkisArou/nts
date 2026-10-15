@@ -3901,6 +3901,7 @@ mod frame_tests {
             params: Vec::new(),
             return_type: HirType::Void,
             written_return: None,
+            result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
             values: Vec::new(),
             blocks: Vec::new(),

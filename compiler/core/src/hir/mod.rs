@@ -540,6 +540,17 @@ pub struct Func {
     /// otherwise. Every `return` must prove each element fits, and so a
     /// read of that position of a call's result is the kind's range.
     pub written_return_elements: Vec<Option<native::Scalar>>,
+    /// What the result's null pointer stands for, where the result is a
+    /// reference whose type admits an absence: `Null` for a `string | null`
+    /// return, `Undefined` for `string | undefined`, `Impossible` otherwise.
+    ///
+    /// **Read at a publication boundary**, which has no other way to know. A
+    /// reference and its one absence share a representation, and inside the
+    /// program every erase says which it is; at the edge -- the N-API glue,
+    /// `nts check`'s driver, a Wasm export -- the null pointer arrived bare and
+    /// was answered `undefined` for both, so an exported `string | null` lost
+    /// node's `null` (`tests/outcomes/an-exported-null-crosses-as-undefined`).
+    pub result_absent: Absent,
     /// Every value the function defines. [`ValueId`] indexes this.
     ///
     /// Separate from the blocks so that a value's identity survives blocks being
@@ -7968,6 +7979,7 @@ mod tests {
                     abstract_declaration: false,
                     obligations: Vec::new(),
                     written_return: None,
+                    result_absent: crate::hir::Absent::Impossible,
                     written_return_elements: Vec::new(),
                 }],
                 ..Program::default()
@@ -8099,6 +8111,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),
@@ -8336,6 +8349,7 @@ mod tests {
                 abstract_declaration: false,
                 obligations: Vec::new(),
                 written_return: None,
+                result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),

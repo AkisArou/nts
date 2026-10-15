@@ -6380,6 +6380,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         };
         let op = value(i32_ty);
@@ -6434,6 +6435,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         };
         let calling = |name: &str| Op {
@@ -6558,6 +6560,7 @@ mod tests {
             abstract_declaration: false,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         };
         let defined: rustc_hash::FxHashSet<String> = ["holds".to_owned()].into_iter().collect();

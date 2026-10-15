@@ -73,6 +73,7 @@ fn predicate(name: &str, negate: bool) -> hir::Func {
         frame: None,
         obligations: Vec::new(),
         written_return: None,
+        result_absent: nts_core::hir::Absent::Impossible,
         written_return_elements: Vec::new(),
     };
     assert_eq!(hir::tags::fold_comparisons(&mut func), 1);

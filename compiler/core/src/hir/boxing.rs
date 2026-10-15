@@ -107,6 +107,7 @@ mod tests {
             frame: None,
             obligations: Vec::new(),
             written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         }
     }
