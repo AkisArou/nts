@@ -43,6 +43,26 @@ export function setDeletes(n: number): string {
   return setDeleting(n, true);
 }
 
+function mapAdding(n: number, change: boolean): string {
+  const first = n & 15;
+  const source = new Map<number, number>();
+  source.set(0, first);
+  source.set(1, first + 1);
+  const result = Array.from(source.values(), (value, index) => {
+    if (change && index === 0) source.set(2, first + 2);
+    return value * 10 + index;
+  });
+  return result.join(",") + ":" + source.size;
+}
+
+export function mapAddControl(n: number): string {
+  return mapAdding(n, false);
+}
+
+export function mapAdds(n: number): string {
+  return mapAdding(n, true);
+}
+
 function arrayChanging(n: number, change: boolean): string {
   const source = [n, n + 1, n + 2];
   const result = Array.from(source, (value, index) => {
@@ -98,6 +118,13 @@ export function arrayShrinks(n: number): string {
 // the callback's output also has a different element type from its source.
 export function unicodeIndices(n: number): string {
   return Array.from("a\u{1F600}b", (value, index) => value + ":" + (index + (n & 3))).join("|");
+}
+
+export function typedChangesType(n: number): string {
+  const source = new Uint8Array(2);
+  source[0] = n & 15;
+  source[1] = (n & 15) + 1;
+  return Array.from(source, (value, index) => "v" + value + ":" + index).join("|");
 }
 
 class Changing {
