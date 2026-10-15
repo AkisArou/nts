@@ -20827,6 +20827,8 @@ struct FuncBuilder<'a> {
     /// been tested and found present, each with that receiver
     /// ([`Self::lower_chain`]): lowered as the plain link it is in that arm.
     chain_present: rustc_hash::FxHashMap<NodeId, ValueId>,
+    /// A receiver whose assertion presence check belongs to the access.
+    access_receiver: Option<access::Pending>,
     /// The object each member read was made on, by the read's node
     /// ([`Self::member_of`]): the `this` a call of what it read passes, which
     /// `o.f?.()` needs after lowering `o.f` as a value.
@@ -21128,6 +21130,7 @@ impl<'a> FuncBuilder<'a> {
             unboxed: rustc_hash::FxHashMap::default(),
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
+            access_receiver: None,
             read_from: rustc_hash::FxHashMap::default(),
             super_send: None,
             forced_slot: None,
@@ -47134,11 +47137,30 @@ impl<'a> FuncBuilder<'a> {
         if self.is_accessor_property(*member) {
             return self.native_accessor_place(target, *object_node, *member);
         }
-        let object = self.lower_expression(*object_node)?;
-        if let Some(place) = self.array_length_place(object, *member) {
+        let (object, guard) = access::receiver(self, *object_node)?;
+        let key = self
+            .indexed_member_name(target, *member)
+            .or_else(|| self.literal_name(*member))
+            .ok_or_else(|| self.unsupported(target, "a computed property name"))?;
+        let key = if guard.is_some() {
+            access::named_key(self, target, *member, key)?
+        } else {
+            access::Key::Name(key)
+        };
+        let place = self.property_place_on(target, object, *member)?;
+        Ok(access::protect(place, guard, key))
+    }
+
+    fn property_place_on(
+        &mut self,
+        target: NodeId,
+        object: ValueId,
+        member: NodeId,
+    ) -> Result<Place, Diagnostic> {
+        if let Some(place) = self.array_length_place(object, member) {
             return Ok(place);
         }
-        if let Some(name) = self.literal_name(*member)
+        if let Some(name) = self.literal_name(member)
             && let Some(place) = self.program_objc_instance_place(target, object, &name)?
         {
             return Ok(place);
@@ -47160,7 +47182,7 @@ impl<'a> FuncBuilder<'a> {
         // gets a sentence about the wrong thing.
         if let HirType::Managed(ManagedType::Table(_, _)) =
             self.values[object.0 as usize].ty.clone()
-            && let Some(name) = self.literal_name(*member)
+            && let Some(name) = self.literal_name(member)
         {
             let origin = self.origin(target);
             let key = self.push(
@@ -47178,8 +47200,8 @@ impl<'a> FuncBuilder<'a> {
         };
         let layout = self.layout_of(target, type_id)?;
         let name = self
-            .literal_name(*member)
-            .ok_or_else(|| self.unsupported(*member, "a computed property name"))?;
+            .literal_name(member)
+            .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
         if let Some(place) = self.interface_field_place(target, object, type_id, &name)? {
             return Ok(place);
         }
@@ -47308,7 +47330,7 @@ impl<'a> FuncBuilder<'a> {
             return self.property_place(target);
         }
         if self.kind_of(target) == Some(syntax::ELEMENT_ACCESS_EXPRESSION) {
-            let (array, index) = self.element_access_parts(target)?;
+            let (array, index, guard) = self.element_access_parts(target)?;
             if matches!(self.values[array.0 as usize].ty, HirType::NativePointer(_)) {
                 return self.native_element_place(target, array, index);
             }
@@ -47320,7 +47342,11 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 let origin = self.origin(target);
                 let key = self.erased_for_table(index, &origin);
-                return Ok(Place::Entry { table: array, key });
+                return Ok(access::protect(
+                    Place::Entry { table: array, key },
+                    guard,
+                    access::index_key(self, target, index),
+                ));
             }
             // `element_access_parts` now admits a receiver the checker proved
             // is an array and the representation left erased, because a *read*
@@ -47335,7 +47361,11 @@ impl<'a> FuncBuilder<'a> {
                      only known at run time",
                 ));
             }
-            return Ok(Place::Element { array, index });
+            return Ok(access::protect(
+                Place::Element { array, index },
+                guard,
+                access::index_key(self, target, index),
+            ));
         }
 
         let symbol = self
@@ -47529,6 +47559,14 @@ impl<'a> FuncBuilder<'a> {
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
+            Place::Checked {
+                ref place,
+                ref guard,
+                ref key,
+            } => {
+                access::require(self, id, guard, key, false)?;
+                self.read_place(id, place)?
+            }
             Place::NativeBits { pointer, field } => {
                 let ty = self.native_bit_unit(id, pointer, field)?;
                 let origin = self.origin(id);
@@ -48317,6 +48355,7 @@ impl<'a> FuncBuilder<'a> {
     /// disagree about the same fact.
     fn slot_type(&mut self, id: NodeId, place: &Place) -> Result<Option<HirType>, Diagnostic> {
         Ok(match *place {
+            Place::Checked { ref place, .. } => self.slot_type(id, place)?,
             Place::NativeBits { pointer, field } => Some(self.native_bit_unit(id, pointer, field)?),
             Place::NativeElement { pointer, .. } => Some(self.native_element_type(id, pointer)?),
             Place::Element { array, .. } => match self.values[array.0 as usize].ty.clone() {
@@ -48372,6 +48411,9 @@ impl<'a> FuncBuilder<'a> {
         // the miscompile bridges exist to prevent -- it was refused here as
         // "an opaque C pointer converted to a different type", which is true
         // and unhelpful.
+        if let Place::Checked { place, .. } = place {
+            return self.coerce_to_slot(id, place, value);
+        }
         let value = match *place {
             Place::NativeElement { pointer, .. } => match self.native_element_type(id, pointer)? {
                 HirType::NativePointer(super::native::Pointee::FnPointer(signature)) => {
@@ -48581,12 +48623,18 @@ impl<'a> FuncBuilder<'a> {
 
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) -> Result<(), Diagnostic> {
+        if let Place::Checked { guard, key, .. } = place {
+            access::require(self, id, guard, key, true)?;
+        }
         if let Place::Global(global) = *place {
             self.check_initialized_place(id, global)?;
         }
         let origin = self.origin(id);
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
+            Place::Checked { ref place, .. } => {
+                return self.write_place(id, place, value);
+            }
             Place::NativeBits { pointer, field } => {
                 let ty = self.native_bit_unit(id, pointer, field)?;
                 let value = self.coerce(value, &ty, id)?;
@@ -56309,7 +56357,11 @@ impl<'a> FuncBuilder<'a> {
         if let Some(read) = self.lower_string_index(id)? {
             return Ok(read);
         }
-        let (array, index) = self.element_access_parts(id)?;
+        let (array, index, guard) = self.element_access_parts(id)?;
+        if let Some(guard) = guard {
+            let key = access::index_key(self, id, index);
+            access::require(self, id, &guard, &key, false)?;
+        }
         self.element_of(id, array, index)
     }
 
@@ -56995,8 +57047,12 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return Ok(None);
         }
-        let receiver = self.lower_expression(*object)?;
+        let (receiver, guard) = access::receiver(self, *object)?;
         let at = self.lower_expression(*index)?;
+        if let Some(guard) = guard {
+            let key = access::index_key(self, id, at);
+            access::require(self, id, &guard, &key, false)?;
+        }
         let origin = self.origin(id);
         Ok(Some(self.runtime_call(
             "nts_str_at",
@@ -57007,12 +57063,15 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The array and index of an `xs[i]`, lowered in source order.
-    fn element_access_parts(&mut self, id: NodeId) -> Result<(ValueId, ValueId), Diagnostic> {
+    fn element_access_parts(
+        &mut self,
+        id: NodeId,
+    ) -> Result<(ValueId, ValueId, Option<access::Guard>), Diagnostic> {
         let children = self.children(id);
         let [array, index] = children.as_slice() else {
             return Err(self.unsupported(id, "an element access of unexpected shape"));
         };
-        let array_value = self.lower_expression(*array)?;
+        let (array_value, guard) = access::receiver(self, *array)?;
         if !matches!(
             self.values[array_value.0 as usize].ty,
             HirType::Managed(
@@ -57026,7 +57085,7 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.not_an_array(id));
         }
         let index_value = self.lower_expression(*index)?;
-        Ok((array_value, index_value))
+        Ok((array_value, index_value, guard))
     }
 
     /// A receiver with no array *representation* that the checker nevertheless
@@ -57543,7 +57602,11 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::ConstFloat(constant), HirType::NUMBER, origin));
         }
 
-        let value = self.lower_expression(*object)?;
+        let (value, guard) = access::receiver(self, *object)?;
+        if let Some(guard) = guard {
+            let key = access::named_key(self, id, *member, member_name.clone())?;
+            access::require(self, id, &guard, &key, false)?;
+        }
         self.member_of(id, value, &member_name)
     }
 
@@ -62810,7 +62873,15 @@ impl<'a> FuncBuilder<'a> {
         if let Some(function) = self.delegated_static(receiver_node, member) {
             return self.lower_delegated_call(id, function, arguments);
         }
-        let receiver = self.lower_expression(receiver_node)?;
+        let (receiver, guard) = access::receiver(self, receiver_node)?;
+        if let Some(guard) = guard {
+            let key = self
+                .indexed_member_name(callee_node, member)
+                .or_else(|| self.literal_name(member))
+                .ok_or_else(|| self.unsupported(callee_node, "a computed property name"))?;
+            let key = access::named_key(self, callee_node, member, key)?;
+            access::require(self, callee_node, &guard, &key, false)?;
+        }
         self.lower_method_on(id, receiver, receiver_node, member, arguments)
     }
 
@@ -81733,6 +81804,12 @@ enum Omitted {
 /// lowering the target twice would call it twice.
 #[derive(Debug, Clone)]
 enum Place {
+    /// A nullable receiver, checked at the read or store, after its operands.
+    Checked {
+        place: Box<Place>,
+        guard: access::Guard,
+        key: access::Key,
+    },
     NativeElement {
         pointer: ValueId,
         index: ValueId,
@@ -83043,6 +83120,7 @@ mod tests {
     }
 }
 
+mod access;
 mod access_families;
 mod access_family_flow;
 mod access_family_functions;

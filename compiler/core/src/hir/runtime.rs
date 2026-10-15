@@ -39,6 +39,7 @@ type Declared = (&'static str, &'static [Option<HirType>], Option<HirType>);
 
 /// Every helper, sorted by name so a lookup is a binary search.
 static SIGNATURES: &[Declared] = &[
+    ("nts_access_key_description", &[None], None),
     (
         "nts_alloc",
         &[Some(HirType::Int {
@@ -1937,6 +1938,7 @@ pub fn into_form(target: &str) -> String {
 /// it, so every `xs.indexOf`, `s.startsWith`, `m.has` and `xs.at` ended a
 /// borrow it had no way to invalidate.
 pub const READS_ONLY: &[&str] = &[
+    // Not nts_access_key_description: it allocates or retains its result.
     "nts_array_at",
     // Not `nts_array_at_ref`: it retains the element it returns.
     "nts_array_at_value",

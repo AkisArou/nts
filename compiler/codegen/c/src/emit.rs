@@ -1705,6 +1705,7 @@ fn emit_bodies<'a>(
 ///
 /// Listing a position the emitter never reaches costs nothing: a cast to
 /// `NtsHeader *` on a value that is already one is a cast to its own type.
+// nts_access_key_description takes NtsValue, so it needs no erased-class row.
 const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_array_to_string", 0),
     ("nts_bound_function_to_string", 0),

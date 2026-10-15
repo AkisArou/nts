@@ -2660,6 +2660,12 @@ NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
  * a boolean, a number and a string; every other tag is a lowering that should
  * have refused, and it aborts rather than guessing. */
 NtsString *nts_value_to_string(NtsValue value);
+/* A property key in a null/undefined access's TypeError. Primitives describe
+ * themselves without running program code; long symbol descriptions use V8's
+ * diagnostic abbreviation. Objects, functions and foreign values answer null
+ * (omit the key), never call toString/valueOf. The returned string is owned.
+ * Not READS_ONLY or ALLOCATES: a string argument is retained, not copied. */
+NtsString *nts_access_key_description(NtsValue key);
 /* What a descriptor's `to_string` points at, for the kinds the compiler emits:
  * an object whose prototype chain adds nothing, a closure or a class token, a
  * bound function, and an array. */

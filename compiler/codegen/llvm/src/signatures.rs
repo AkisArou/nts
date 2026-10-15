@@ -113,6 +113,12 @@ pub const SIGNATURES: &[Signature] = &[
         ],
     },
     Signature {
+        name: "nts_access_key_description",
+        returns: "ptr",
+        params: &["i32", "i64"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_alloc",
         returns: "noalias nonnull ptr",
         params: &["i64"],

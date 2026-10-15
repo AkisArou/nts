@@ -1147,8 +1147,9 @@ pub(super) fn analyze(
                 super::assertions::can_throw(probe, at)
             }
             syntax::PREFIX_UNARY_EXPRESSION => probe.plus_of_a_bigint(at),
-            syntax::PROPERTY_ACCESS_EXPRESSION => {
+            syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION => {
                 super::assertions::getter_read_can_throw(probe, at)
+                    || super::access::can_throw(probe, at)
             }
             _ => false,
         };

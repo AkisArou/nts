@@ -104,6 +104,15 @@ fn checks(report: &str) -> usize {
         .count()
 }
 
+#[test]
+fn access_error_keys_describe_primitives_without_program_callbacks() {
+    let report = run_suite(
+        "access_keys",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+    );
+    assert_eq!(checks(&report), 24, "{report}");
+}
+
 /// A C library's object in an erased value (`runtime/c/tests/handles.c`): the
 /// tag block 8..15 is a pointer and never managed, counts through what its
 /// family registered, answers `typeof` "object", and aborts in its own words

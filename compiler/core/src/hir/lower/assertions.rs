@@ -147,14 +147,21 @@ pub(super) fn lower(
         ));
     }
     let plan = check(builder, id);
-    let allowed = builder.absences_of(id).unwrap_or_default();
+    let deferred = super::access::defer_presence(builder, id, value);
+    let mut allowed = builder.absences_of(id).unwrap_or_default();
+    if deferred {
+        // A null receiver is rejected by the access after its index/RHS has
+        // run. Keep establishing the representation of every present value.
+        allowed.extend([tags::NULL, tags::UNDEFINED]);
+    }
     let target = match &plan {
         Some(Check::Primitive { target, .. }) => Some(target.clone()),
         Some(Check::Class(class)) => Some(HirType::Managed(ManagedType::Object(*class))),
         _ => None,
     };
     if let Some(target) = target
-        && let Some(recovered) = recover_matching(builder, id, source, value, &target, &allowed)
+        && let Some(recovered) =
+            recover_matching(builder, id, source, value, &target, &allowed, deferred)
     {
         return recovered;
     }
@@ -197,7 +204,7 @@ pub(super) fn lower(
             )?;
             return Ok(builder.push(OpKind::Unerase { value: erased }, target, origin));
         }
-        Some(Check::Present) if can_throw(builder, id) => {
+        Some(Check::Present) if !deferred && can_throw(builder, id) => {
             if let Some(absent) = builder.absence_of(id, value) {
                 reject_when(
                     builder,
@@ -220,6 +227,7 @@ fn recover_matching(
     value: ValueId,
     target: &HirType,
     allowed: &[u32],
+    deferred: bool,
 ) -> Option<Result<ValueId, Diagnostic>> {
     // Recover only an existing representation, never the assertion's claim.
     // This also removes a proved erasure round trip before any guard or ABI
@@ -254,7 +262,8 @@ fn recover_matching(
     let placeholder = matches!(builder.values[concrete.0 as usize].kind, OpKind::ConstNull)
         && matches!(target, HirType::Managed(_) | HirType::NativePointer(_));
     Some((|| {
-        let needs_presence = !placeholder
+        let needs_presence = !deferred
+            && !placeholder
             && if concrete == value {
                 removes_absence(builder, source, id)
             } else {
@@ -343,6 +352,9 @@ pub(super) fn dereferenced_getter_read(
     value: ValueId,
 ) -> Result<ValueId, Diagnostic> {
     if !getter_read_can_throw(builder, id) {
+        return Ok(value);
+    }
+    if super::access::defer_presence(builder, id, value) {
         return Ok(value);
     }
     if let Some(absent) = builder.absence_of(id, value) {

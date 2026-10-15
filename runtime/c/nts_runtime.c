@@ -8539,6 +8539,46 @@ NtsString *nts_symbol_to_string(const NtsSymbol *symbol) {
   return whole;
 }
 
+NtsString *nts_access_key_description(NtsValue key) {
+  switch (nts_value_tag(key)) {
+  case NTS_TAG_UNDEFINED:
+  case NTS_TAG_NULL:
+  case NTS_TAG_BOOLEAN:
+  case NTS_TAG_NUMBER:
+  case NTS_TAG_BIGINT:
+  case NTS_TAG_STRING:
+    return nts_value_to_string(key);
+  case NTS_TAG_SYMBOL: {
+    const NtsSymbol *symbol = (const NtsSymbol *)nts_value_reference(key);
+    const NtsString *description = symbol ? symbol->description : NULL;
+    if (!description || description->length <= 128u) {
+      return nts_symbol_to_string(symbol);
+    }
+    /* Node v24.20.0 / V8 NoSideEffectsToMaybeString: count UTF-16 units,
+     * including any lone surrogate at either cut, rather than UTF-8 bytes. */
+    NtsString *first = nts_str_slice(description, 0, 56);
+    NtsString *last = nts_str_slice(description, description->length - 56u,
+                                    description->length);
+    NtsString *middle = NTS_TEXT("...<omitted>...");
+    NtsString *head = nts_concat(first, middle);
+    NtsString *shortened = nts_concat(head, last);
+    NtsSymbol abbreviated = *symbol;
+    abbreviated.description = shortened;
+    NtsString *out = nts_symbol_to_string(&abbreviated);
+    nts_release((NtsHeader *)first);
+    nts_release((NtsHeader *)last);
+    nts_release((NtsHeader *)middle);
+    nts_release((NtsHeader *)head);
+    nts_release((NtsHeader *)shortened);
+    return out;
+  }
+  default:
+    /* A diagnostic must never call user code. An erased object key still
+     * raises the catchable TypeError, with its description omitted. */
+    return NULL;
+  }
+}
+
 NtsMap *nts_map_new(double kind) {
   return nts_map_alloc(&nts_desc_map, (uint32_t)kind, true);
 }

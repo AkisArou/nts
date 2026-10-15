@@ -16,6 +16,81 @@ fn prepare(name: &str, source: &str) -> Option<(ScratchDir, hir::Prepared)> {
     prepare_with_types(name, source, true)
 }
 
+#[test]
+fn non_null_array_accesses_emit_no_receiver_guard() {
+    let source = r"
+        export function read(values: number[]): number { return values[3]; }
+        export function write(values: number[]): number { return values[3] = 9; }
+    ";
+    let Some((_dir, prepared)) = prepare("present-receiver", source) else {
+        return;
+    };
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    let text = emitted.writer.text();
+    assert!(!text.contains("nts_raise("), "{text}");
+    assert!(!text.contains("nts_uncaught("), "{text}");
+    assert!(!text.contains("nts_assertion_failed("), "{text}");
+    assert!(!text.contains("nts_access_key_description("), "{text}");
+
+    // The same access with a nullable contract must retain the real guard,
+    // so the absence of it above cannot pass because guard emission is dead.
+    let Some((_dir, prepared)) = prepare(
+        "nullable-receiver",
+        "export function read(values: number[] | null): number { return values![3]; }",
+    ) else {
+        return;
+    };
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    // String constants are emitted as byte arrays, not C string literals.
+    // Check the actual throwing path rather than searching for its message.
+    let text = emitted.writer.text();
+    assert!(text.contains("nts_uncaught("), "{text}");
+    assert!(!text.contains("nts_assertion_failed("), "{text}");
+}
+
+#[test]
+fn object_key_refusal_keeps_primitive_and_erased_keys_licensed() {
+    let source = r#"
+        class Key { toString(): string { return "x"; } }
+        export function objectKey(values: Record<string, number> | null, key: Key): number {
+            // @ts-ignore -- JavaScript permits ToPropertyKey on an object.
+            return values![key];
+        }
+        export function primitiveKey(values: Record<string, number> | null, key: string): number {
+            return values![key];
+        }
+        export function erasedKey(values: Record<string, number> | null, key: any): number {
+            return values![key];
+        }
+    "#;
+    let Some((_dir, prepared)) = prepare("access-key-types", source) else {
+        return;
+    };
+    let refused = &prepared.program.uncompiled;
+    assert!(
+        refused
+            .iter()
+            .any(|(name, why)| name == "objectKey" && why.contains("object-typed key")),
+        "{refused:?}"
+    );
+    assert!(
+        !refused
+            .iter()
+            .any(|(name, _)| name == "primitiveKey" || name == "erasedKey"),
+        "{refused:?}"
+    );
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
+    assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
+    assert!(
+        emitted
+            .writer
+            .text()
+            .contains("nts_access_key_description(")
+    );
+}
+
 /// A program whose binding lives in its own declaration file, the way a real
 /// one does.
 ///
