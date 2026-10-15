@@ -35,17 +35,20 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::facts::Facts;
+use super::facts::{self, Facts};
 use super::flow::Analysis;
 use super::{BinOp, BlockId, Func, OpKind, Terminator, ValueId};
 
 /// Loops longer than this are treated as unbounded.
 ///
-/// Not a correctness bound — a `trips` of 10^15 is still sound — but a bound
-/// that large multiplied by an increment leaves nothing provable anyway, and
-/// keeping the arithmetic well inside the safe-integer range means the product
-/// below cannot itself lose precision.
-const MAX_TRIPS: f64 = 1e9;
+/// The count has to be exact, so it is a safe integer. Whether what it
+/// multiplies stays exact is a question about the product, and is asked of
+/// the bound itself below. It was 1e9, standing in for that question, and a
+/// loop guarded by a 32-bit count -- `i < n` with `n` an `i32`, which every
+/// `#whole` clone of an exported function has -- runs up to 2^31 times. So
+/// such a loop's accumulators were all unbounded and stayed doubles:
+/// `optional-chain`'s `total`, awfy-sieve's `primeCount`.
+const MAX_TRIPS: f64 = facts::SAFE_MAX;
 
 /// How many merges deep a step may be followed.
 ///
@@ -70,7 +73,7 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
         };
         // The counter is bounded by its own guard, whatever the trip count
         // turns out to be. Those are two different facts and they were coupled:
-        // a loop over `xs.length` has up to 4294967295 trips, `MAX_TRIPS` is
+        // a loop over `xs.length` has up to 4294967295 trips, `MAX_TRIPS` was
         // 1e9, so `trip_count` gave up -- and the counter lost its bound along
         // with the accumulators, though `i < xs.length` bounds it exactly.
         //
@@ -115,7 +118,12 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
             let upward = (trips * increment.hi).max(0.0);
             let lo = start.lo + downward;
             let hi = start.hi + upward;
-            if !lo.is_finite() || !hi.is_finite() {
+            // Inside the safe-integer range whole numbers add and multiply
+            // exactly, so this is the true bound. Past it a rounded product
+            // can fall short of what the loop reaches, and a bound that large
+            // proves no integer representation anyway.
+            let safe = facts::SAFE_MIN..=facts::SAFE_MAX;
+            if !safe.contains(&lo) || !safe.contains(&hi) {
                 continue;
             }
             caps.insert(*param, Facts::new(lo, hi, false, true, true));
@@ -431,9 +439,7 @@ fn step_of(
             op: BinOp::Sub,
             lhs,
             rhs,
-        } if copies(func, predecessors, lhs, param, depth) => {
-            Some(super::facts::neg(analysis.get(rhs)))
-        }
+        } if copies(func, predecessors, lhs, param, depth) => Some(facts::neg(analysis.get(rhs))),
 
         // A merge. `if (found) { total += 1 }` inside a loop reaches the latch
         // through a block parameter whose incoming values are the accumulator

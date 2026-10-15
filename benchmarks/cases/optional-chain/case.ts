@@ -51,5 +51,7 @@ export function run(rounds: number): number {
 export const seed = 100000;
 
 // The representation this row measures (`nts expect-ir`): the optional call
-// reaches the closure directly, not through a dispatch table.
+// reaches the closure directly, not through a dispatch table, and the total
+// over an `i32` count of rounds is an integer, not a double.
 // expect-ir: all: no call.virtual in run
+// expect-ir: all: block params in run#whole are integer

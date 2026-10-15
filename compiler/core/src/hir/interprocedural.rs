@@ -151,12 +151,13 @@ pub fn analyze_assuming(
     let mut analyses = settle(program, &in_slot, &outward, &written, &caps, growable);
 
     for _ in 0..FEEDBACK_CAP {
-        let next: Vec<_> = program
+        let counted = program
             .funcs
             .iter()
             .zip(&analyses)
             .map(|(func, analysis)| super::loops::accumulator_caps(func, analysis))
             .collect();
+        let next = narrowed(counted, &caps);
         if next == caps {
             break;
         }
@@ -164,6 +165,34 @@ pub fn analyze_assuming(
         analyses = settle(program, &in_slot, &outward, &written, &caps, growable);
     }
     analyses
+}
+
+/// The caps the next round assumes: what this round counted, narrowed by what
+/// the rounds before it did.
+///
+/// Every round is sound on its own. The first assumes no cap; each cap is
+/// counted from a sound analysis, so it is true of the program; and the
+/// analysis that assumes it is then sound in turn. So a value two rounds bound
+/// differently is bounded by both, and one a round no longer bounds keeps the
+/// bound it had. Caps then only narrow, which is what lets the rounds stop.
+/// Recounted alone, a cap fed back through a callee -- `parse` hands
+/// `skipOWS` a position and gets one past it back -- grew from its own
+/// previous value every round and never settled: once a loop bounded by an
+/// `i32` count could be counted at all, `runtime/node/fs` spent every round
+/// [`FEEDBACK_CAP`] allows and compiled in 118 s against 58.
+fn narrowed(
+    mut counted: Vec<FxHashMap<ValueId, Facts>>,
+    earlier: &[FxHashMap<ValueId, Facts>],
+) -> Vec<FxHashMap<ValueId, Facts>> {
+    for (counted, earlier) in counted.iter_mut().zip(earlier) {
+        for (value, cap) in earlier {
+            counted
+                .entry(*value)
+                .and_modify(|now| *now = now.narrow(*cap))
+                .or_insert(*cap);
+        }
+    }
+    counted
 }
 
 /// Run the parameter and return fixpoint to convergence, given loop bounds.
@@ -626,5 +655,43 @@ mod tests {
         // And once widened, a TOP entry does not come back narrower.
         let again = widened(&mut changes, &next, [(1, upto(3.0))].into_iter().collect());
         assert_eq!(again.get(&1), None);
+    }
+
+    fn cap(lo: f64, hi: f64) -> Facts {
+        Facts::new(lo, hi, false, true, true)
+    }
+
+    fn caps(entries: &[(u32, Facts)]) -> Vec<FxHashMap<ValueId, Facts>> {
+        vec![
+            entries
+                .iter()
+                .map(|(value, facts)| (ValueId(*value), *facts))
+                .collect(),
+        ]
+    }
+
+    #[test]
+    fn a_cap_that_grows_keeps_the_bound_it_had() {
+        // `parse` and `skipOWS`: the position doubles every recount.
+        let earlier = caps(&[(115, cap(0.0, 4_294_967_295.0))]);
+        let counted = caps(&[(115, cap(0.0, 8_589_934_591.0))]);
+        assert_eq!(narrowed(counted, &earlier), earlier);
+    }
+
+    #[test]
+    fn a_cap_a_round_no_longer_finds_is_kept() {
+        let earlier = caps(&[(3, cap(0.0, 511.0))]);
+        assert_eq!(narrowed(caps(&[]), &earlier), earlier);
+    }
+
+    #[test]
+    fn a_new_or_narrower_cap_is_taken() {
+        let earlier = caps(&[(3, cap(0.0, 511.0))]);
+        let counted = caps(&[(3, cap(2.0, 255.0)), (9, cap(1.0, 7.0))]);
+        assert_eq!(
+            narrowed(counted.clone(), &earlier),
+            counted,
+            "the intersection of [0, 511] and [2, 255] is [2, 255]",
+        );
     }
 }
