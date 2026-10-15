@@ -480,7 +480,17 @@ export function attempt(dir, body, tools, origin?) {
     // as "exited non-zero with no diagnostic" because only the exit-0 branch
     // below read NTS lines. A refusal, then, with its diagnostics.
     if (/NTS\d{4}/.test(diagnostics)) return refusal(diagnostics);
-    return { bucket: "unsupported", why: "emit" };
+    // **And one with no NTS code still said something.** The Wasm lane's first
+    // parity run filed 192 cases as "no diagnostic" that were all one invalid
+    // module, which emit-wasm's own first line ("invalid generated wasm: ...")
+    // named at once. Kept normalised as an invalid-HIR line is, so one defect
+    // is one cause however many cases reach it.
+    const said = diagnostics.split("\n").map((line) => line.trim()).find((line) => line !== "");
+    return {
+      bucket: "unsupported",
+      why: "emit",
+      first: said?.replace(/"[^"]*"/g, '"X"').replace(/\b(\w*Id)\(\d+\)/g, "$1(N)").replace(/\d+/g, "N").slice(0, 200),
+    };
   }
   // `emit-c` exits 0 while refusing, so the diagnostics decide, never the
   // status -- and *both* streams are the diagnostics.

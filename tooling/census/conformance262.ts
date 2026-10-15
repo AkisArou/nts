@@ -538,7 +538,12 @@ function classify(row) {
         // compiler defect rather than a decline -- nothing refused it.
         return { outcome: "no-verdict", cause: `link: ${row.first ?? "?"}` };
       }
-      if (row.why === "emit") return { outcome: "no-verdict", cause: "emit-c exited non-zero with no diagnostic" };
+      if (row.why === "emit") {
+        return {
+          outcome: "no-verdict",
+          cause: row.first ? `emit: ${row.first}` : "the emitter exited non-zero and printed nothing",
+        };
+      }
       const diagnostics = row.diagnostics ?? [];
       if (diagnostics.some(namesHarness)) {
         const which = diagnostics.find(namesHarness);
