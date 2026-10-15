@@ -14,6 +14,10 @@
 // primitive-string boundary"), for the same missing fact.
 //
 // The control differs in one thing, `undefined` for `null`, and agrees.
+//
+// Fixed 2026-10-15, and now its guard: `Func::result_absent` says which absence
+// a function's null result stands for, and the boundaries -- `nts check`'s
+// driver, the N-API glue -- read it.
 export function stringOrNull(present: boolean): string | null {
   return present ? "text" : null;
 }
