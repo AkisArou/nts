@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: non-null control=7;null receiver=TypeError: A non-null assertion received null or undefined;",
+  "node": "exit 1; nts: uncaught Observed: non-null control=7;null receiver=TypeError: Cannot read properties of null (reading '3');",
+  "measured_with": "5b792327706fba5e",
+  "source": "measured"
+}
