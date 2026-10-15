@@ -233,6 +233,18 @@ pub(crate) fn unit(
         Helper::Unit
     };
     crate::contract::nonnull(b, string, "a character of a null string")?;
+    if checked
+        && helper == Helper::CharCodeAt
+        && matches!(
+            b.ty(index),
+            HirType::Int {
+                bits: 8 | 16 | 32,
+                ..
+            }
+        )
+    {
+        return checked_unit(b, result, string, index);
+    }
     if !checked {
         unit_index_contract(b, string, index)?;
     }
@@ -242,6 +254,32 @@ pub(crate) fn unit(
     numeric::convert(b, &b.ty(index).clone(), &index_type)?;
     call(b, helper)?;
     numeric::convert(b, &index_type, &b.ty(result).clone())
+}
+
+/// `charCodeAt` with a 32-bit index, in line: one unsigned comparison against
+/// the length -- a negative index reads past it, the premise `arrays::within`
+/// states -- then the code unit, or `NaN` past either end, as JS answers. The
+/// helper takes a number index and tests it whole and in range in `f64`, five
+/// conversions a character, and JSON's number scanner reads every digit so.
+fn checked_unit(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    string: ValueId,
+    index: ValueId,
+) -> Result<(), Failure> {
+    crate::arrays::index(b, index)?;
+    b.load(string)?;
+    call(b, Helper::Length)?;
+    b.instruction(&I::I32LtU);
+    b.instruction(&I::If(BlockType::Result(ValType::F64)));
+    b.load(string)?;
+    crate::arrays::index(b, index)?;
+    call(b, Helper::Unit)?;
+    b.instruction(&I::F64ConvertI32U);
+    b.instruction(&I::Else);
+    b.instruction(&I::F64Const(f64::NAN.into()));
+    b.instruction(&I::End);
+    numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())
 }
 
 /// Whether `index` names a code unit of `string`, as an array's index is
