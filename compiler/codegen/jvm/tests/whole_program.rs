@@ -276,6 +276,42 @@ fn exp_and_hypot_answer_as_node_does() {
     assert_eq!(stdout, "true 7.38905609893065 12.048265419125958\n");
 }
 
+/// Three globals whose names the JVM's mangling makes one, each its own field:
+/// `$`, `$‍` and `$‌` all mangle to `$$`, since ZWJ and ZWNJ are
+/// outside what DEX spells. The class declared the field three times and was
+/// refused (test262 `identifiers/part-zwj-zwnj-escaped`); the later two now
+/// take their index, as two properties of one spelling do. `a` and `b` are the
+/// control: names the mangling keeps apart, which always loaded.
+#[test]
+fn globals_the_mangling_makes_alike_are_told_apart() {
+    let Some((status, stdout, stderr)) = run_whole_script(
+        "zwj",
+        "var $ = 1;\nvar $\\u200D = 2;\nvar $\\u200C = 3;\nconsole.log($, $\\u200D, $\\u200C);\n\
+         var a = 4;\nvar b = 5;\nconsole.log(a, b);\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "1 2 3\n4 5\n");
+}
+
+/// A generated name never takes a global's own spelling. `$‍` and
+/// `$‌` both mangle to `$$`, so the second is told apart by its index --
+/// and `$$_0` to `$$_3` are globals of their own, which a name chosen without
+/// looking at them would have declared again. The index is bumped until free.
+#[test]
+fn a_told_apart_global_skips_the_names_other_globals_spell() {
+    let Some((status, stdout, stderr)) = run_whole_script(
+        "zwj-suffix",
+        "var $\\u200D = 1;\nvar $\\u200C = 2;\nvar $$_0 = 3;\nvar $$_1 = 4;\nvar $$_2 = 5;\nvar $$_3 = 6;\n\
+         console.log($\\u200D, $\\u200C, $$_0, $$_1, $$_2, $$_3);\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(stdout, "1 2 3 4 5 6\n");
+}
+
 /// A buffer the language allows and the machine cannot give is node's
 /// catchable `RangeError: Array buffer allocation failed`, as on C, where
 /// `calloc` fails and the lowering throws on the null. The JVM refused at run

@@ -35,6 +35,9 @@ pub struct JvmProgram<'a> {
     /// `(layout, field)` for every field some operation reads or writes by
     /// position through a value of that layout's type; see [`Self::reached`].
     positional: FxHashSet<(usize, u32)>,
+    /// Each module global's static field, by global index; see
+    /// [`Self::global_field`].
+    global_fields: Vec<String>,
 }
 
 impl<'a> JvmProgram<'a> {
@@ -72,6 +75,7 @@ impl<'a> JvmProgram<'a> {
             selectors,
             live,
             positional: FxHashSet::default(),
+            global_fields: global_fields(program),
         };
         facts.positional = facts.positional_accesses();
         facts.settle_faces();
@@ -252,6 +256,21 @@ impl<'a> JvmProgram<'a> {
     /// method there must have. A layout's own table holds its *row* at the
     /// slot -- `Point#nts$get$x@interface1@1` on the face itself -- and naming
     /// a method after that was a member the call never reached.
+    /// The static field module global `index` is stored in.
+    ///
+    /// Its name mangled for the JVM (`body::method_name`), except where an
+    /// earlier global mangles alike: then `<name>_<index>`, the rule properties
+    /// are told apart by (`hierarchy::field_name`), with the index bumped past
+    /// any global's own spelling. The mangling is not one-to-one -- every
+    /// character DEX forbids becomes `$`, and so do ZWNJ and ZWJ, which an
+    /// ECMAScript identifier may contain -- so test262's
+    /// `identifiers/part-zwj-zwnj-escaped`, three globals `$`, `$‍` and
+    /// `$‌`, declared one field three times and the class was refused.
+    #[must_use]
+    pub fn global_field(&self, index: usize) -> &str {
+        &self.global_fields[index]
+    }
+
     #[must_use]
     pub fn selector(&self, slot: usize) -> Option<&'a str> {
         u32::try_from(slot)
@@ -266,4 +285,41 @@ impl Deref for JvmProgram<'_> {
     fn deref(&self) -> &Program {
         self.program
     }
+}
+
+/// [`JvmProgram::global_field`] for every global, in index order.
+///
+/// **Every global's own spelling is reserved first**, so a generated name never
+/// takes one -- not even a later global's. `$‍` and `$‌` both mangle
+/// to `$$`, and the second became `$$_1`, which a third global spelled `$$_1`
+/// then declared again. A generated name bumps its index until it is free.
+/// Linear in the globals, with sets, since a runtime module has thousands.
+fn global_fields(program: &Program) -> Vec<String> {
+    let spelled: Vec<String> = program
+        .globals
+        .iter()
+        .map(|global| crate::body::method_name(&global.name))
+        .collect();
+    let reserved: FxHashSet<&str> = spelled.iter().map(String::as_str).collect();
+    let mut taken: FxHashSet<String> = FxHashSet::default();
+    spelled
+        .iter()
+        .enumerate()
+        .map(|(at, name)| {
+            if taken.insert(name.clone()) {
+                return name.clone();
+            }
+            // At most `n` spellings are reserved and `n` names taken, so one of
+            // any `2n + 1` consecutive candidates is free.
+            let free = (at..)
+                .take(2 * spelled.len() + 1)
+                .map(|index| format!("{name}_{index}"))
+                .find(|candidate| {
+                    !reserved.contains(candidate.as_str()) && !taken.contains(candidate)
+                })
+                .unwrap_or_else(|| format!("{name}_{at}"));
+            taken.insert(free.clone());
+            free
+        })
+        .collect()
 }

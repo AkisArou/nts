@@ -1877,7 +1877,7 @@ impl Emitter<'_> {
         let Some(descriptor) = types::descriptor(self.shape, &entry.ty) else {
             return Err(refuse(self.func, "a global of unrepresentable type"));
         };
-        let name = crate::body::method_name(&entry.name);
+        let name = self.program.global_field(index as usize).to_owned();
         // **A bound static is the jar's field, not a copy in our class.**
         // `Kind.SMALL` arrives here as one of our globals -- the declaration
         // says `static readonly SMALL: Kind` and nothing distinguishes it from

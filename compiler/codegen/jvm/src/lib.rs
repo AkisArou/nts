@@ -192,7 +192,7 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
     // Module-scope storage, as static fields. Private unless the program
     // exports it, for the reason the C backend makes it `static`: a name
     // outside the program is a name something outside can collide with.
-    for global in &program.globals {
+    for (at, global) in program.globals.iter().enumerate() {
         let Some(descriptor) =
             types::descriptor(types::Shape::packaged(program, package), &global.ty)
         else {
@@ -214,7 +214,7 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
         };
         builder.field(
             visibility | access::STATIC,
-            body::method_name(&global.name),
+            program.global_field(at).to_owned(),
             descriptor,
         );
     }
@@ -3851,19 +3851,20 @@ fn class_initializer(
         .map_err(|error| initializer_refusal(program, &error.to_string()))
 }
 
+/// Module globals by index, as [`globals_to_write`] answers them.
+type IndexedGlobals<'p> = Vec<(usize, &'p nts_core::hir::Global)>;
+
 /// The module globals `<clinit>` writes, because Java's zeroed static is not
 /// their zero: those whose initial value is not `+0`, and every erased one.
 fn globals_to_write<'p>(
     package: &str,
     program: &'p JvmProgram<'_>,
-) -> (
-    Vec<&'p nts_core::hir::Global>,
-    Vec<&'p nts_core::hir::Global>,
-) {
+) -> (IndexedGlobals<'p>, IndexedGlobals<'p>) {
     let interesting: Vec<_> = program
         .globals
         .iter()
-        .filter(|global| {
+        .enumerate()
+        .filter(|(_, global)| {
             // Java's zero is `+0`, by its bits: `-0.0 != 0.0` is false, so a
             // global folded to `-0` -- test262's `var n_zero = -0;` -- went
             // unwritten and read `+0`, and `1 / n_zero` was `Infinity`.
@@ -3883,7 +3884,8 @@ fn globals_to_write<'p>(
     let undefined: Vec<_> = program
         .globals
         .iter()
-        .filter(|global| matches!(global.ty, nts_core::hir::HirType::Erased))
+        .enumerate()
+        .filter(|(_, global)| matches!(global.ty, nts_core::hir::HirType::Erased))
         .collect();
     (interesting, undefined)
 }
@@ -3892,12 +3894,12 @@ fn globals_to_write<'p>(
 fn write_globals(
     package: &str,
     program: &JvmProgram<'_>,
-    interesting: &[&nts_core::hir::Global],
-    undefined: &[&nts_core::hir::Global],
+    interesting: &[(usize, &nts_core::hir::Global)],
+    undefined: &[(usize, &nts_core::hir::Global)],
     pool: &mut Pool,
     code: &mut Code,
 ) -> Result<(), Diagnostic> {
-    for global in interesting.iter().copied() {
+    for &(at, global) in interesting {
         let origin = global.origin.clone();
         let descriptor = types::descriptor(types::Shape::packaged(program, package), &global.ty)
             .ok_or_else(|| initializer_refusal(program, "an unrepresentable global initializer"))?;
@@ -3925,11 +3927,11 @@ fn write_globals(
             &origin,
             pool,
             &body::program_class(package),
-            &body::method_name(&global.name),
+            program.global_field(at),
             &descriptor,
         );
     }
-    for global in undefined.iter().copied() {
+    for &(at, global) in undefined {
         let origin = global.origin.clone();
         code.get_static(
             &origin,
@@ -3942,7 +3944,7 @@ fn write_globals(
             &origin,
             pool,
             &body::program_class(package),
-            &body::method_name(&global.name),
+            program.global_field(at),
             types::VALUE_DESCRIPTOR,
         );
     }
