@@ -499,11 +499,35 @@ function runTrain(root: string, train: Entry[]): "done" | "halve" {
   }
   record("landed");
   status({ state: "landed", commit: tip, base, run: gated.run, train: shas });
+  const refreshed = refreshPackages(root, base, tip);
   for (const { entry, landing } of members) {
     const train = members.length > 1 ? ` in a train of ${members.length}` : "";
-    answer(entry, { state: "landed", message: `LANDED ${entry.sha.slice(0, 12)}${train} as ${landing.slice(0, 12)}: main is ${tip.slice(0, 12)}`, landing, main: tip, run: gated.run });
+    answer(entry, { state: "landed", message: `LANDED ${entry.sha.slice(0, 12)}${train} as ${landing.slice(0, 12)}: main is ${tip.slice(0, 12)}${refreshed}`, landing, main: tip, run: gated.run });
   }
   return "done";
+}
+
+/**
+ * **The shared checkout's packages follow its lockfile**, so a landing that
+ * changes the lockfile installs. Every tree's inputs are copied from the
+ * checkout's `node_modules` (`inputs.sh`), so a package a landing added -- the
+ * AssemblyScript column's compiler, 2026-10-15 -- reached no tree until
+ * someone remembered to install it by hand. After the fast-forward, so a
+ * failure here cannot unland anything: it is said in the landing's message
+ * instead, for the person to run.
+ */
+function refreshPackages(root: string, base: string, tip: string): string {
+  const touched = git(["diff", "--name-only", `${base}..${tip}`, "--", "pnpm-lock.yaml", "pnpm-workspace.yaml"], root);
+  if (touched === "") return "";
+  const install = spawnSync("pnpm", ["install", "--frozen-lockfile", "--prefer-offline"], {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 600_000,
+    env: { ...process.env, NTS_LAND: "1" },
+  });
+  if (install.status === 0) return "; packages installed for the new lockfile";
+  const why = (install.stderr || install.stdout || String(install.error ?? "")).trim().split("\n").pop();
+  return `; the lockfile changed and \`pnpm install --frozen-lockfile\` failed in ${root} (${why}): run it there`;
 }
 
 function main(): void {
