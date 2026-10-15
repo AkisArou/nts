@@ -36990,10 +36990,14 @@ impl<'a> FuncBuilder<'a> {
         sequence: NodeId,
         sequence_value: ValueId,
         walk: Walk,
-        element_ty: &HirType,
         ty: &HirType,
+        mapped: bool,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
+        let HirType::Managed(ManagedType::Array(element_ty)) = ty else {
+            return Err(self.unsupported(id, "a walk collected into a value that is not an array"));
+        };
+        let element_ty = element_ty.as_ref();
         let append = match *element_ty {
             ref counted if holds_counted(counted) => "nts_array_push_ref",
             HirType::Float { bits: 64 } => "nts_array_push",
@@ -37080,6 +37084,42 @@ impl<'a> FuncBuilder<'a> {
             (Some(step), done)
         };
         let cond = self.walk_condition(&walk, at, sequence_value, &origin)?;
+        let cond = if !mapped && matches!(walk, Walk::Table { .. } | Walk::Entries { .. }) {
+            // This walk invokes no source callback: its live entry count is
+            // the number of slots allocated in `out`. Keep both halves of
+            // `filled < out.length && cursor >= 0`: the first exposes the
+            // output counter's bound to flow/bounds; the second still refuses
+            // to read an exhausted table cursor. A mapper may add entries and
+            // does not have this fixed-count contract.
+            //
+            // Test the cursor first and put the bound on the body's incoming
+            // edge: flow's relational facts describe the immediate guard,
+            // while its interval refinements survive both edges. These tests
+            // read only compiler-owned values, so their order has no effect.
+            let bounds_test = self.new_block();
+            let (exit, _) = self.exit_of(record.depth);
+            let reached = self.carried_now(&record.carried);
+            self.terminate(Terminator::Branch {
+                cond,
+                then_target: bounds_test,
+                then_args: Vec::new(),
+                else_target: exit,
+                else_args: reached,
+            });
+            self.switch_to(bounds_test);
+            let length = self.push(OpKind::Length(out), HirType::NUMBER, origin.clone());
+            self.push(
+                OpKind::Binary {
+                    op: BinOp::Lt,
+                    lhs: self.bindings[&filled],
+                    rhs: length,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        } else {
+            cond
+        };
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
@@ -37187,10 +37227,7 @@ impl<'a> FuncBuilder<'a> {
         let sequence_value = self.lower_expression(sequence)?;
         let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
         let ty = self.array_from_type(id, &walk, mapped)?;
-        let HirType::Managed(ManagedType::Array(element_ty)) = ty.clone() else {
-            return Err(self.unsupported(id, "an `Array.from` that does not build an array"));
-        };
-        self.collect_a_walk(id, sequence, sequence_value, walk, &element_ty, &ty)
+        self.collect_a_walk(id, sequence, sequence_value, walk, &ty, mapped)
     }
 
     /// The one value a walk hands the body, whichever kind of walk it is.
@@ -62367,11 +62404,8 @@ impl<'a> FuncBuilder<'a> {
                      an array either, so there is nothing to collect the iterator into",
                 ));
             };
-            let HirType::Managed(ManagedType::Array(element_ty)) = built.clone() else {
-                unreachable!("matched an array just above")
-            };
             let walk = self.walk_of(element, value, None, 1)?;
-            return self.collect_a_walk(element, element, value, walk, &element_ty, &built);
+            return self.collect_a_walk(element, element, value, walk, &built, false);
         }
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]

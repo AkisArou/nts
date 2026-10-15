@@ -2033,7 +2033,13 @@ pub fn reads_only(name: &str) -> bool {
 /// result, which is counting to do, so a function calling one is not inert.
 /// `nts_array_at_ref` was on `READS_ONLY` until 2026-10-14, and that second half
 /// is the leak it caused: `return xs.find(...)` never released what it found.
-pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &["nts_array_at_ref"];
+pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
+    "nts_array_at_ref",
+    // Table reads retain the returned tagged value, which can hold a reference,
+    // and neither store into a container nor run the program's code.
+    "nts_map_key_at",
+    "nts_map_value_at",
+];
 
 /// Whether a borrow survives a call to `name`: it stores nothing a borrow
 /// depends on ([`READS_ONLY`] or [`RETAINS_ONLY_ITS_RESULT`]).
