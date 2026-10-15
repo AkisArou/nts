@@ -5207,12 +5207,72 @@ fn arithmetic(
         return Ok(float_bitwise(out, op, lhs, rhs));
     }
     let ty = ty_of(&func.values[lhs.0 as usize].ty, func)?;
-    let instruction = binary(op, float, wraps(&func.values[lhs.0 as usize].ty), func)?;
+    let unsigned = wraps(&func.values[lhs.0 as usize].ty);
+    let instruction = binary(op, float, unsigned, func)?;
+    if matches!(op, BinOp::Shl | BinOp::Shr | BinOp::UShr) {
+        return Ok(int32_shift(out, instruction, ty, unsigned, lhs, rhs));
+    }
     Ok(format!(
         "{out} = {instruction} {ty} {}, {}",
         name(lhs),
         name(rhs)
     ))
+}
+
+/// JavaScript's shifts on an integer, at the width they are defined at.
+///
+/// `<<`, `>>` and `>>>` take their left operand as 32 bits and their count
+/// modulo 32, whatever holds them, and C's `nts_shl`, `nts_shr` and `nts_ushr`
+/// say so by taking `int32_t` and masking. This emitted the bare instruction at
+/// the operand's width instead, and LLVM's shift by the width or more is
+/// poison: `4294967295 >>> -32.1` arrives as `lshr i64 4294967295, -32`, which
+/// is 4294967295 in node. So both operands become 32 bits -- truncated from
+/// wider, extended by their own signedness from narrower -- the count is
+/// masked, and the result goes back to the slot: sign-extended where it is
+/// `<<`'s and `>>`'s int32, zero-extended where it is `>>>`'s uint32.
+fn int32_shift(
+    out: &str,
+    instruction: &str,
+    ty: &str,
+    unsigned: bool,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> String {
+    let bits: u32 = ty.trim_start_matches('i').parse().unwrap_or(32);
+    let to32 = |value: String, tag: &str, text: &mut String| -> String {
+        if bits == 32 {
+            return value;
+        }
+        let conversion = if bits > 32 {
+            "trunc"
+        } else if unsigned {
+            "zext"
+        } else {
+            "sext"
+        };
+        let _ = write!(text, "{out}.{tag} = {conversion} {ty} {value} to i32\n  ");
+        format!("{out}.{tag}")
+    };
+    let mut text = String::new();
+    let left = to32(name(lhs), "a", &mut text);
+    let count = to32(name(rhs), "b", &mut text);
+    let _ = write!(text, "{out}.n = and i32 {count}, 31\n  ");
+    if bits == 32 {
+        let _ = write!(text, "{out} = {instruction} i32 {left}, {out}.n");
+        return text;
+    }
+    let back = if bits < 32 {
+        "trunc"
+    } else if instruction == "lshr" {
+        "zext"
+    } else {
+        "sext"
+    };
+    let _ = write!(
+        text,
+        "{out}.r = {instruction} i32 {left}, {out}.n\n  {out} = {back} i32 {out}.r to {ty}"
+    );
+    text
 }
 
 /// Branch to the one runtime owner of the bigint overflow refusal. These
