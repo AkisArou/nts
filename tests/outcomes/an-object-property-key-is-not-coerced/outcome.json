@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: primitive key control=7;;object key=0;;",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: an object property key, whose ToPrimitive conversion this compiler does not yet perform",
   "node": "exit 1; nts: uncaught Observed: primitive key control=7;;object key=7;coerced;;",
-  "measured_with": "5b792327706fba5e",
+  "measured_with": "d3787c41b252cfd4",
   "source": "measured"
 }

@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "agrees",
-  "nts": "exit 1; nts: uncaught Observed: string key control=7;7;symbol key=2;7;",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: a symbol property stored in a string-keyed record, which this runtime does not hold",
   "node": "exit 1; nts: uncaught Observed: string key control=7;7;symbol key=2;7;",
-  "measured_with": "07a08dd5f54a0949",
+  "measured_with": "d3787c41b252cfd4",
   "source": "measured"
 }

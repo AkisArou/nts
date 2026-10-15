@@ -1,9 +1,8 @@
 {
   "run": "build",
-  "category": "refused",
-  "nts": "NTS1001 an `in` whose key is not a literal the compiler can see",
-  "ran": "exit 1; nts: uncaught Observed: ",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: an inherited record property (constructor, hasOwnProperty, isPrototypeOf, propertyIsEnumerable, toLocaleString, toString, valueOf, __proto__, __defineGetter__, __defineSetter__, __lookupGetter__, __lookupSetter__), whose prototype this runtime does not record",
   "node": "exit 1; nts: uncaught Observed: own key control=true;inherited key=true;",
-  "measured_with": "07a08dd5f54a0949",
+  "measured_with": "d3787c41b252cfd4",
   "source": "measured"
 }

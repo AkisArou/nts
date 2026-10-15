@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "aborted",
-  "nts": "SIGSEGV",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: string key control=7;boolean key=7;",
   "node": "exit 1; nts: uncaught Observed: string key control=7;boolean key=7;",
-  "measured_with": "07a08dd5f54a0949",
+  "measured_with": "d3787c41b252cfd4",
   "source": "measured"
 }
