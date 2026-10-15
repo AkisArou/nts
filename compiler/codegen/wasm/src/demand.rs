@@ -23,6 +23,9 @@ pub(crate) struct Services {
     /// A body calls `Symbol.for` or `Symbol.keyFor`, whose registry is a
     /// string-keyed table.
     pub(crate) symbol_registry: bool,
+    /// A body calls `String.fromCharCode`, which reads a one-byte string from
+    /// a table of all 256 built once.
+    pub(crate) one_byte_strings: bool,
 }
 
 #[derive(Debug, Default)]
@@ -179,6 +182,7 @@ fn call(
             }
             demand.services.symbol_registry |=
                 matches!(name.as_str(), "nts_symbol_for" | "nts_symbol_key_for");
+            demand.services.one_byte_strings |= name == "nts_string_from_char_code";
             if crate::presence::external(name).is_some_and(crate::presence::Op::typed)
                 && let Some(receiver) = args.first()
                 && let HirType::Managed(ManagedType::Object(ty)) = func.value(*receiver).ty

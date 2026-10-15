@@ -798,6 +798,25 @@ fn source_null_receiver_keys_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// `String.fromCharCode` reads a code unit below 256 from the one-byte table
+/// and asks the engine for the rest: the table's edge, a sweep across it, and
+/// numbers `ToUint16` wraps into it agree with node.
+#[test]
+fn source_one_byte_strings_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/one-byte-strings");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "one-byte-strings",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

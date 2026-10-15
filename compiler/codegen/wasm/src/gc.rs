@@ -415,7 +415,9 @@ pub(crate) struct Plan {
     /// `(array externref)`: each semantic identity's name, or null, for an
     /// uncaught throw to report (`raising::class_name`). Planned where a
     /// body raises.
-    pub(crate) names: Option<u32>,
+    /// An immutable array of strings: each identity's name for an uncaught
+    /// raise, and the 256 one-byte strings `String.fromCharCode` reads.
+    pub(crate) strings: Option<u32>,
     /// `(array (mut eqref))`: the arrays a `String()` join is inside of.
     pub(crate) joining: Option<u32>,
     /// Each owned kind's storage, by element type.
@@ -494,6 +496,10 @@ impl Plan {
                 .row_signature(slot, declared)
                 .map_err(|why| Failure::Unsupported(why).at(&use_.function, &use_.origin))?;
         }
+        // `String.fromCharCode` reads its one-byte strings from one table.
+        if resources.services.one_byte_strings {
+            builder.strings_type();
+        }
         // A job or a timer is a task, run at a checkpoint.
         if resources.services.tasks {
             builder.promise_types();
@@ -511,7 +517,7 @@ impl Plan {
             builder
                 .request(&HirType::Erased)
                 .map_err(crate::EmitError::InvalidWasm)?;
-            builder.names_type();
+            builder.strings_type();
         }
         for (ty, use_) in &resources.referenced_objects {
             builder
@@ -711,7 +717,7 @@ struct Builder<'a> {
     buffers: Option<BufferNodes>,
     symbol: Option<NodeId>,
     date: Option<NodeId>,
-    names: Option<NodeId>,
+    strings: Option<NodeId>,
     joining: Option<NodeId>,
     /// The element types whose views own their buffers, and each one's store
     /// and view types once planned.
@@ -762,7 +768,7 @@ impl<'a> Builder<'a> {
             buffers: None,
             symbol: None,
             date: None,
-            names: None,
+            strings: None,
             joining: None,
             owned: nts_core::hir::views::owned_view_kinds(program),
             owned_views: FxHashMap::default(),
@@ -1134,12 +1140,12 @@ impl<'a> Builder<'a> {
     }
 
     /// The names of the semantic identities, by identity.
-    fn names_type(&mut self) -> NodeId {
-        if let Some(id) = self.names {
+    fn strings_type(&mut self) -> NodeId {
+        if let Some(id) = self.strings {
             return id;
         }
         let id = self.add(
-            "identity names".into(),
+            "strings".into(),
             None,
             true,
             Shape::Array(Field::value(
@@ -1147,7 +1153,7 @@ impl<'a> Builder<'a> {
                 false,
             )),
         );
-        self.names = Some(id);
+        self.strings = Some(id);
         id
     }
 
@@ -2408,7 +2414,7 @@ impl<'a> Builder<'a> {
                 symbol: indices[node.0],
                 descriptor: symbol_descriptor,
             }),
-            names: self.names.map(|node| indices[node.0]),
+            strings: self.strings.map(|node| indices[node.0]),
             date: self.date.map(|node| DateTypes {
                 date: indices[node.0],
                 descriptor: date_descriptor,

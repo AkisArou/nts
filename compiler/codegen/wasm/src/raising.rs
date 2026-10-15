@@ -168,7 +168,7 @@ const FIXED_ARRAY_LIMIT: usize = 10_000;
 /// Params: value. Locals: its identity.
 fn class_name(m: &mut Builder<'_>) -> Result<Function, Failure> {
     let mut f = Function::new([ValType::I32]);
-    let (Some(root), Some(names)) = (m.types.root, m.types.names) else {
+    let (Some(root), Some(names)) = (m.types.root, m.types.strings) else {
         f.instructions(&[I::RefNull(HeapType::EXTERN), I::End]);
         return Ok(f);
     };

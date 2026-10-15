@@ -176,6 +176,8 @@ pub(crate) enum GlobalKey {
     SymbolRegistry,
     /// Each semantic identity's name, for an uncaught throw to report.
     IdentityNames,
+    /// The 256 one-byte strings, `String.fromCharCode`'s table.
+    OneByteStrings,
     /// A tagged template's cooked strings, by source site.
     Template(u32),
     /// The arrays a `String()` join is inside of, and how many.

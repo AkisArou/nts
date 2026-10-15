@@ -4,8 +4,8 @@ use crate::{
     body::Body,
     error::Failure,
     helpers::Helper as ScalarHelper,
-    ir::Function,
-    module::{Builder, Func, FuncKey},
+    ir::{self, Function},
+    module::{Builder, Func, FuncKey, Global, GlobalKey},
     numeric,
     types::{Physical, Slot},
 };
@@ -122,14 +122,27 @@ impl Helper {
             Self::CharCodeAt | Self::CharAt => indexed(self, m),
             Self::StartsWith | Self::EndsWith => affix(self, m),
             Self::Substring | Self::Slice => substring(self, m),
+            // The code unit is `ToInt32` reduced to 16 bits, which is `ToUint16`; one
+            // below 256 is read from the one-byte table.
             Self::FromCharCode => {
                 let to_int = crate::helpers::callee(m, ScalarHelper::ToInt32)?;
                 let from = callee(m, Self::FromCharCodeBuiltin)?;
-                let mut f = Function::default();
+                let (table, ty) = one_byte_strings(m)?;
+                let mut f = Function::new([ValType::I32]);
                 f.instruction(&I::LocalGet(0));
                 f.call(to_int);
+                f.instructions(&[
+                    I::I32Const(0xffff),
+                    I::I32And,
+                    I::LocalTee(1),
+                    I::I32Const(256),
+                    I::I32LtU,
+                    I::If(BlockType::Result(ValType::EXTERNREF)),
+                ]);
+                f.global_get(table);
+                f.instructions(&[I::LocalGet(1), I::ArrayGet(ty), I::Else, I::LocalGet(1)]);
                 f.call(from);
-                f.instruction(&I::End);
+                f.instructions(&[I::End, I::End]);
                 Ok(f)
             }
         }
@@ -590,4 +603,32 @@ fn substring(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.call(builtin);
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// The 256 one-byte strings, U+0000 to U+00FF, as one immutable array built
+/// once from imported string constants.
+///
+/// V8 answers `wasm:js-string`'s `fromCharCode` through its runtime every
+/// time (`Runtime_WasmStringFromCodePoint`, then a single-character table
+/// lookup), where JavaScript's own `String.fromCharCode` reads that table
+/// inline. A UTF-8 decoder building its output a character at a time spent
+/// 46% of its time there (`node-utf8`, 2026-10-16).
+fn one_byte_strings(m: &mut Builder<'_>) -> Result<(Global, u32), Failure> {
+    let ty = m
+        .types
+        .strings
+        .ok_or_else(|| Failure::Invariant("the one-byte string table has no type".into()))?;
+    let table = m.global(GlobalKey::OneByteStrings, |m| {
+        let mut code = ir::Code::default();
+        for unit in 0_u8..=u8::MAX {
+            let literal = m.literal(&char::from(unit).to_string());
+            code.global_get(literal);
+        }
+        code.instruction(&I::ArrayNewFixed {
+            array_type_index: ty,
+            array_size: 256,
+        });
+        Ok((crate::module::constant_type(ty), code))
+    })?;
+    Ok((table, ty))
 }
