@@ -19,9 +19,10 @@
 //! block and nothing else reads it, the branch consumes it directly. That is
 //! the shape almost every conditional has.
 
+use crate::program::JvmProgram;
 use nts_codegen_common::symbols::jvm_member_name;
 use nts_codegen_common::{Copy, block_order, destruct, edge_copies};
-use nts_core::hir::{BinOp, BlockId, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId};
+use nts_core::hir::{BinOp, BlockId, Func, HirType, OpKind, Terminator, UnOp, ValueId};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::code::{Code, Label};
 use nts_jvm_emitter::{Body, Compare, Kind, Pool, VType};
@@ -66,7 +67,7 @@ pub fn refuse(func: &Func, what: &str) -> Diagnostic {
 /// Separate from the body walk because a signature is refusable on its own
 /// terms: a parameter type with no descriptor is a refusal whatever the body
 /// does, and saying so here keeps the slot allocation below about slots.
-fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), Diagnostic> {
+fn check_signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Result<(), Diagnostic> {
     for param in &func.params {
         if types::descriptor(types::Shape::packaged(program, package), &param.ty).is_none() {
             return Err(refuse(
@@ -103,7 +104,7 @@ fn check_signature(package: &str, program: &Program, func: &Func) -> Result<(), 
 /// `colors: 80` became a bool, and written one op after, was `top` at the
 /// label's frame -- "Bad local variable type ... locals[242] is top" -- and the
 /// module did not load.
-fn puts_label(program: &Program, func: &Func, value: ValueId) -> bool {
+fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
     match &func.values[value.0 as usize].kind {
         OpKind::Binary { op, .. } => comparison(*op).is_some(),
         OpKind::Unary {
@@ -189,7 +190,7 @@ fn puts_label(program: &Program, func: &Func, value: ValueId) -> bool {
 /// is `Top` only if every read of it is in its own block with no label
 /// in between. Fusion is ignored -- a fused comparison emits no label,
 /// so counting it costs a slot its `Top` and never soundness.
-fn crossing_values(program: &Program, func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+fn crossing_values(program: &JvmProgram<'_>, func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
     for (block_at, block) in func.blocks.iter().enumerate() {
         for (index, value) in block.ops.iter().enumerate() {
@@ -390,7 +391,12 @@ fn held_differently(plans: &Held, value: ValueId) -> Option<nts_jvm_emitter::VTy
         })
 }
 
-fn held_values(package: &str, program: &Program, func: &Func, plan: &crate::widen::Plan) -> Held {
+fn held_values(
+    package: &str,
+    program: &JvmProgram<'_>,
+    func: &Func,
+    plan: &crate::widen::Plan,
+) -> Held {
     Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
@@ -413,7 +419,7 @@ fn held_values(package: &str, program: &Program, func: &Func, plan: &crate::wide
 
 #[derive(Debug)]
 pub struct Emitter<'a> {
-    pub(crate) program: &'a Program,
+    pub(crate) program: &'a JvmProgram<'a>,
     pub(crate) templates: bool,
     /// The program plus the one whole-program fact that changes a type's
     /// spelling; see [`types::Shape`].
@@ -454,7 +460,7 @@ impl<'a> Emitter<'a> {
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     pub fn new(
         package: &'a str,
-        program: &'a Program,
+        program: &'a JvmProgram<'a>,
         func: &'a Func,
         plan: &crate::widen::Plan,
         templates: bool,
@@ -819,7 +825,7 @@ pub fn method_name(raw: &str) -> String {
 
 /// The descriptor of a function, from its own signature.
 #[must_use]
-pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String> {
+pub fn signature(package: &str, program: &JvmProgram<'_>, func: &Func) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
     for param in &func.params {
         params.push(types::descriptor(
@@ -837,6 +843,7 @@ pub fn signature(package: &str, program: &Program, func: &Func) -> Option<String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nts_core::hir::Program;
     use nts_core::hir::{Block, ManagedType, Op};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
@@ -867,7 +874,7 @@ mod tests {
             ),
         ];
         let func = one_block(values, Terminator::Return(None));
-        crossing_values(&Program::default(), &func).contains(&ValueId(0))
+        crossing_values(&JvmProgram::new(&Program::default()), &func).contains(&ValueId(0))
     }
 
     /// A function of one block holding every value, in order.
@@ -968,7 +975,7 @@ mod tests {
                 ],
                 Terminator::Return(Some(ValueId(1))),
             );
-            let crossing = crossing_values(&program, &func);
+            let crossing = crossing_values(&JvmProgram::new(&program), &func);
             // Written after the label, like a comparison's result.
             assert!(!crossing.contains(&ValueId(1)));
             crossing.contains(&ValueId(0))

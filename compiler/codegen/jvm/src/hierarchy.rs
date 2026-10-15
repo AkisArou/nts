@@ -15,7 +15,8 @@
 //! verifier rejects. A refusal that over-refuses is safe; one that under-refuses
 //! is a broken artifact, and only the field made the difference visible.
 
-use nts_core::hir::{Field, HirType, Layout, ManagedType, Program};
+use crate::program::JvmProgram;
+use nts_core::hir::{Field, HirType, Layout, ManagedType};
 use nts_semantic_schema::TypeId;
 
 /// The layout this one's class extends on the JVM: its `Layout.base`, or --
@@ -41,7 +42,7 @@ use nts_semantic_schema::TypeId;
 /// those selectors on the JVM. Otherwise `None`, and the refusal the JVM would have
 /// given still stands. Deliberately free of `is_interface`, which asks this.
 #[must_use]
-pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
+pub fn jvm_base(program: &JvmProgram<'_>, layout: &Layout) -> Option<usize> {
     if let Some(at) = program.base_layout(layout) {
         return Some(at);
     }
@@ -82,7 +83,7 @@ pub fn jvm_base(program: &Program, layout: &Layout) -> Option<usize> {
 
 /// Every layout from `layout` up to the root, `layout` first.
 #[must_use]
-pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout> {
+pub fn ancestry<'a>(program: &'a JvmProgram<'a>, layout: &'a Layout) -> Vec<&'a Layout> {
     let mut chain = vec![layout];
     let mut current = layout;
     // Bounded by the layout count, because a cycle in `base` would otherwise
@@ -109,7 +110,7 @@ pub fn ancestry<'a>(program: &'a Program, layout: &'a Layout) -> Vec<&'a Layout>
 /// superclass is two fields, and `getfield` on the wrong one reads the wrong
 /// storage rather than failing.
 #[must_use]
-pub fn inherited(program: &Program, layout: &Layout) -> usize {
+pub fn inherited(program: &JvmProgram<'_>, layout: &Layout) -> usize {
     jvm_base(program, layout)
         .and_then(|at| program.layouts.get(at))
         .map_or(0, |base| base.fields.len())
@@ -132,7 +133,7 @@ pub fn inherited(program: &Program, layout: &Layout) -> usize {
 /// repeating a base's name is two fields on two classes, which the JVM resolves
 /// from the class the access names.
 #[must_use]
-pub fn field_name(program: &Program, owner: &Layout, at: usize) -> String {
+pub fn field_name(program: &JvmProgram<'_>, owner: &Layout, at: usize) -> String {
     let Some(field) = owner.fields.get(at) else {
         return String::new();
     };
@@ -150,7 +151,7 @@ pub fn field_name(program: &Program, owner: &Layout, at: usize) -> String {
 
 /// [`field_name`] for each field a class declares itself, in order.
 #[must_use]
-pub fn declared_names(program: &Program, layout: &Layout) -> Vec<String> {
+pub fn declared_names(program: &JvmProgram<'_>, layout: &Layout) -> Vec<String> {
     let from = inherited(program, layout).min(layout.fields.len());
     (from..layout.fields.len())
         .map(|at| field_name(program, layout, at))
@@ -159,7 +160,7 @@ pub fn declared_names(program: &Program, layout: &Layout) -> Vec<String> {
 
 /// The fields a class declares itself.
 #[must_use]
-pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
+pub fn declared<'a>(program: &JvmProgram<'_>, layout: &'a Layout) -> &'a [Field] {
     let from = inherited(program, layout).min(layout.fields.len());
     &layout.fields[from..]
 }
@@ -190,7 +191,11 @@ pub fn declared<'a>(program: &Program, layout: &'a Layout) -> &'a [Field] {
 /// name. `program.layout` resolves that to the layout actually emitted, which
 /// is the class name a `Fieldref` needs.
 #[must_use]
-pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize) -> &'a Layout {
+pub fn declares_field<'a>(
+    program: &'a JvmProgram<'a>,
+    layout: &'a Layout,
+    field: usize,
+) -> &'a Layout {
     let declared_by = layout
         .fields
         .get(field)
@@ -268,7 +273,7 @@ pub fn declares_field<'a>(program: &'a Program, layout: &'a Layout, field: usize
 /// implementing `EventTargetLike`.
 #[must_use]
 pub fn identities<'a>(
-    program: &'a Program,
+    program: &'a JvmProgram<'a>,
     layout: &Layout,
 ) -> Vec<&'a nts_core::hir::ClassIdentity> {
     if is_interface(program, layout) {
@@ -279,7 +284,10 @@ pub fn identities<'a>(
 
 /// The class a type id names, when its layout is shared by more than one.
 #[must_use]
-pub fn identity_of(program: &Program, id: TypeId) -> Option<&nts_core::hir::ClassIdentity> {
+pub fn identity_of<'a>(
+    program: &'a JvmProgram<'_>,
+    id: TypeId,
+) -> Option<&'a nts_core::hir::ClassIdentity> {
     let layout = program.layout(id)?;
     identities(program, layout)
         .into_iter()
@@ -289,7 +297,7 @@ pub fn identity_of(program: &Program, id: TypeId) -> Option<&nts_core::hir::Clas
 /// Whether anything extends this layout, which is the whole of what decides
 /// `ACC_FINAL`.
 #[must_use]
-pub fn extended(program: &Program, layout: &Layout) -> bool {
+pub fn extended(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     // A layout whose classes have their own subclasses is extended by them, so
     // it cannot be `final`. Asked first because it is the cheaper question.
     !identities(program, layout).is_empty() || extended_by_a_base(program, layout)
@@ -297,7 +305,7 @@ pub fn extended(program: &Program, layout: &Layout) -> bool {
 
 /// Whether another layout's JVM superclass is this one. A layout not in the
 /// program answers yes, as `extended` always has: final is the claim to prove.
-fn extended_by_a_base(program: &Program, layout: &Layout) -> bool {
+fn extended_by_a_base(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     let Some(mine) = program.layouts.iter().position(|c| std::ptr::eq(c, layout)) else {
         return true;
     };
@@ -356,10 +364,17 @@ pub fn member_name(func_name: &str) -> String {
 /// `AbstractMethodError` the verifier waves through (2026-10-02, the first
 /// interface root a raising copy dispatched at). So an interface this layout
 /// implements that declares the slot names it, ahead of any class.
+///
+/// **A field family's slot is named by its declared accessor**, ahead of all
+/// of that: every row, the face's own included, fills it under a name of its
+/// owner's, and the call names the family's (`JvmProgram::selector`).
 #[must_use]
-pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Option<String> {
+pub fn declared_member(program: &JvmProgram<'_>, layout: &Layout, slot: usize) -> Option<String> {
     let mut at = layout;
     let mut name = at.methods.get(slot)?.as_ref()?;
+    if let Some(selector) = program.selector(slot) {
+        return Some(member_name(selector));
+    }
     if let Some(uniform) = uniform_member(program, slot) {
         return Some(uniform);
     }
@@ -385,7 +400,7 @@ pub fn declared_member(program: &Program, layout: &Layout, slot: usize) -> Optio
 /// The base-most layout above this one, which is where a field shared by a
 /// whole hierarchy belongs.
 #[must_use]
-pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
+pub fn root<'a>(program: &'a JvmProgram<'a>, layout: &'a Layout) -> &'a Layout {
     let mut at = layout;
     while let Some(base) = jvm_base(program, at).and_then(|id| program.layouts.get(id)) {
         at = base;
@@ -409,7 +424,7 @@ pub fn root<'a>(program: &'a Program, layout: &'a Layout) -> &'a Layout {
 /// falls out -- a program that never tests an optional property carries no extra
 /// field anywhere.
 #[must_use]
-pub fn holds_presence(package: &str, program: &Program, layout: &Layout) -> bool {
+pub fn holds_presence(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> bool {
     if jvm_base(program, layout).is_some() {
         return false;
     }
@@ -456,8 +471,12 @@ pub fn holds_presence(package: &str, program: &Program, layout: &Layout) -> bool
 /// **Not decided from "has only abstract methods".** A base class every
 /// subclass overrides looks exactly like that, and making it an interface would
 /// silently drop its fields and its constructor.
+///
+/// A face of fields that holders do not extend stays a class, which holds its
+/// fields; it is *referred to* as a companion interface instead
+/// ([`crate::faces`]), which every holder implements.
 #[must_use]
-pub fn is_interface(program: &Program, layout: &Layout) -> bool {
+pub fn is_interface(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     let named = program
         .layouts
         .iter()
@@ -499,8 +518,8 @@ pub fn is_interface(program: &Program, layout: &Layout) -> bool {
 /// The question is not "is it named as an interface" but "is it named by
 /// something that does not reach it through `base`".
 #[must_use]
-pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
-    if is_interface(program, layout) {
+pub fn claimed_without_extending(program: &JvmProgram<'_>, layout: &Layout) -> bool {
+    if is_interface(program, layout) || program.is_split(layout) {
         return false;
     }
     program.layouts.iter().any(|other| {
@@ -531,8 +550,8 @@ pub fn claimed_without_extending(program: &Program, layout: &Layout) -> bool {
 /// `Reader` declined a function that agreed on all 377 cases, so the caller
 /// tests the value at run time instead and refuses only the one that arrives.
 #[must_use]
-pub fn held_without_extending(program: &Program, layout: &Layout) -> bool {
-    if is_interface(program, layout) {
+pub fn held_without_extending(program: &JvmProgram<'_>, layout: &Layout) -> bool {
+    if is_interface(program, layout) || program.is_split(layout) {
         return false;
     }
     program
@@ -558,7 +577,7 @@ pub fn held_without_extending(program: &Program, layout: &Layout) -> bool {
 /// frame -- "Type top (current frame, locals[1])" at `undestroy`'s second
 /// load of `_readableState`, in eight modules.
 #[must_use]
-pub fn held_cast<'p>(program: &'p Program, ty: &HirType) -> Option<&'p Layout> {
+pub fn held_cast<'p>(program: &'p JvmProgram<'p>, ty: &HirType) -> Option<&'p Layout> {
     let HirType::Managed(ManagedType::Object(id)) = ty else {
         return None;
     };
@@ -572,9 +591,12 @@ pub fn held_cast<'p>(program: &'p Program, ty: &HirType) -> Option<&'p Layout> {
 /// In `Layout.interfaces` order, which the IR sorts, so one input gives one
 /// byte sequence -- the class file's `interfaces[]` is written in this order and
 /// the jar-drift test compares bytes.
+///
+/// Then the companion interfaces of the split faces it holds
+/// ([`crate::split_faces::implemented`]), declared or by shape, in layout order.
 #[must_use]
-pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<String> {
-    layout
+pub fn implemented(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> Vec<String> {
+    let mut names: Vec<String> = layout
         .interfaces
         .iter()
         .filter_map(|id| program.layout(*id))
@@ -586,7 +608,14 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
         // agree, so they ask the same question.
         .filter(|at| is_interface(program, at))
         .map(|at| crate::types::class_name(package, at))
-        .collect()
+        .collect();
+    for face in crate::split_faces::implemented(program, layout) {
+        let name = crate::split_faces::interface_name(package, face);
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
 }
 
 /// The JVM name of a **uniform** slot -- the erased entry and its raising
@@ -607,7 +636,7 @@ pub fn implemented(package: &str, program: &Program, layout: &Layout) -> Vec<Str
 /// The raising slot is named only in a program where some callable has a
 /// raising body there; see the comment at that branch.
 #[must_use]
-pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
+pub fn uniform_member(program: &JvmProgram<'_>, slot: usize) -> Option<String> {
     let erased = program.erased_call_slot? as usize;
     let raising_slot = program.raising_call_slot.map(|slot| slot as usize);
     // The ordinary entry's member, from a layout that fills it -- or, where every
@@ -659,7 +688,7 @@ pub fn uniform_member(program: &Program, slot: usize) -> Option<String> {
 /// overrides when no superclass declares it.
 #[must_use]
 pub fn declaring_interface<'a>(
-    program: &'a Program,
+    program: &'a JvmProgram<'a>,
     layout: &Layout,
     slot: usize,
 ) -> Option<&'a Layout> {
@@ -680,7 +709,7 @@ pub fn declaring_interface<'a>(
 /// Sink` leaves `B.interfaces` empty, and `B` is still assignable to `Sink`
 /// because the JVM resolves a superclass's interfaces too.
 #[must_use]
-pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
+pub fn implements(program: &JvmProgram<'_>, layout: &Layout, id: TypeId) -> bool {
     // The edge, **and** that the target is emitted as an interface. `implemented`
     // below already filters by `is_interface` and its comment says the two
     // halves have to agree -- there are three, and this was the one that did
@@ -705,17 +734,30 @@ pub fn implements(program: &Program, layout: &Layout, id: TypeId) -> bool {
     //
     // The edge test is first because it is a `contains` and `is_interface`
     // scans every layout.
-    ancestry(program, layout)
-        .iter()
-        .any(|at| at.interfaces.contains(&id))
-        && program
-            .layout(id)
-            .is_some_and(|target| is_interface(program, target))
+    //
+    // **A split face is implemented by every holder, edge or not**
+    // ([`crate::faces`]): a class fitting `interface Point { x: number }` by
+    // shape implements `Point` on this lane, and nothing in `interfaces` says
+    // so. The receivers test is the cheap half, so a layout no face reaches is
+    // never asked whether one splits.
+    let Some(target) = program.layout(id) else {
+        return false;
+    };
+    let chain = ancestry(program, layout);
+    if chain.iter().any(|at| at.interfaces.contains(&id)) {
+        return is_interface(program, target) || crate::split_faces::split(program, target);
+    }
+    !target.fields.is_empty()
+        && chain
+            .iter()
+            .any(|at| crate::split_faces::receives(program, target, at))
+        && crate::split_faces::split(program, target)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nts_core::hir::Program;
 
     #[test]
     fn a_flattened_record_field_belongs_to_its_emitted_class() {
@@ -747,20 +789,20 @@ mod tests {
             ..Program::default()
         };
         program.record_parents.insert(TypeId(2), TypeId(1));
-        assert!(jvm_base(&program, &program.layouts[1]).is_none());
+        assert!(jvm_base(&JvmProgram::new(&program), &program.layouts[1]).is_none());
         assert_eq!(
-            declares_field(&program, &program.layouts[1], 0).name,
+            declares_field(&JvmProgram::new(&program), &program.layouts[1], 0).name,
             "Entry"
         );
         // With a real emitted superclass, the same field is inherited.
         program.layouts[1].base = Some(TypeId(1));
         assert_eq!(
-            declares_field(&program, &program.layouts[1], 0).name,
+            declares_field(&JvmProgram::new(&program), &program.layouts[1], 0).name,
             "Metadata"
         );
         program.layouts[1].fields.push(field("status", 2));
         assert_eq!(
-            declares_field(&program, &program.layouts[1], 2).name,
+            declares_field(&JvmProgram::new(&program), &program.layouts[1], 2).name,
             "Entry"
         );
     }

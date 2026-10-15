@@ -240,6 +240,7 @@ different problem from the four rows losing by a lot.
 | `arrays` | 1.03x / 1.02x | both runs above; small and real |
 | `fib` | 1.04x / 1.03x | the reference is `int` against a `number`; correcting it per the rule would move this **against** us by 3-4%, measured -- below |
 | `upcast` | 1.03x / 1.05x | bytecode identical to the tree that measured 0.99x; a between-sitting difference, not a change |
+| `face-fields` | **0.90x-0.96x**, six runs (2026-10-15, new) | stage C's row: one face held three ways -- a class whose fields begin with its, one with them reordered, a literal -- at one site, read through the split face's companion interface. Faster than hand-written `invokeinterface` accessors on all six; **but 3.0x node** (C 2.9x): three receivers is megamorphic for HotSpot and polymorphic-inline-cached for V8. The lever is the compiler's: the closed set of holders admits a type test at the site rather than a dispatch |
 | `checksum` | 1.00x | parity, twice |
 | `closure-merge` | **1.01x**; **ART 3.33x** | six runs, all 1.01x here. **The largest ART regression in the table**, and found: the `(D)D` closure ABI, five conversions a call, worth **2.6x on ART and 0% on HotSpot**. Not allocation (128 B/op each side, to the byte) and not the trampoline. Below |
 | `growth-grown` | **1.01x** | six runs, all 1.01x |

@@ -1644,6 +1644,21 @@ impl Emitter<'_> {
             OpKind::Convert(operand) => {
                 self.conversion(code, pool, value, *operand, &op.ty, &origin)?
             }
+            // A licensed conversion to a split face changes nothing on this
+            // lane: the source implements the face's interface (`split_faces`),
+            // and reads through the view dispatch to its row.
+            OpKind::FieldView {
+                value: viewed,
+                face,
+                ..
+            } if self
+                .program
+                .layout(*face)
+                .is_some_and(|layout| self.program.is_split(layout)) =>
+            {
+                self.load(code, pool, *viewed)?;
+                Placed::OnStack
+            }
             OpKind::FieldView { source, face, .. } => {
                 let name = |ty| {
                     self.program
@@ -2852,6 +2867,16 @@ impl Emitter<'_> {
                 self.program
                     .layout(*id)
                     .map(|layout| types::instance_class(self.shape.package, self.program, layout))
+                    .unwrap_or_default()
+            }
+            // A split face's own class, which holds its fields: its values are
+            // referred to as its interface, which `new` cannot name.
+            HirType::Managed(ManagedType::Object(id))
+                if crate::hierarchy::identity_of(self.program, *id).is_none()
+                    && self.split_type(*id).is_some() =>
+            {
+                self.split_type(*id)
+                    .map(|layout| types::class_name(self.shape.package, layout))
                     .unwrap_or_default()
             }
             _ => self.object_class(ty)?,
@@ -4989,6 +5014,22 @@ impl Emitter<'_> {
     /// Returned from here rather than looked up again beside the call: the
     /// layout walk is the same walk, and this file has been bitten before by
     /// two implementations of one question drifting apart.
+    /// The split face a value is typed as, if it is one: a positional access
+    /// to it goes through the face's field accessor, and a dispatch through
+    /// its interface.
+    fn split_receiver(&self, value: ValueId) -> Option<&nts_core::hir::Layout> {
+        let HirType::Managed(ManagedType::Object(id)) = self.ty(value) else {
+            return None;
+        };
+        self.split_type(*id)
+    }
+
+    /// The split face an object type is, if it is one.
+    fn split_type(&self, id: nts_semantic_schema::TypeId) -> Option<&nts_core::hir::Layout> {
+        let program = self.program;
+        program.layout(id).filter(|layout| program.is_split(layout))
+    }
+
     fn field_ref(
         &self,
         object: ValueId,
@@ -6295,10 +6336,11 @@ impl Emitter<'_> {
         // `IncompatibleClassChangeError` at the call rather than
         // anything the verifier reports at load.
         let through_interface = match self.ty(receiver) {
-            HirType::Managed(ManagedType::Object(id)) => self
-                .program
-                .layout(*id)
-                .is_some_and(|at| crate::hierarchy::is_interface(self.program, at)),
+            HirType::Managed(ManagedType::Object(id)) => {
+                self.program.layout(*id).is_some_and(|at| {
+                    crate::hierarchy::is_interface(self.program, at) || self.program.is_split(at)
+                })
+            }
             _ => false,
         };
         if through_interface {
@@ -6396,7 +6438,20 @@ impl Emitter<'_> {
             OpKind::FieldGet { object, field } => {
                 let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
                 self.load(code, pool, *object)?;
-                code.get_field(origin, pool, &class, &name, &descriptor);
+                // Through a split face, the field's accessor: the object may
+                // be any holder, and each holds the field in a class of its
+                // own (`split_faces`).
+                if let Some(face) = self.split_receiver(*object) {
+                    code.invoke_interface(
+                        origin,
+                        pool,
+                        &crate::split_faces::interface_name(self.shape.package, face),
+                        &crate::split_faces::accessor(*field),
+                        &format!("(){descriptor}"),
+                    );
+                } else {
+                    code.get_field(origin, pool, &class, &name, &descriptor);
+                }
                 self.convert_field(code, pool, &descriptor, &declared, true, origin)?;
                 Some(Placed::OnStack)
             }
@@ -6430,7 +6485,17 @@ impl Emitter<'_> {
                 self.load(code, pool, *object)?;
                 self.load(code, pool, *stored)?;
                 self.convert_field(code, pool, &descriptor, &declared, false, origin)?;
-                code.put_field(origin, pool, &class, &name, &descriptor);
+                if let Some(face) = self.split_receiver(*object) {
+                    code.invoke_interface(
+                        origin,
+                        pool,
+                        &crate::split_faces::interface_name(self.shape.package, face),
+                        &crate::split_faces::accessor(*field),
+                        &format!("({descriptor})V"),
+                    );
+                } else {
+                    code.put_field(origin, pool, &class, &name, &descriptor);
+                }
                 // **`None`, not `Placed::Stored`.** A store produces no value, and
                 // the original arm returned from `operation` early rather than
                 // falling through to the code that puts a result in its slot.
@@ -6997,17 +7062,10 @@ impl Emitter<'_> {
             // is what lets C2 devirtualise through class-hierarchy analysis --
             // which is why this lane is expected to win the `dispatch` row
             // rather than merely match it.
-            Callee::Virtual { slot, declared } => {
-                if self.program.interface_access.contains_selector(*slot) {
-                    return Err(Diagnostic::error(
-                        "NTS4001",
-                        format!(
-                            "interface field accessor dispatch requires JVM stateful interfaces (in `{}`)",
-                            self.func.name
-                        ),
-                        origin.location,
-                    ));
-                }
+            // A field family's accessor is a slot like any other: the face's
+            // class answers it with the family's default and an owner with
+            // its row (`split_faces::implement`), so the call is the same one.
+            Callee::Virtual { declared, .. } => {
                 return self.virtual_call(code, pool, declared, args, result, origin);
             }
             // A closure call is a dispatch like any other, and the only thing

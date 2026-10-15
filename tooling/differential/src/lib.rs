@@ -450,10 +450,7 @@ pub fn check(
     // without the other compares a program that never releases against an
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
-    let interface_access = match backend {
-        Backend::C | Backend::Llvm | Backend::Wasm => hir::InterfaceAccess::Materialize,
-        Backend::Jvm => hir::InterfaceAccess::PreserveFieldAccess,
-    };
+    let interface_access = hir::InterfaceAccess::Materialize;
     let options = hir::Options {
         provider,
         ..hir::Options::new(interface_access)
@@ -1962,9 +1959,11 @@ fn run_jvm(
     // into the jar and reflects; it is slow, and a correctness harness is the
     // one place that does not matter.
     let mut cases = String::new();
+    // The backend's own facts, once: a split face is spelled as its interface.
+    let facts = nts_codegen_jvm::JvmProgram::new(program);
     for (one, at, tuple) in interleaved(testable) {
         let Some(returns) = nts_codegen_jvm::types::descriptor(
-            nts_codegen_jvm::types::Shape::of(program),
+            nts_codegen_jvm::types::Shape::of(&facts),
             &one.returns,
         ) else {
             bail!(
@@ -1975,7 +1974,7 @@ fn run_jvm(
         let mut parameters = Vec::with_capacity(one.params.len());
         for (ty, _) in &one.params {
             let Some(descriptor) =
-                nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(program), ty)
+                nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(&facts), ty)
             else {
                 bail!(
                     "`{}` takes a type the JVM backend rendered but this harness cannot",

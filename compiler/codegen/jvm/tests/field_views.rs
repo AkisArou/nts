@@ -1,10 +1,20 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+//! A face of fields held three ways -- a class whose fields begin with the
+//! face's, one that keeps them in another order, and a literal of the face --
+//! now that a face holders do not extend is split (`split_faces`).
+//!
+//! These pinned the backend's two old refusals, the view (`reordered`: "requires
+//! JVM stateful interfaces") and the prefix store (`ordered`: "storing a
+//! `Ordered` where a `Named` is declared"). Both were the one representation --
+//! a face that carries state was a JVM class its holders did not extend -- and
+//! both now compile: a value of `Named` is referred to as `Named$Face`, which
+//! every holder implements.
+
 use camino::Utf8Path;
-use nts_core::hir::{self, OpKind};
+use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
-#[test]
-fn native_field_views_stop_at_the_transfer_and_keep_prefix_diagnostics() {
+fn program() -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../core/tests/programs/interface-field-view/tsconfig.json")
         .canonicalize_utf8()
@@ -12,54 +22,54 @@ fn native_field_views_stop_at_the_transfer_and_keep_prefix_diagnostics() {
     let snapshot = TsgoApi::for_compilation(nts_frontend_ts::tsgo::locate().unwrap())
         .snapshot(&config)
         .unwrap();
-    let program = hir::prepare(&snapshot).unwrap().program;
-    let view = program
-        .funcs
+    hir::prepare(&snapshot).unwrap().program
+}
+
+/// Whether the class `name` names `interface` in its constant pool -- which a
+/// class does for an interface it implements.
+fn names(emitted: &nts_codegen_jvm::Emitted, name: &str, interface: &str) -> bool {
+    let class = emitted
+        .classes
         .iter()
-        .find(|f| f.name == "reordered")
-        .unwrap()
-        .values
-        .iter()
-        .find(|op| matches!(op.kind, OpKind::FieldView { .. }))
-        .unwrap();
-    let emitted = nts_codegen_jvm::emit(&program);
-    let stopped = emitted
-        .diagnostics
-        .iter()
-        .find(|d| d.message.contains("(in `reordered`)"))
-        .unwrap();
-    assert_eq!(stopped.code, "NTS4001");
-    assert_eq!(stopped.primary, view.origin.location);
-    assert!(stopped.message.contains("interface field accessor dispatch requires JVM stateful interfaces: `Reordered` -> `Named`"), "{}", stopped.message);
-    let prefix = emitted
-        .diagnostics
-        .iter()
-        .find(|d| d.message.contains("(in `ordered`)"))
-        .unwrap();
-    assert!(
-        prefix
-            .message
-            .contains("storing a `Ordered` where a `Named` is declared")
-    );
-    assert!(!prefix.message.contains("interface field accessor dispatch"));
-    assert!(
-        !emitted
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("(in `exact`)"))
-    );
+        .find(|class| class.binary_name == name)
+        .unwrap_or_else(|| panic!("{name} is written"));
+    class
+        .bytes
+        .windows(interface.len())
+        .any(|window| window == interface.as_bytes())
 }
 
 #[test]
-fn semantic_store_names_survive_a_different_storage_representative() {
-    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../core/tests/programs/interface-field-view/tsconfig.json")
-        .canonicalize_utf8()
-        .unwrap();
-    let snapshot = TsgoApi::for_compilation(nts_frontend_ts::tsgo::locate().unwrap())
-        .snapshot(&config)
-        .unwrap();
-    let mut program = hir::prepare(&snapshot).unwrap().program;
+fn a_view_and_a_prefix_store_to_a_face_of_fields_compile_through_its_interface() {
+    let emitted = nts_codegen_jvm::emit(&program());
+    for function in ["reordered", "ordered", "exact", "nameOf"] {
+        assert!(
+            !emitted
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains(&format!("(in `{function}`)"))),
+            "`{function}` compiles: {:?}",
+            emitted.diagnostics
+        );
+    }
+    assert!(
+        emitted
+            .classes
+            .iter()
+            .any(|class| class.binary_name == "nts/gen/Named$Face"),
+        "the face's companion interface is written"
+    );
+    for holder in ["nts/gen/Ordered", "nts/gen/Reordered"] {
+        assert!(
+            names(&emitted, holder, "nts/gen/Named$Face"),
+            "{holder} implements the face's interface"
+        );
+    }
+}
+
+#[test]
+fn a_split_face_takes_its_interface_name_from_its_layout() {
+    let mut program = program();
     let named = program
         .interface_identities
         .iter()
@@ -73,23 +83,19 @@ fn semantic_store_names_survive_a_different_storage_representative() {
         .unwrap()
         .name = "OtherRepresentative".into();
     let emitted = nts_codegen_jvm::emit(&program);
-    let stopped = emitted
-        .diagnostics
-        .iter()
-        .find(|d| d.message.contains("(in `ordered`)"))
-        .unwrap();
     assert!(
-        stopped
-            .message
-            .contains("storing a `Ordered` where a `Named` is declared"),
-        "{}",
-        stopped.message
+        emitted
+            .classes
+            .iter()
+            .any(|class| class.binary_name == "nts/gen/OtherRepresentative$Face"),
+        "the companion follows the layout's name, as its class does"
     );
     assert!(
-        stopped
-            .message
-            .contains("(target held as `OtherRepresentative`)"),
-        "{}",
-        stopped.message
+        !emitted
+            .diagnostics
+            .iter()
+            .any(|d| d.message.contains("(in `ordered`)")),
+        "{:?}",
+        emitted.diagnostics
     );
 }

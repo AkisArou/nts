@@ -42,8 +42,11 @@ pub mod closures;
 mod face;
 mod fuse;
 pub mod hierarchy;
+mod program;
+pub use program::JvmProgram;
 mod intcall;
 pub mod ops;
+mod split_faces;
 pub mod types;
 mod unbox;
 pub mod widen;
@@ -131,7 +134,7 @@ pub fn emit(program: &Program) -> Emitted {
 /// A class the program writes over a foreign one is registered with, or
 /// composed by, that foreign runtime (Objective-C's, the Windows Runtime's),
 /// which a JVM has none of: each refused by name, at its first method.
-fn foreign_classes_refused(program: &Program) -> Vec<Diagnostic> {
+fn foreign_classes_refused(program: &JvmProgram<'_>) -> Vec<Diagnostic> {
     program
         .foreign_classes
         .iter()
@@ -158,8 +161,13 @@ fn foreign_classes_refused(program: &Program) -> Vec<Diagnostic> {
 
 /// Emit into a named package.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit_into(package: &str, program: &Program) -> Emitted {
+    emit_program(package, &JvmProgram::new(program))
+}
+
+/// [`emit_into`], over the facts this backend derives once.
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
+fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
     let mut pool = Pool::new();
     let mut diagnostics = foreign_classes_refused(program);
     // An array that grows is a wrapper rather than a bare `double[]`, chosen
@@ -341,6 +349,22 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
             &mut diagnostics,
             object_class(package, program, layout, &plan, &handed_to, &reactions),
         );
+        // A split face's companion interface, beside its class; see
+        // `split_faces`.
+        if program.is_split(layout) {
+            collect(
+                &mut classes,
+                &mut diagnostics,
+                split_faces::interface_class(
+                    program,
+                    package,
+                    &plan,
+                    layout,
+                    &program_origin(program),
+                )
+                .map(Some),
+            );
+        }
         // One empty subclass per class sharing this layout, or one
         // implementation of it where it is an interface; see
         // `hierarchy::identities`. The fields stay on the layout's own class,
@@ -421,7 +445,7 @@ pub fn emit_into(package: &str, program: &Program) -> Emitted {
 /// descriptor named.
 fn declare_fields(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
     builder: &mut ClassBuilder,
@@ -537,7 +561,7 @@ fn declare_fields(
 /// arriving from the one direction that check does not cover.
 fn declare_presence(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     interface: bool,
     builder: &mut ClassBuilder,
@@ -614,7 +638,7 @@ fn declare_presence(
 /// extend and no field to hold, so the class extends `Object`.
 fn identity_class(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     class: &nts_core::hir::ClassIdentity,
 ) -> Result<Class, Diagnostic> {
@@ -678,7 +702,7 @@ fn collect(
 /// class a signature-typed slot can hold is one class's subclass. One with a
 /// base keeps it, and that base, a signature class, extends the root in turn.
 /// See `types::callable_class`.
-fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> String {
+fn super_class(package: &str, program: &JvmProgram<'_>, layout: &nts_core::hir::Layout) -> String {
     let root = (!hierarchy::is_interface(program, layout)
         && types::is_callable_storage(program, layout))
     .then(|| types::callable_class(package));
@@ -701,7 +725,7 @@ fn super_class(package: &str, program: &Program, layout: &nts_core::hir::Layout)
 /// threw `AbstractMethodError`. The face replaces it.
 fn typed_face(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -756,7 +780,7 @@ fn typed_face(
 /// representation: then no caller can name it either.
 fn declined_stub(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     why: &str,
     written: &rustc_hash::FxHashSet<&str>,
@@ -838,7 +862,7 @@ fn declined_stub(
 /// On the runtime corpora it drops 6 to 9 classes per module: generator and
 /// iterator frames, and `ReadableStreamDefaultReader<N>` instantiations whose
 /// ids an earlier layout holds. None is named by any class that remains.
-fn shadowed_layout(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+fn shadowed_layout(program: &JvmProgram<'_>, layout: &nts_core::hir::Layout) -> bool {
     !layout.types.is_empty()
         && layout.types.iter().all(|id| {
             program
@@ -854,7 +878,7 @@ fn shadowed_layout(program: &Program, layout: &nts_core::hir::Layout) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn finish_classes(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     declined: Vec<(&nts_core::hir::Func, Diagnostic)>,
     classes: &mut Vec<Class>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -889,7 +913,7 @@ fn finish_classes(
 /// Layouts this backend emits as interfaces that some operation allocates; see
 /// `types::instance_class`. Not where every allocation is of a class with an
 /// identity, which allocates its own (`identity_class`).
-fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
+fn constructed_interfaces<'a>(program: &'a JvmProgram<'_>) -> Vec<&'a nts_core::hir::Layout> {
     program
         .layouts
         .iter()
@@ -907,7 +931,7 @@ fn constructed_interfaces(program: &Program) -> Vec<&nts_core::hir::Layout> {
 /// `X$Object`: the final class implementing interface `X` that `new` allocates.
 fn interface_instance(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
 ) -> Result<Class, Diagnostic> {
     let origin = program_origin(program);
@@ -965,7 +989,7 @@ fn interface_instance(
 /// Either entry makes a program need the root: a closure every call to which
 /// is inside a `try` fills only the raising one, and is callable all the same
 /// (`types::is_callable`).
-fn uniform_entries(package: &str, program: &Program) -> Vec<(String, String)> {
+fn uniform_entries(package: &str, program: &JvmProgram<'_>) -> Vec<(String, String)> {
     let entry_at = |slot: u32| {
         program.layouts.iter().find_map(|layout| {
             let name = layout.methods.get(slot as usize)?.as_ref()?;
@@ -998,7 +1022,7 @@ fn uniform_entries(package: &str, program: &Program) -> Vec<(String, String)> {
 /// the first time a dispatch reaches it, and UNFILLED in `jvm-verifies`.
 fn unfilled_uniform_stubs(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -1053,7 +1077,7 @@ fn unfilled_uniform_stubs(
     Ok(())
 }
 
-fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diagnostic> {
+fn callable_root(package: &str, program: &JvmProgram<'_>) -> Result<Option<Class>, Diagnostic> {
     let entries = uniform_entries(package, program);
     if entries.is_empty()
         && !program
@@ -1095,7 +1119,7 @@ fn callable_root(package: &str, program: &Program) -> Result<Option<Class>, Diag
 /// The types a promise reaction is posted at: each `PromiseSubscribe`'s
 /// reaction operand, by the object type it holds. Their classes become
 /// `NtsResumable`; see `reaction_resume`.
-fn reaction_types(program: &Program) -> rustc_hash::FxHashSet<nts_semantic_schema::TypeId> {
+fn reaction_types(program: &JvmProgram<'_>) -> rustc_hash::FxHashSet<nts_semantic_schema::TypeId> {
     let mut found = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
         for op in &func.values {
@@ -1125,7 +1149,7 @@ fn reaction_types(program: &Program) -> rustc_hash::FxHashSet<nts_semantic_schem
 /// `(): void => {}` is `Closure0 implements NtsCallback` and nothing more.
 fn reaction_resume(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -1210,7 +1234,9 @@ fn reaction_resume(
 /// `NtsValue` and the first dispatch was `IncompatibleClassChangeError`; with
 /// the unboxing but without the interface it was `ClassCastException` naming
 /// `nts/gen/Closure0`, which is the same gap said more precisely.
-fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeId, Vec<String>> {
+fn closure_interfaces(
+    program: &JvmProgram<'_>,
+) -> FxHashMap<nts_semantic_schema::TypeId, Vec<String>> {
     let mut found: FxHashMap<nts_semantic_schema::TypeId, Vec<String>> = FxHashMap::default();
     let interfaces: std::collections::BTreeSet<&str> = program
         .foreign
@@ -1282,7 +1308,7 @@ fn closure_interfaces(program: &Program) -> FxHashMap<nts_semantic_schema::TypeI
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn object_class(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     plan: &widen::Plan,
     handed_to: &FxHashMap<nts_semantic_schema::TypeId, Vec<String>>,
@@ -1316,7 +1342,13 @@ fn object_class(
         };
         // What this layout declares it implements. Pushed before the runtime
         // interfaces below so the program's own edges come first and the order
-        // is the IR's, which is sorted.
+        // is the IR's, which is sorted. A split face's class implements its own
+        // companion interface first: its values are referred to as it.
+        if program.is_split(layout) {
+            builder
+                .interfaces
+                .push(split_faces::interface_name(package, layout));
+        }
         for name in hierarchy::implemented(package, program, layout) {
             builder.interfaces.push(name);
         }
@@ -1418,6 +1450,19 @@ fn object_class(
     // eventually and the disagreement here is a class that does not load.
     dispatch_forwarders(package, program, layout, &mut builder, &mut pool)?;
     member_forwarders(package, program, layout, &mut builder, &mut pool)?;
+    // What a split face's companion interface asks of this class and no
+    // forwarder above answered: family defaults and field accessors.
+    if !interface {
+        split_faces::implement(
+            program,
+            package,
+            plan,
+            layout,
+            &mut builder,
+            &mut pool,
+            &origin,
+        )?;
+    }
     unfilled_uniform_stubs(package, program, layout, &mut builder, &mut pool, &origin)?;
     typed_face(package, program, layout, &mut builder, &mut pool, &origin)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
@@ -1500,7 +1545,7 @@ fn object_class(
 
 fn render(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     plan: &widen::Plan,
     pool: &mut Pool,
@@ -1525,7 +1570,7 @@ fn render(
 /// forwarder, so a Java caller keeps getting the program's text.
 fn printing_method(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -1620,7 +1665,7 @@ fn printing_method(
 /// `runtime/c` does for a null `function_name`.
 fn naming_method(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -1764,7 +1809,7 @@ fn named_by(
 /// A function of this program and its descriptor, by name.
 fn program_function<'p>(
     package: &str,
-    program: &'p Program,
+    program: &'p JvmProgram<'p>,
     name: &str,
 ) -> Option<(&'p nts_core::hir::Func, String)> {
     let func = program.funcs.iter().find(|func| func.name == name)?;
@@ -1798,7 +1843,7 @@ fn call_on_this(
 /// a duplicate entry in `interfaces` is a class file the verifier rejects.
 fn callback_interfaces(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
 ) -> Vec<&'static str> {
     let mut found: Vec<&'static str> = Vec::new();
@@ -1850,7 +1895,7 @@ fn callback_interfaces(
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn bridge_body(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     ours: &nts_core::hir::Func,
     want: &str,
@@ -2022,7 +2067,7 @@ fn bridge_body(
 /// set, and is the same function the bridge asks when it emits the post.
 pub(crate) fn carries_env(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
 ) -> bool {
     let mut wanted: Vec<String> = hierarchy::implemented(package, program, layout);
@@ -2225,7 +2270,7 @@ fn lane_accessors(
 
 fn deliverable_bridges(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     pool: &mut Pool,
     builder: &mut ClassBuilder,
@@ -2295,7 +2340,7 @@ fn deliverable_bridges(
 /// lambda -- which is not an `Fn` -- reaches the wrapper.
 fn lambda_overloads(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
     origin: &nts_semantic_schema::Origin,
@@ -2461,7 +2506,7 @@ fn lambda_forward(
 /// already implements the matching `Nts*Callback`, which Java *can* lambda.
 fn lambda_interface(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     ty: &nts_core::hir::HirType,
 ) -> Option<(String, &'static str, String)> {
     // The layout the parameter's *type* names, and its face: the descriptor
@@ -2489,7 +2534,7 @@ fn lambda_interface(
 /// a wrapper on the common path.
 fn lambda_adapter(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     base: &str,
     interface: &'static str,
     call: &str,
@@ -2622,7 +2667,7 @@ fn lambda_adapter(
 fn publish(
     package: &str,
     builder: &mut ClassBuilder,
-    program: &Program,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     access: u16,
     name: &str,
@@ -2648,7 +2693,7 @@ fn publish(
 /// and one more thing to keep true.
 fn generic_signature(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     descriptor: &str,
 ) -> Option<String> {
@@ -2702,7 +2747,7 @@ fn erases_to(signature: &str, descriptor: &str) -> bool {
 
 fn foreign_bridges(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     handed_to: &FxHashMap<nts_semantic_schema::TypeId, Vec<String>>,
     pool: &mut Pool,
@@ -2827,7 +2872,7 @@ struct DispatchForwarder<'a> {
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn dispatch_forwarders(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -2847,17 +2892,9 @@ fn dispatch_forwarders(
     let mut forwarded: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
     let mut planned = Vec::new();
     for (slot, entry) in layout.methods.iter().enumerate() {
-        // Stage B field families are a native dispatch surface. Their virtual
-        // call sites already decline in ops; projecting the rows here invents
-        // JVM overrides between unrelated default helpers. Direct concrete
-        // helper calls keep their Program bodies. Stateful JVM interfaces will
-        // supply the field surface in stage C.
-        if u32::try_from(slot)
+        let selector = u32::try_from(slot)
             .ok()
-            .is_some_and(|slot| program.interface_access.contains_selector(slot))
-        {
-            continue;
-        }
+            .is_some_and(|slot| program.interface_access.contains_selector(slot));
         let Some(func_name) = entry else { continue };
         let Some(target) = program.funcs.iter().find(|f| &f.name == func_name) else {
             // A slot naming a function the program does not carry is a fact
@@ -2873,6 +2910,13 @@ fn dispatch_forwarders(
                 origin.location,
             ));
         };
+        // A field family's accessor declared and not given here: a class
+        // answers it with the family's default (`split_faces::implement`),
+        // and only a row is a forwarder. Left abstract, `new` on a face's own
+        // class would be an `InstantiationError`.
+        if selector && target.abstract_declaration {
+            continue;
+        }
         let Some(full) = body::signature(package, program, target) else {
             return Err(Diagnostic::error(
                 "NTS4008",
@@ -2894,6 +2938,48 @@ fn dispatch_forwarders(
                 origin.location,
             )
         })?;
+        // A field family's row is called by the family's declared accessor,
+        // name and descriptor (`JvmProgram::selector`). A row in another
+        // representation -- `MIMEParams#keys#frame`'s `force` returns its own
+        // `boolean` where the accessor returns an erased value -- is a method
+        // no call reaches, and was a whole class declined under NTS4009. C
+        // would call it through the declared signature. It answers by name
+        // instead, under the declaration's descriptor, if a call arrives.
+        // And a row whose family's declaration reachability removed is one
+        // no call names at all, so it is not a method: `MIMEParams`' frames
+        // were declined whole for one in `fs`.
+        let declaration = program
+            .selector(slot)
+            .map(|name| program.funcs.iter().find(|f| f.name == name));
+        if selector && matches!(declaration, Some(None)) {
+            continue;
+        }
+        if selector
+            && let Some(wanted) = declaration
+                .flatten()
+                .and_then(|declared| instance_descriptor(package, program, declared))
+            && wanted != descriptor
+        {
+            if !builder
+                .methods
+                .iter()
+                .any(|m| m.name == member && m.descriptor == wanted)
+            {
+                let body = split_faces::refusing(
+                    &types::class_name(package, layout),
+                    &wanted,
+                    &format!(
+                        "`{}`'s row for `{member}` is `{descriptor}` where the family's \
+                         accessor is `{wanted}`",
+                        layout.name
+                    ),
+                    pool,
+                    &origin,
+                )?;
+                builder.method(access::PUBLIC, member, wanted, Some(body));
+            }
+            continue;
+        }
         // The agreement that dispatch depends on, asserted where it is cheap --
         // and where the disagreement is one the JVM has an answer for, taken.
         //
@@ -3127,7 +3213,7 @@ fn dispatch_conflict(
 /// hand-written `function f(this: Foo)`, which TypeScript allows, from being
 /// silently attached to a class.
 fn method_of<'a>(
-    program: &'a Program,
+    program: &'a JvmProgram<'a>,
     func: &nts_core::hir::Func,
 ) -> Option<(&'a nts_core::hir::Layout, String)> {
     use nts_core::hir::{HirType, ManagedType};
@@ -3189,7 +3275,7 @@ fn method_of<'a>(
 /// silently attached to a class as a method.
 fn member_forwarders(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -3341,7 +3427,7 @@ struct Bridge {
 #[allow(clippy::too_many_arguments)]
 fn bridge_for(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
     base: Option<&nts_core::hir::Layout>,
     slot: usize,
@@ -3412,7 +3498,7 @@ fn bridge_for(
 /// reach a method that was never written for it.
 fn narrows_return(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     derived: &str,
     base: &str,
     dropped: usize,
@@ -3440,13 +3526,28 @@ fn narrows_return(
     let (Some(from), Some(to)) = (class_of(derived_result), class_of(base_result)) else {
         return false;
     };
-    let Some(layout) = program
-        .layouts
-        .iter()
-        .find(|l| types::class_name(package, l) == from)
-    else {
+    // A split face is spelled as its companion interface on either side.
+    let spells = |l: &nts_core::hir::Layout, name: &str| {
+        types::class_name(package, l) == name
+            || (program.is_split(l) && split_faces::interface_name(package, l) == name)
+    };
+    let Some(layout) = program.layouts.iter().find(|l| spells(l, &from)) else {
         return false;
     };
+    // **And a split face's interface is what every member of the face
+    // implements** (`JvmProgram::settle_faces`), so a return narrowing to a
+    // member is as covariant as one narrowing to a subclass:
+    // `PerformanceMark.toJSON(): PerformanceEntryDetailJSON` over
+    // `toJSON(): PerformanceEntryJSON`, once the base's face split.
+    if let Some(face) = program
+        .layouts
+        .iter()
+        .find(|l| program.is_split(l) && split_faces::interface_name(package, l) == to)
+    {
+        return hierarchy::ancestry(program, layout)
+            .iter()
+            .any(|a| std::ptr::eq(*a, face) || program.member(face, a));
+    }
     hierarchy::ancestry(program, layout)
         .iter()
         .any(|a| types::class_name(package, a) == to)
@@ -3466,7 +3567,7 @@ fn class_of(descriptor: &str) -> Option<String> {
 /// parameter.
 pub(crate) fn instance_descriptor(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
 ) -> Option<String> {
     let mut params = Vec::with_capacity(func.params.len());
@@ -3490,7 +3591,11 @@ pub(crate) fn instance_descriptor(
 /// same reason `closure_singletons` scans: which layouts are frames is a fact
 /// about the program's *operations*, and `object_class` sees one layout at a
 /// time.
-fn resumes(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> Option<String> {
+fn resumes(
+    package: &str,
+    program: &JvmProgram<'_>,
+    layout: &nts_core::hir::Layout,
+) -> Option<String> {
     let wanted = types::class_name(package, layout);
     for func in &program.funcs {
         for op in &func.values {
@@ -3539,7 +3644,7 @@ fn resumes(package: &str, program: &Program, layout: &nts_core::hir::Layout) -> 
 /// ones.
 fn erased_closures(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     skipped: &rustc_hash::FxHashSet<&str>,
 ) -> Vec<(String, String)> {
     // **One per closure singleton, whether or not an `Erase` names it.**
@@ -3581,7 +3686,7 @@ pub(crate) fn closure_field(class: &str) -> String {
 
 fn closure_singletons(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     skipped: &rustc_hash::FxHashSet<&str>,
 ) -> Vec<(String, String)> {
     let mut found = std::collections::BTreeSet::new();
@@ -3636,7 +3741,7 @@ fn closure_singletons(
 /// Declare and initialize source-site caches and closure singletons.
 fn initialize_statics(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     skipped: &rustc_hash::FxHashSet<&str>,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
@@ -3679,7 +3784,7 @@ pub(crate) fn template_field(site: u32) -> String {
 /// No method is needed where Java's zeroed static storage suffices.
 fn class_initializer(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     singletons: &[(String, String)],
     erased: &[(String, String)],
     pool: &mut Pool,
@@ -3786,7 +3891,7 @@ fn class_initializer(
 /// Build each template once, without exposing its writable construction array.
 fn initialize_templates(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     pool: &mut Pool,
     code: &mut Code,
 ) -> Result<(), Diagnostic> {
@@ -3836,7 +3941,7 @@ fn initialize_templates(
     Ok(())
 }
 
-fn initializer_refusal(program: &Program, detail: &str) -> Diagnostic {
+fn initializer_refusal(program: &JvmProgram<'_>, detail: &str) -> Diagnostic {
     Diagnostic::error(
         "NTS4003",
         format!("the generated class initializer could not be written: {detail}"),
@@ -3844,7 +3949,7 @@ fn initializer_refusal(program: &Program, detail: &str) -> Diagnostic {
     )
 }
 
-fn program_origin(program: &Program) -> nts_semantic_schema::Origin {
+fn program_origin(program: &JvmProgram<'_>) -> nts_semantic_schema::Origin {
     program.funcs.first().map_or_else(
         || {
             nts_semantic_schema::Origin::source(nts_diagnostics::Location {

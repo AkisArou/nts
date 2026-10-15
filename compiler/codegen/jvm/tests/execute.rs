@@ -97,7 +97,7 @@ fn run(example: &str, body: &str) -> Option<String> {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::NoGc,
-            ..hir::Options::new(hir::InterfaceAccess::PreserveFieldAccess)
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .expect("prepared HIR should verify");

@@ -33,17 +33,14 @@ export function reachSpelled(it: Spelled): number {
   return it["a b"] + it["a-b"];
 }
 
-/// An interface that carries state, dispatched through.
+/// An interface that carries state, dispatched through -- kept here as the
+/// guard that it is **no longer refused**.
 ///
-/// **Ordinary TypeScript with no JVM spelling.** `Stateful` has a property, so
-/// it cannot be a JVM interface -- one has no instance fields -- and `implements`
-/// is not `extends`, so nothing relates `First` to it. Reading an erased `First`
-/// back as a `Stateful` is a `checkcast` that throws.
-///
-/// It reached that cast and threw for as long as the backend has existed. The
-/// refusal exists because a `ClassCastException` at run time is a **wrong
-/// answer**: nothing in the refusal counts can see it, and it took an example
-/// that dispatches through an interface type to surface it at all.
+/// `Stateful` has a property, so it was a JVM class, and `implements` is not
+/// `extends`: reading an erased `First` back as a `Stateful` was a `checkcast`
+/// that threw, and then a refusal by name. A face its holders do not extend is
+/// now referred to as an interface they implement (`split_faces`), and
+/// `refusals.rs` asserts `dispatchThrough` compiles.
 interface Stateful {
   seen: number;
   step(): void;

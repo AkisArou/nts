@@ -2573,13 +2573,10 @@ fn hir_preparation() -> Result<(
                 selected_provider() == hir::Provider::ReferenceCounting,
             )
             .map_err(anyhow::Error::msg)?,
-            // Wasm dispatches interface field families by row; the JVM keeps
-            // positional field access until it implements them.
-            if backend == nts_codegen_common::Backend::Wasm {
-                hir::InterfaceAccess::Materialize
-            } else {
-                hir::InterfaceAccess::PreserveFieldAccess
-            },
+            // Both dispatch interface field families by row: Wasm through
+            // its typed references, the JVM through a split face's
+            // companion interface (`nts_codegen_jvm` `split_faces`).
+            hir::InterfaceAccess::Materialize,
         ),
     };
     Ok((backend, provider, interface_access))
@@ -8610,7 +8607,7 @@ fn emit_jvm(
         configured,
         false,
         targets,
-        hir::InterfaceAccess::PreserveFieldAccess,
+        hir::InterfaceAccess::Materialize,
     );
     options.provider = provider;
     let prepared = match hir::prepare_with(&snapshot, &options) {

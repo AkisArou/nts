@@ -26,7 +26,10 @@ fn accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it() {
         .unwrap();
     assert!(program.layouts[child].methods.iter().any(Option::is_some));
     assert_eq!(
-        nts_codegen_jvm::hierarchy::jvm_base(&program, &program.layouts[child]),
+        nts_codegen_jvm::hierarchy::jvm_base(
+            &nts_codegen_jvm::JvmProgram::new(&program),
+            &program.layouts[child]
+        ),
         Some(parent)
     );
     let emitted = nts_codegen_jvm::emit(&program);
@@ -53,7 +56,10 @@ fn accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it() {
         .methods
         .push(Some("real_method".to_owned()));
     assert_eq!(
-        nts_codegen_jvm::hierarchy::jvm_base(&program, &program.layouts[child]),
+        nts_codegen_jvm::hierarchy::jvm_base(
+            &nts_codegen_jvm::JvmProgram::new(&program),
+            &program.layouts[child]
+        ),
         None
     );
 }

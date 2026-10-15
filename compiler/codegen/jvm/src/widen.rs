@@ -51,7 +51,8 @@
 //! differently, and an unsigned type is not an f64's to represent. A class
 //! touched by any of those is refused whole.
 
-use nts_core::hir::{BinOp, Func, HirType, ManagedType, OpKind, Program, Terminator, ValueId};
+use crate::program::JvmProgram;
+use nts_core::hir::{BinOp, Func, HirType, ManagedType, OpKind, Terminator, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 /// What this backend decided to hold as a `double`.
@@ -154,7 +155,7 @@ fn is_f64(ty: &HirType) -> bool {
 /// The layout a field access names, and the field's declared type.
 fn field_of<'a>(
     package: &str,
-    program: &'a Program,
+    program: &'a JvmProgram<'a>,
     func: &Func,
     object: ValueId,
     index: u32,
@@ -213,7 +214,7 @@ fn live_ops(func: &Func) -> Vec<ValueId> {
 
 /// Decide, once, for the whole program.
 #[must_use]
-pub fn plan(package: &str, program: &Program) -> Plan {
+pub fn plan(package: &str, program: &JvmProgram<'_>) -> Plan {
     // One index space: every value of every function, then one slot per
     // candidate field. A `getfield` unions its result with the field, so a
     // field and the values that flow through it are refused or kept together.
@@ -344,7 +345,7 @@ pub fn plan(package: &str, program: &Program) -> Plan {
     reason = "four disjoint verdicts about one class"
 )]
 fn strike_down(
-    program: &Program,
+    program: &JvmProgram<'_>,
     classes: &mut Classes,
     offset: &FxHashMap<String, usize>,
     refused: &mut FxHashSet<u32>,
@@ -430,7 +431,7 @@ fn strike_down(
 /// to remove.
 fn unify(
     package: &str,
-    program: &Program,
+    program: &JvmProgram<'_>,
     classes: &mut Classes,
     offset: &FxHashMap<String, usize>,
     field_index: &FxHashMap<(String, String), u32>,

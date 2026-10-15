@@ -2331,7 +2331,7 @@ fn jvm_case(
         entry,
         true,
         provider,
-        hir::InterfaceAccess::PreserveFieldAccess,
+        hir::InterfaceAccess::Materialize,
     )?;
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
     if !mismatches.is_empty() {

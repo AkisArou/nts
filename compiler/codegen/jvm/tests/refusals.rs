@@ -69,7 +69,7 @@ fn declined() -> Vec<(String, String)> {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::NoGc,
-            ..hir::Options::new(hir::InterfaceAccess::PreserveFieldAccess)
+            ..hir::Options::new(hir::InterfaceAccess::Materialize)
         },
     )
     .expect("prepared HIR should verify");
@@ -115,38 +115,25 @@ fn two_properties_that_become_one_jvm_field_are_refused_by_name() {
     );
 }
 
-/// An interface carrying state, reached through an erased value.
+/// An interface carrying state, implemented without extending and dispatched
+/// through, **now compiles** rather than refusing.
 ///
-/// **This was a wrong answer rather than a refusal**, which is the worse kind
-/// and the reason it survived: a program that compiles, loads, and throws
-/// `ClassCastException` is invisible to every refusal count in the tree. It took
-/// an example that dispatches *through* an interface type to surface it -- other
-/// examples use `implements` and pass, because none of them does that.
-///
-/// The message has to name the type, because the fix is a change to the
-/// program's shape rather than to a line: `abstract class` where the source says
-/// `interface` compiles and agrees with node on every case, and a reader needs to
-/// know which declaration to change.
+/// It was a wrong answer first -- a `checkcast` to the face's class that
+/// compiled, loaded, and threw `ClassCastException` -- and then a refusal by
+/// name, because a face that carries state was a JVM class its implementers did
+/// not extend. A split face (`split_faces`) is referred to as an interface they
+/// implement, so `dispatchThrough` has a spelling. Whether it answers as node
+/// does is the examples' to say:
+/// `a-face-with-a-field-a-class-implements-without-extending` dispatches and
+/// writes through one on every case.
 #[test]
-fn an_interface_that_carries_state_is_refused_rather_than_cast() {
+fn an_interface_that_carries_state_compiles_through_its_interface() {
     let diagnostics = declined();
-
-    let found = diagnostics
-        .iter()
-        .find(|(_, message)| message.contains("without extending"));
-    let Some((code, message)) = found else {
-        panic!(
-            "a `checkcast` to a stateful dispatch root was not refused; \
-             the backend said: {diagnostics:?}"
-        );
-    };
-    assert_eq!(
-        code, "NTS4001",
-        "refusals from lowering carry the backend's code"
-    );
     assert!(
-        message.contains("`Stateful`"),
-        "names the declaration to change: {message}"
+        !diagnostics
+            .iter()
+            .any(|(_, message)| message.contains("(in `dispatchThrough`)")),
+        "`dispatchThrough` compiles: {diagnostics:?}"
     );
 }
 

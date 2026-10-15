@@ -67,13 +67,17 @@
 //! because `field.set` writing its captures needs a receiver the field is
 //! declared on, and the base has no fields.
 
-use nts_core::hir::{BlockId, Func, HirType, ManagedType, Program, Terminator, ValueId};
+use crate::program::JvmProgram;
+use nts_core::hir::{BlockId, Func, HirType, ManagedType, Terminator, ValueId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::types;
 
 /// The closure layout a type names, if it names one.
-fn closure_layout<'a>(program: &'a Program, ty: &HirType) -> Option<&'a nts_core::hir::Layout> {
+fn closure_layout<'a>(
+    program: &'a JvmProgram<'a>,
+    ty: &HirType,
+) -> Option<&'a nts_core::hir::Layout> {
     let HirType::Managed(ManagedType::Object(id)) = ty else {
         return None;
     };
@@ -82,7 +86,7 @@ fn closure_layout<'a>(program: &'a Program, ty: &HirType) -> Option<&'a nts_core
 
 /// The layout `layout` names as its base, if it names one.
 fn base_of<'a>(
-    program: &'a Program,
+    program: &'a JvmProgram<'a>,
     layout: &nts_core::hir::Layout,
 ) -> Option<&'a nts_core::hir::Layout> {
     crate::hierarchy::jvm_base(program, layout).and_then(|at| program.layouts.get(at))
@@ -118,7 +122,7 @@ fn edges(terminator: &Terminator) -> Vec<(BlockId, &Vec<ValueId>)> {
 /// share would be a slot type one of them does not widen to, which the verifier
 /// would reject at the store rather than accept quietly.
 #[must_use]
-pub fn joined(package: &str, program: &Program, func: &Func) -> FxHashMap<ValueId, String> {
+pub fn joined(package: &str, program: &JvmProgram<'_>, func: &Func) -> FxHashMap<ValueId, String> {
     let mut arriving: FxHashMap<ValueId, FxHashSet<ValueId>> = FxHashMap::default();
     for block in &func.blocks {
         for (target, args) in edges(&block.terminator) {

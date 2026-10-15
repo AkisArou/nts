@@ -19,8 +19,9 @@
 //! observable arrives as an explicit `Convert` from the middle end rather than
 //! being implied by a parameter's width.
 
+use crate::program::JvmProgram;
 use nts_codegen_common::symbols::jvm_class_name;
-use nts_core::hir::{HirType, Layout, ManagedType, Program};
+use nts_core::hir::{HirType, Layout, ManagedType};
 use nts_jvm_emitter::{Kind, VType};
 
 /// The two properties the tag *numbering* exists to make true.
@@ -113,7 +114,7 @@ pub fn callable_class(package: &str) -> String {
 /// `Program::erased_call_slot`, read at use because removing the unread
 /// `closure_slot` would renumber the table.
 #[must_use]
-pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+pub fn is_callable(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     // Either uniform entry. A closure every call to which is inside a `try`
     // keeps only its raising entry -- the ordinary one is a different program
     // and prune drops what nothing calls -- and asking only the erased slot
@@ -133,7 +134,7 @@ pub fn is_callable(program: &nts_core::hir::Program, layout: &Layout) -> bool {
 /// A function value's storage identity survives removal of its unused entries.
 /// This proves the shared reference ABI, never a method that can be invoked.
 #[must_use]
-pub fn is_callable_storage(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+pub fn is_callable_storage(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     is_callable(program, layout)
         || layout.types.iter().any(|ty| {
             nts_core::hir::has_a_closure_body(*ty) || program.signature_faces.contains_key(ty)
@@ -144,7 +145,7 @@ pub fn is_callable_storage(program: &nts_core::hir::Program, layout: &Layout) ->
 /// own class. A value of a signature type is any closure the program can store
 /// there, so it is referred to as [`callable_class`].
 #[must_use]
-pub fn is_signature(program: &nts_core::hir::Program, layout: &Layout) -> bool {
+pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     is_callable_storage(program, layout)
         && !layout
             .types
@@ -154,12 +155,16 @@ pub fn is_signature(program: &nts_core::hir::Program, layout: &Layout) -> bool {
 
 /// The class a value of this layout's type is referred to as -- in a
 /// descriptor, a frame, a dispatch -- which is [`class_name`] except for a
-/// signature. Constructing, declaring and naming a class still use
-/// `class_name`: a signature class is still written, and still what a closure
-/// with a signature base extends.
+/// signature and a split face. Constructing, declaring and naming a class still
+/// use `class_name`: a signature class is still written, and still what a
+/// closure with a signature base extends; a split face's class still holds its
+/// fields, and its values are referred to as the interface every holder
+/// implements (`split_faces`).
 #[must_use]
-pub fn reference_class(package: &str, program: &nts_core::hir::Program, layout: &Layout) -> String {
-    if is_signature(program, layout) && !crate::hierarchy::is_interface(program, layout) {
+pub fn reference_class(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> String {
+    if program.is_split(layout) {
+        crate::split_faces::interface_name(package, layout)
+    } else if is_signature(program, layout) && !crate::hierarchy::is_interface(program, layout) {
         callable_class(package)
     } else {
         class_name(package, layout)
@@ -178,7 +183,7 @@ pub fn reference_class(package: &str, program: &nts_core::hir::Program, layout: 
 /// constructor, and only allocation names it: every descriptor, cast and
 /// `instanceof` still names the interface, which it is an instance of.
 #[must_use]
-pub fn instance_class(package: &str, program: &nts_core::hir::Program, layout: &Layout) -> String {
+pub fn instance_class(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> String {
     if crate::hierarchy::is_interface(program, layout) {
         format!("{}$Object", class_name(package, layout))
     } else {
@@ -374,7 +379,7 @@ pub fn is_callback_interface(descriptor: &str) -> bool {
 /// could be made.
 #[derive(Clone, Copy, Debug)]
 pub struct Shape<'a> {
-    pub program: &'a Program,
+    pub program: &'a JvmProgram<'a>,
     pub grows: bool,
     /// The package generated classes land in, as a binary-name prefix.
     ///
@@ -392,12 +397,12 @@ pub const DEFAULT_PACKAGE: &str = "nts/gen";
 
 impl<'a> Shape<'a> {
     #[must_use]
-    pub fn of(program: &'a Program) -> Self {
+    pub fn of(program: &'a JvmProgram<'a>) -> Self {
         Self::packaged(program, DEFAULT_PACKAGE)
     }
 
     #[must_use]
-    pub fn packaged(program: &'a Program, package: &'a str) -> Self {
+    pub fn packaged(program: &'a JvmProgram<'a>, package: &'a str) -> Self {
         Self {
             program,
             grows: nts_core::hir::arrays_can_grow(program),
@@ -1048,6 +1053,7 @@ fn short(ty: &HirType) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nts_core::hir::Program;
 
     fn empty() -> Program {
         Program::default()
@@ -1067,7 +1073,7 @@ mod tests {
             base: None,
         };
         assert!(
-            !is_callable_storage(&program, &layout),
+            !is_callable_storage(&JvmProgram::new(&program), &layout),
             "a name supplies no function identity"
         );
         program.signature_faces.insert(
@@ -1077,17 +1083,20 @@ mod tests {
                 returns: Some(HirType::Erased),
             },
         );
-        assert!(is_callable_storage(&program, &layout));
-        assert!(is_signature(&program, &layout));
-        assert!(!is_callable(&program, &layout), "storage is not an entry");
+        assert!(is_callable_storage(&JvmProgram::new(&program), &layout));
+        assert!(is_signature(&JvmProgram::new(&program), &layout));
+        assert!(
+            !is_callable(&JvmProgram::new(&program), &layout),
+            "storage is not an entry"
+        );
         layout.types = vec![TypeId(SYNTHETIC_CLOSURES)];
-        assert!(is_callable_storage(&program, &layout));
-        assert!(!is_signature(&program, &layout));
-        assert!(!is_callable(&program, &layout));
+        assert!(is_callable_storage(&JvmProgram::new(&program), &layout));
+        assert!(!is_signature(&JvmProgram::new(&program), &layout));
+        assert!(!is_callable(&JvmProgram::new(&program), &layout));
         for token in [constructor_token(0), class_token(3)] {
             layout.types = vec![token];
             assert!(
-                !is_callable_storage(&program, &layout),
+                !is_callable_storage(&JvmProgram::new(&program), &layout),
                 "constructor identity is not callback storage"
             );
         }
@@ -1130,10 +1139,11 @@ mod tests {
             HirType::Managed(ManagedType::Promise(Box::new(HirType::Erased))),
         ];
         for ty in cases {
-            let Some(rendered) = descriptor(Shape::of(&empty()), &ty) else {
+            let Some(rendered) = descriptor(Shape::of(&JvmProgram::new(&empty())), &ty) else {
                 continue;
             };
-            let Some(VType::Object(named)) = vtype(Shape::of(&empty()), &ty) else {
+            let Some(VType::Object(named)) = vtype(Shape::of(&JvmProgram::new(&empty())), &ty)
+            else {
                 continue;
             };
             assert_eq!(
@@ -1157,15 +1167,15 @@ mod tests {
         // equal its keys.
         let table = HirType::Managed(ManagedType::Table(string(), Box::new(HirType::Erased)));
         assert_eq!(
-            descriptor(Shape::of(&empty()), &map),
-            descriptor(Shape::of(&empty()), &table)
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &map),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &table)
         );
         assert_ne!(
-            descriptor(Shape::of(&empty()), &map),
-            descriptor(Shape::of(&empty()), &set)
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &map),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &set)
         );
         assert_eq!(
-            descriptor(Shape::of(&empty()), &set).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &set).as_deref(),
             Some(SET_DESCRIPTOR)
         );
     }
@@ -1176,15 +1186,21 @@ mod tests {
             bits: 8,
             signed: true,
         };
-        assert_eq!(descriptor(Shape::of(&empty()), &byte).as_deref(), Some("I"));
+        assert_eq!(
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &byte).as_deref(),
+            Some("I")
+        );
         assert_eq!(kind(&byte), Some(Kind::Int));
-        assert_eq!(vtype(Shape::of(&empty()), &byte), Some(VType::Integer));
+        assert_eq!(
+            vtype(Shape::of(&JvmProgram::new(&empty())), &byte),
+            Some(VType::Integer)
+        );
     }
 
     #[test]
     fn a_bool_is_an_int_to_compute_and_a_z_to_declare() {
         assert_eq!(
-            descriptor(Shape::of(&empty()), &HirType::Bool).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::Bool).as_deref(),
             Some("Z")
         );
         assert_eq!(kind(&HirType::Bool), Some(Kind::Int));
@@ -1196,16 +1212,25 @@ mod tests {
             bits: 64,
             signed: true,
         };
-        assert_eq!(descriptor(Shape::of(&empty()), &long).as_deref(), Some("J"));
+        assert_eq!(
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &long).as_deref(),
+            Some("J")
+        );
         assert_eq!(kind(&long), Some(Kind::Long));
-        assert_eq!(vtype(Shape::of(&empty()), &long), Some(VType::Long));
+        assert_eq!(
+            vtype(Shape::of(&JvmProgram::new(&empty())), &long),
+            Some(VType::Long)
+        );
     }
 
     #[test]
     fn what_this_slice_does_not_represent_says_so() {
-        assert_eq!(descriptor(Shape::of(&empty()), &HirType::Never), None);
         assert_eq!(
-            descriptor(Shape::of(&empty()), &HirType::Void).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::Never),
+            None
+        );
+        assert_eq!(
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::Void).as_deref(),
             Some("V")
         );
         assert_eq!(kind(&HirType::Void), None, "void has no computational kind");
@@ -1217,17 +1242,17 @@ mod tests {
     #[test]
     fn void_is_a_return_descriptor_and_not_a_field_one() {
         assert_eq!(
-            descriptor(Shape::of(&empty()), &HirType::Void).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::Void).as_deref(),
             Some("V")
         );
         assert_eq!(
-            field_descriptor(Shape::of(&empty()), &HirType::Void),
+            field_descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::Void),
             None,
             "a field may not be declared `V`: JVMS 4.3.2"
         );
         let double = HirType::Float { bits: 64 };
         assert_eq!(
-            field_descriptor(Shape::of(&empty()), &double).as_deref(),
+            field_descriptor(Shape::of(&JvmProgram::new(&empty())), &double).as_deref(),
             Some("D"),
             "and everything else is unchanged"
         );
@@ -1246,12 +1271,12 @@ mod tests {
     #[test]
     fn a_bigint_is_a_reference_to_two_longs() {
         assert_eq!(
-            descriptor(Shape::of(&empty()), &HirType::BigInt).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &HirType::BigInt).as_deref(),
             Some(BIGINT_DESCRIPTOR)
         );
         assert_eq!(kind(&HirType::BigInt), Some(Kind::Ref));
         assert_eq!(
-            vtype(Shape::of(&empty()), &HirType::BigInt),
+            vtype(Shape::of(&JvmProgram::new(&empty())), &HirType::BigInt),
             Some(VType::Object(BIGINT.to_owned()))
         );
     }
@@ -1265,7 +1290,7 @@ mod tests {
         let array = HirType::Managed(ManagedType::Array(Box::new(HirType::BigInt)));
         assert_eq!(wrapper(&HirType::BigInt), Some("nts/rt/NtsArrayL"));
         assert_eq!(
-            descriptor(Shape::of(&empty()), &array).as_deref(),
+            descriptor(Shape::of(&JvmProgram::new(&empty())), &array).as_deref(),
             Some("[Lnts/rt/NtsBigInt;")
         );
     }

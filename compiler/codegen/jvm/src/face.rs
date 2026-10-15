@@ -21,7 +21,8 @@
 //! erased entry still exists, so the class is callable from TypeScript and
 //! only the Java face is absent, by name, rather than everything at once.
 
-use nts_core::hir::{HirType, Layout, Program};
+use crate::program::JvmProgram;
+use nts_core::hir::{HirType, Layout};
 use nts_jvm_emitter::code::Code;
 use nts_jvm_emitter::{Kind, Pool, VType};
 
@@ -45,7 +46,7 @@ pub(crate) struct Face {
 /// signature, a position with no representation, a rest parameter, or a
 /// descriptor no runtime callback interface names.
 #[must_use]
-pub(crate) fn of(package: &str, program: &Program, layout: &Layout) -> Option<Face> {
+pub(crate) fn of(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> Option<Face> {
     if !types::is_signature(program, layout) {
         return None;
     }
