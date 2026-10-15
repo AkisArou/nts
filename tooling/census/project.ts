@@ -412,11 +412,16 @@ export function caseRoot(materialise, { flags = [], base } = {}) {
     setTreeMode(temporary, true);
     const root = join(base, key);
     let created = true;
-    try { renameSync(temporary, root); }
-    catch (error) {
-      if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+    if (existsSync(root)) {
       verifiedRoot(root, key, manifest);
       created = false;
+    } else {
+      try { renameSync(temporary, root); }
+      catch (error) {
+        if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+        verifiedRoot(root, key, manifest);
+        created = false;
+      }
     }
     touchRoot(base, key);
     return { root, key, created };

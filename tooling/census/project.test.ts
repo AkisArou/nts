@@ -80,6 +80,16 @@ test("a corrupt existing winner is rejected rather than overwritten", (t) => {
   assert.equal(readFileSync(join(root, "src/main.js"), "utf8"), "corruption");
 });
 
+test("an empty foreign directory at the key is retained", (t) => {
+  const base = scratch(t);
+  const { root } = caseRoot((dir) => fill(dir), { base });
+  thaw(root);
+  rmSync(root, { recursive: true });
+  mkdirSync(root);
+  assert.throws(() => caseRoot((dir) => fill(dir), { base }));
+  assert.deepEqual(readdirSync(root), []);
+});
+
 test("collection is explicit, by last use, and removes only owned roots", (t) => {
   const base = scratch(t);
   const old = caseRoot((dir) => fill(dir, "old"), { base });
