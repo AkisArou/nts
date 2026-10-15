@@ -630,6 +630,24 @@ fn source_char_codes_past_the_end_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// `startsWith` and `endsWith`, every string against every affix, answer what
+/// node answers.
+#[test]
+fn source_string_affixes_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/string-affixes");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "string-affixes",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 34, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

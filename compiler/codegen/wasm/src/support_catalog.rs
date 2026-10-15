@@ -855,7 +855,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_str_char_code_at_int", Support::WasmHelper),
     ("nts_str_char_code_at_int_fn", Support::WasmHelper),
     ("nts_str_code_point_at", Support::HostImport),
-    ("nts_str_ends_with", Support::HostImport),
+    ("nts_str_ends_with", Support::WasmHelper),
     ("nts_str_includes", Support::HostImport),
     ("nts_str_index_of", Support::HostImport),
     ("nts_str_index_of_from", Support::HostImport),
@@ -878,7 +878,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("native frame-storage helper"),
     ),
     ("nts_str_split", Support::WasmHelper),
-    ("nts_str_starts_with", Support::HostImport),
+    ("nts_str_starts_with", Support::WasmHelper),
     ("nts_str_substring", Support::WasmHelper),
     (
         "nts_str_substring_general",

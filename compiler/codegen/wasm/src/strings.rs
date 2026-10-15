@@ -44,6 +44,11 @@ pub(crate) enum Helper {
     FromCharCode,
     /// `s[i]`: C's `nts_str_at`, code at its site over the builtins.
     At,
+    /// `startsWith` and `endsWith` with no position, over the builtins: a
+    /// length test, then `equals` of the end that would match. They were host
+    /// calls, a crossing into JS each, a third of a loop that makes three.
+    StartsWith,
+    EndsWith,
 }
 
 impl Helper {
@@ -62,6 +67,8 @@ impl Helper {
             Self::Slice => "string.slice",
             Self::FromCharCode => "string.fromCharCode",
             Self::At => "string.at",
+            Self::StartsWith => "string.startsWith",
+            Self::EndsWith => "string.endsWith",
         }
     }
     pub(crate) const fn builtin(self) -> bool {
@@ -78,14 +85,18 @@ impl Helper {
             | Self::CharAt
             | Self::Substring
             | Self::Slice
-            | Self::FromCharCode => false,
+            | Self::FromCharCode
+            | Self::StartsWith
+            | Self::EndsWith => false,
         }
     }
     pub(crate) fn signature(self) -> (Vec<Physical>, Physical) {
         match self {
             Self::Length => (vec![STRING], I32),
             Self::Unit => (vec![STRING, I32], I32),
-            Self::Equal | Self::Compare => (vec![STRING, STRING], I32),
+            Self::Equal | Self::Compare | Self::StartsWith | Self::EndsWith => {
+                (vec![STRING, STRING], I32)
+            }
             Self::Concat => (vec![STRING, STRING], NONNULL_STRING),
             Self::SubstringBuiltin => (vec![STRING, I32, I32], NONNULL_STRING),
             Self::FromCharCodeBuiltin => (vec![I32], NONNULL_STRING),
@@ -109,6 +120,7 @@ impl Helper {
                 "string builtin {self:?} has no module body"
             ))),
             Self::CharCodeAt | Self::CharAt => indexed(self, m),
+            Self::StartsWith | Self::EndsWith => affix(self, m),
             Self::Substring | Self::Slice => substring(self, m),
             Self::FromCharCode => {
                 let to_int = crate::helpers::callee(m, ScalarHelper::ToInt32)?;
@@ -138,6 +150,8 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         "nts_str_at" => Some(Helper::At),
         "nts_str_substring" => Some(Helper::Substring),
         "nts_str_slice" => Some(Helper::Slice),
+        "nts_str_starts_with" => Some(Helper::StartsWith),
+        "nts_str_ends_with" => Some(Helper::EndsWith),
         "nts_string_from_char_code" => Some(Helper::FromCharCode),
         _ => None,
     }
@@ -413,7 +427,10 @@ pub(crate) fn runtime(
     call(b, helper)?;
     match output {
         F64 => numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())?,
-        I32 if helper == Helper::Equal && b.ty(result) == &HirType::Bool => {}
+        I32 if matches!(
+            helper,
+            Helper::Equal | Helper::StartsWith | Helper::EndsWith
+        ) && b.ty(result) == &HirType::Bool => {}
         Physical::Reference(_) if is_string(b.ty(result)) => {}
         _ => {
             return Err(format!("string helper {helper:?} result {:?}", b.ty(result)).into());
@@ -424,6 +441,71 @@ pub(crate) fn runtime(
 
 /// `ToIntegerOrInfinity` before testing bounds. NaN becomes zero, fractions
 /// truncate, and infinities/huge indices stay outside the range until checked.
+/// `startsWith` or `endsWith` of `(string, affix)`: false where the affix is
+/// the longer, else whether each of its code units matches the string's at
+/// the same place from the start, or from the end. A loop rather than
+/// `equals` of a `substring`, which allocates a string for every call.
+fn affix(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
+    let length = callee(m, Helper::Length)?;
+    let unit = callee(m, Helper::Unit)?;
+    // locals: 2 the affix's length, 3 the string's, 4 where the match starts
+    // in the string, 5 the code unit compared
+    let mut f = Function::new([ValType::I32, ValType::I32, ValType::I32, ValType::I32]);
+    f.instruction(&I::LocalGet(1));
+    f.call(length);
+    f.instruction(&I::LocalSet(2));
+    f.instruction(&I::LocalGet(0));
+    f.call(length);
+    f.instructions(&[
+        I::LocalSet(3),
+        I::LocalGet(2),
+        I::LocalGet(3),
+        I::I32GtU,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+    ]);
+    if helper == Helper::StartsWith {
+        f.instruction(&I::I32Const(0));
+    } else {
+        f.instructions(&[I::LocalGet(3), I::LocalGet(2), I::I32Sub]);
+    }
+    f.instructions(&[
+        I::LocalSet(4),
+        I::Block(BlockType::Empty),
+        I::Loop(BlockType::Empty),
+        I::LocalGet(5),
+        I::LocalGet(2),
+        I::I32GeU,
+        I::BrIf(1),
+        I::LocalGet(0),
+        I::LocalGet(4),
+        I::LocalGet(5),
+        I::I32Add,
+    ]);
+    f.call(unit);
+    f.instructions(&[I::LocalGet(1), I::LocalGet(5)]);
+    f.call(unit);
+    f.instructions(&[
+        I::I32Ne,
+        I::If(BlockType::Empty),
+        I::I32Const(0),
+        I::Return,
+        I::End,
+        I::LocalGet(5),
+        I::I32Const(1),
+        I::I32Add,
+        I::LocalSet(5),
+        I::Br(0),
+        I::End,
+        I::End,
+        I::I32Const(1),
+        I::End,
+    ]);
+    Ok(f)
+}
+
 fn indexed(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     let char_at = helper == Helper::CharAt;
     let length = callee(m, Helper::Length)?;

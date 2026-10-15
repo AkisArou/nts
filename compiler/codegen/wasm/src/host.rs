@@ -188,10 +188,6 @@ const SERVICES: &[Service] = &[
         shape: Shape::StringNumberString,
     },
     Service {
-        name: "nts_str_ends_with",
-        shape: Shape::StringStringBool,
-    },
-    Service {
         name: "nts_str_includes",
         shape: Shape::StringStringBool,
     },
@@ -230,10 +226,6 @@ const SERVICES: &[Service] = &[
     Service {
         name: "nts_str_replace_all",
         shape: Shape::StringStringStringString,
-    },
-    Service {
-        name: "nts_str_starts_with",
-        shape: Shape::StringStringBool,
     },
     Service {
         name: "nts_str_to_well_formed",

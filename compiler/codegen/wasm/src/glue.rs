@@ -184,20 +184,6 @@ const STRING_METHODS: &[(&str, &str, &str, &[ValueType], ValueType)] = &[
         ValueType::I32,
     ),
     (
-        "nts_str_starts_with",
-        "string_startsWith",
-        "String.prototype.startsWith",
-        &[NULLABLE_STRING, NULLABLE_STRING],
-        ValueType::I32,
-    ),
-    (
-        "nts_str_ends_with",
-        "string_endsWith",
-        "String.prototype.endsWith",
-        &[NULLABLE_STRING, NULLABLE_STRING],
-        ValueType::I32,
-    ),
-    (
         "nts_str_trim",
         "string_trim",
         "String.prototype.trim",
