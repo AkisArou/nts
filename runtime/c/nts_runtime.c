@@ -7836,9 +7836,18 @@ void nts_dataview_set_biguint64(NtsDataView *view, double at, __int128 value,
 NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
                                bool fixed) {
   size_t length = nts_buffer_index(byte_length);
+  /* The old maximum carries over only from a resizable buffer to a resizable
+   * one. A fixed buffer's reserved bytes are its length, and `transfer(n)` of
+   * one is a fixed buffer of n bytes: reserving the old length there gave a
+   * buffer reporting n bytes over a smaller block. */
+  const bool resizable = !fixed && buffer && buffer->resizable;
+  /* Past the maximum a resizable buffer keeps: null, which the caller raises
+   * as the `RangeError` the language gives. */
+  if (resizable && length > buffer->reserved_bytes) {
+    return 0;
+  }
   NtsBuffer *moved = nts_buffer_make(
-      length, fixed ? length : (buffer ? buffer->reserved_bytes : length),
-      !fixed && buffer && buffer->resizable);
+      length, resizable ? buffer->reserved_bytes : length, resizable);
   if (moved && buffer && buffer->bytes) {
     size_t carried = buffer->length < length ? buffer->length : length;
     memcpy(moved->bytes, buffer->bytes, carried);

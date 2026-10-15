@@ -951,8 +951,11 @@ fn buffer_slice(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure
 }
 
 /// C's `nts_buffer_transfer`: a new buffer of `length` bytes holding as many
-/// of the old one's as fit, fixed or keeping the old one's maximum. The old
-/// one is detached, its lengths zeroed, as every accessor then reads.
+/// of the old one's as fit. It keeps the old one's maximum only where both
+/// are resizable; a fixed one, or one transferred from a fixed buffer, holds
+/// exactly its length, which may exceed the old maximum. A resizable one
+/// past its maximum answers null, which the caller raises as a `RangeError`.
+/// The old one is detached, its lengths zeroed, as every accessor then reads.
 ///
 /// Params: buffer, length, fixed. Locals: length, the new buffer, carried.
 fn transfer(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
@@ -970,13 +973,33 @@ fn transfer(m: &mut Builder<'_>, t: BufferTypes) -> Result<Function, Failure> {
     buffers::index_of(&mut f, 1);
     f.instructions(&[
         I::I32TruncSatF64U,
-        I::LocalTee(n),
+        I::LocalSet(n),
+        // Resizable on both sides, and past the maximum it keeps.
+        I::LocalGet(2),
+        I::I32Eqz,
+        I::LocalGet(0),
+        buffer_field(t, RESIZABLE),
+        I::I32And,
+        I::LocalGet(n),
+        I::LocalGet(0),
+        buffer_field(t, RESERVED),
+        I::I32GtU,
+        I::I32And,
+        I::If(BlockType::Empty),
+        I::RefNull(HeapType::Concrete(t.buffer)),
+        I::Return,
+        I::End,
+        I::LocalGet(n),
         I::F64ConvertI32U,
         // A fixed one reserves its length, else the old maximum.
         I::LocalGet(n),
         I::LocalGet(0),
         buffer_field(t, RESERVED),
         I::LocalGet(2),
+        I::LocalGet(0),
+        buffer_field(t, RESIZABLE),
+        I::I32Eqz,
+        I::I32Or,
         I::Select,
         I::F64ConvertI32U,
         I::LocalGet(2),
