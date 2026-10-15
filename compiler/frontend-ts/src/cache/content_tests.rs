@@ -423,12 +423,28 @@ fn unused_entries_hints_and_partials_are_collected_by_age() {
 #[test]
 fn collection_claim_is_shared_between_short_lived_processes() {
     const CHILD: &str = "NTS_CACHE_COLLECTION_TEST_ROOT";
+    const CLOCK: &str = "NTS_CACHE_COLLECTION_TEST_TIME";
     if let Some(dir) = std::env::var_os(CHILD) {
-        bound_the_cache(&Utf8PathBuf::from_path_buf(dir.into()).expect("utf8"));
+        let seconds = std::env::var(CLOCK)
+            .expect("clock")
+            .parse()
+            .expect("seconds");
+        bound_the_cache_at(
+            &Utf8PathBuf::from_path_buf(dir.into()).expect("utf8"),
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds),
+        );
         return;
     }
     let project = Project::new("collection-claim");
     std::fs::create_dir_all(&project.cache).expect("cache");
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_secs();
+    let now = std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds);
+    let first = project.cache.join("first-collection.postcard");
+    std::fs::write(&first, "old").expect("file");
+    age(&first, now);
     let run = || {
         let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
             .args([
@@ -436,6 +452,7 @@ fn collection_claim_is_shared_between_short_lived_processes() {
                 "cache::content_tests::collection_claim_is_shared_between_short_lived_processes",
             ])
             .env(CHILD, &project.cache)
+            .env(CLOCK, seconds.to_string())
             .output()
             .expect("child");
         assert!(
@@ -443,11 +460,16 @@ fn collection_claim_is_shared_between_short_lived_processes() {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("1 passed;"),
+            "the child must execute exactly one test"
+        );
     };
     run();
+    assert!(!first.exists(), "the first process must actually collect");
     let old = project.cache.join("miss-after-collection.postcard");
     std::fs::write(&old, "old").expect("file");
-    age(&old, std::time::SystemTime::now());
+    age(&old, now);
     run();
     assert!(
         old.exists(),

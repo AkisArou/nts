@@ -207,7 +207,11 @@ fn touch(path: &Utf8Path) {
 /// One cross-process collection per hour; short-lived case workers do not each
 /// scan the directory. A crashed claimant costs one missed collection only.
 fn bound_the_cache(dir: &Utf8Path) {
-    let Some(hour) = std::time::SystemTime::now()
+    bound_the_cache_at(dir, std::time::SystemTime::now());
+}
+
+fn bound_the_cache_at(dir: &Utf8Path, now: std::time::SystemTime) {
+    let Some(hour) = now
         .duration_since(std::time::UNIX_EPOCH)
         .ok()
         .map(|d| d.as_secs() / 3600)
@@ -228,7 +232,7 @@ fn bound_the_cache(dir: &Utf8Path) {
         .and_then(|s| s.trim().parse().ok())
         .unwrap_or(2 * 1024 * 1024 * 1024);
     sweep(dir, cap);
-    collect_old(dir, std::time::SystemTime::now());
+    collect_old(dir, now);
 }
 
 fn collect_old(dir: &Utf8Path, now: std::time::SystemTime) {
