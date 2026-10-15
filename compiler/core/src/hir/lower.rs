@@ -74271,9 +74271,16 @@ impl<'a> FuncBuilder<'a> {
         let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
         let origin = self.origin(id);
         let radix = match arguments.get(1) {
+            // `ToInt32(radix)` in the specification, which is `ToNumber`
+            // first: unchecked JavaScript passes anything, and test262 passes
+            // `false`, which is 0 -- "decide from the text". Coerced alone,
+            // a boolean reached `nts_parse_int`'s `double` as a `bool`, which
+            // C promoted to the right number by luck and the JVM's stack
+            // accounting refused.
             Some(node) => {
                 let given = self.lower_expression(*node)?;
-                self.coerce(given, &HirType::NUMBER, *node)?
+                let number = self.coerce_to_number(id, *node, given)?;
+                self.coerce(number, &HirType::NUMBER, *node)?
             }
             None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
         };

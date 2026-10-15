@@ -1,3 +1,6 @@
+// **Fixed 2026-10-15, and now its guard:** `parseInt`'s radix is `ToNumber` of
+// what it is given. What it was:
+//
 // **A boolean radix reaches `parseInt` unconverted.** `parseInt("11", false)`
 // is `parseInt("11", 0)` -- the radix is `ToNumber(false)` -- and the prepared
 // HIR passes the boolean as it is: `call.extern nts_parse_int(%2, %3)` where

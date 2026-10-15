@@ -1,4 +1,4 @@
-// The control for `tests/outcomes/a-boolean-radix-to-parse-int`: the radix is
+// The control for `tests/programs/a-boolean-radix-to-parse-int`: the radix is
 // the number `0`, which is what `ToNumber(false)` is. It differs in one thing,
 // the radix's type, and agrees with node on every backend.
 
