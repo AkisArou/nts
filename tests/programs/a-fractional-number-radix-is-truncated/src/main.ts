@@ -1,5 +1,3 @@
-// backend: jvm
-// run: check
 // Native numeric arguments isolate the radix helper from erased ToNumber.
 // ToIntegerOrInfinity makes radix 2.5 exactly 2; the control differs only in
 // supplying that integer directly.
