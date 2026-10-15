@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 an `in` whose key is not a literal the compiler can see",
+  "ran": "exit 1; nts: uncaught Observed: ",
+  "node": "exit 1; nts: uncaught Observed: own key control=true;inherited key=true;",
+  "measured_with": "07a08dd5f54a0949",
+  "source": "measured"
+}

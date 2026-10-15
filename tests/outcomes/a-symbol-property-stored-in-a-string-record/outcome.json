@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: string key control=7;7;symbol key=2;7;",
+  "node": "exit 1; nts: uncaught Observed: string key control=7;7;symbol key=2;7;",
+  "measured_with": "07a08dd5f54a0949",
+  "source": "measured"
+}
