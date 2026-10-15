@@ -3466,6 +3466,20 @@ static inline int16_t nts_to_int16(double x) {
   return u < 32768u ? (int16_t)u : (int16_t)((int)u - 65536);
 }
 
+/* JavaScript `%` over two int32 operands, answered as a number: the C form of
+ * `specialize::integral_remainder`, which says why it is exact. A zero divisor
+ * is NaN. A divisor of -1 divides by 1 instead, because INT32_MIN % -1
+ * overflows the division (undefined here, a trap on x86) and both answer a
+ * zero. A zero remainder of a negative dividend is -0. The LLVM backend's
+ * selects are the same rule. */
+static inline double nts_rem_i32(int32_t a, int32_t b) {
+  const int32_t r = a % (b == 0 || b == -1 ? 1 : b);
+  if (b == 0) {
+    return NAN;
+  }
+  return r == 0 && a < 0 ? -0.0 : (double)r;
+}
+
 /* JavaScript `<<`: the count masks to five bits, and shifting a negative value
  * left is defined rather than undefined. */
 static inline int32_t nts_shl(int32_t a, int32_t b) {

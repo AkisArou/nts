@@ -14,6 +14,7 @@ Thirty-odd sections and rising, because every one of them is a measurement
 that changed somebody's mind and the goal says to keep those where a reader
 meets them. This is the map; the row table below it is the current state.
 
+- 2026-10-15: six losing rows, a cause for each, and the sitting still owed
 - Where the rows stand
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
@@ -159,6 +160,26 @@ integral bounds guards, a per-access try/catch, a shared-handler try/catch, and
 `ifnull` for a null comparison. Four projections about it died in one night, each
 a correct measurement of the wrong quantity -- see the sections at the end.
 
+
+## 2026-10-15: six losing rows, a cause for each, and the sitting still owed
+
+Six rows read badly in the 2026-10-15 sittings (01:07, 06:05, 09:53). Each
+has a cause now, three are fixed on main, and two by the commit that adds
+this section. **None of the numbers below is a published row**: every one is
+a diagnostic -- `emit-jvm` classes timed by a driver of this lane's
+(`Time.java`/`TimeM.java`: ns/op, the median of 9 batches) on E-cores 28-31
+beside other lanes' gates, A against B in alternating rounds of one sitting.
+The P-core `nts-bench` sitting that would publish them, every backend at
+once, waited out every idle window on 2026-10-15 and is still owed.
+
+| row | read | cause | state |
+| --- | --- | --- | --- |
+| `closure-merge` | 14x | 519195e49 sent every call through a signature to the erased entry: an `NtsValue` per call | **fixed**, typed signatures (59a9a8288): 3,683 ns before 519195e49, 45,000 on main, 3,680 after |
+| `event-state` | 1.84x | `rem f64 (convert i32) (convert i32)` is `drem`, HotSpot's `fmod` | **fixed** here, `specialize::integral_remainder` -> `remI32`: 439-454 -> 314-335 ns, 0.73x |
+| `awfy-queens` | 1.79x | `arrays_can_grow` is whole-program, and the `!` stores became checked (10-06), so every array is an `NtsArrayZ/D` and every store took a `double` subscript | **improved** here, `set(a, int, v)`: 31.9-32.3 -> 30.6-30.8 us, 0.96x. The growable representation itself remains (plain 23 us, Java 17.6 us) |
+| `awfy-sieve` | 2.38x / 2.01x | `new Array(5000)` booleans held as `NtsArrayZ` (21.9 us against 11.8 for `boolean[]`) | **fixed** on main by 1eb93e938 (bounds-proven stores); 1.20x at 09:53 |
+| `pipeline` | 1.69x | the same: `NtsArrayD` with a `double` subscript in the 01:36 build | **fixed** on main the same way: `double[]`, 0.95x-1.04x the reference in separate JVMs |
+| `bytes` | 4.52x | the 01:07 build ran the row all in `f64` | not a regression: 1.09x at 06:05 |
 
 ## Where the rows stand
 

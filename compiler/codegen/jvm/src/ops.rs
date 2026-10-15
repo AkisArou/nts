@@ -1652,7 +1652,10 @@ impl Emitter<'_> {
                 self.absence(code, pool, &op.kind, &op.ty, &origin)?
             }
             OpKind::Binary { op: bin, lhs, rhs } => {
-                self.binary(code, pool, value, *bin, *lhs, *rhs)?
+                match self.integral_remainder(code, pool, value)? {
+                    Some(placed) => placed,
+                    None => self.binary(code, pool, value, *bin, *lhs, *rhs)?,
+                }
             }
             OpKind::Unary { op: un, operand } => self.unary(code, pool, &op.ty, *un, *operand)?,
             OpKind::Convert(operand) => {
@@ -5589,6 +5592,27 @@ impl Emitter<'_> {
         };
         self.convert(code, pool, &from, &to, origin)?;
         Ok(Placed::OnStack)
+    }
+
+    /// A `%` over two widened `int`s: their integer remainder and two tests --
+    /// `specialize::integral_remainder` says why that is exact -- where `drem`
+    /// is the JVM's call into `fmod`, about ten times slower.
+    fn integral_remainder(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+    ) -> Result<Option<Placed>, Diagnostic> {
+        let Some((a, b)) =
+            nts_core::hir::specialize::integral_remainder(self.func, self.func.value(value))
+        else {
+            return Ok(None);
+        };
+        let origin = self.func.origin.clone();
+        self.load(code, pool, a)?;
+        self.load(code, pool, b)?;
+        code.invoke_static(&origin, pool, RUNTIME, "remI32", "(II)D");
+        Ok(Some(Placed::OnStack))
     }
 
     fn binary(

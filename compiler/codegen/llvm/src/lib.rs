@@ -3537,7 +3537,8 @@ fn operation(
         // one helper: a managed operand, and neither side the absent
         // reference. Splitting them was what pushed `operation` over its line
         // limit, and the guard was written twice to do it.
-        OpKind::Binary { op: bin, lhs, rhs } => string_binary(func, &out, *bin, *lhs, *rhs)
+        OpKind::Binary { op: bin, lhs, rhs } => integral_remainder(func, op, &out)
+            .or_else(|| string_binary(func, &out, *bin, *lhs, *rhs))
             .map_or_else(|| arithmetic(func, &out, *bin, *lhs, *rhs, platform), Ok)?,
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand, platform)?,
         // A representation change specialization decided on. The C backend
@@ -5482,6 +5483,32 @@ fn extremum(
         "{out}.c = icmp {test} {ty} {0}, {1}\n  {out} = select i1 {out}.c, {ty} {0}, {ty} {1}",
         name(lhs),
         name(rhs)
+    ))
+}
+
+/// A floating-point `%` over two `i32`s, as their integer remainder: the rule
+/// [`nts_core::hir::specialize::integral_remainder`] states and the C runtime's
+/// `nts_rem_i32` spells, here without a branch. A divisor of 0 or -1 divides by
+/// 1 instead -- `srem` by zero is undefined, and so is `i32::MIN` by -1 -- and
+/// the selects put NaN back for the zero and `-0` for a zero remainder of a
+/// negative dividend.
+fn integral_remainder(func: &Func, op: &nts_core::hir::Op, out: &str) -> Option<String> {
+    let (a, b) = nts_core::hir::specialize::integral_remainder(func, op)?;
+    let (a, b) = (name(a), name(b));
+    Some(format!(
+        "{out}.z = icmp eq i32 {b}, 0\n  \
+         {out}.m = icmp eq i32 {b}, -1\n  \
+         {out}.g = or i1 {out}.z, {out}.m\n  \
+         {out}.d = select i1 {out}.g, i32 1, i32 {b}\n  \
+         {out}.r = srem i32 {a}, {out}.d\n  \
+         {out}.f = sitofp i32 {out}.r to double\n  \
+         {out}.e = icmp eq i32 {out}.r, 0\n  \
+         {out}.n = icmp slt i32 {a}, 0\n  \
+         {out}.s = and i1 {out}.e, {out}.n\n  \
+         {out}.v = select i1 {out}.s, double {negative_zero}, double {out}.f\n  \
+         {out} = select i1 {out}.z, double {nan}, double {out}.v",
+        negative_zero = float_literal(-0.0),
+        nan = float_literal(f64::NAN),
     ))
 }
 

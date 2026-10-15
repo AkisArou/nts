@@ -1647,6 +1647,60 @@ fn convert(
     id
 }
 
+/// The two `i32`s a floating-point `%` is really over, when it is one.
+///
+/// Specialization narrows a remainder whose *result* is provably whole; what
+/// it leaves is `rem f64 (convert a) (convert b)` with `a` and `b` already
+/// `i32`, because the result can still be NaN (`b` may be zero) or `-0` (a
+/// zero remainder of a negative dividend) and a reader can tell. The HIR keeps
+/// that `rem` as it is, so [`facts::rem`] and `zero_sign` reason about it
+/// unchanged, and a backend that does not ask here emits its floating-point
+/// remainder and is still right.
+///
+/// A backend that does ask answers it from the integers, which is exact:
+/// JavaScript's `%` and a truncated integer remainder agree on every pair of
+/// whole operands but three ways, and each is a test rather than a division.
+///
+/// - `b == 0` answers NaN.
+/// - `b == -1` answers a zero without dividing, because `i32::MIN % -1`
+///   overflows the division: undefined in C and in LLVM's `srem`, and a trap
+///   on x86. Dividing by 1 instead gives the same zero.
+/// - a zero remainder of a negative dividend answers `-0`: `-5 % 5`.
+///
+/// That is one rule, and every backend spells it exactly so. `fmod` and the
+/// JVM's `drem` answer the same values from floating point, an order of
+/// magnitude slower: `event-state` makes six draws a call, one of these each.
+#[must_use]
+pub fn integral_remainder(func: &Func, op: &Op) -> Option<(ValueId, ValueId)> {
+    const I32: HirType = HirType::Int {
+        bits: 32,
+        signed: true,
+    };
+    let OpKind::Binary {
+        op: BinOp::Rem,
+        lhs,
+        rhs,
+    } = op.kind
+    else {
+        return None;
+    };
+    if op.ty != HirType::NUMBER {
+        return None;
+    }
+    let integer = |operand: ValueId| {
+        let widened = func.value(operand);
+        match widened.kind {
+            OpKind::Convert(from)
+                if widened.ty == HirType::NUMBER && func.value(from).ty == I32 =>
+            {
+                Some(from)
+            }
+            _ => None,
+        }
+    };
+    Some((integer(lhs)?, integer(rhs)?))
+}
+
 impl BinOp {
     /// Whether this operator produces a bool rather than a number.
     #[must_use]
@@ -1743,6 +1797,93 @@ mod tests {
         };
         let second = &func.values[args[1].0 as usize];
         (second.kind.clone(), second.ty.clone())
+    }
+
+    /// `rem f64` over two values, each widened from a parameter of the given
+    /// type, as a function: the remainder is `ValueId(4)`.
+    fn remainder_over(lhs: &HirType, rhs: &HirType) -> Func {
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let param = |name: &str, ty: HirType| Param {
+            name: name.to_owned(),
+            ty,
+            origin: origin.clone(),
+            known: crate::hir::facts::Facts::TOP,
+            written: None,
+            shape: crate::hir::ParamShape::Ordinary,
+        };
+        let widen = |from: u32, ty: &HirType| {
+            if *ty == HirType::NUMBER {
+                op(OpKind::Param(from), HirType::NUMBER)
+            } else {
+                op(OpKind::Convert(ValueId(from)), HirType::NUMBER)
+            }
+        };
+        Func {
+            name: "f".to_owned(),
+            params: vec![param("a", lhs.clone()), param("b", rhs.clone())],
+            return_type: HirType::NUMBER,
+            values: vec![
+                op(OpKind::Param(0), lhs.clone()),
+                op(OpKind::Param(1), rhs.clone()),
+                widen(0, lhs),
+                widen(1, rhs),
+                op(
+                    OpKind::Binary {
+                        op: crate::hir::BinOp::Rem,
+                        lhs: ValueId(2),
+                        rhs: ValueId(3),
+                    },
+                    HirType::NUMBER,
+                ),
+            ],
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: (0..5).map(ValueId).collect(),
+                terminator: Terminator::Return(Some(ValueId(4))),
+            }],
+            origin,
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+            obligations: Vec::new(),
+            written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
+            written_return_elements: Vec::new(),
+        }
+    }
+
+    /// A remainder over two widened `i32`s is the backends' integer form, and
+    /// it answers with the integers themselves -- not their widenings, which
+    /// a backend would only have to see through again. Each control differs
+    /// in one operand: a `double`, and an unsigned `u32`, whose values above
+    /// `i32::MAX` the signed rule would get wrong.
+    #[test]
+    fn a_remainder_of_two_widened_integers_is_integral() {
+        const I32: HirType = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        const U32: HirType = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let both = remainder_over(&I32, &I32);
+        assert_eq!(
+            super::integral_remainder(&both, &both.values[4]),
+            Some((ValueId(0), ValueId(1)))
+        );
+        let float = remainder_over(&I32, &HirType::NUMBER);
+        assert_eq!(super::integral_remainder(&float, &float.values[4]), None);
+        let unsigned = remainder_over(&U32, &I32);
+        assert_eq!(
+            super::integral_remainder(&unsigned, &unsigned.values[4]),
+            None
+        );
     }
 
     /// A `u64` computed at run time -- here a parameter, whose value no fold

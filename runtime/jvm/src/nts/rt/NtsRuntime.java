@@ -91,6 +91,18 @@ public final class NtsRuntime {
         if (right == 0) { throw new NtsRefusal("an integer remainder by zero"); }
         return left % right;
     }
+    /**
+     * JavaScript `%` over two `int`s, answered as a number: the JVM's form of
+     * `specialize::integral_remainder`. A zero divisor is NaN and a zero
+     * remainder of a negative dividend is -0. `MIN_VALUE % -1` needs no guard
+     * here, unlike C and LLVM: Java defines it as 0, and the sign test makes it
+     * the -0 JavaScript answers.
+     */
+    public static double remI32(int left, int right) {
+        if (right == 0) { return Double.NaN; }
+        int r = left % right;
+        return r == 0 && left < 0 ? -0.0 : r;
+    }
 
     /**
      * The unsigned forms, which are a *correctness* requirement rather than a

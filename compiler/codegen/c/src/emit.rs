@@ -5006,16 +5006,8 @@ fn binary_text(
         return wrap(format!("{} {operator} {}", cast(lhs), cast(rhs)));
     }
 
-    // `%` is integer-only in C, and on doubles it is `fmod` -- which is not an
-    // approximation of JavaScript's remainder but exactly it: ECMAScript
-    // defines `%` as truncated division with the sign of the dividend, and so
-    // does C99. `-4 % 2` is `-0` on both sides, and `x % 0` is NaN on both.
-    //
-    // Specialization turns most of these into an integer `%` first, where the
-    // two are also the same operation. This is what is left: a remainder over
-    // values the analysis could not prove whole.
-    if matches!(bin, BinOp::Rem) && matches!(op.ty, HirType::Float { .. }) {
-        return format!("{name} = fmod({}, {});", value_name(lhs), value_name(rhs));
+    if let Some(text) = float_remainder(func, op, name, bin, lhs, rhs) {
+        return text;
     }
 
     if let Some(text) = wrapping_arithmetic(op, name, bin, operator, lhs, rhs) {
@@ -5027,6 +5019,37 @@ fn binary_text(
         value_name(lhs),
         value_name(rhs)
     )
+}
+
+/// `%` with a number result.
+///
+/// `%` is integer-only in C, and on doubles it is `fmod` -- which is not an
+/// approximation of JavaScript's remainder but exactly it: ECMAScript defines
+/// `%` as truncated division with the sign of the dividend, and so does C99.
+/// `-4 % 2` is `-0` on both sides, and `x % 0` is NaN on both.
+///
+/// Specialization turns most of these into an integer `%` first, where the two
+/// are also the same operation. This is what is left: a remainder over values
+/// the analysis could not prove whole -- or over two that are, whose result is
+/// a number because it can be NaN or `-0`. That one is the integers' remainder
+/// and three tests, an order of magnitude cheaper than `fmod`.
+fn float_remainder(
+    func: &Func,
+    op: &nts_core::hir::Op,
+    name: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+) -> Option<String> {
+    if let Some((a, b)) = nts_core::hir::specialize::integral_remainder(func, op) {
+        return Some(format!(
+            "{name} = nts_rem_i32({}, {});",
+            value_name(a),
+            value_name(b)
+        ));
+    }
+    (matches!(bin, BinOp::Rem) && matches!(op.ty, HirType::Float { .. }))
+        .then(|| format!("{name} = fmod({}, {});", value_name(lhs), value_name(rhs)))
 }
 
 /// Checked signed bigint arithmetic. The builtins expose the carry without
