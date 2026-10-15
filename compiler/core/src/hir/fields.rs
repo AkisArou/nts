@@ -874,6 +874,16 @@ pub fn closures(program: &Program) -> FieldClosures {
                 Some(name) if access.storage_bodies.contains_key(name) => layout
                     .index_of(&family.member)
                     .map_or(Held::Many, |own| shared(layout, own)),
+                // **No row is the family's default, which reads the face's own
+                // positional field** (`Plan::default_for`): the owner whose
+                // layout *is* the face's -- an object literal typed by the
+                // interface -- has none, because its field is plain storage. So
+                // it holds what was stored there. Read as "any closure" since
+                // the families landed (cb684ee45), and `optional-chain`'s
+                // `h.fn?.(x)`, a field only `plusOne` is ever stored into, went
+                // from a direct call back to a boxed dispatch: 35 to 90 us on C,
+                // 10x C++.
+                None => shared(layout, field),
                 _ => Held::Many,
             });
         }

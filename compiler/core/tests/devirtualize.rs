@@ -200,3 +200,39 @@ fn the_receiver_is_unerased_to_the_class_it_is_called_as() {
         layout.name
     );
 }
+
+/// An object literal typed by an interface whose field holds one closure is
+/// called directly too.
+///
+/// The interface's field has an accessor family, and the literal's own layout
+/// -- the face's -- has no row in it, since its field is plain storage. That
+/// missing row is the family's default, which reads the stored field, and it
+/// was read as "any closure": `optional-chain`'s call went back to a boxed
+/// dispatch (35 to 90 us on C).
+#[test]
+fn an_interface_field_of_a_literal_holding_one_closure_is_called_directly() {
+    let Some(program) = prepared("an-interface-field-holding-one-closure") else {
+        return;
+    };
+    let run = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "run" || func.name.starts_with("run__"))
+        .expect("run is compiled");
+    let dispatches = run.values.iter().any(|op| {
+        matches!(
+            &op.kind,
+            OpKind::Call {
+                callee: Callee::Closure { .. },
+                ..
+            }
+        )
+    });
+    let direct = run.values.iter().any(|op| {
+        matches!(&op.kind, OpKind::Call { callee: Callee::Direct(name), .. } if name.contains("#call"))
+    });
+    assert!(
+        direct && !dispatches,
+        "the one closure the field holds is called directly"
+    );
+}
