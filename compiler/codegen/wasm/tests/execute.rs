@@ -474,6 +474,24 @@ fn source_absent_scalars_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A reference against the null literal, from either side and in either
+/// sense: `ref.is_null` answers what node answers.
+#[test]
+fn source_null_comparisons_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/null-comparisons");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "null-comparisons",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

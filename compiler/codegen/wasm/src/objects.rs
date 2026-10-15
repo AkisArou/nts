@@ -465,9 +465,27 @@ pub(crate) fn binary(
         if !is_reference(b.ty(value)) {
             return Err("reference equality with a different operand kind".into());
         }
-        b.load(value)?;
     }
-    b.instruction(&I::RefEq);
+    // A comparison with the null literal -- every `x!`, every `x === null` --
+    // asks `ref.is_null`, not `ref.eq` against a null: the same answer, in the
+    // form V8 reads as a type test, so the accesses after it lose their own
+    // null checks. Spelled as `ref.eq`, AWFY's queens ran 18% slower.
+    let null = |value: ValueId| matches!(b.func.value(value).kind, OpKind::ConstNull);
+    match (null(lhs), null(rhs)) {
+        (false, true) => {
+            b.load(lhs)?;
+            b.instruction(&I::RefIsNull);
+        }
+        (true, false) => {
+            b.load(rhs)?;
+            b.instruction(&I::RefIsNull);
+        }
+        (true, true) | (false, false) => {
+            b.load(lhs)?;
+            b.load(rhs)?;
+            b.instruction(&I::RefEq);
+        }
+    }
     if op == BinOp::Ne {
         b.instruction(&I::I32Eqz);
     }
