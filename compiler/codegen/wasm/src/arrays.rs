@@ -143,21 +143,45 @@ pub(crate) fn valid_index(
 }
 /// Whether `value` is a whole index below the `i32` length `length` pushes,
 /// or at it when appending: an array's or a typed array's.
+///
+/// **Every such length counts the elements of GC-array storage**, which the
+/// engine caps under 2^30 bytes, so it is a nonnegative `i32`; a narrow index
+/// is checked by one unsigned comparison on that premise. A length that is
+/// not GC storage -- a view of linear memory, a buffer past 2^31 -- breaks it:
+/// the comparison would accept a negative index wrapped past the length. A
+/// debug build of this compiler checks the premise in what it emits.
 pub(crate) fn within(
     b: &mut Body<'_, '_>,
     value: ValueId,
     append: bool,
     length: impl Fn(&mut Body<'_, '_>) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    if let HirType::Int {
+        bits: 8 | 16 | 32, ..
+    } = b.ty(value)
+    {
+        // A signed index below zero reads as at least 2^31 unsigned, past every
+        // length, so the unsigned comparison alone refuses it. Tested beside
+        // it, the sign cost V8 a third of AWFY's sieve: it computes both
+        // comparisons and their `and` rather than branching once.
+        if cfg!(debug_assertions) {
+            // The premise above, where the debug compiler's tests run it: a
+            // length that reads as negative is one this comparison cannot
+            // check. A trap, because it is this compiler's defect.
+            length(b)?;
+            b.instruction(&I::I32Const(0));
+            b.instruction(&I::I32LtS);
+            b.instruction(&I::If(BlockType::Empty));
+            b.instruction(&I::Unreachable);
+            b.instruction(&I::End);
+        }
+        index(b, value)?;
+        length(b)?;
+        b.instruction(&if append { I::I32LeU } else { I::I32LtU });
+        return Ok(());
+    }
     whole_nonnegative(b, value)?;
     match b.ty(value) {
-        HirType::Int {
-            bits: 8 | 16 | 32, ..
-        } => {
-            index(b, value)?;
-            length(b)?;
-            b.instruction(&if append { I::I32LeU } else { I::I32LtU });
-        }
         HirType::Int { bits: 64, .. } => {
             b.load(value)?;
             length(b)?;
