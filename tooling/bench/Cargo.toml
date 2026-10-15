@@ -20,6 +20,8 @@ nts-codegen-llvm.workspace = true
 nts-codegen-wasm.workspace = true
 nts-core.workspace = true
 nts-frontend-ts.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

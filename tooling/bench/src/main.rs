@@ -33,8 +33,10 @@ use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+use serde::{Deserialize, Serialize};
 
 /// One measurement.
+#[derive(Serialize, Deserialize)]
 struct Measured {
     ns_per_op: f64,
     checksum: String,
@@ -258,7 +260,17 @@ fn publish(
     cases: &[Utf8PathBuf],
     requested: &[String],
     spoiled: &[String],
+    lanes: Option<&[String]>,
 ) -> Result<()> {
+    // A run of some lanes has `--` where the others would be, over every case
+    // as readily as over a few, and it wrote those into the table until this.
+    if let Some(lanes) = lanes {
+        println!(
+            "\nREADME not updated: NTS_BENCH_LANES measured only {}.",
+            lanes.join(", ")
+        );
+        return Ok(());
+    }
     // Only a full run may rewrite the README. A filtered one would leave the
     // table describing a mixture of two machines and two revisions, which is
     // worse than a stale table because it does not look stale.
@@ -466,6 +478,13 @@ fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     validate_lanes()?;
     let root = repository_root(&argv)?;
+    if let Some(at) = argv.iter().position(|arg| arg == "--render") {
+        let path = argv
+            .get(at + 1)
+            .filter(|next| !next.starts_with('-'))
+            .map_or_else(|| run_file(&root), Utf8PathBuf::from);
+        return render(&root, &path);
+    }
     let cases_dir = root.join("benchmarks/cases");
 
     // A flag's *value* is not a case name. Filtering on the leading dash alone
@@ -535,7 +554,9 @@ fn main() -> Result<()> {
     );
     println!("{}", "-".repeat(236));
 
+    let lanes = wanted_lanes();
     let mut rows = Vec::new();
+    let mut measured = Vec::new();
     let mut spoiled = Vec::new();
     for case in &cases {
         // Before each case rather than once at the start: a sweep begun while
@@ -546,14 +567,34 @@ fn main() -> Result<()> {
             println!("note: {:<16} {warning}", case.file_name().unwrap_or("?"));
             spoiled.push(case.file_name().unwrap_or("?").to_string());
         }
+        // A row that fails its checks keeps its measurements: `--render` judges
+        // them again, which is the point of saving them.
         match run_case(&root, case, &out) {
-            Ok(row) => rows.push(row),
+            Ok(measurements) => {
+                match assemble(&measurements, lanes.is_some()) {
+                    Ok(row) => rows.push(row),
+                    Err(error) => println!("{:<16} failed: {error:#}", measurements.shown),
+                }
+                measured.push(measurements);
+            }
             Err(error) => println!("{:<16} failed: {error:#}", case.file_name().unwrap_or("?")),
         }
     }
 
-    publish(&root, &rows, &cases, &requested, &spoiled)?;
-    Ok(())
+    let run = Run {
+        lanes: lanes.clone(),
+        requested: requested.clone(),
+        cases: cases
+            .iter()
+            .filter_map(|case| case.file_name().map(str::to_owned))
+            .collect(),
+        spoiled: spoiled.clone(),
+        measured,
+    };
+    let saved = run_file(&root);
+    std::fs::write(&saved, serde_json::to_string(&run)?)
+        .with_context(|| format!("writing {saved}"))?;
+    publish(&root, &rows, &cases, &requested, &spoiled, lanes.as_deref())
 }
 
 /// Rewrite the README's generated benchmark table.
@@ -1174,7 +1215,7 @@ const DECLINED: &str = "the JVM backend declined ";
 /// Reporting the second as `refused` was wrong for exactly one afternoon, and
 /// it read as eight missing features where there are six deliberate refusals
 /// and two harness gaps.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum JvmAbsence {
     /// The backend declined a construct, by name, at emit time.
     Refused,
@@ -1232,7 +1273,7 @@ fn reaches_unicode(source: &str) -> bool {
     source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
 }
 
-fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
+fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurements> {
     let name = case.file_name().context("a case needs a name")?;
     let tsconfig = case_tsconfig(case, out, name)?;
 
@@ -1305,7 +1346,15 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Row> {
         &rendered,
         emission,
     )?;
-    finish_row(case, out, name, &shown, &results, absences, lowers)
+    let (node, bun) = measure_hosts(case, out, name)?;
+    Ok(Measurements {
+        shown,
+        results,
+        absences,
+        lowers,
+        node,
+        bun,
+    })
 }
 
 /// What emitting the case established, before anything is built.
@@ -1488,6 +1537,7 @@ fn variants(
 }
 
 /// Why the columns that may be missing are, for one row.
+#[derive(Serialize, Deserialize)]
 struct Absences {
     jvm: Option<JvmAbsence>,
     wasm: Option<String>,
@@ -1595,7 +1645,7 @@ fn work_agrees(row: &Row) -> Result<()> {
 ///
 /// `NTS_BENCH_LANES=jvm` runs the JVM backend, the Java reference and node.
 /// Anything filtered out renders `--`, the same as a lane that refused, so a
-/// filtered run is never mistaken for a published one -- and `finish_row`
+/// filtered run is never mistaken for a published one -- and `publish`
 /// refuses to write the README from a filtered run for the same reason a
 /// filtered *case* list does.
 fn wanted_lanes() -> Option<Vec<String>> {
@@ -1693,15 +1743,68 @@ fn idle_reference(row: &mut Row, listed: &[(&str, &str)]) -> Result<()> {
     }
 }
 
-fn finish_row(
+/// One case's measurements, before they become a row: what a run saves
+/// (`Run`), so that the table can be rendered again from them without timing
+/// anything (`nts-bench --render`).
+#[derive(Serialize, Deserialize)]
+struct Measurements {
+    shown: String,
+    results: Vec<Option<Measured>>,
+    absences: Absences,
+    lowers: bool,
+    node: Measured,
+    bun: Option<Measured>,
+}
+
+/// A run, as `target/bench/run.json` keeps it: what was asked, what was
+/// measured, and what spoiled it. Rendering it again decides about the README
+/// exactly as the run did, from the same facts.
+#[derive(Serialize, Deserialize)]
+struct Run {
+    lanes: Option<Vec<String>>,
+    requested: Vec<String>,
+    cases: Vec<String>,
+    spoiled: Vec<String>,
+    measured: Vec<Measurements>,
+}
+
+/// Where a run is saved, beside what it built.
+fn run_file(root: &Utf8Path) -> Utf8PathBuf {
+    root.join("target/bench/run.json")
+}
+
+/// Render the README from a saved run (`--render [path]`): the rows are
+/// assembled again by today's code from the measurements as they were taken,
+/// so a change to how a row is judged reaches the table without re-timing it.
+fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
+    let text = std::fs::read_to_string(path).with_context(|| format!("reading {path}"))?;
+    let run: Run = serde_json::from_str(&text).with_context(|| format!("parsing {path}"))?;
+    let filtered = run.lanes.is_some();
+    let mut rows = Vec::new();
+    for measured in &run.measured {
+        match assemble(measured, filtered) {
+            Ok(row) => rows.push(row),
+            Err(error) => println!("{:<16} failed: {error:#}", measured.shown),
+        }
+    }
+    let cases_dir = root.join("benchmarks/cases");
+    let cases: Vec<Utf8PathBuf> = run.cases.iter().map(|case| cases_dir.join(case)).collect();
+    publish(
+        root,
+        &rows,
+        &cases,
+        &run.requested,
+        &run.spoiled,
+        run.lanes.as_deref(),
+    )
+}
+
+/// node, and bun where it runs, over the case's own harness.
+fn measure_hosts(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
-    shown: &str,
-    results: &[Option<Measured>],
-    absences: Absences,
-    lowers: bool,
-) -> Result<Row> {
+) -> Result<(Measured, Option<Measured>)> {
     let harness = node_harness(case, out, name)?;
     let node = measure(std::process::Command::new("node").arg(&harness))?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
@@ -1716,14 +1819,28 @@ fn finish_row(
             .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
             .transpose()?
     };
+    Ok((node, bun))
+}
 
-    agreed(results, bun.as_ref(), &node)?;
+/// A case's row, from its measurements: the checks a row must pass, and the
+/// console line. Run after measuring, and again by `--render`. `filtered`
+/// is whether `NTS_BENCH_LANES` chose the lanes.
+fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
+    let Measurements {
+        shown,
+        results,
+        absences,
+        lowers,
+        node,
+        bun,
+    } = measured;
+    let (shown, lowers) = (shown.as_str(), *lowers);
+    agreed(results, bun.as_ref(), node)?;
 
     // A lane that must run, unless a filter deliberately excluded it. Under
     // `NTS_BENCH_LANES` the C lanes are absent on purpose and their cells
     // render `--`; without one, an absent `nts` column is a failure, because
     // every ratio in the table divides by it.
-    let filtered = wanted_lanes().is_some();
     // Three ways our column can be absent, and only one of them is a defect.
     // A filter excluded it deliberately; this compiler refused the program, and
     // `--` is what the README's legend already calls that; or it should have run
@@ -1754,9 +1871,9 @@ fn finish_row(
         jvm: optional(4),
         jvm_absence: absences.jvm,
         java: optional(5),
-        bun: bun.map(|result| result.ns_per_op),
+        bun: bun.as_ref().map(|result| result.ns_per_op),
         wasm: optional(6),
-        wasm_absence: absences.wasm,
+        wasm_absence: absences.wasm.clone(),
         cpp_wasm: optional(7),
         cpp_wasmtime: optional(8),
         assemblyscript: optional(9),
@@ -3553,6 +3670,65 @@ mod tests {
     fn exceptions_says_whose_trace_its_node_ratio_measures() {
         assert!(row("exceptions").asymmetry().is_some());
         assert!(row("fib").asymmetry().is_none());
+    }
+
+    fn measured(ns: f64) -> super::Measured {
+        super::Measured {
+            ns_per_op: ns,
+            checksum: "3ff0000000000000".to_owned(),
+            spread: 1.0,
+        }
+    }
+
+    /// A saved run assembles the rows it assembled when it was measured: the
+    /// measurements survive the round trip through `run.json`.
+    #[test]
+    fn a_saved_run_assembles_the_same_rows() {
+        let measurements = super::Measurements {
+            shown: "fib".to_owned(),
+            results: vec![
+                Some(measured(10.0)),
+                Some(measured(12.0)),
+                Some(measured(9.0)),
+                Some(measured(10.5)),
+            ],
+            absences: super::Absences {
+                jvm: Some(super::JvmAbsence::NotRun),
+                wasm: Some("not run".to_owned()),
+            },
+            lowers: true,
+            node: measured(30.0),
+            bun: None,
+        };
+        let fresh = super::assemble(&measurements, false).expect("a row");
+        let text = serde_json::to_string(&measurements).expect("saved");
+        let saved: super::Measurements = serde_json::from_str(&text).expect("read back");
+        let again = super::assemble(&saved, false).expect("the same row");
+        assert_eq!(
+            (fresh.nts, fresh.cpp, fresh.llvm, fresh.node),
+            (again.nts, again.cpp, again.llvm, again.node)
+        );
+        assert_eq!(again.nts, Some(10.0));
+        assert_eq!(again.wasm_absence.as_deref(), Some("not run"));
+    }
+
+    /// A run of some lanes never reaches the README, over every case as over
+    /// a few.
+    #[test]
+    fn a_lane_filtered_run_leaves_the_readme_alone() {
+        let root = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .expect("a UTF-8 temporary directory")
+            .join(format!("nts-bench-lanes-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("a root");
+        let readme = "before\n<!-- benchmarks:start -->\nold\n<!-- benchmarks:end -->\n";
+        std::fs::write(root.join("README.md"), readme).expect("a README");
+        let rows = vec![row("fib")];
+        let cases = vec![root.join("benchmarks/cases/fib")];
+        super::publish(&root, &rows, &cases, &[], &[], Some(&["c".to_owned()]))
+            .expect("declines quietly");
+        let after = std::fs::read_to_string(root.join("README.md")).expect("still there");
+        std::fs::remove_dir_all(&root).expect("cleaned up");
+        assert_eq!(after, readme);
     }
 
     /// The set that matches is the only quiet answer.

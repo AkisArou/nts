@@ -158,6 +158,8 @@ dependencies = [
  "nts-codegen-wasm",
  "nts-core",
  "nts-frontend-ts",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
