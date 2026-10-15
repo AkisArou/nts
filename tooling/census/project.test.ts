@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
 import { caseRoot, collectCaseRoots, environment, materialise, workspace } from "./project.ts";
 import { parseDiagnostics } from "./attempt262.ts";
 

@@ -7,8 +7,9 @@
 // different programs while reporting the same corpus.
 
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, normalize } from "node:path";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -308,6 +309,149 @@ export function pinCompiler(nts, scratch) {
  * second handed the first's program, surfacing only because an unrelated check
  * happened to catch it.
  */
-export function environment() {
-  return { ...process.env, NTS_NO_SNAPSHOT_CACHE: "1" };
+export function environment({ snapshotCache = false } = {}) {
+  return { ...process.env, NTS_NO_SNAPSHOT_CACHE: snapshotCache ? "0" : "1" };
+}
+
+const ROOT_MANIFEST = ".nts-case-root.json";
+const ROOT_FORMAT = "nts-case-root-v1";
+const HOUR = 3600_000;
+
+function rootsBase(base?) {
+  return resolve(base ?? join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "nts/case-roots"));
+}
+
+function canonicalFlags(flags) {
+  if (!Array.isArray(flags) || flags.some((flag) => typeof flag !== "string")) throw new Error("case flags must be strings");
+  return [...new Set(flags)].sort();
+}
+
+/** Relative paths and bytes only: neither the scratch path nor its timestamps name a case. */
+function rootEntries(root) {
+  const entries = [];
+  const walk = (relative) => {
+    const path = join(root, relative);
+    const meta = lstatSync(path);
+    if (meta.isSymbolicLink()) throw new Error(`case root rejects symlinks: ${relative}`);
+    if (meta.isDirectory()) {
+      for (const name of readdirSync(path)) {
+        if (relative === "" && name === ROOT_MANIFEST) continue;
+        walk(relative ? `${relative}/${name}` : name);
+      }
+    } else if (meta.isFile()) {
+      const bytes = readFileSync(path);
+      entries.push([relative, bytes.length, createHash("sha256").update(bytes).digest("hex")]);
+    } else throw new Error(`case root requires regular files: ${relative}`);
+  };
+  walk("");
+  return entries.sort((a, b) => Buffer.compare(Buffer.from(a[0]), Buffer.from(b[0])));
+}
+
+function rootKey(flags, entries) {
+  return createHash("sha256").update(JSON.stringify([ROOT_FORMAT, flags, entries])).digest("hex");
+}
+
+function setTreeMode(path, readonly) {
+  const meta = lstatSync(path);
+  if (meta.isSymbolicLink()) return; // Cleanup never follows a rejected input's link.
+  if (meta.isDirectory()) {
+    if (!readonly) chmodSync(path, 0o700);
+    for (const name of readdirSync(path)) setTreeMode(join(path, name), readonly);
+    if (readonly) chmodSync(path, 0o555);
+  } else if (meta.isFile()) chmodSync(path, readonly ? 0o444 : 0o600);
+}
+
+function removeRoot(path) {
+  setTreeMode(path, false);
+  rmSync(path, { recursive: true, force: true });
+}
+
+function verifiedRoot(root, key, expected?) {
+  if (!lstatSync(root).isDirectory() || lstatSync(root).isSymbolicLink()) throw new Error("case winner is not a directory");
+  const manifestPath = join(root, ROOT_MANIFEST);
+  if (!lstatSync(manifestPath).isFile() || lstatSync(manifestPath).isSymbolicLink()) throw new Error("case manifest is not a regular file");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.format !== ROOT_FORMAT || manifest.state !== "published" || manifest.key !== key) throw new Error("invalid case winner manifest");
+  const flags = canonicalFlags(manifest.flags);
+  const entries = rootEntries(root);
+  if (rootKey(flags, entries) !== key || JSON.stringify(entries) !== JSON.stringify(manifest.entries)
+      || (expected && JSON.stringify(manifest) !== JSON.stringify(expected))) throw new Error("case winner content differs from its manifest");
+  return manifest;
+}
+
+function touchRoot(base, key, now = Date.now()) {
+  const uses = join(base, "uses");
+  mkdirSync(uses, { recursive: true });
+  const path = join(uses, key);
+  if (existsSync(path)) {
+    if (now - lstatSync(path).mtimeMs < HOUR) return;
+    utimesSync(path, new Date(now), new Date(now));
+  } else writeFileSync(path, "");
+}
+
+/**
+ * Publish one immutable input tree, shared across workers and backends.
+ * The callback fills a fresh directory; outputs belong in an attempt directory
+ * outside the returned root. Publication does no collection or directory sweep.
+ */
+export function caseRoot(materialise, { flags = [], base } = {}) {
+  base = rootsBase(base);
+  flags = canonicalFlags(flags);
+  mkdirSync(base, { recursive: true });
+  const temporary = mkdtempSync(join(base, ".tmp-"));
+  const owner = JSON.stringify({ format: ROOT_FORMAT, state: "building" });
+  writeFileSync(join(temporary, ROOT_MANIFEST), owner);
+  try {
+    materialise(temporary);
+    const marker = join(temporary, ROOT_MANIFEST);
+    if (!lstatSync(marker).isFile() || lstatSync(marker).isSymbolicLink() || readFileSync(marker, "utf8") !== owner) throw new Error(`${ROOT_MANIFEST} is reserved`);
+    const entries = rootEntries(temporary);
+    const key = rootKey(flags, entries);
+    const manifest = { format: ROOT_FORMAT, state: "published", key, flags, entries };
+    writeFileSync(marker, JSON.stringify(manifest));
+    setTreeMode(temporary, true);
+    const root = join(base, key);
+    let created = true;
+    try { renameSync(temporary, root); }
+    catch (error) {
+      if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error;
+      verifiedRoot(root, key, manifest);
+      created = false;
+    }
+    touchRoot(base, key);
+    return { root, key, created };
+  } finally {
+    if (existsSync(temporary)) removeRoot(temporary);
+  }
+}
+
+/** Explicit runner-start maintenance; only old, owned roots are eligible. */
+export function collectCaseRoots({ base, now = Date.now(), maxAge = 7 * 86400_000 } = {}) {
+  base = rootsBase(base);
+  if (!Number.isFinite(now) || !Number.isFinite(maxAge) || maxAge < 0) throw new Error("invalid case-root collection age");
+  if (!existsSync(base)) return { removed: 0 };
+  let removed = 0;
+  for (const name of readdirSync(base)) {
+    const root = join(base, name);
+    try {
+      const meta = lstatSync(root);
+      if (!meta.isDirectory() || meta.isSymbolicLink()) continue;
+      if (/^[a-f0-9]{64}$/.test(name)) {
+        const use = join(base, "uses", name);
+        if (now - (existsSync(use) ? lstatSync(use).mtimeMs : meta.mtimeMs) <= maxAge) continue;
+        verifiedRoot(root, name);
+        removeRoot(root);
+        rmSync(use, { force: true });
+        removed++;
+      } else if (name.startsWith(".tmp-") && now - meta.mtimeMs > maxAge) {
+        const marker = join(root, ROOT_MANIFEST);
+        if (lstatSync(marker).isSymbolicLink() || !lstatSync(marker).isFile()) continue;
+        const manifest = JSON.parse(readFileSync(marker, "utf8"));
+        if (manifest.format !== ROOT_FORMAT || !["building", "published"].includes(manifest.state)) continue;
+        removeRoot(root);
+        removed++;
+      }
+    } catch { /* Foreign, damaged or concurrently removed trees are retained. */ }
+  }
+  return { removed };
 }
