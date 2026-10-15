@@ -1840,14 +1840,16 @@ double nts_parse_float(const NtsString *s);
 NtsString *nts_decode_uri(const NtsString *s, double component);
 NtsString *nts_encode_uri(const NtsString *s, double component);
 
-/* `Number(v)` on an erased value: ToNumber over the tags a value carries.
+/* Implicit ToNumber over the primitive tags a value carries.
  *
  * A reference answers NaN, which is right for a plain object and not the whole
  * rule -- ToNumber of an object is ToPrimitive, and `Number([5])` is 5. The
- * lowering emits this only where the checker's type admits no object.
+ * lowering admits primitives by source type, or by a builtin argument's tag
+ * guard. That guard throws for Symbol/BigInt and stops object conversions by
+ * name before this helper.
  *
  * A bigint ends the program by name: implicit ToNumber of one is a TypeError,
- * which nothing here can throw, and no lowering checks for it first yet. So
+ * which nothing here can throw. It remains a second net behind the guard. So
  * this is **not** `NTS_READS_ONLY`: `pure` lets a compiler delete a call
  * whose result is unused and treats it as one that returns (clang spells it
  * `willreturn`), and either would drop or misplace the abort. */

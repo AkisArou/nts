@@ -23,6 +23,7 @@ use super::{
 use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
 use layout_collection::{BuilderLayouts, LayoutCollector};
+use numeric_arguments::Builtin as NumericBuiltin;
 
 /// The checker's `TypeFlagsUniqueESSymbol`: a `unique symbol`, one name
 /// distinguishable from every other, which the decoder leaves `Structured`.
@@ -20175,48 +20176,6 @@ enum MethodsOf {
     String,
 }
 
-/// What an explicit `undefined` is at an index argument of a built-in method,
-/// at `position` in the helper's arguments (the receiver is 0), as the number
-/// the runtime is handed. `None` where the argument is not an index.
-///
-/// Mostly what an omitted argument is, because the specification asks
-/// whether the *value* is undefined: `slice(1, undefined)` is `slice(1)`, an
-/// end at the length. Not where it asks whether the argument is *present*:
-/// `splice(1, undefined)` removes nothing where `splice(1)` removes the rest,
-/// `toSpliced` likewise, and an array's `lastIndexOf(x, undefined)` searches
-/// from `0` where `lastIndexOf(x)` searches from the end -- each is
-/// `ToIntegerOrInfinity(undefined)`, which is `0`. A string's `lastIndexOf`
-/// asks `ToNumber`, whose `NaN` is the end. `Infinity` is the end throughout,
-/// as [`absent_argument`] hands it.
-fn undefined_argument(receiver: MethodsOf, method: &str, position: usize) -> Option<f64> {
-    match (receiver, method, position) {
-        // The end, as an omitted end is: `slice(1, undefined)` is `slice(1)`,
-        // and a string's `lastIndexOf` reads `ToNumber(undefined)`, `NaN`.
-        (_, "slice", 2)
-        | (MethodsOf::String, "substring" | "substr" | "lastIndexOf" | "endsWith", 2)
-        | (MethodsOf::Array, "fill" | "copyWithin", 3) => Some(f64::INFINITY),
-        // `ToIntegerOrInfinity(undefined)`. As omitted for a start or a search
-        // position -- and *not* as omitted where the argument's presence is
-        // asked: `splice`'s and `toSpliced`'s count, an array's `lastIndexOf`
-        // start.
-        (_, "at" | "slice", 1)
-        | (MethodsOf::Array, "splice" | "toSpliced" | "with" | "copyWithin", 1)
-        | (
-            MethodsOf::Array,
-            "splice" | "toSpliced" | "lastIndexOf" | "fill" | "copyWithin" | "indexOf" | "includes",
-            2,
-        )
-        | (
-            MethodsOf::String,
-            "charAt" | "charCodeAt" | "codePointAt" | "substring" | "substr" | "repeat"
-            | "padStart" | "padEnd",
-            1,
-        )
-        | (MethodsOf::String, "indexOf" | "includes" | "startsWith", 2) => Some(0.0),
-        _ => None,
-    }
-}
-
 /// Which end of the array a walk starts from.
 ///
 /// `findLast`, `findLastIndex` and `reduceRight` are `find`, `findIndex` and
@@ -38877,6 +38836,7 @@ impl<'a> FuncBuilder<'a> {
         width: NodeId,
         value: NodeId,
     ) -> Result<ValueId, Diagnostic> {
+        let width_node = width;
         let width = self.lower_expression(width)?;
         let value = self.lower_expression(value)?;
         if self.values[value.0 as usize].ty != HirType::BigInt {
@@ -38884,6 +38844,8 @@ impl<'a> FuncBuilder<'a> {
         }
         // Both arguments are evaluated before ToIndex can throw. Keep its
         // comparisons in lowering so the caller can catch the RangeError.
+        let width =
+            self.builtin_number_argument((id, width_node), NumericBuiltin::BigIntWidth, 1, width)?;
         let width = self.coerce(width, &HirType::NUMBER, id)?;
         self.guard_buffer_length(
             id,
@@ -39263,8 +39225,8 @@ impl<'a> FuncBuilder<'a> {
         if let Some(to_stderr) = self.console_method(callee) {
             return Some(self.lower_console(id, arguments, to_stderr));
         }
-        if let Some(intrinsic) = self.intrinsic_of(callee) {
-            return Some(self.lower_intrinsic(id, intrinsic, arguments));
+        if let Some((intrinsic, builtin)) = self.intrinsic_of(callee) {
+            return Some(self.lower_intrinsic(id, intrinsic, builtin, arguments));
         }
         if let Some(decided) = self.lower_decided_static(id, callee, arguments) {
             return Some(decided);
@@ -55527,7 +55489,10 @@ impl<'a> FuncBuilder<'a> {
         element: HirType,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
+        let bigint = element == HirType::BigInt;
         let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        let arguments_values =
+            self.builtin_arguments(id, NumericBuiltin::TypedOf { bigint }, arguments)?;
         let origin = self.origin(id);
         // `f64::from(u32)` rather than `as`: an argument list longer than a
         // `u32` is not a program, and the cast clippy objects to would round
@@ -55548,8 +55513,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER))),
             origin.clone(),
         );
-        for (at, argument) in arguments.iter().enumerate() {
-            let value = self.lower_expression(*argument)?;
+        for (at, (argument, value)) in arguments.iter().zip(arguments_values).enumerate() {
             let value = self.coerce(value, &HirType::NUMBER, *argument)?;
             let index = self.push(
                 OpKind::ConstFloat(f64::from(u32::try_from(at).unwrap_or(u32::MAX))),
@@ -59279,10 +59243,6 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value)
             }
             Branch::Present(value) => self.narrowed(id, value),
-            Branch::Unerased(value, ty) => {
-                let origin = self.origin(id);
-                Ok(self.push(OpKind::Unerase { value }, ty, origin))
-            }
             Branch::ObjcGetter(receiver, object, property) => {
                 self.send_objc_getter(id, object, &property, Some(receiver))
             }
@@ -62827,6 +62787,12 @@ impl<'a> FuncBuilder<'a> {
         // and an `i32` receiver is common -- `charCodeAt` gives one.
         if name == "toString" && arguments.len() == 1 {
             let radix = self.lower_expression(arguments[0])?;
+            let radix = self.builtin_number_argument(
+                (id, arguments[0]),
+                NumericBuiltin::NumberMethod(&name),
+                1,
+                radix,
+            )?;
             let radix = self.coerce(radix, &HirType::NUMBER, arguments[0])?;
             let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
             let origin = self.origin(id);
@@ -62843,6 +62809,12 @@ impl<'a> FuncBuilder<'a> {
         // is nowhere at compile time to put it.
         if name == "toFixed" && arguments.len() == 1 {
             let digits = self.lower_expression(arguments[0])?;
+            let digits = self.builtin_number_argument(
+                (id, arguments[0]),
+                NumericBuiltin::NumberMethod(&name),
+                1,
+                digits,
+            )?;
             let digits = self.coerce(digits, &HirType::NUMBER, arguments[0])?;
             let value = self.coerce(receiver, &HirType::NUMBER, receiver_node)?;
             let origin = self.origin(id);
@@ -63867,75 +63839,34 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// **An index that may be `undefined` is what the method says `undefined`
     /// is**, which is not one thing: `xs.slice(1, undefined)` runs to the end,
-    /// and `xs.splice(1, undefined)` removes nothing ([`undefined_argument`]).
+    /// and `xs.splice(1, undefined)` removes nothing. `numeric_arguments`
+    /// owns both the conversion and that undefined policy.
     /// Lowered as it was, the erased value met the helper's `double` through
     /// an unerase nothing had tested, and C, LLVM, the JVM and RC all read an
     /// undefined `end` as `0` -- an empty slice, and agreeing with node only
     /// where `0` happened to be the answer, as `splice`'s count is.
     fn lower_method_arguments(
         &mut self,
+        id: NodeId,
         (receiver, method): (MethodsOf, &str),
         arguments: &[NodeId],
         args: &mut Vec<ValueId>,
     ) -> Result<(), Diagnostic> {
-        for argument in arguments {
-            let value = self.lower_expression(*argument)?;
+        let values = arguments
+            .iter()
+            .map(|argument| self.lower_expression(*argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        for (argument, value) in arguments.iter().zip(values) {
             let position = args.len();
-            let value = match undefined_argument(receiver, method, position) {
-                Some(meaning) => self.index_or_undefined(*argument, value, meaning)?,
-                None => value,
-            };
+            let value = self.builtin_number_argument(
+                (id, *argument),
+                NumericBuiltin::Method(receiver, method),
+                position,
+                value,
+            )?;
             args.push(value);
         }
         Ok(())
-    }
-
-    /// An index argument, or `meaning` where it is `undefined`.
-    ///
-    /// Asked of the type, which says whether the value can be `undefined`; the
-    /// erased representation is what the test reads. The unerase is in the arm
-    /// the tag test chose, so nothing reads an `undefined` as a number. A `null` is refused: TypeScript's index parameters are
-    /// `number` or `number | undefined`, so one came past the checker, and
-    /// `null` is `0` where `undefined` may be the end.
-    fn index_or_undefined(
-        &mut self,
-        argument: NodeId,
-        value: ValueId,
-        meaning: f64,
-    ) -> Result<ValueId, Diagnostic> {
-        if self.values[value.0 as usize].ty != HirType::Erased {
-            return Ok(value);
-        }
-        let absences = self.absences_of(argument).unwrap_or_default();
-        if !absences.contains(&super::tags::UNDEFINED) {
-            return Ok(value);
-        }
-        if absences.contains(&super::tags::NULL) {
-            return Err(self.unsupported(
-                argument,
-                "an index that may be null, which a method reads as `0` where `undefined` may mean the end",
-            ));
-        }
-        let origin = self.origin(argument);
-        let undefined = self.push(OpKind::ConstFloat(meaning), HirType::NUMBER, origin);
-        if self
-            .snapshot
-            .node_types
-            .get(&argument)
-            .is_some_and(|ty| holds_only_absences(self.snapshot, *ty))
-        {
-            return Ok(undefined);
-        }
-        let Some(absent) = self.absence_of(argument, value) else {
-            return Ok(value);
-        };
-        self.lower_branching_value_at(
-            argument,
-            HirType::NUMBER,
-            absent,
-            Branch::Value(undefined),
-            Branch::Unerased(value, HirType::NUMBER),
-        )
     }
 
     /// A method call on a typed array.
@@ -74240,14 +74171,14 @@ impl<'a> FuncBuilder<'a> {
     /// associate trusted *declaration identities* with a closed set of
     /// compiler-owned semantics, so the core never matches on a name at all.
     /// This is the shape that becomes.
-    fn intrinsic_of(&self, callee: NodeId) -> Option<Intrinsic> {
+    fn intrinsic_of(&self, callee: NodeId) -> Option<(Intrinsic, NumericBuiltin<'static>)> {
         let (object, member) = self.member_access(callee)?;
         if self.kind_of(object) != Some(syntax::IDENTIFIER) {
             return None;
         }
         let member = member.as_str();
         match self.node(object).text.as_deref()? {
-            "Math" => math_member(member),
+            "Math" => math_member(member).map(|intrinsic| (intrinsic, NumericBuiltin::Math)),
             // `Number`'s four predicates. The first two are `Number` only in
             // spelling: over a `number` they are exactly the global `isNaN`
             // and `isFinite`, because the whole difference the `Number.` forms
@@ -74256,22 +74187,28 @@ impl<'a> FuncBuilder<'a> {
             // `Number.parseInt` and the global are the same function object in
             // JavaScript, which is why this maps to the same helper rather than
             // to a second one.
-            "Number" => Some(match member {
-                "isNaN" => Intrinsic::NotANumber,
-                "isFinite" => Intrinsic::UnaryCall("nts_is_finite"),
-                "isInteger" => Intrinsic::UnaryCall("nts_is_integer"),
-                "isSafeInteger" => Intrinsic::UnaryCall("nts_is_safe_integer"),
-                _ => return None,
-            }),
+            "Number" => Some((
+                match member {
+                    "isNaN" => Intrinsic::NotANumber,
+                    "isFinite" => Intrinsic::UnaryCall("nts_is_finite"),
+                    "isInteger" => Intrinsic::UnaryCall("nts_is_integer"),
+                    "isSafeInteger" => Intrinsic::UnaryCall("nts_is_safe_integer"),
+                    _ => return None,
+                },
+                NumericBuiltin::NumberPredicate,
+            )),
             // Two functions rather than two names for one. `fromCharCode`
             // takes a UTF-16 code *unit* through `ToUint16` and always yields
             // one of them; `fromCodePoint` takes a code *point* and yields a
             // surrogate pair above 0xFFFF.
-            "String" => Some(match member {
-                "fromCharCode" => Intrinsic::UnaryCall("nts_string_from_char_code"),
-                "fromCodePoint" => Intrinsic::UnaryCall("nts_string_from_code_point"),
-                _ => return None,
-            }),
+            "String" => Some((
+                match member {
+                    "fromCharCode" => Intrinsic::UnaryCall("nts_string_from_char_code"),
+                    "fromCodePoint" => Intrinsic::UnaryCall("nts_string_from_code_point"),
+                    _ => return None,
+                },
+                NumericBuiltin::StringFactory,
+            )),
             _ => None,
         }
     }
@@ -74582,7 +74519,8 @@ impl<'a> FuncBuilder<'a> {
         let Some(text) = arguments.first() else {
             return Err(self.unsupported(id, "`parseInt` with no argument"));
         };
-        let value = self.lower_expression(*text)?;
+        let values = self.builtin_raw_arguments(arguments)?;
+        let value = values[0];
         let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
         let origin = self.origin(id);
         let radix = match arguments.get(1) {
@@ -74593,8 +74531,12 @@ impl<'a> FuncBuilder<'a> {
             // C promoted to the right number by luck and the JVM's stack
             // accounting refused.
             Some(node) => {
-                let given = self.lower_expression(*node)?;
-                let number = self.coerce_to_number(id, *node, given)?;
+                let number = self.builtin_number_argument(
+                    (id, *node),
+                    NumericBuiltin::ParseRadix,
+                    2,
+                    values[1],
+                )?;
                 self.coerce(number, &HirType::NUMBER, *node)?
             }
             None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
@@ -74782,11 +74724,16 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
         let primitive = primitive_builtin(name);
-        // `isNaN` and `isFinite`. Over a `number` these are exactly the
-        // `Number.` forms -- the whole difference between the two pairs is what
-        // they do to a value that is not a number, and one cannot reach here.
+        // The globals convert their argument; the Number predicates do not.
+        // Carry that semantic owner through intrinsic selection rather than
+        // inferring conversion from the shared numeric helper signature.
         if let Some(intrinsic) = global_predicate(name) {
-            return Some(self.lower_intrinsic(id, intrinsic, arguments));
+            return Some(self.lower_intrinsic(
+                id,
+                intrinsic,
+                NumericBuiltin::GlobalPredicate,
+                arguments,
+            ));
         }
         // `parseInt(string, radix)`, whose second argument is optional -- so it
         // is read here rather than below, where every builtin takes exactly
@@ -75157,6 +75104,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         intrinsic: Intrinsic,
+        builtin: NumericBuiltin<'_>,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let ty = self
@@ -75165,8 +75113,9 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
 
         match (intrinsic, arguments) {
-            (Intrinsic::Unary(op), [argument]) => {
-                let operand = self.lower_expression(*argument)?;
+            (Intrinsic::Unary(op), [_]) => {
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let operand = values[0];
                 Ok(self.push(OpKind::Unary { op, operand }, ty, origin))
             }
             // `Math.min(a, b, c)`, `Math.max(a)` and `Math.max()`.
@@ -75191,16 +75140,12 @@ impl<'a> FuncBuilder<'a> {
             // (`Math/max/Math.max_each-element-coerced.js`), and
             // `outcomes/math-max-converts-every-argument` is the record.
             //
-            // `coerce_to_number` is the same conversion `Number(x)` gets, which is
-            // the point: an object refuses there with "a conversion to number from
-            // this type", and now refuses here with it too. The record's own header
-            // observed that `Number(obj)` was refused while this compiled, which is
-            // one decision answered two ways.
+            // The builtin argument catalog now guards primitive ToNumber here.
+            // It throws for Symbol/BigInt, and objects stop by name until their
+            // ToPrimitive conversion is available.
             (Intrinsic::Binary(op @ (BinOp::Min | BinOp::Max)), args) => {
                 let mut folded: Option<ValueId> = None;
-                for argument in args {
-                    let operand = self.lower_expression(*argument)?;
-                    let operand = self.coerce_to_number(id, *argument, operand)?;
+                for operand in self.builtin_arguments(id, builtin, args)? {
                     folded = Some(match folded {
                         None => operand,
                         Some(lhs) => self.push(
@@ -75227,15 +75172,14 @@ impl<'a> FuncBuilder<'a> {
             // Every other binary `Math` member, and on the same terms: the
             // specification converts both arguments with `ToNumber` and so does
             // this. `Math.pow(obj, 2)` had the same `OperandsDiffer` waiting in it.
-            (Intrinsic::Binary(op), [left, right]) => {
-                let lhs = self.lower_expression(*left)?;
-                let lhs = self.coerce_to_number(id, *left, lhs)?;
-                let rhs = self.lower_expression(*right)?;
-                let rhs = self.coerce_to_number(id, *right, rhs)?;
+            (Intrinsic::Binary(op), [_, _]) => {
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let (lhs, rhs) = (values[0], values[1]);
                 Ok(self.push(OpKind::Binary { op, lhs, rhs }, ty, origin))
             }
-            (Intrinsic::NotANumber, [argument]) => {
-                let operand = self.lower_expression(*argument)?;
+            (Intrinsic::NotANumber, [_]) => {
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let operand = values[0];
                 Ok(self.push(
                     OpKind::Binary {
                         op: BinOp::Ne,
@@ -75246,8 +75190,9 @@ impl<'a> FuncBuilder<'a> {
                     origin,
                 ))
             }
-            (Intrinsic::UnaryCall(name), [argument]) => {
-                let operand = self.lower_expression(*argument)?;
+            (Intrinsic::UnaryCall(name), [_]) => {
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let operand = values[0];
                 // A code point the helper will not accept throws before it is
                 // reached. See `guard_code_point`.
                 if name == "nts_string_from_code_point" {
@@ -75255,9 +75200,9 @@ impl<'a> FuncBuilder<'a> {
                 }
                 Ok(self.runtime_call(name, vec![operand], ty, origin))
             }
-            (Intrinsic::BinaryCall(name), [left, right]) => {
-                let lhs = self.lower_expression(*left)?;
-                let rhs = self.lower_expression(*right)?;
+            (Intrinsic::BinaryCall(name), [_, _]) => {
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let (lhs, rhs) = (values[0], values[1]);
                 Ok(self.runtime_call(name, vec![lhs, rhs], ty, origin))
             }
             // `String.fromCharCode` takes any number of code units and the
@@ -75272,13 +75217,13 @@ impl<'a> FuncBuilder<'a> {
             // `fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff))`, which
             // is the surrogate pair, and there is no one-at-a-time spelling of
             // it that does not allocate the same two strings anyway.
-            (Intrinsic::UnaryCall(name), [first, rest @ ..])
+            (Intrinsic::UnaryCall(name), [_, rest @ ..])
                 if !rest.is_empty() && name == "nts_string_from_char_code" =>
             {
-                let operand = self.lower_expression(*first)?;
+                let values = self.builtin_arguments(id, builtin, arguments)?;
+                let operand = values[0];
                 let mut folded = self.runtime_call(name, vec![operand], ty.clone(), origin.clone());
-                for argument in rest {
-                    let operand = self.lower_expression(*argument)?;
+                for operand in values.into_iter().skip(1) {
                     let unit = self.runtime_call(name, vec![operand], ty.clone(), origin.clone());
                     // The *call* spelling of concatenation, not `BinOp::Concat`.
                     // The emitter renders both as `nts_concat`, but only a call
@@ -75299,10 +75244,8 @@ impl<'a> FuncBuilder<'a> {
                 }
                 Ok(folded)
             }
-            // `Math.min()` is `Infinity` and `Math.min(a, b, c)` folds, but both
-            // are shapes this lowering does not accept yet, and quietly
-            // producing the two-argument answer for a three-argument call would
-            // be wrong in a way nothing downstream could detect.
+            // Only the arities selected above are admitted. A helper's f64
+            // parameter is storage, not permission to reinterpret other calls.
             _ => Err(self.unsupported(id, "an intrinsic call with this many arguments")),
         }
     }
@@ -75430,17 +75373,7 @@ impl<'a> FuncBuilder<'a> {
         if name == "charCodeAt"
             && let [argument] = arguments
         {
-            let index = self.lower_expression(*argument)?;
-            let origin = self.origin(id);
-            return Ok(self.push(
-                OpKind::StringUnitAt {
-                    string: receiver,
-                    index,
-                    checked: true,
-                },
-                HirType::NUMBER,
-                origin,
-            ));
+            return self.builtin_string_unit_at(id, receiver, *argument);
         }
 
         // `s.concat()` concatenates nothing: `s` itself, which is immutable.
@@ -75526,7 +75459,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        self.lower_method_arguments((MethodsOf::String, name.as_str()), arguments, &mut args)?;
+        self.lower_method_arguments(id, (MethodsOf::String, name.as_str()), arguments, &mut args)?;
         let origin = self.origin(id);
 
         if let Some(folded) = self.fold_string_call(helper, &args, &ty, &origin) {
@@ -75799,7 +75732,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        self.lower_method_arguments((MethodsOf::Array, &name), arguments, &mut args)?;
+        self.lower_method_arguments(id, (MethodsOf::Array, &name), arguments, &mut args)?;
         let origin = self.origin(id);
         self.fill_array_arguments((id, &name), arity, &mut args, &origin)?;
         if args.len() != arity + 1 {
@@ -77010,7 +76943,7 @@ impl<'a> FuncBuilder<'a> {
         // Lowered before the helper is chosen, because the choice now depends
         // on the needle's type and not only on the array's.
         let mut args = vec![receiver];
-        self.lower_method_arguments((MethodsOf::Array, name), arguments, &mut args)?;
+        self.lower_method_arguments(id, (MethodsOf::Array, name), arguments, &mut args)?;
         let needle_is_erased = args
             .get(1)
             .is_some_and(|value| self.values[value.0 as usize].ty == HirType::Erased);
@@ -82563,10 +82496,6 @@ enum Native {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
-    /// An erased value the branch's test proved present, read at this type in
-    /// its arm -- here and not before the branch, because an unerase is a read
-    /// only a tag test licenses. See [`FuncBuilder::index_or_undefined`].
-    Unerased(ValueId, HirType),
     /// A parameter's default, in the arm where the argument a call passed for
     /// it is `undefined`: see [`FuncBuilder::lower_parameter_default`], whose
     /// arguments these are -- the call, the default, the callee, the arguments
@@ -83371,6 +83300,7 @@ mod interfaces;
 mod layout_collection;
 mod literal_methods;
 mod native_memory;
+mod numeric_arguments;
 mod printed;
 mod property_keys;
 mod typed_signatures;

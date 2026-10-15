@@ -6181,11 +6181,11 @@ static bool nts_number_radix(const char *text, size_t length, double *out) {
  * rule. ToNumber of an object is ToPrimitive first, which runs `valueOf` and
  * `toString` off a prototype chain: `Number([])` is 0 and `Number([5])` is 5,
  * neither of which this can produce. So the lowering only emits this call where
- * the checker's type admits no object -- `typeof v === "string" || typeof v ===
- * "boolean"` is the shape that reaches it -- and the arm is here because a tag
- * switch with a hole is worse than one with an answer that cannot be reached.
- * NaN is also what the specification gives for a plain `{}`, so the unreachable
- * case is at least not a surprising number. */
+ * the checker's type or a builtin argument's tag guard admits no object. The
+ * builtin guard throws for Symbol/BigInt before this call. The arm is here
+ * because a tag switch with a hole is worse than one with an answer that cannot
+ * be reached. NaN is also what the specification gives for a plain `{}`, so the
+ * unreachable case is at least not a surprising number. */
 double nts_value_to_number(NtsValue value) {
   switch (nts_value_tag(value)) {
   case NTS_TAG_NUMBER:

@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 6 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "checked 58 cases across 2 function(s) | agreed on every case",
   "node": null,
-  "measured_with": "57175a82121a6c73",
+  "measured_with": "a758a0b875aaad32",
   "source": "measured"
 }
