@@ -43,11 +43,36 @@ function unknownValues(): Record<string, unknown> {
     "null": 7, "undefined": 8, "17": 9, "NaN": 10,
     "Infinity": 11, "-Infinity": 12 };
 }
+// Drive every key kind in each run: the differential input pool alone does
+// not visit every residue modulo 12. The control differs only in its key.
+function exercise(key: any, spelling: string, n: number): string {
+  const record = values();
+  const read = record[key];
+  const present = key in record;
+  const own = Object.hasOwn(record, key);
+  record[key] = n & 3;
+  record[key] += 2;
+  const post = record[key]++;
+  const pre = ++record[key];
+  const down = record[key]--;
+  const before = --record[key];
+  const stored = record[spelling];
+  const removed = delete record[key];
+  const again = delete record[key];
+  const absent = key in record;
+  return String(read) + ":" + String(present) + ":" + String(own) + ":"
+    + String(post + pre + down + before + stored) + ":"
+    + String(removed) + ":" + String(again) + ":" + String(absent) + ";";
+}
 export function readPrimitive(n: number): string {
-  return String(unknownValues()[pick(n)]);
+  let result = "";
+  for (let i = 0; i < 12; i++) result += exercise(pick(i), spelling(i), n);
+  return result;
 }
 export function readStringControl(n: number): string {
-  return String(unknownValues()[spelling(n)]);
+  let result = "";
+  for (let i = 0; i < 12; i++) result += exercise(spelling(i), spelling(i), n);
+  return result;
 }
 export function writePrimitive(n: number): number {
   const record = values();
