@@ -57007,8 +57007,8 @@ impl<'a> FuncBuilder<'a> {
     /// the wrong one reads the elements wrongly: `nts_array_slice` copies eight
     /// bytes an element, and the rest element called it for every array, so a
     /// rest over an `unknown[]` held halves of sixteen-byte values (the Wasm
-    /// lane's test262 parity run; tests/outcomes/a-rest-element-copies-erased-
-    /// elements-as-numbers).
+    /// lane's test262 parity run; tests/programs/a-rest-element-over-erased-
+    /// elements is the guard).
     fn slice_helper(
         &self,
         at: NodeId,
