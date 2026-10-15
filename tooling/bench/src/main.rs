@@ -838,6 +838,30 @@ fn wasm_absences(rows: &[Row]) -> String {
     )
 }
 
+/// The mark on a ratio against node that measures work nts does not do.
+const ASYMMETRIC: char = '\u{b6}';
+
+/// `cell` with `mark` after it where `marked` holds; a `--` stays bare.
+fn marked(cell: String, marked: bool, mark: char) -> String {
+    if marked && cell != "--" {
+        format!("{cell}{mark}")
+    } else {
+        cell
+    }
+}
+
+/// What the `ASYMMETRIC` mark means, for each case that carries it.
+fn asymmetric(rows: &[Row]) -> String {
+    use std::fmt::Write as _;
+    let mut said = String::new();
+    for row in rows {
+        if let Some(why) = row.asymmetry() {
+            let _ = write!(said, "\n{ASYMMETRIC} `{}`: {why}.\n", row.case);
+        }
+    }
+    said
+}
+
 fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     // Split out for the length limit, and because the two are different kinds
     // of thing: one is the numbers, the other is what a reader has to know
@@ -884,9 +908,17 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
             row.assemblyscript.map_or_else(|| "--".to_owned(), human),
             human(row.node),
             row.quotable(row.against(row.cpp), ["nts (C)", "C++"]),
-            row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
+            marked(
+                row.quotable(row.against(Some(row.node)), ["nts (C)", "node"]),
+                row.asymmetry().is_some(),
+                ASYMMETRIC
+            ),
             row.quotable(row.jvm_against_java(), ["nts (JVM)", "Java"]),
-            row.quotable(row.wasm_against_node(), ["nts (Wasm)", "node"]),
+            marked(
+                row.quotable(row.wasm_against_node(), ["nts (Wasm)", "node"]),
+                row.asymmetry().is_some(),
+                ASYMMETRIC
+            ),
             row.quotable(row.wasm_against_cpp_wasm(), ["nts (Wasm)", "C++ (wasm)"]),
             row.quotable(
                 row.wasm_against_assemblyscript(),
@@ -927,8 +959,9 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
     } else {
         ""
     };
+    let marks = asymmetric(rows);
     let updated = format!(
-        "{}{START}\n{table}{mark}{wasm_absences}{legend}{spreads}{}",
+        "{}{START}\n{table}{mark}{marks}{wasm_absences}{legend}{spreads}{}",
         &text[..from],
         &text[to..]
     );
@@ -1086,6 +1119,24 @@ impl Row {
             Some(ours) => format!("{ours_over:.2}x", ours_over = ours / self.node),
             None => "--".to_owned(),
         }
+    }
+
+    /// Whether the C++ built for WASI skipped the work its native build did: a
+    /// WASI cell more than [`IDLE_FACTOR`] times faster than native C++ on the
+    /// same `ref.cpp` answered without running the loop. `optional-chain`'s
+    /// loop has a closed form; for x86 LLVM vectorises it and runs it (10.29
+    /// us), for `wasm32` without SIMD it takes the closed form instead (1.6 ns).
+    fn cpp_wasm_idle(&self) -> bool {
+        matches!((self.cpp, self.cpp_wasm), (Some(native), Some(wasm)) if wasm * IDLE_FACTOR < native)
+    }
+
+    /// Why node's column measures work nts does not do, where it does.
+    fn asymmetry(&self) -> Option<&'static str> {
+        let case = self.case.strip_suffix(" (rc)").unwrap_or(&self.case);
+        KNOWN_ASYMMETRIC
+            .iter()
+            .find(|(name, _)| *name == case)
+            .map(|(_, why)| *why)
     }
 
     /// The Wasm lane against the hand-written C++ as WebAssembly on the same
@@ -1609,6 +1660,39 @@ fn validate_lanes() -> Result<()> {
     )
 }
 
+/// The tripwire on a C++ reference that did no work as WASI
+/// (`Row::cpp_wasm_idle`): a listed case loses its WASI cells, said why; any
+/// other fails the run, and so does a listed case that did the work, so the
+/// list cannot outlive its cause.
+fn idle_reference(row: &mut Row) -> Result<()> {
+    let case = row
+        .case
+        .strip_suffix(" (rc)")
+        .unwrap_or(&row.case)
+        .to_owned();
+    let listed = WASI_IDLE_TODAY.iter().find(|(name, _)| *name == case);
+    match (row.cpp_wasm_idle(), listed) {
+        (true, Some((_, why))) => {
+            println!(
+                "note: {case:<16} C++ (wasm) is `--`: the reference did no work as WASI, {why}"
+            );
+            row.cpp_wasm = None;
+            row.cpp_wasmtime = None;
+            Ok(())
+        }
+        (true, None) => bail!(
+            "{case}: the reference did no work as WASI -- {} against {} natively. Make its \
+             loop carry each round into the next, or list it in WASI_IDLE_TODAY with why",
+            row.cpp_wasm.map_or_else(|| "--".to_owned(), human),
+            row.cpp.map_or_else(|| "--".to_owned(), human),
+        ),
+        (false, Some(_)) if row.cpp.is_some() && row.cpp_wasm.is_some() => {
+            bail!("{case} is in WASI_IDLE_TODAY, and its C++ (wasm) did the work: take it out")
+        }
+        _ => Ok(()),
+    }
+}
+
 fn finish_row(
     case: &Utf8Path,
     out: &Utf8Path,
@@ -1678,16 +1762,24 @@ fn finish_row(
         assemblyscript: optional(9),
         varied: Vec::new(),
     };
+    idle_reference(&mut row)?;
     // A row whose own passes disagree has no single number, and printing one of
     // them as though it were the answer is the failure this table exists to
     // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
+    // A cell `idle_reference` dropped is not published, so it has no spread.
     for (label, measured) in [
         ("nts (JVM)", results.get(4)),
         ("Java", results.get(5)),
         ("nts (C)", results.get(1)),
         ("nts (Wasm)", results.get(6)),
-        ("C++ (wasm)", results.get(7)),
-        ("C++ (wasmtime)", results.get(8)),
+        (
+            "C++ (wasm)",
+            results.get(7).filter(|_| row.cpp_wasm.is_some()),
+        ),
+        (
+            "C++ (wasmtime)",
+            results.get(8).filter(|_| row.cpp_wasmtime.is_some()),
+        ),
         ("AssemblyScript", results.get(9)),
     ] {
         if let Some(Some(measured)) = measured
@@ -3235,6 +3327,35 @@ fn refusal_drift(rows: &[Row], known: &[(&str, &str)]) -> Option<String> {
     Some(said)
 }
 
+/// How much faster than its native build a C++ WASI cell may be before it is
+/// taken for a build that skipped the work (`Row::cpp_wasm_idle`): the run
+/// fails, "the reference did no work", unless the case is listed below.
+const IDLE_FACTOR: f64 = 50.0;
+
+/// The cases whose C++ reference does no work as WASI, until their loop is
+/// made to carry each round into the next: their C++ (wasm) cells are left
+/// out, said why, and a listed case that does the work again fails the run
+/// too, so the list cannot outlive its cause.
+const WASI_IDLE_TODAY: &[(&str, &str)] = &[
+    (
+        "optional-chain",
+        "its loop has a closed form, which LLVM takes for wasm32 where for x86 it \
+         vectorises the loop and runs it",
+    ),
+    (
+        "generic-classes",
+        "its loop has a closed form, which LLVM takes for wasm32",
+    ),
+];
+
+/// Cases whose node column measures work nts does not do at all, and what.
+/// Their ratios against node are marked, and say nothing about generated code.
+const KNOWN_ASYMMETRIC: &[(&str, &str)] = &[(
+    "exceptions",
+    "node and Java build a stack trace for every throw, which nts does not do, \
+     so its ratios against them measure the trace",
+)];
+
 const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
     // 5.74, 5.74 and 5.38 us on one sitting against 4.49, 4.44 and 4.48 on
     // another, out of one class file — and the *reference* is the bimodal half,
@@ -3360,7 +3481,8 @@ fn human(ns: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        REFUSES_TODAY, Row, driver_entries, lost_case_decline, missing_entry, refusal_drift,
+        REFUSES_TODAY, Row, driver_entries, idle_reference, lost_case_decline, missing_entry,
+        refusal_drift,
     };
     use camino::Utf8PathBuf;
 
@@ -3396,6 +3518,47 @@ mod tests {
     /// A refusal the tests list, so every arm below is exercised whether or not
     /// `REFUSES_TODAY` has an entry today.
     const KNOWN: &[(&str, &str)] = &[("json-stringify-doc", "for the tests")];
+
+    /// A C++ reference far faster as WASI than natively did no work: listed,
+    /// its WASI cells go; unlisted, the run fails; listed and working, too.
+    #[test]
+    fn a_reference_that_did_no_work_as_wasi_is_caught() {
+        let idle = |case: &str| Row {
+            cpp: Some(10_000.0),
+            cpp_wasm: Some(1.5),
+            cpp_wasmtime: Some(1.4),
+            ..row(case)
+        };
+        let mut listed = idle("optional-chain");
+        assert!(idle_reference(&mut listed).is_ok());
+        assert_eq!(listed.cpp_wasm, None);
+        assert_eq!(listed.cpp_wasmtime, None);
+        let said = idle_reference(&mut idle("fib"))
+            .expect_err("an unlisted reference that did no work fails the run")
+            .to_string();
+        assert!(said.contains("did no work"), "{said}");
+        let mut working = Row {
+            cpp: Some(10_000.0),
+            cpp_wasm: Some(12_000.0),
+            ..row("generic-classes")
+        };
+        let said = idle_reference(&mut working)
+            .expect_err("a listed reference that did the work fails the run")
+            .to_string();
+        assert!(said.contains("take it out"), "{said}");
+        let mut filtered = Row {
+            cpp: None,
+            cpp_wasm: Some(12_000.0),
+            ..row("generic-classes")
+        };
+        assert!(idle_reference(&mut filtered).is_ok());
+    }
+
+    #[test]
+    fn exceptions_says_whose_trace_its_node_ratio_measures() {
+        assert!(row("exceptions").asymmetry().is_some());
+        assert!(row("fib").asymmetry().is_none());
+    }
 
     /// The set that matches is the only quiet answer.
     #[test]
