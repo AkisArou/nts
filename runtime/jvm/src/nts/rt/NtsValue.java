@@ -99,6 +99,23 @@ public final class NtsValue {
         return value == null ? UNDEFINED_VALUE : new NtsValue(OBJECT, 0.0, value);
     }
     /**
+     * What an erased array's `num` holds when its null slots are `null`.
+     * Every other reference leaves `num` at zero, and nothing that switches on
+     * a reference tag reads it, so the mark is free to carry.
+     */
+    static final double NULL_SLOTS = 1.0;
+    /**
+     * An erased `(T | null)[]`: an object whose null elements are `null`, which
+     * {@link #arrayElement} answers ahead of the read site's own guess. The
+     * static element type that knew this is gone once the array is erased --
+     * `Array.isArray(a) ? a[1] : 0` on an `unknown` reads `any[]`, and a null
+     * slot there means a hole, `undefined`. `OpKind::Erase`'s `slots`.
+     */
+    public static NtsValue ofArrayWithNullSlots(Object array, boolean absentIsUndefined) {
+        if (array == null) { return absentIsUndefined ? UNDEFINED_VALUE : NULL_VALUE; }
+        return new NtsValue(OBJECT, NULL_SLOTS, array);
+    }
+    /**
      * A string whose absence is `undefined`: an element of a `(string |
      * undefined)[]`, whose empty slot is the null reference. `ofString` reads
      * that null as `null`, and {@link #ofObjectOrUndefined} would tag a present
@@ -658,12 +675,17 @@ public final class NtsValue {
      *
      * <p>`nullSlot` is the tag a null reference slot reads as -- `NULL` or
      * `UNDEFINED`, the one absence the element type admits, which the lowering
-     * knows and a Java null does not say.
+     * knows and a Java null does not say. An array erased as `(T | null)[]`
+     * overrides it ({@link #ofArrayWithNullSlots}): its null slots are `null`
+     * whatever the read site guesses, as C's array header bit says there.
      */
     public static NtsValue arrayElement(NtsValue array, double index, int nullSlot) {
         Object ref = array == null ? null : array.ref;
         if (ref == null) {
             return UNDEFINED_VALUE;
+        }
+        if (array.num == NULL_SLOTS) {
+            nullSlot = NULL;
         }
         int at = (int) index;
         if (at < 0 || (double) at != index) {

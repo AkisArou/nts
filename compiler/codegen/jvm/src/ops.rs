@@ -3570,6 +3570,11 @@ impl Emitter<'_> {
             ));
         }
         match kind {
+            OpKind::Erase {
+                value,
+                absent,
+                slots: nts_core::hir::Absent::Null,
+            } => self.erase_with_null_slots(code, pool, *value, *absent, origin),
             OpKind::Erase { value, absent, .. } => {
                 self.erase(code, pool, Some(result), *value, *absent, origin)
             }
@@ -3730,6 +3735,50 @@ impl Emitter<'_> {
     /// The payload is a `double` whatever the number was, which is what lets one
     /// erased value hold any of them -- so the widening happens here rather than
     /// being a second representation to keep in step with the first.
+    /// **An erased `(T | null)[]` says its null slots are `null`** (`OpKind::
+    /// Erase`'s `slots`). The static element type that knew it is gone once the
+    /// array is erased, and `arrayElement` reads a null slot by the *read
+    /// site's* type: `undefined` for `any[]`, a hole's answer. So the erased
+    /// value carries the fact, in its `num`, which no reference tag reads --
+    /// nothing to allocate beyond the wrapper this erase builds anyway, and it
+    /// travels with every copy of the value. C marks the array object instead
+    /// (`nts_array_mark_null_slots`); the two differ only for one array erased
+    /// both as `(T | null)[]` and as `T[]`, which needs a null in a `T[]` the
+    /// types forbid.
+    ///
+    /// Never unboxed: `unbox` takes only an object's erasure, so the wrapper the
+    /// mark lives in is always built.
+    fn erase_with_null_slots(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+        absent: nts_core::hir::Absent,
+        origin: &nts_semantic_schema::Origin,
+    ) -> Result<Placed, Diagnostic> {
+        if !matches!(self.ty(value), HirType::Managed(ManagedType::Array(_))) {
+            return Err(refuse(
+                self.func,
+                "an erasure that marks null slots on a value that is not an array, \
+                 which the verifier rejects",
+            ));
+        }
+        self.load(code, pool, value)?;
+        code.const_int(
+            origin,
+            pool,
+            i32::from(absent == nts_core::hir::Absent::Undefined),
+        );
+        code.invoke_static(
+            origin,
+            pool,
+            types::VALUE,
+            "ofArrayWithNullSlots",
+            "(Ljava/lang/Object;Z)Lnts/rt/NtsValue;",
+        );
+        Ok(Placed::OnStack)
+    }
+
     fn erase(
         &mut self,
         code: &mut Code,
