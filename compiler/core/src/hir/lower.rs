@@ -20443,7 +20443,7 @@ enum CallbackResult {
     /// the loop.
     Store { array: ValueId, index: u32 },
     /// `Array.from` maps during its source walk. The private output's length
-    /// before the callback is its dense index, and the checked store grows it.
+    /// before the callback is its dense index; the append policy grows it.
     Append { array: ValueId, index: ValueId },
     /// `some` and `every`: it decides whether to stop.
     ///
@@ -37003,7 +37003,7 @@ impl<'a> FuncBuilder<'a> {
     /// where it *is* known would size the allocation exactly and cost a second
     /// path through this function to be wrong in; the growth strategy record
     /// 0029 describes is what makes appending the right answer for all five.
-    /// `Array.from(xs, f)`: the walk, then the callback over what it built.
+    /// `Array.from(xs, f)` runs its callback between steps of this walk.
     ///
     /// **Two features wear this name and only one of them is here.** With an
     /// iterable the second argument is a mapping callback; with `{ length: n }`
