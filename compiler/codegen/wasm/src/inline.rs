@@ -27,9 +27,12 @@ use nts_semantic_schema::Origin;
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 use wasm_encoder::{BlockType, Instruction as I, ValType};
 
-/// The largest callee body inlined, in bytes: under V8's own 500, and above
-/// towers' `pushDisk` (272).
-const CALLEE_BYTES: usize = 300;
+/// The largest callee body inlined, in bytes, measured by row: at 300,
+/// AWFY's permute and bounce kept their hot callees as calls (`swap`, and
+/// `Ball#bounce` at 353 once its null checks are each made once); at 500 --
+/// V8's own bound -- permute runs 0.62 of its time without inlining and bounce
+/// 0.55, while queens, towers and the rest move no further.
+const CALLEE_BYTES: usize = 500;
 /// How large a caller may grow, as a multiple of its own size...
 const GROWTH: usize = 3;
 /// ...or to this many bytes, for a short caller of a few callees.
