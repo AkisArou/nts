@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentType { func: \"probe\", callee: \"Closure0#call\", at: 1, expected: Managed(Object(TypeId(5))), found: Managed(Array(Int { bits: 32, signed: true })) }",
+  "node": null,
+  "measured_with": "a236c37af9401a01",
+  "source": "measured"
+}

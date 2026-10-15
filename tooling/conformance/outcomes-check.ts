@@ -340,12 +340,17 @@ function runCheck(dir, backend, options) {
   // of the record and the check reads "agreed on every case" over cases that
   // never ran (CompilerHelper's BigInt(number) probe, 2026-10-14: 21 of 696).
   const declined = /\bcase\(s\) the compiled program declined\b/;
+  // And invalid HIR by its words too: `nts check` says it as
+  // "Error: invalid HIR: …", which a line-start match dropped, so the JVM
+  // lane's `function ([]) {…}` over an array literal recorded as not measured
+  // (2026-10-15). The prefix goes, so the record reads as `emit-c`'s does.
   const lines = said.filter(
     (l) =>
       /^(checked|agreed|disagree|declined|refused:|not emitted:|nothing to check|invalid HIR)/i.test(l) ||
       /\bdisagree/i.test(l) ||
+      /\binvalid HIR\b/.test(l) ||
       declined.test(l),
-  ).map(stableCheckText);
+  ).map((l) => stableCheckText(l.replace(/^Error: (?=invalid HIR)/, "")));
   const text = lines.join(" | ");
   if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
   // **A backend's refusal by name is a refusal**, as a lowering's is: `nts

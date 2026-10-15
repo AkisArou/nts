@@ -1,8 +1,8 @@
 {
   "run": "check",
   "category": "invalid-hir",
-  "nts": "invalid HIR: StoreType { func: \"g@0arrf64__resume\", what: \"a field read\", expected: Managed(Object(TypeId(5))), found: Managed(Array(Int { bits: 32, signed: true })) }",
+  "nts": "invalid HIR: StoreType { func: \"g@0arrf64\", what: \"a field\", expected: Managed(Object(TypeId(5))), found: Managed(Array(Int { bits: 32, signed: true })) } | invalid HIR: StoreType { func: \"g@0arrf64__resume\", what: \"a field read\", expected: Managed(Object(TypeId(5))), found: Managed(Array(Int { bits: 32, signed: true })) }",
   "node": null,
-  "measured_with": "a236c37af9401a01",
+  "measured_with": "c415341d8b2d8358",
   "source": "measured"
 }
