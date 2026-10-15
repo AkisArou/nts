@@ -28,6 +28,32 @@ use wasm_encoder::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Func(u32);
 
+#[cfg(test)]
+impl Func {
+    /// A symbol for a body built by hand, outside any builder.
+    pub(crate) const fn by_hand(index: u32) -> Self {
+        Self(index)
+    }
+}
+
+/// An emitted body's size in bytes, each symbol standing in at its interning
+/// number: near the index assembly gives it, which is close enough for a
+/// size bound.
+pub(crate) fn encoded_size(body: &ir::Function) -> usize {
+    let mut encoded = wasm_encoder::Function::new_with_locals_types(body.locals.clone());
+    for inst in &body.code.insts {
+        encoded.instruction(&match inst {
+            ir::Inst::Op(i) => i.clone(),
+            ir::Inst::Call(f) => I::Call(f.0),
+            ir::Inst::RefFunc(f) => I::RefFunc(f.0),
+            ir::Inst::GlobalGet(g) => I::GlobalGet(g.0),
+            ir::Inst::GlobalSet(g) => I::GlobalSet(g.0),
+            ir::Inst::Throw(t) => I::Throw(t.0),
+        });
+    }
+    encoded.byte_len()
+}
+
 /// A global the builder interned; its index is assigned at assembly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Global(u32);
@@ -496,6 +522,44 @@ impl<'p> Builder<'p> {
         self.funcs[id.0 as usize].kind = FuncKind::Defined(Some(function));
     }
 
+    /// Every program function with a lowered body, for the inliner.
+    pub(crate) fn program_bodies(&self) -> Vec<Func> {
+        self.func_keys
+            .iter()
+            .filter(|(key, _)| matches!(key, FuncKey::Program(_)))
+            .map(|(_, func)| *func)
+            .filter(|func| self.body(*func).is_some())
+            .collect()
+    }
+
+    /// The functions the module exports, which keep their own bodies.
+    pub(crate) fn exported_funcs(&self) -> BTreeSet<Func> {
+        self.exports
+            .iter()
+            .filter_map(|(_, export)| match export {
+                Export::Func(func) => Some(*func),
+                Export::Global(_) => None,
+            })
+            .collect()
+    }
+
+    /// A function's parameters and result, as the module declares them.
+    pub(crate) fn signature(&self, func: Func) -> (&[Physical], Option<Physical>) {
+        let entry = &self.funcs[func.0 as usize];
+        (&entry.params, entry.result)
+    }
+
+    pub(crate) fn body(&self, func: Func) -> Option<&ir::Function> {
+        match &self.funcs[func.0 as usize].kind {
+            FuncKind::Defined(Some(body)) => Some(body),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn replace_body(&mut self, func: Func, body: ir::Function) {
+        self.set_body(func, body);
+    }
+
     /// A global. Its initializer is built first, so every global it reads is
     /// interned, and therefore indexed, before it.
     pub(crate) fn global(
@@ -637,6 +701,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     if !declines.is_empty() {
         return Err(EmitError::Declined(declines));
     }
+    crate::inline::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
     manifest.builtins = assembled.builtins;

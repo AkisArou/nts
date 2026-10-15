@@ -492,6 +492,90 @@ fn source_null_comparisons_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Small direct calls are inlined into their callers, and the program still
+/// answers what node answers: no export calls the helpers it used.
+#[test]
+fn small_direct_calls_are_inlined() {
+    let fixture = common::repository().join("tests/wasm/inlined-calls");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let index = |name: &str| {
+        names
+            .iter()
+            .position(|it| it == name)
+            .unwrap_or_else(|| panic!("no function `{name}` in {names:?}"))
+    };
+    let imported = imported_functions(&emitted.bytes);
+    // A helper and any copy specialised from it (`square#whole`).
+    let helpers: Vec<usize> = ["square", "clamp", "sumTo", "Counter#bump", "Counter#read"]
+        .into_iter()
+        .flat_map(|helper| {
+            index(helper);
+            names
+                .iter()
+                .enumerate()
+                .filter(move |(_, name)| *name == helper || name.starts_with(&format!("{helper}#")))
+                .map(|(at, _)| at)
+        })
+        .collect();
+    for caller in ["squares", "clamped", "sums", "counted"] {
+        let called = calls_from(&emitted.bytes, index(caller) - imported);
+        let left: Vec<&String> = helpers
+            .iter()
+            .filter(|helper| called.contains(helper))
+            .map(|helper| &names[*helper])
+            .collect();
+        assert!(left.is_empty(), "`{caller}` still calls {left:?}");
+    }
+    let output = common::run_with_node_flags(
+        "inlined-calls",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
+/// How many functions the module imports, which precede its own in the
+/// function index space.
+fn imported_functions(bytes: &[u8]) -> usize {
+    let mut count = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        if let wasmparser::Payload::ImportSection(reader) = payload.unwrap() {
+            for import in reader.into_imports() {
+                if matches!(import.unwrap().ty, wasmparser::TypeRef::Func(_)) {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+/// The function indices the `at`-th defined function calls directly.
+fn calls_from(bytes: &[u8], at: usize) -> Vec<usize> {
+    let mut seen = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+            if seen == at {
+                let mut called = vec![];
+                let mut reader = body.get_operators_reader().unwrap();
+                while !reader.eof() {
+                    if let wasmparser::Operator::Call { function_index } = reader.read().unwrap() {
+                        called.push(function_index as usize);
+                    }
+                }
+                return called;
+            }
+            seen += 1;
+        }
+    }
+    panic!("no function body {at}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

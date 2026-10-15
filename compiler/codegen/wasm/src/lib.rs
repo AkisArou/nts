@@ -35,6 +35,7 @@ mod glue;
 mod helpers;
 mod host;
 mod indexing;
+mod inline;
 mod ir;
 mod module;
 mod numeric;

@@ -135,6 +135,21 @@ pub(crate) fn lower(
     body.instruction(&I::Unreachable);
     body.instruction(&I::End);
     body.code.settle();
+    // Every local a structured body reads is written on every path to the
+    // read: its locals are SSA values and edge moves. The inliner leaves such
+    // a local as the last inlined copy left it, so a debug build -- the one
+    // the tests run -- checks the premise here. A dispatched body reaches a
+    // block only after the edge that writes its locals, which the `pc`
+    // decides and a structural dataflow cannot see, so the inliner resets
+    // those instead.
+    if cfg!(debug_assertions) && plan.structure.is_some() {
+        let unwritten = crate::inline::unwritten_reads(&body.code, func.params.len());
+        debug_assert!(
+            unwritten.is_empty(),
+            "`{}` reads locals {unwritten:?} that a path leaves unwritten",
+            func.name
+        );
+    }
     let route = FunctionRoute {
         name: func.name.clone(),
         route: plan.route(),
