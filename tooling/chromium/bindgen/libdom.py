@@ -162,7 +162,8 @@ def coverage(declarations, skips, allowlist, literals):
             totals["absent: " + kind] += len(names)
     reasons = collections.Counter(" ".join(why.split()[:2]) for row in rows.values() for why in row["skipped"].values())
     proven, unproven = literals
-    return {"libDom": os.path.relpath(LIB_DOM, ROOT), "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
+    return {"libDom": os.path.join("third_party", "typescript-go", os.path.relpath(LIB_DOM, TYPESCRIPT_GO)),
+            "totals": dict(totals), "skippedBy": dict(reasons.most_common()),
             "literals": {"proven": proven, "noFold": [f"{owner}.{member}: {literal} ({kind})"
                                                       for kind, owner, member, literal in unproven]},
             "interfaces": rows}

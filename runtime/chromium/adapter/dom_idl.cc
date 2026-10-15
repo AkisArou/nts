@@ -38548,6 +38548,12 @@ const NtsStringView* nts_dom_IntersectionObserver_get_scrollMargin(NtsDomInterse
   return context.Lend(nts_dom::AsString(receiver->scrollMargin()), false);
 }
 
+NtsDomDoubleSequence* nts_dom_IntersectionObserver_get_thresholds(NtsDomIntersectionObserver* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
+  return nts_dom::SequenceHandle<NtsDomDoubleSequence>(nts_dom::Sequence(receiver->thresholds()));
+}
+
 double nts_dom_IntersectionObserver_get_delay(NtsDomIntersectionObserver* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::IntersectionObserver>(self);
@@ -39315,6 +39321,12 @@ NtsDomImageData* nts_dom_CanvasRenderingContext2D_getImageData_5(NtsDomCanvasRen
   auto* imageDataSettings_converted = NtsDomToImageDataSettings(context, imageDataSettings, exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomImageData>(receiver->getImageData(sx_converted, sy_converted, sw_converted, sh_converted, imageDataSettings_converted, exception_state));
+}
+
+NtsDomDoubleSequence* nts_dom_CanvasRenderingContext2D_getLineDash(NtsDomCanvasRenderingContext2D* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  return nts_dom::SequenceHandle<NtsDomDoubleSequence>(nts_dom::Sequence(receiver->getLineDash()));
 }
 
 NtsDomDOMMatrix* nts_dom_CanvasRenderingContext2D_getTransform(NtsDomCanvasRenderingContext2D* self) {
@@ -58461,6 +58473,16 @@ double nts_dom_DOMStringSequence_get_length(NtsDomDOMStringSequence* self) {
 const NtsStringView* nts_dom_DOMStringSequence_item(NtsDomDOMStringSequence* self, double index) {
   NtsDomContext& context = nts_dom::Current();
   return context.Lend(nts_dom::AsString(nts_dom::SequenceOf<nts_dom::NtsTextSequence>(self)->item(index)), true);
+}
+
+double nts_dom_DoubleSequence_get_length(NtsDomDoubleSequence* self) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsNumberSequence>(self)->length());
+}
+
+double nts_dom_DoubleSequence_item(NtsDomDoubleSequence* self, double index) {
+  nts_dom::AssertEntered();
+  return static_cast<double>(nts_dom::SequenceOf<nts_dom::NtsNumberSequence>(self)->item(index));
 }
 
 double nts_dom_ElementSequence_get_length(NtsDomElementSequence* self) {

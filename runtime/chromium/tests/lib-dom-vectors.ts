@@ -793,6 +793,22 @@ export function libDomTranscript(): string {
     performance.clearMarks("given");
   }
 
+  // Lists of numbers answered: an observer's thresholds, one given as 0.1,
+  // which Blink keeps as a float (V8 reads it widened), and the default; and
+  // a canvas's line dash read back, empty until setLineDash binds (it waits
+  // on a lent number[]), so a non-empty dash readback is unexercised here.
+  {
+    const given = new IntersectionObserver((): void => {}, { threshold: 0.1 });
+    const plain = new IntersectionObserver((): void => {});
+    const thresholds = given.thresholds.join(",") + ":" + plain.thresholds.length + "," + plain.thresholds[0];
+    given.disconnect();
+    plain.disconnect();
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    const dash = context === null ? "none" : context.getLineDash().length + ":" + context.getLineDash().join(",");
+    log("numberLists", thresholds + "|" + dash);
+  }
+
   root.remove();
   return lines.join("\n");
 }

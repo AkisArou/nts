@@ -118,6 +118,15 @@ declare module "nts:dom" {
     /** @ntsSymbol nts_dom_DOMStringSequence_item */
     item(this: DOMStringSequence, index: Float64): StringView | null;
   }
+  export type DoubleSequence = HostClass<"NtsDomDoubleSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & DoubleSequenceMethods;
+  export interface DoubleSequenceMethods {
+    /** @ntsSymbol nts_dom_DoubleSequence_get_length */
+    _get_length(this: DoubleSequence): Float64;
+    /** @ntsGet _get_length */
+    readonly length: Float64;
+    /** @ntsSymbol nts_dom_DoubleSequence_item */
+    item(this: DoubleSequence, index: Float64): Float64;
+  }
   export type ElementSequence = HostClass<"NtsDomElementSequence", null, "nts_dom_sequence_retain", "nts_dom_sequence_release"> & ElementSequenceMethods;
   export interface ElementSequenceMethods {
     /** @ntsSymbol nts_dom_ElementSequence_get_length */
@@ -25470,6 +25479,14 @@ declare module "nts:dom" {
      */
     readonly scrollMargin: StringView;
     /**
+     * @ntsSymbol nts_dom_IntersectionObserver_get_thresholds
+     */
+    _get_thresholds(this: IntersectionObserver): DoubleSequence;
+    /**
+     * @ntsGet _get_thresholds
+     */
+    readonly thresholds: DoubleSequence;
+    /**
      * @ntsSymbol nts_dom_IntersectionObserver_get_delay
      */
     _get_delay(this: IntersectionObserver): Float64;
@@ -26159,6 +26176,10 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     getImageData(this: CanvasRenderingContext2D, sx: Float64, sy: Float64, sw: Float64, sh: Float64, imageDataSettings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+    /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_getLineDash
+     */
+    getLineDash(this: CanvasRenderingContext2D): DoubleSequence;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_getTransform
      */

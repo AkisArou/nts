@@ -250,6 +250,29 @@ private:
   blink::Vector<blink::String> items_;
 };
 
+// Of numbers (`sequence<unrestricted double>`, `FrozenArray<double>`):
+// `getLineDash()`, an observer's `thresholds` -- each the double V8 answers,
+// a float widened exactly. The program reads each in range, copying the
+// sequence into its array; past the end is NaN, which no copy reads.
+class NtsNumberSequence final : public HeldSequence {
+public:
+  template <class Number>
+  explicit NtsNumberSequence(const blink::Vector<Number> &items) {
+    items_.reserve(items.size());
+    for (Number item : items)
+      items_.push_back(item);
+  }
+  ~NtsNumberSequence() override;
+  double length() const { return items_.size(); }
+  double item(double index) const {
+    const auto at = At(index, items_.size());
+    return at ? items_[*at] : std::numeric_limits<double>::quiet_NaN();
+  }
+
+private:
+  blink::Vector<double> items_;
+};
+
 // A sequence's handle is its HeldSequence's address, whichever kind it is:
 // made from one, and read back as the kind its accessors know it to be.
 template <class Handle> Handle *SequenceHandle(HeldSequence *sequence) {
@@ -262,6 +285,12 @@ template <class Kind> Kind *SequenceOf(const void *handle) {
 template <class T>
 NtsSequence *Sequence(const blink::HeapVector<blink::Member<T>> &items) {
   return blink::MakeGarbageCollected<NtsSequence>(items);
+}
+inline NtsNumberSequence *Sequence(const blink::Vector<double> &items) {
+  return blink::MakeGarbageCollected<NtsNumberSequence>(items);
+}
+inline NtsNumberSequence *Sequence(const blink::Vector<float> &items) {
+  return blink::MakeGarbageCollected<NtsNumberSequence>(items);
 }
 inline NtsTextSequence *Sequence(const blink::Vector<blink::String> &items) {
   return blink::MakeGarbageCollected<NtsTextSequence>(items);

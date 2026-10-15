@@ -82,7 +82,7 @@
       ]
     },
     "chromium": {
-      "session": "nts-0c",
+      "session": "bay-bolide",
       "branch": "chromium/",
       "owns": [
         "docs/electron-like.md",

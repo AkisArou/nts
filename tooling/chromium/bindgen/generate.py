@@ -117,6 +117,7 @@ BYTE_STRING = "ByteString"
 # The element name of a sequence of strings: `DOMStringSequence`, whatever
 # string type its IDL names (no interface is called DOMString).
 TEXT_SEQUENCE = "DOMString"
+NUMBER_SEQUENCE = "Double"
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
@@ -903,6 +904,11 @@ class Generator:
                     raise Skip(f"result type {idl_type.syntactic_form}")
                 self.sequences.add(TEXT_SEQUENCE)
                 return Result(f"NtsDom{TEXT_SEQUENCE}Sequence*", f"{TEXT_SEQUENCE}Sequence", "sequence")
+            # `getLineDash()`, `thresholds`: a DoubleSequence
+            # (nts_dom::NtsNumberSequence), whose items are doubles.
+            if element.keyword_typename in ("double", "unrestricted double") and not element.does_include_nullable_type:
+                self.sequences.add(NUMBER_SEQUENCE)
+                return Result(f"NtsDom{NUMBER_SEQUENCE}Sequence*", f"{NUMBER_SEQUENCE}Sequence", "sequence")
             if not element.is_interface or element.does_include_nullable_type:
                 raise Skip(f"result type {idl_type.syntactic_form}")
             identifier = self.bound_interface(element).identifier
@@ -1888,18 +1894,21 @@ class Generator:
     def sequence_functions(self):
         """Each TSequence's `length` and `item(index)`, typed for its
         elements, over the adapter class of its kind: DOM objects
-        (nts_dom::NtsSequence) or strings (nts_dom::NtsTextSequence)."""
+        (nts_dom::NtsSequence), strings (nts_dom::NtsTextSequence) or numbers
+        (nts_dom::NtsNumberSequence)."""
         functions = []
         for identifier in sorted(self.sequences):
             handle = f"NtsDom{identifier}Sequence"
             text = identifier == TEXT_SEQUENCE
-            sequence = f"nts_dom::SequenceOf<nts_dom::{'NtsTextSequence' if text else 'NtsSequence'}>(self)"
+            kind = {TEXT_SEQUENCE: "NtsTextSequence", NUMBER_SEQUENCE: "NtsNumberSequence"}.get(identifier, "NtsSequence")
+            sequence = f"nts_dom::SequenceOf<nts_dom::{kind}>(self)"
             length = Function(None, f"nts_dom_{identifier}Sequence_get_length", [],
                               Result("double", 'Float64', "scalar"),
                               f"{sequence}->length()", False, False)
             item = Function(None, f"nts_dom_{identifier}Sequence_item",
                             [Param("index", "double index", 'index: Float64', "index", False)],
                             Result("const NtsStringView*", "StringView | null", "string", True) if text else
+                            Result("double", "Float64", "scalar") if identifier == NUMBER_SEQUENCE else
                             Result(f"{self.handle_tag(identifier)}*", f"{identifier} | null", "node"),
                             f"{sequence}->item(index)", False, False)
             for function in (length, item):
@@ -1908,6 +1917,14 @@ class Generator:
                 function.params = [Param("self", f"{handle}* self", "", "", False)] + function.params
             functions += [length, item]
         return functions
+
+    @staticmethod
+    def sequence_item_ts(identifier):
+        """What a sequence's `item(index)` answers: a string or an object, null
+        past the end, or a number (NaN past the end, nts_dom::NtsNumberSequence)."""
+        if identifier == NUMBER_SEQUENCE:
+            return "Float64"
+        return f"{'StringView' if identifier == TEXT_SEQUENCE else identifier} | null"
 
     def sequence_types(self):
         lines = []
@@ -1921,7 +1938,7 @@ class Generator:
                 f"    /** @ntsGet _get_length */",
                 f'    readonly length: Float64;',
                 f"    /** @ntsSymbol nts_dom_{name}_item */",
-                f'    item(this: {name}, index: Float64): {"StringView" if identifier == TEXT_SEQUENCE else identifier} | null;',
+                f'    item(this: {name}, index: Float64): {self.sequence_item_ts(identifier)};',
                 "  }",
             ]
         return lines

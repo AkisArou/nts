@@ -65,6 +65,7 @@ void NtsSequence::Trace(blink::Visitor *visitor) const {
   HeldSequence::Trace(visitor);
 }
 NtsTextSequence::~NtsTextSequence() = default;
+NtsNumberSequence::~NtsNumberSequence() = default;
 
 // Sequences the program keeps off the stack, as Roots for objects.
 class SequenceRoots final : public blink::GarbageCollected<SequenceRoots> {

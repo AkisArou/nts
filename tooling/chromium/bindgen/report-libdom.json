@@ -1,15 +1,15 @@
 {
-  "libDom": "../../../../Projects/nts/third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
+  "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3148,
-    "skipped": 236,
+    "bound": 3150,
+    "skipped": 234,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
     "absent: other": 33
   },
   "skippedBy": {
-    "result type": 64,
+    "result type": 62,
     "defined in": 60,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
     "parameter type": 15,
@@ -2364,11 +2364,10 @@
         "rootMargin",
         "scrollMargin",
         "takeRecords",
+        "thresholds",
         "unobserve"
       ],
-      "skipped": {
-        "thresholds": "result type FrozenArray<double>"
-      },
+      "skipped": {},
       "absent": {}
     },
     "IntersectionObserverEntry": {
@@ -2412,6 +2411,7 @@
         "fontStretch",
         "fontVariantCaps",
         "getImageData",
+        "getLineDash",
         "getTransform",
         "globalAlpha",
         "globalCompositeOperation",
@@ -2457,7 +2457,6 @@
       "skipped": {
         "fillStyle": "result type any",
         "getContextAttributes": "result type CanvasRenderingContext2DSettings",
-        "getLineDash": "result type sequence<unrestricted double>",
         "setLineDash": "parameter type sequence<unrestricted double>",
         "strokeStyle": "result type any"
       },

@@ -1,5 +1,5 @@
 {
-  "bound": 7042,
+  "bound": 7044,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2262,11 +2262,6 @@
       "why": "parameter type IntersectionObserverCallback"
     },
     {
-      "interface": "IntersectionObserver",
-      "member": "get thresholds",
-      "why": "result type FrozenArray<double>"
-    },
-    {
       "interface": "CanvasRenderingContext2D",
       "member": "get filter",
       "why": "result type (DOMString or CanvasFilter)?"
@@ -2370,11 +2365,6 @@
       "interface": "CanvasRenderingContext2D",
       "member": "getContextAttributes/0",
       "why": "result type CanvasRenderingContext2DSettings"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "getLineDash/0",
-      "why": "result type sequence<unrestricted double>"
     },
     {
       "interface": "CanvasRenderingContext2D",
