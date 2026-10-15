@@ -261,7 +261,7 @@ pub(crate) fn call(
             b.call(target);
             numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())?;
         }
-        Op::KeyAt | Op::ValueAt => at(b, op, &c, subject, args[1])?,
+        Op::KeyAt | Op::ValueAt => at(b, op, &c, result, subject, args[1])?,
         Op::Extend => {
             let source = b.types().collection(b.ty(args[1]))?.clone();
             if source.wrapper != c.wrapper {
@@ -424,6 +424,71 @@ pub(crate) fn typed_gets(
         .collect()
 }
 
+/// The `key_at` and `value_at` reads whose every use takes the entry as the
+/// type the collection stores it as, by that type.
+///
+/// The runtime's signature answers an erased entry, so a read of a number
+/// key boxed it and the `unerase` beside it unboxed it again: an allocation
+/// per element, which made `Array.from` of a `Set<number>` ten times node.
+/// Such a read keeps the stored scalar in a local of its own type, and the
+/// `unerase` is that local. A read used any other way is erased as before.
+pub(crate) fn typed_reads(
+    func: &nts_core::hir::Func,
+    plan: &gc::Plan,
+) -> BTreeMap<ValueId, HirType> {
+    let mut candidates = BTreeMap::new();
+    for (at, op) in func.values.iter().enumerate() {
+        let OpKind::Call {
+            callee: Callee::External(name),
+            args,
+            ..
+        } = &op.kind
+        else {
+            continue;
+        };
+        let (Some(read @ (Op::KeyAt | Op::ValueAt)), [map, _]) = (external(name), args.as_slice())
+        else {
+            continue;
+        };
+        let Ok(c) = plan.collection(&func.value(*map).ty) else {
+            continue;
+        };
+        let stored = if read == Op::KeyAt {
+            Some(key_storage(c.key))
+        } else {
+            c.value.clone()
+        };
+        if let Some(stored @ (HirType::Float { bits: 64 } | HirType::Bool)) = stored {
+            let id = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+            candidates.insert(id, stored);
+        }
+    }
+    if candidates.is_empty() {
+        return BTreeMap::new();
+    }
+    let mut erased = BTreeSet::new();
+    for block in &func.blocks {
+        for &id in &block.ops {
+            let op = func.value(id);
+            for operand in nts_core::hir::operands_of(&op.kind) {
+                let Some(stored) = candidates.get(&operand) else {
+                    continue;
+                };
+                if !matches!(op.kind, OpKind::Unerase { .. } if &op.ty == stored) {
+                    erased.insert(operand);
+                }
+            }
+        }
+        erased.extend(
+            nts_core::hir::operands_of_terminator(&block.terminator)
+                .into_iter()
+                .filter(|operand| candidates.contains_key(operand)),
+        );
+    }
+    candidates.retain(|id, _| !erased.contains(id));
+    candidates
+}
+
 /// The tag of a typed get's value: its stored type's, or `undefined`.
 pub(crate) fn typed_tag(
     b: &mut Body<'_, '_>,
@@ -486,11 +551,13 @@ pub(crate) fn typed_value(
     Ok(())
 }
 
-/// `key_at` and `value_at`: the entry a cursor landed on, erased.
+/// `key_at` and `value_at`: the entry a cursor landed on, erased unless every
+/// use reads it as stored (`typed_reads`).
 fn at(
     b: &mut Body<'_, '_>,
     op: Op,
     c: &Collection,
+    result: ValueId,
     subject: ValueId,
     cursor: ValueId,
 ) -> Result<(), Failure> {
@@ -510,6 +577,9 @@ fn at(
     numeric::convert(b, &b.ty(cursor).clone(), &HirType::NUMBER)?;
     b.instruction(&I::I32TruncSatF64U);
     b.instruction(&I::ArrayGet(array));
+    if b.typed_read(result).is_some() {
+        return Ok(());
+    }
     erased::erase_stack(b, &storage)
 }
 

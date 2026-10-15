@@ -517,6 +517,10 @@ pub(crate) fn unerase(
     if let Some(map) = body.typed_get(value) {
         return crate::collections::typed_value(body, value, map);
     }
+    // Held as the stored type, which is what this asks for.
+    if body.typed_read(value).is_some() {
+        return body.load(value);
+    }
     let ty = body.ty(result).clone();
     unerase_to(body, value, &ty)
 }

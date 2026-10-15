@@ -82,6 +82,9 @@ pub(crate) struct Body<'b, 'p> {
     /// The collection gets whose value is their entry, by the collection
     /// read (`collections::typed_gets`).
     typed_gets: BTreeMap<ValueId, ValueId>,
+    /// The entry reads held as the type their collection stores, by that
+    /// type (`collections::typed_reads`).
+    typed_reads: BTreeMap<ValueId, HirType>,
     scratch: BTreeMap<(u32, Physical), u32>,
     pc: Option<u32>,
     cases: BTreeMap<BlockId, u32>,
@@ -155,6 +158,7 @@ impl<'b, 'p> Body<'b, 'p> {
             }
         }
         let typed_gets = crate::collections::typed_gets(func, types);
+        let typed_reads = crate::collections::typed_reads(func, types);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
             let b = &func.blocks[block.0 as usize];
@@ -166,7 +170,7 @@ impl<'b, 'p> Body<'b, 'p> {
                 Some(Physical::Scalar(Slot::I32))
             } else {
                 types
-                    .slot(&op.ty)
+                    .slot(typed_reads.get(&value).unwrap_or(&op.ty))
                     .map_err(|failure| failure.at(&func.name, &op.origin))?
             };
             if !matches!(op.kind, OpKind::Param(_))
@@ -216,6 +220,7 @@ impl<'b, 'p> Body<'b, 'p> {
             m,
             values,
             typed_gets,
+            typed_reads,
             scratch,
             pc,
             cases,
@@ -243,6 +248,10 @@ impl<'b, 'p> Body<'b, 'p> {
     /// The collection a get reads, where its value is the entry it found.
     pub(crate) fn typed_get(&self, value: ValueId) -> Option<ValueId> {
         self.typed_gets.get(&value).copied()
+    }
+    /// The type an entry read is held as, where it is not erased.
+    pub(crate) fn typed_read(&self, value: ValueId) -> Option<&HirType> {
+        self.typed_reads.get(&value)
     }
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
         self.values[value.0 as usize]
