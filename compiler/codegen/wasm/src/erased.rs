@@ -565,15 +565,7 @@ pub(crate) fn unerase_to(
         }
         HirType::Managed(ManagedType::String) => {
             body.instruction(&I::Drop);
-            body.load(value)?;
-            call(body, Helper::Tag)?;
-            body.instruction(&I::I32Const(NULL));
-            body.instruction(&I::I32Eq);
-            body.load(value)?;
-            call(body, Helper::Tag)?;
-            body.instruction(&I::I32Const(UNDEFINED));
-            body.instruction(&I::I32Eq);
-            body.instruction(&I::I32Or);
+            nullish(body, value)?;
             body.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
             body.instruction(&I::RefNull(HeapType::EXTERN));
             body.instruction(&I::Else);
@@ -621,6 +613,48 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
             "non-reference managed projection".into(),
         ));
     };
+    let why = "an erased value read as an object of a type it is not";
+    // Every typed array is one struct type; its element kind is a field, so a
+    // view is told apart by more than its type.
+    if let HirType::Managed(ManagedType::View(element)) = ty {
+        nullish(body, value)?;
+        body.instruction(&I::If(BlockType::Result(ValType::Ref(reference))));
+        body.instruction(&I::RefNull(reference.heap_type));
+        body.instruction(&I::Else);
+        projection_guard(body, value, &[reference.heap_type], why)?;
+        crate::buffers::kind_guard(body, value, element)?;
+        body.load(value)?;
+        body.instruction(&I::RefCastNonNull(reference.heap_type));
+        body.instruction(&I::End);
+        return Ok(());
+    }
+    // **The type first.** An erased value read as an object is one nearly
+    // always, so one `br_on_cast` answers it. Asking whether it was null or
+    // undefined first cost two calls of `value.tag` -- three type tests and
+    // two loads apiece -- before the test and the cast the answer needed
+    // anyway: four tag calls a round where `h.fn?.(x)` reads one field twice
+    // (`optional-chain`, 2026-10-15). A value that is not one is the absence
+    // when it is null or undefined, and refused by name otherwise.
+    body.instruction(&I::Block(BlockType::Result(ValType::Ref(reference))));
+    body.load(value)?;
+    body.instruction(&I::BrOnCast {
+        relative_depth: 0,
+        from_ref_type: RefType::ANYREF,
+        to_ref_type: RefType {
+            nullable: false,
+            heap_type: reference.heap_type,
+        },
+    });
+    body.instruction(&I::Drop);
+    nullish(body, value)?;
+    contract::require(body, why)?;
+    body.instruction(&I::RefNull(reference.heap_type));
+    body.instruction(&I::End);
+    Ok(())
+}
+
+/// Whether erased `value` is null or undefined, as an i32 left on the stack.
+fn nullish(body: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     body.load(value)?;
     call(body, Helper::Tag)?;
     body.instruction(&I::I32Const(NULL));
@@ -630,22 +664,6 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
     body.instruction(&I::I32Const(UNDEFINED));
     body.instruction(&I::I32Eq);
     body.instruction(&I::I32Or);
-    body.instruction(&I::If(BlockType::Result(ValType::Ref(reference))));
-    body.instruction(&I::RefNull(reference.heap_type));
-    body.instruction(&I::Else);
-    projection_guard(
-        body,
-        value,
-        &[reference.heap_type],
-        "an erased value read as an object of a type it is not",
-    )?;
-    // Every typed array is one struct type; its element kind is a field.
-    if let HirType::Managed(ManagedType::View(element)) = ty {
-        crate::buffers::kind_guard(body, value, element)?;
-    }
-    body.load(value)?;
-    body.instruction(&I::RefCastNonNull(reference.heap_type));
-    body.instruction(&I::End);
     Ok(())
 }
 

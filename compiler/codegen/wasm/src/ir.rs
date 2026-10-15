@@ -342,6 +342,8 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::RefTestNullable(_)
             | I::RefCastNonNull(_)
             | I::RefCastNullable(_)
+            // A branch on a cast: `flow` and `outline` read its label.
+            | I::BrOnCast { .. }
             | I::ExternConvertAny
             | I::AnyConvertExtern
             | I::CallRef(_)
