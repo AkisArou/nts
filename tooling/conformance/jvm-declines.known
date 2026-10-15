@@ -27,3 +27,7 @@ stateful store S2 -> CbFace	jvm-only	a-function-field-read-through-an-interface:
 # One owned stage-C feature. The source plan records each non-prefix transfer
 # as FieldView; the JVM refuses that operation, never infers a new store shape.
 interface field accessor dispatch	unmeasured	stage C: createCacheStorage RequestContext -> ResponseContext and acquireHTTPParser ParserLease -> HTTPParserLease have no method on main 2a4e53739 (lowering NTS1001 non-prefix transfer), and are newly licensed on native; a-teed-stream-read-back remains stopped on main. Retire this single row when the JVM implements field-family dispatch
+
+# JVM test262 witnesses recorded on clean main 64fe6c9fc (2026-10-16).
+unrelated store FnN -> ClosureN	jvm-only	a-generator-as-an-array-pattern-default-on-jvm reads a generator default's name without calling it; C and LLVM agree with node, while the typed signature body stores its receiver into the concrete closure field of the generator frame (38c1de166)
+unrelated store Generator0 -> Iterable<N>	jvm-only	a-generator-into-an-empty-array-pattern-on-jvm passes a generator to an empty pattern; C and LLVM agree with node because the pattern reads nothing through its iterable target, while the JVM declines the unrelated class store (e67962c9b). The elision sibling is a separate recorded wrong answer on C and LLVM
