@@ -1894,6 +1894,14 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
     let stats = source.stats();
 
+    println!(
+        "checker work this run{}",
+        if stats.round_trips == 0 {
+            " (snapshot reused)"
+        } else {
+            ""
+        }
+    );
     println!("files            {}", stats.files);
     println!("nodes decoded    {}", stats.nodes_decoded);
     println!("types resolved   {}", stats.types_resolved);
@@ -1954,7 +1962,12 @@ fn frontend(tsconfig: &Utf8Path, decompose: bool, calls: bool, constants: bool) 
     // Reporting the snapshot and exiting zero would let a backend emit code for
     // it, which is the one outcome nothing downstream can detect.
     if snapshot.has_errors() {
-        bail!("{} type error(s); refusing to proceed", stats.errors);
+        let errors = snapshot
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
+            .count();
+        bail!("{errors} type error(s); refusing to proceed");
     }
 
     Ok(())
