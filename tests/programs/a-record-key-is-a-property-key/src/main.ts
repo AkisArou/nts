@@ -199,3 +199,18 @@ export function missingPrimitiveKeys(n: number): string {
   return String(record[key]) + ";" + String(key in record) + ";"
     + String(Object.hasOwn(record, key)) + ";" + String(delete record[key]);
 }
+
+// A property deletion releases the map's ownership; a value already read
+// must stay alive until its later use. There is no other owner at creation.
+export function deletedManagedValuesStayLive(n: number): string {
+  const arrays: Record<string, number[]> = { "1": [n & 3, 7] };
+  const numberKey: any = (n & 1) === 0 ? 1 : "1";
+  const held = arrays[numberKey]!;
+  const removed = delete arrays[numberKey];
+  const strings: Record<string, string> = { "true": "held" + String(n & 3) };
+  const booleanKey: any = (n & 1) === 0 ? true : "true";
+  const text = strings[booleanKey]!;
+  const removedText = delete strings[booleanKey];
+  return String(held[0]! + held[1]!) + ";" + text + ";"
+    + String(removed) + ";" + String(removedText);
+}
