@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 an `in` whose key is not a literal the compiler can see",
+  "ran": "exit 1; nts: uncaught Observed: ",
+  "node": "exit 1; nts: uncaught Observed: present record control=true;absent record=TypeError: Cannot use 'in' operator to search for 'x' in null;",
+  "measured_with": "07a08dd5f54a0949",
+  "source": "measured"
+}
