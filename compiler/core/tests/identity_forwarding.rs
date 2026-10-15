@@ -30,7 +30,7 @@ fn prepared() -> Option<hir::Program> {
     let options = hir::Options {
         provider: hir::Provider::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => Some(prepared.program),

@@ -60,7 +60,7 @@ fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::Pa
         &snapshot,
         &hir::Options {
             provider: hir::Provider::NoGc,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .expect("prepared");

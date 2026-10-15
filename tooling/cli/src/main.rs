@@ -1482,7 +1482,7 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     let program = &prepared.program;
@@ -1609,7 +1609,7 @@ fn dump_refusals(tsconfig: &Utf8Path) -> Result<()> {
     let targets = configured_abis(tsconfig)?;
     let options = hir::Options {
         targets,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     let prepared = hir::prepare_unverified(&snapshot, &options);
     for (name, why) in &prepared.program.uncompiled {
@@ -2548,11 +2548,7 @@ fn entry_names() -> Vec<String> {
         .collect()
 }
 
-fn hir_preparation() -> Result<(
-    nts_codegen_common::Backend,
-    hir::Provider,
-    hir::InterfaceAccess,
-)> {
+fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
     let arguments: Vec<_> = std::env::args().collect();
     let backend: nts_codegen_common::Backend =
         match arguments.iter().position(|arg| arg == "--backend") {
@@ -2563,23 +2559,17 @@ fn hir_preparation() -> Result<(
                 .map_err(anyhow::Error::msg)?,
             None => nts_codegen_common::Backend::C,
         };
-    let (provider, interface_access) = match backend {
-        nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => {
-            (selected_provider(), hir::InterfaceAccess::Materialize)
-        }
-        nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => (
+    let provider = match backend {
+        nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => selected_provider(),
+        nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => {
             nts_codegen_common::provider::host_gc(
                 backend.name(),
                 selected_provider() == hir::Provider::ReferenceCounting,
             )
-            .map_err(anyhow::Error::msg)?,
-            // Both dispatch interface field families by row: Wasm through
-            // its typed references, the JVM through a split face's
-            // companion interface (`nts_codegen_jvm` `split_faces`).
-            hir::InterfaceAccess::Materialize,
-        ),
+            .map_err(anyhow::Error::msg)?
+        }
     };
-    Ok((backend, provider, interface_access))
+    Ok((backend, provider))
 }
 
 fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
@@ -2611,9 +2601,9 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let (backend, provider, interface_access) = hir_preparation()?;
+        let (backend, provider) = hir_preparation()?;
         println!(
-            "preparation: backend={} interface-access={interface_access:?} provider={provider:?}",
+            "preparation: backend={} provider={provider:?}",
             backend.name()
         );
         let emission = Emission::from_flags();
@@ -2669,7 +2659,7 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
                 || configured.unwrap_or(hir::reachable::Roots::EveryExport),
                 hir::reachable::Roots::Entry,
             ),
-            ..hir::Options::new(interface_access)
+            ..hir::Options::default()
         };
         // An invalid program is exactly the one worth reading, so the
         // complaints are printed and the program is dumped anyway.
@@ -8483,7 +8473,6 @@ fn emit_options<'a>(
     configured: Option<hir::reachable::Roots<'a>>,
     callbacks_checkpoint: bool,
     targets: nts_core::hir::native::Targets,
-    interface_access: hir::InterfaceAccess,
 ) -> hir::Options<'a> {
     // **`!entry.is_empty()` was never false.** This read the flags itself and
     // asked `entry.is_empty()`, and the entry list always held at least
@@ -8512,7 +8501,7 @@ fn emit_options<'a>(
         foreign,
         callbacks_checkpoint,
         targets,
-        ..hir::Options::new(interface_access)
+        ..hir::Options::default()
     }
 }
 
@@ -8543,7 +8532,6 @@ fn emit_llvm(
             configured,
             emission.host.checkpoints_after_callbacks(),
             targets,
-            hir::InterfaceAccess::Materialize,
         ),
     ) {
         Ok(prepared) => prepared,
@@ -8607,7 +8595,6 @@ fn emit_jvm(
         configured,
         false,
         targets,
-        hir::InterfaceAccess::Materialize,
     );
     options.provider = provider;
     let prepared = match hir::prepare_with(&snapshot, &options) {
@@ -8815,7 +8802,6 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
             configured,
             emission.host.checkpoints_after_callbacks(),
             targets,
-            hir::InterfaceAccess::Materialize,
         ),
     ) {
         Ok(prepared) => prepared,

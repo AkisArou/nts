@@ -50,10 +50,7 @@ fn prepared(name: &str) -> Option<hir::Prepared> {
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::prepare_unverified(
-        &snapshot,
-        &hir::Options::new(hir::InterfaceAccess::Materialize),
-    ))
+    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()))
 }
 
 fn lowered(name: &str) -> Option<hir::lower::Lowered> {

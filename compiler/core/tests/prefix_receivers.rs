@@ -32,7 +32,7 @@ fn a_face_lists_the_owners_that_reach_it_as_a_prefix() {
     let options = hir::Options {
         provider: hir::Provider::NoGc,
         roots: hir::reachable::Roots::EveryExport,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     let program = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared.program,

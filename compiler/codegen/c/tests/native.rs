@@ -1088,7 +1088,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
     // A host handle needs the counting provider; a never-free program refuses it.
     let options = hir::Options {
         provider: hir::Provider::ReferenceCounting,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
     for name in ["related", "unrelatedOrder", "sameType"] {
@@ -1298,7 +1298,7 @@ export function counted(n: Int32): number {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(hir::InterfaceAccess::Materialize)
+                ..hir::Options::default()
             },
         )
         .expect("valid HIR");
@@ -1398,7 +1398,7 @@ declare function node_value(n: Node): c_int;
         let (_, snapshot) = snapshot_with_types(name, &format!("{prelude}{body}"), false)?;
         let options = hir::Options {
             provider: hir::Provider::ReferenceCounting,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         Some(hir::prepare_with(&snapshot, &options))
     };
@@ -1555,7 +1555,7 @@ void handler_clear(void) {
         };
         let options = hir::Options {
             provider,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert!(
@@ -1698,7 +1698,7 @@ export function handedOn(n: number): number {
         assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
         let options = hir::Options {
             provider,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert!(

@@ -324,15 +324,14 @@ fields can return undefined; incomplete supplies retain named stops. Spread and
 own-property reflection require separate evidence about every concrete own shape
 and literal allocation. A prototype getter is not an own property.
 
-Preparation requires an explicit interface-access capability, separately from
-the memory provider. C and LLVM select `Materialize`; JVM and Wasm select
-`PreserveFieldAccess` until they implement field-family dispatch. Preserving
-keeps declared field operations and their existing layout guard, clears future
-native-helper edges before settling, and omits native row reservations while
-storage layouts merge. Optional and required schemas with identical storage
-therefore keep their original shared representation. Actual getter operations
-and non-prefix views remain explicit. `nts hir <project> --prepared --backend
-jvm` prints the JVM preparation and names the selected mode and provider.
+Every backend prepares with field-family dispatch, chosen independently of the
+memory provider: `interface_access::materialize` turns a stored family's field
+operations into calls through its selector, and the verifier holds the prepared
+program to that. C and LLVM dispatch through rows, Wasm through typed
+references, and the JVM through a split face's companion interface (stage C).
+A positional mode for backends without dispatch existed until every backend had
+it, and was removed on 2026-10-15. `nts hir <project> --prepared --backend jvm`
+prints the JVM preparation and names its provider.
 
 The JVM currently declines the new dispatch sites as NTS4001, classified as
 `interface field accessor dispatch`. Stateful JVM interfaces are stage C.

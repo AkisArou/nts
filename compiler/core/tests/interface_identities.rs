@@ -17,12 +17,9 @@ fn prepared() -> Option<Program> {
         .snapshot(&config)
         .expect("snapshot");
     Some(
-        hir::prepare_with(
-            &snapshot,
-            &hir::Options::new(hir::InterfaceAccess::Materialize),
-        )
-        .expect("valid prepared HIR")
-        .program,
+        hir::prepare_with(&snapshot, &hir::Options::default())
+            .expect("valid prepared HIR")
+            .program,
     )
 }
 

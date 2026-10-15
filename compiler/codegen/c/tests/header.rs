@@ -36,11 +36,7 @@ fn emit(tsgo: &Utf8Path, name: &str, source: &str) -> (ScratchDir, nts_codegen_c
         .snapshot(&dir.join("tsconfig.json"))
         .unwrap();
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options::new(hir::InterfaceAccess::Materialize),
-    )
-    .unwrap();
+    let prepared = hir::prepare_with(&snapshot, &hir::Options::default()).unwrap();
     assert!(
         prepared.diagnostics.is_empty(),
         "{:?}",

@@ -135,7 +135,7 @@ fn typescript_reaches_the_provider_through_the_intrinsic_table() {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::NoGc,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .expect("prepared HIR should verify");

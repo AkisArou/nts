@@ -49,14 +49,6 @@ pub(super) fn declare(
             program.interface_access.note_selector(*slot);
         }
     }
-    // Preserved stored operations never call native family helpers. Construct
-    // only families already called by source lowering, so unused bodies cannot
-    // demand extra layouts before reachability has a chance to discard them.
-    let used = if hierarchy.preserve_field_layouts {
-        used_selectors(program)
-    } else {
-        rustc_hash::FxHashSet::default()
-    };
     let mut context = Context {
         snapshot,
         hierarchy,
@@ -99,18 +91,14 @@ pub(super) fn declare(
             pending: dispatch && !family.eager,
             stored_dispatch: dispatch && !family.eager,
         };
-        if !hierarchy.preserve_field_layouts
-            || plan.entries().any(|entry| used.contains(&entry.slot))
-        {
-            declare_functions(
-                &mut context,
-                program,
-                &layouts,
-                family,
-                &plan,
-                &mut functions,
-            );
-        }
+        declare_functions(
+            &mut context,
+            program,
+            &layouts,
+            family,
+            &plan,
+            &mut functions,
+        );
         program.interface_access.push(plan);
     }
     program.funcs.extend(functions);
@@ -164,21 +152,6 @@ fn receivers(
         }
     }
     receivers
-}
-
-fn used_selectors(program: &Program) -> rustc_hash::FxHashSet<u32> {
-    program
-        .funcs
-        .iter()
-        .flat_map(|func| &func.values)
-        .filter_map(|op| match op.kind {
-            OpKind::Call {
-                callee: Callee::Virtual { slot, .. },
-                ..
-            } => Some(slot),
-            _ => None,
-        })
-        .collect()
 }
 
 fn declare_functions(

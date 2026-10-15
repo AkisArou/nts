@@ -212,7 +212,7 @@ fn prepare(name: &str, provider: hir::Provider) -> Option<(ScratchDir, hir::Prep
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(hir::InterfaceAccess::Materialize)
+                ..hir::Options::default()
             },
         )
         .unwrap(),

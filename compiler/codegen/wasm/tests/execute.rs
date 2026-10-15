@@ -19,7 +19,7 @@ fn prepared_project(fixture: &Path) -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::HostGc,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .expect("prepared HIR verifies");

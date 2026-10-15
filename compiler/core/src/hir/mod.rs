@@ -4852,7 +4852,7 @@ pub fn may_stop(op: &Op) -> bool {
 }
 
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
-    prepare_with(snapshot, &Options::new(InterfaceAccess::Materialize))
+    prepare_with(snapshot, &Options::default())
 }
 
 /// Why [`prepare_with`] produced no program.
@@ -4922,23 +4922,11 @@ pub enum Provider {
     ReferenceCounting,
 }
 
-/// How a backend implements licensed stored-field families. This capability
-/// is independent of the memory provider: a host collector does not imply
-/// that the backend implements accessor dispatch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InterfaceAccess {
-    Materialize,
-    /// Keep positional field operations and their existing layout guards.
-    /// Getter calls and non-prefix field views still require dispatch support.
-    PreserveFieldAccess,
-}
-
 /// What to compile, and how.
 #[derive(Debug, Clone, Copy)]
 pub struct Options<'a> {
     /// The memory discipline. See [`Provider`].
     pub provider: Provider,
-    pub interface_access: InterfaceAccess,
     /// Whether a callback returning to the program's foreign loop is a
     /// checkpoint: `nts_checkpoint_after_callbacks`, which the entry point of
     /// a program whose loop is `GLib`'s turns on. Decided once, by the loop
@@ -4973,13 +4961,10 @@ pub struct Options<'a> {
     pub targets: native::Targets,
 }
 
-impl Options<'_> {
-    /// Select the backend's accessor capability before setting other options.
-    /// There is deliberately no default for this representation decision.
-    pub fn new(interface_access: InterfaceAccess) -> Self {
+impl Default for Options<'_> {
+    fn default() -> Self {
         Self {
             provider: Provider::NoGc,
-            interface_access,
             // No loop is known to checkpoint after a callback until a build
             // says whose loop the program runs.
             callbacks_checkpoint: false,
@@ -7022,15 +7007,7 @@ fn specialize_numbers_of(
 
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let mut lowered = lower::lower_with_access(
-        snapshot,
-        options.entry_files,
-        options.foreign,
-        options.interface_access,
-    );
-    if options.interface_access == InterfaceAccess::PreserveFieldAccess {
-        lowered.program.interface_access.preserve_stored_fields();
-    }
+    let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     // On the program the lowering produced, before any pass renumbers a value
@@ -7060,7 +7037,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     let (forwarded, orphaned) = forward_identities(&mut program, options.roots);
     let pruned = pruned + dropped + orphaned;
     let unions_split = split_unions(&mut program);
-    interface_access::materialize(&mut program, options.interface_access);
+    interface_access::materialize(&mut program);
     // After the copies that give a call its class, so that only an access
     // through an interface whose class is lost is tested.
     interface_fields::guard(&mut program);

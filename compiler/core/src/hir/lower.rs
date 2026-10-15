@@ -448,9 +448,6 @@ struct Hierarchy {
     /// keyed by what values have, so a site in a generic body names each
     /// instance its copies make.
     template_instances: rustc_hash::FxHashMap<TypeId, Vec<TypeId>>,
-    /// A preserving backend keeps the original stored layout geometry.
-    /// Native-only accessor reservations must not split its merged records.
-    preserve_field_layouts: bool,
     /// Declared-face and actual source-supplier storage after reservations,
     /// computed once before bodies.
     /// Anonymous schemas may reserve entries only to alias one of these rows.
@@ -15451,31 +15448,11 @@ fn field_aliases(
 /// using only `include` does. See [`public_api`] for what it decides and why
 /// there is no way to decide it without being told.
 #[must_use]
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn lower_with(
     snapshot: &SemanticSnapshot,
     entry: &[String],
     foreign: &super::runtime::ForeignTable,
-) -> Lowered {
-    lower_with_access(
-        snapshot,
-        entry,
-        foreign,
-        super::InterfaceAccess::Materialize,
-    )
-}
-
-/// The selected backend capability also controls source reads whose stored
-/// suppliers differ in representation or absence. A preserving backend keeps
-/// the declared field operation, even if its known structural suppliers are
-/// getters. The existing field guard checks those reads. Source getter
-/// operations still resolve through their ordinary accessor declarations.
-#[must_use]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-pub fn lower_with_access(
-    snapshot: &SemanticSnapshot,
-    entry: &[String],
-    foreign: &super::runtime::ForeignTable,
-    interface_access: super::InterfaceAccess,
 ) -> Lowered {
     // The instantiations generic bodies make of other generics, written into
     // the snapshot first, so every pass below meets them as the checker's
@@ -15494,13 +15471,7 @@ pub fn lower_with_access(
     // The hierarchy and the naming before the module scope, because the module scope's
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
-    let (mut hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
-    if interface_access == super::InterfaceAccess::PreserveFieldAccess {
-        hierarchy.preserve_field_layouts = true;
-        for family in &mut std::sync::Arc::make_mut(&mut hierarchy.access_families).licensed {
-            family.eager = false;
-        }
-    }
+    let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
     let mut module = collect_module_scope(
         snapshot,
         foreign,
@@ -53435,9 +53406,6 @@ impl<'a> FuncBuilder<'a> {
         let mut reserved = Vec::new();
         for ((root, member), slot) in &self.hierarchy.slots {
             if let Some((family, writes)) = self.hierarchy.access_families.for_key(*root, member) {
-                if self.hierarchy.preserve_field_layouts {
-                    continue;
-                }
                 let direct = family.supplies.iter().find(|supply| supply.owner == ty);
                 let supply = direct.or_else(|| self.field_reservation(ty, fields, family));
                 if let Some(supply) = supply {

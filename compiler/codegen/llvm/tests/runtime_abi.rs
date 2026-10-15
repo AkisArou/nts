@@ -116,7 +116,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::ReferenceCounting,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .unwrap();
@@ -211,7 +211,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
             &snapshot,
             &hir::Options {
                 provider,
-                ..hir::Options::new(hir::InterfaceAccess::Materialize)
+                ..hir::Options::default()
             },
         )
         .unwrap();

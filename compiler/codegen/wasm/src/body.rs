@@ -743,12 +743,12 @@ impl<'b, 'p> Body<'b, 'p> {
             numeric::unary(self, id, op, value)
         }
     }
-    /// A view is the object itself: under Materialize every read through the
-    /// interface dispatches, and the view's owner has a row. Under preserved
-    /// field access a read would be positional, so a view is refused there.
+    /// A view is the object itself: once interface access is materialized
+    /// every read through the interface dispatches, and the view's owner has a
+    /// row. A program that skipped preparation would still read by position,
+    /// so a view is refused there.
     fn field_view(&mut self, id: ValueId, value: ValueId) -> Result<(), Failure> {
-        if self.m.program.interface_access.mode != Some(nts_core::hir::InterfaceAccess::Materialize)
-        {
+        if !self.m.program.interface_access.materialized {
             return Err("a field view, whose reads need interface dispatch (Materialize)".into());
         }
         self.load(value)?;

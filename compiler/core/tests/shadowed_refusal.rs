@@ -35,10 +35,7 @@ fn lower_at(relative: &str) -> Option<Prepared> {
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     assert!(!snapshot.has_errors(), "fixture must typecheck");
-    Some(hir::prepare_unverified(
-        &snapshot,
-        &hir::Options::new(hir::InterfaceAccess::Materialize),
-    ))
+    Some(hir::prepare_unverified(&snapshot, &hir::Options::default()))
 }
 
 fn held(lowered: &Prepared) -> Vec<&str> {

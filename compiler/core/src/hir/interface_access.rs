@@ -62,7 +62,10 @@ pub struct Plan {
     /// A live transfer retains its explicit `FieldView` operation through all
     /// copies; the JVM consumes that operation rather than deriving a cast.
     pub native_views: BTreeSet<(TypeId, TypeId)>,
-    pub mode: Option<super::InterfaceAccess>,
+    /// Whether [`materialize`] has run: before it, a stored family's field
+    /// operations are still positional and [`verify_mode`] has nothing to hold
+    /// them to.
+    pub materialized: bool,
     /// What a family selector calls on a receiver whose class has no row: its
     /// face's own positional storage, or a named stop where the face holds
     /// no field for the member. See [`Plan::default_for`].
@@ -76,15 +79,6 @@ pub struct Plan {
 }
 
 impl Plan {
-    /// These source fields never become accessor calls. Clear their future
-    /// edges before settling and pruning can revive native-only helpers,
-    /// their classes or their refusals on a preserving backend.
-    pub(super) fn preserve_stored_fields(&mut self) {
-        for family in &mut self.families {
-            family.pending = false;
-        }
-    }
-
     pub(super) fn prune_views(&mut self, funcs: &[Func]) {
         let views: FxHashSet<_> = funcs
             .iter()
@@ -315,16 +309,8 @@ impl Plan {
 }
 
 /// Run after source shaping, before numeric storage and signature decisions.
-pub(super) fn materialize(program: &mut Program, mode: super::InterfaceAccess) -> usize {
-    program.interface_access.mode = Some(mode);
-    if mode == super::InterfaceAccess::PreserveFieldAccess {
-        // These are precisely the stored operations source shaping left for
-        // main's positional implementation. Its guard below still stops a
-        // disagreeing layout. Getter calls and FieldView operations were
-        // already explicit at lowering and are not rewritten here.
-        program.interface_access.preserve_stored_fields();
-        return 0;
-    }
+pub(super) fn materialize(program: &mut Program) -> usize {
+    program.interface_access.materialized = true;
     let direct = storage_proofs::direct_sites(program);
     let plan = &program.interface_access;
     let mut replaced = 0;
@@ -359,47 +345,22 @@ pub(super) fn materialize(program: &mut Program, mode: super::InterfaceAccess) -
 }
 
 pub(super) fn verify_mode(program: &Program, problems: &mut Vec<super::verify::Invalid>) {
-    let Some(mode) = program.interface_access.mode else {
+    if !program.interface_access.materialized {
         return;
-    };
-    let direct = if mode == super::InterfaceAccess::Materialize {
-        storage_proofs::direct_sites(program)
-    } else {
-        Vec::new()
-    };
+    }
+    let direct = storage_proofs::direct_sites(program);
     for (at, func) in program.funcs.iter().enumerate() {
         for value in func.blocks.iter().flat_map(|block| &block.ops) {
             let op = func.value(*value);
-            let invalid = match mode {
-                super::InterfaceAccess::Materialize => {
-                    program
-                        .interface_access
-                        .stored_entry(func, &op.kind)
-                        .is_some()
-                        && !direct[at].contains(value)
-                }
-                super::InterfaceAccess::PreserveFieldAccess => {
-                    if let OpKind::Call {
-                        callee: Callee::Virtual { slot, .. },
-                        ..
-                    } = op.kind
-                    {
-                        program
-                            .interface_access
-                            .by_selector
-                            .get(&slot)
-                            .is_some_and(|family| {
-                                program.interface_access.families[*family].stored_dispatch
-                            })
-                    } else {
-                        false
-                    }
-                }
-            };
+            let invalid = program
+                .interface_access
+                .stored_entry(func, &op.kind)
+                .is_some()
+                && !direct[at].contains(value);
             if invalid {
                 problems.push(super::verify::Invalid::InvalidInterfaceAccess {
                     reason: format!(
-                        "{}: field operation disagrees with {mode:?} preparation",
+                        "{}: a stored family's field operation survived materialization",
                         func.name
                     ),
                 });

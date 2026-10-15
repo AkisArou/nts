@@ -40,7 +40,7 @@ fn counted(name: &str, source: &str) -> Option<String> {
     assert!(!snapshot.has_errors(), "fixture must typecheck");
     let options = hir::Options {
         provider: hir::Provider::ReferenceCounting,
-        ..hir::Options::new(hir::InterfaceAccess::Materialize)
+        ..hir::Options::default()
     };
     let prepared = hir::prepare_with(&snapshot, &options).unwrap();
     assert!(

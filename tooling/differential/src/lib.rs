@@ -454,10 +454,9 @@ pub fn check(
     // without the other compares a program that never releases against an
     // allocator that expects it to. Hence [`counting`], asked here and at the
     // runtime's defines, and nowhere else.
-    let interface_access = hir::InterfaceAccess::Materialize;
     let options = hir::Options {
         provider,
-        ..hir::Options::new(interface_access)
+        ..hir::Options::default()
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {
         Ok(prepared) => prepared,

@@ -302,7 +302,7 @@ fn a_program_records_the_provider_it_was_lowered_under() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let options = hir::Options {
             provider,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options).expect("valid HIR");
         assert_eq!(

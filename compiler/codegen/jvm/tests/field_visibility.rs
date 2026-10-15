@@ -94,7 +94,7 @@ fn no_generated_field_is_public() {
             &snapshot,
             &hir::Options {
                 provider: hir::Provider::NoGc,
-                ..hir::Options::new(hir::InterfaceAccess::Materialize)
+                ..hir::Options::default()
             },
         )
         .expect("prepared HIR should verify");

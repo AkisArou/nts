@@ -56,7 +56,7 @@ fn prepared() -> Option<hir::Program> {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::NoGc,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .expect("prepared HIR should verify");

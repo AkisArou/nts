@@ -247,139 +247,92 @@ fn an_exact_source_allocation_keeps_its_typed_array_storage() {
 }
 
 #[test]
-fn preserving_fields_keeps_equivalent_optional_record_layouts_merged() {
+fn equivalent_optional_records_keep_one_geometry_in_their_own_layouts() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/accessor-preserved-layout/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    for access in [
-        hir::InterfaceAccess::Materialize,
-        hir::InterfaceAccess::PreserveFieldAccess,
-    ] {
-        let lowered = hir::lower::lower_with_access(
-            &snapshot,
-            &[],
-            &rustc_hash::FxHashMap::default(),
-            access,
-        );
-        let program = &lowered.program;
-        assert!(program.interface_access.families.len() >= 2);
-        let layout = |name| {
-            let function = program.funcs.iter().find(|func| func.name == name).unwrap();
-            let hir::HirType::Managed(hir::ManagedType::Object(ty)) = function.params[0].ty else {
-                panic!("record parameter");
-            };
-            program.layout(ty).unwrap()
+    let lowered = hir::lower::lower_with(&snapshot, &[], &rustc_hash::FxHashMap::default());
+    let program = &lowered.program;
+    assert!(program.interface_access.families.len() >= 2);
+    let layout = |name| {
+        let function = program.funcs.iter().find(|func| func.name == name).unwrap();
+        let hir::HirType::Managed(hir::ManagedType::Object(ty)) = function.params[0].ty else {
+            panic!("record parameter");
         };
-        let optional = layout("readOptional");
-        let explicit = layout("readExplicit");
-        assert_eq!(
-            optional
-                .fields
-                .iter()
-                .map(|field| (&field.name, &field.ty))
-                .collect::<Vec<_>>(),
-            explicit
-                .fields
-                .iter()
-                .map(|field| (&field.name, &field.ty))
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(
-            std::ptr::eq(optional, explicit),
-            access == hir::InterfaceAccess::PreserveFieldAccess,
-            "optional membership differs, but preserving storage has the same geometry"
-        );
-    }
+        program.layout(ty).unwrap()
+    };
+    let optional = layout("readOptional");
+    let explicit = layout("readExplicit");
+    assert_eq!(
+        optional
+            .fields
+            .iter()
+            .map(|field| (&field.name, &field.ty))
+            .collect::<Vec<_>>(),
+        explicit
+            .fields
+            .iter()
+            .map(|field| (&field.name, &field.ty))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        !std::ptr::eq(optional, explicit),
+        "optional membership differs, so each record keeps its own layout"
+    );
 }
 
 #[test]
-fn preserving_stored_fields_does_not_construct_unused_native_bodies() {
+fn a_stored_family_constructs_its_accessor_bodies() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/interface-fields/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    for access in [
-        hir::InterfaceAccess::Materialize,
-        hir::InterfaceAccess::PreserveFieldAccess,
-    ] {
-        let lowered = hir::lower::lower_with_access(
-            &snapshot,
-            &[],
-            &rustc_hash::FxHashMap::default(),
-            access,
-        );
-        let program = &lowered.program;
-        assert!(!program.interface_access.families.is_empty());
-        let has_body = program
+    let lowered = hir::lower::lower_with(&snapshot, &[], &rustc_hash::FxHashMap::default());
+    let program = &lowered.program;
+    assert!(!program.interface_access.families.is_empty());
+    assert!(
+        program
             .funcs
             .iter()
-            .any(|func| func.name.contains("nts$get$") || func.name.contains("nts$set$"));
-        assert_eq!(
-            has_body,
-            access == hir::InterfaceAccess::Materialize,
-            "unused helper bodies must not demand layouts before pruning"
-        );
-    }
+            .any(|func| func.name.contains("nts$get$") || func.name.contains("nts$set$")),
+        "a family's reads dispatch, so its accessor bodies exist before pruning"
+    );
 }
 
 #[test]
-fn preserving_optional_storage_keeps_source_field_reads() {
+fn optional_storage_reads_dispatch_through_their_family() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/programs/accessor-schema-supplier/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    for access in [
-        hir::InterfaceAccess::Materialize,
-        hir::InterfaceAccess::PreserveFieldAccess,
-    ] {
-        let program = hir::prepare_with(
-            &snapshot,
-            &hir::Options {
-                provider: hir::Provider::HostGc,
-                ..hir::Options::new(access)
-            },
-        )
-        .unwrap()
-        .program;
-        if access == hir::InterfaceAccess::PreserveFieldAccess {
-            assert!(
-                program.funcs.iter().all(|func| {
-                    !func.name.contains("nts$get$") && !func.name.contains("nts$set$")
-                }),
-                "a preserved field must not revive a native-only accessor helper"
-            );
-        }
-        for name in ["readLabel", "resultLabel", "textOf"] {
-            let read = program.funcs.iter().find(|f| f.name == name).unwrap();
-            let dispatches = read.values.iter().any(|op| {
-                matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
-                    if program.interface_access.contains_selector(slot))
-            });
-            assert_eq!(
-                dispatches,
-                access == hir::InterfaceAccess::Materialize,
-                "{name}"
-            );
-            if access == hir::InterfaceAccess::PreserveFieldAccess {
-                assert!(
-                    read.values
-                        .iter()
-                        .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
-                );
-            }
-        }
+    let program = hir::prepare_with(
+        &snapshot,
+        &hir::Options {
+            provider: hir::Provider::HostGc,
+            ..hir::Options::default()
+        },
+    )
+    .unwrap()
+    .program;
+    for name in ["readLabel", "resultLabel", "textOf"] {
+        let read = program.funcs.iter().find(|f| f.name == name).unwrap();
+        let dispatches = read.values.iter().any(|op| {
+            matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                if program.interface_access.contains_selector(slot))
+        });
+        assert!(dispatches, "{name}");
     }
 }
 
 #[test]
-fn stored_field_capability_is_independent_of_the_memory_provider() {
+fn stored_field_dispatch_is_independent_of_the_memory_provider() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
@@ -387,55 +340,26 @@ fn stored_field_capability_is_independent_of_the_memory_provider() {
         .join("tests/programs/interface-fields/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
     for provider in [hir::Provider::NoGc, hir::Provider::HostGc] {
-        for interface_access in [
-            hir::InterfaceAccess::Materialize,
-            hir::InterfaceAccess::PreserveFieldAccess,
-        ] {
-            let mut program = hir::prepare_with(
-                &snapshot,
-                &hir::Options {
-                    provider,
-                    ..hir::Options::new(interface_access)
-                },
-            )
-            .unwrap()
-            .program;
-            let read = program
-                .funcs
-                .iter()
-                .find(|func| func.name == "nameOf")
-                .unwrap();
-            let dispatches = read.values.iter().any(|op| {
-                matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
-                    if program.interface_access.contains_selector(slot))
-            });
-            assert_eq!(
-                dispatches,
-                interface_access == hir::InterfaceAccess::Materialize
-            );
-            if interface_access == hir::InterfaceAccess::PreserveFieldAccess {
-                assert!(
-                    read.values
-                        .iter()
-                        .any(|op| matches!(op.kind, OpKind::FieldGet { .. }))
-                );
-                assert!(
-                    read.values.iter().any(|op| {
-                        matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
-                        if name == "nts_refused")
-                    }),
-                    "the preserved positional read must retain its layout guard"
-                );
-            }
-            program.interface_access.mode = Some(match interface_access {
-                hir::InterfaceAccess::Materialize => hir::InterfaceAccess::PreserveFieldAccess,
-                hir::InterfaceAccess::PreserveFieldAccess => hir::InterfaceAccess::Materialize,
-            });
-            assert!(
-                hir::verify::verify(&program).is_err(),
-                "the verifier must reject a changed preparation contract"
-            );
-        }
+        let program = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        )
+        .unwrap()
+        .program;
+        assert!(program.interface_access.materialized);
+        let read = program
+            .funcs
+            .iter()
+            .find(|func| func.name == "nameOf")
+            .unwrap();
+        let dispatches = read.values.iter().any(|op| {
+            matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
+                if program.interface_access.contains_selector(slot))
+        });
+        assert!(dispatches, "{provider:?}");
     }
 }
 
@@ -516,7 +440,7 @@ fn a_field_view_outlives_its_replaced_owner_under_reference_counting() {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::ReferenceCounting,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         },
     )
     .expect("the view's alias and ownership remain valid after RC insertion");
