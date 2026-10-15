@@ -3116,6 +3116,48 @@ impl Emitter<'_> {
         self.assignable_types(&source, &target)
     }
 
+    /// **An array and an object type are classes neither of which can extend
+    /// the other.** An array is a JVM array or one of the runtime's final array
+    /// classes, and an object type is a class this program writes, so storing
+    /// one where the other is declared fails verification -- and a
+    /// `VerifyError` takes the whole class with it, every function in it, where
+    /// a refusal declines this one. Unless the declared type is spelled
+    /// `java/lang/Object`, which takes any reference.
+    ///
+    /// The IR does pass these: test262's `dstr/ary-ptrn-*` call `f([,])` with a
+    /// generator, which unchecked JavaScript's pattern-implied parameter type
+    /// declares an array (record
+    /// `a-generator-passed-to-an-array-pattern-parameter`). C passes the
+    /// pointer, and `f` never reads the array it was promised. Over the 29
+    /// runtime modules this declines nothing that verified: 1,016 declined
+    /// functions before and after (2026-10-15).
+    fn array_and_object_apart(&self, source: &HirType, target: &HirType) -> Result<(), Diagnostic> {
+        let apart = matches!(
+            (source, target),
+            (
+                HirType::Managed(ManagedType::Object(_)),
+                HirType::Managed(ManagedType::Array(_))
+            ) | (
+                HirType::Managed(ManagedType::Array(_)),
+                HirType::Managed(ManagedType::Object(_))
+            )
+        );
+        if apart
+            && types::descriptor(self.shape, target).is_some_and(|it| it != "Ljava/lang/Object;")
+        {
+            return Err(refuse(
+                self.func,
+                &format!(
+                    "storing {} where {} is declared -- an object type and an array are classes \
+                     neither of which extends the other, so the JVM would refuse the class",
+                    types::describe(source),
+                    types::describe(target)
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// The same question between two types rather than two values.
     fn assignable_types(&self, source: &HirType, target: &HirType) -> Result<(), Diagnostic> {
         // Wrappers erase their payload's Java class, then restore it on read.
@@ -3146,6 +3188,7 @@ impl Emitter<'_> {
             }
             _ => {}
         }
+        self.array_and_object_apart(source, target)?;
         let (
             HirType::Managed(ManagedType::Object(source_id)),
             HirType::Managed(ManagedType::Object(target_id)),

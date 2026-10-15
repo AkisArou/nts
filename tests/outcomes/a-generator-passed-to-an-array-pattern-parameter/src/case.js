@@ -6,11 +6,14 @@
 // nothing between them. The verifier accepts the call.
 //
 // C agrees with node by luck: a pointer is a pointer, and `skip` never reads
-// the array it was promised. The JVM refuses the class at load, `VerifyError:
-// Bad type on operand stack` -- the generator's class is not an array -- on
-// every case. Test262 has about 43 such cases (`dstr/ary-ptrn-empty`,
-// `dstr/ary-ptrn-elision-exhausted`, in functions, methods, generators and
-// arrows): 27 crash like this and 16 are refused by the JVM's store check.
+// the array it was promised. The JVM refuses the store by name, "storing an
+// object where an array of erased values is declared" -- an object type and
+// an array are classes neither of which extends the other. It was a
+// `VerifyError` at load until the backend's store check learned that pair,
+// which took the whole program class with it. Test262 has about 43 such cases
+// (`dstr/ary-ptrn-empty`, `dstr/ary-ptrn-elision-exhausted`, in functions,
+// methods, generators and arrows): 31 are refused by name, and 7 still throw
+// `ClassCastException` at a cast of the erased generator.
 //
 // The control is `tests/programs/an-array-passed-to-an-array-pattern-parameter`,
 // which differs in one thing: the argument is an array.
