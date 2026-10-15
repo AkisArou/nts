@@ -508,6 +508,27 @@ public final class RuntimeRegression {
         check(!NtsValue.strictEq(NtsValue.ofNumber(Double.NaN), NtsValue.ofNumber(Double.NaN)), "NaN strict equality");
         check(NtsValue.strictEq(NtsValue.ofNumber(-0.0), NtsValue.ofNumber(0.0)), "zero strict equality");
     }
+    /**
+     * `Number.prototype.toString(radix)` truncates the radix toward zero before using it, so a
+     * fractional radix answers what its integer does. Each fractional case beside its integer, both
+     * as node prints them: 10.9 is ten (`ToString`), 2.5 and 3.7 run the digit loop at 2 and 3.
+     */
+    private static void testRadixTruncates() {
+        Object[][] cases = {
+            {15.0, 2.5, "1111"}, {15.0, 2.0, "1111"},
+            {255.5, 10.9, "255.5"}, {255.5, 10.0, "255.5"},
+            {35.0, 36.5, "z"}, {35.0, 36.0, "z"},
+            {0.1, 2.5, "0.0001100110011001100110011001100110011001100110011001101"},
+            {0.1, 2.0, "0.0001100110011001100110011001100110011001100110011001101"},
+            {-7.25, 2.5, "-111.01"},
+            {1e21, 3.7, "100010202110111202020110202012022200000000000"},
+            {123.456, 16.9, "7b.74bc6a7ef9dc"}, {123.456, 16.0, "7b.74bc6a7ef9dc"},
+        };
+        for (Object[] c : cases) {
+            equal(NtsRuntime.numberToStringRadix((Double) c[0], (Double) c[1]), c[2],
+                "(" + c[0] + ").toString(" + c[1] + ")");
+        }
+    }
     private static void testArraysAndStrings() {
         Random random = new Random(725389);
         NtsArrayD a = NtsArrayD.empty();
@@ -1151,6 +1172,7 @@ public final class RuntimeRegression {
         testSetLength(); System.out.println("array setLength passed");
         testCheckedSet(); System.out.println("checked growable store passed");
         testNumbersAndIndices(); System.out.println("numeric and index tests passed");
+        testRadixTruncates(); System.out.println("a fractional radix truncates passed");
         testArraysAndStrings(); System.out.println("array and string tests passed");
         testPromises(); System.out.println("promise and queue tests passed");
         testTimers(); System.out.println("timer heap tests passed");

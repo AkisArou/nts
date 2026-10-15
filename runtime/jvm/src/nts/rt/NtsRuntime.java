@@ -1226,7 +1226,15 @@ public final class NtsRuntime {
     }
 
     public static String numberToStringRadix(double x, double radix) {
-        if (radix == 10.0) {
+        // `ToIntegerOrInfinity(radix)` first, and nothing reads `radix` after
+        // it: the radix is truncated toward zero, so `(15).toString(2.5)` is
+        // base 2 and `10.9` is base 10, which is `ToString`. This truncated it
+        // into `base` and went on dividing by the raw double, so 2.5 wrote
+        // `210` for 15 where node writes `1111`; and it tested for ten before
+        // truncating, so 10.9 took the digit loop. Outside 2..36 is the
+        // lowering's `RangeError` and never arrives.
+        final int base = (int) radix;
+        if (base == 10) {
             return numberToString(x);
         }
         if (Double.isNaN(x)) {
@@ -1239,7 +1247,6 @@ public final class NtsRuntime {
             return x > 0 ? "Infinity" : "-Infinity";
         }
 
-        final int base = (int) radix;
         final String digits = "0123456789abcdefghijklmnopqrstuvwxyz";
         final char[] buffer = new char[2200];
         int integerCursor = buffer.length / 2;
@@ -1264,8 +1271,8 @@ public final class NtsRuntime {
         if (fraction >= delta) {
             buffer[fractionCursor++] = '.';
             do {
-                fraction *= radix;
-                delta *= radix;
+                fraction *= base;
+                delta *= base;
                 final int digit = (int) fraction;
                 buffer[fractionCursor++] = digits.charAt(digit);
                 fraction -= digit;
@@ -1306,13 +1313,13 @@ public final class NtsRuntime {
         // zeros it stands for. Subnormals answer -1023 here where C's `ilogb`
         // answers the true exponent, and the difference cannot be reached: a
         // subnormal is never above 52.
-        while (integerCursor > 0 && integer > 0.0 && Math.getExponent(integer / radix) > 52) {
-            integer /= radix;
+        while (integerCursor > 0 && integer > 0.0 && Math.getExponent(integer / base) > 52) {
+            integer /= base;
             buffer[--integerCursor] = '0';
         }
         while (integer > 0.0 && integerCursor > 0) {
-            final double remainder = integer % radix;
-            integer = (integer - remainder) / radix;
+            final double remainder = integer % base;
+            integer = (integer - remainder) / base;
             buffer[--integerCursor] = digits.charAt((int) remainder);
         }
         // Against the buffer's middle, not against `fractionCursor`: the
