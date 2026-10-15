@@ -4336,7 +4336,17 @@ impl Emitter<'_> {
                     );
                 }
                 self.load(code, pool, *array)?;
-                self.push_as(code, pool, *index, Kind::Double, origin)?;
+                // The subscript by its own kind, as the read above takes it.
+                // Widened to a `double`, every store paid `i2d` and the
+                // integrality test inside the helper; `awfy-queens`, whose
+                // stores the bounds pass cannot prove, makes three per call.
+                let subscript = if self.kind_of(*index)? == Kind::Int {
+                    Kind::Int
+                } else {
+                    Kind::Double
+                };
+                self.push_as(code, pool, *index, subscript, origin)?;
+                let at = if subscript == Kind::Int { "I" } else { "D" };
                 if holds == Kind::Ref {
                     self.load(code, pool, *value)?;
                 } else {
@@ -4347,7 +4357,7 @@ impl Emitter<'_> {
                     pool,
                     &class,
                     "set",
-                    &format!("(L{class};D{element})V"),
+                    &format!("(L{class};{at}{element})V"),
                 );
                 Ok(Placed::Stored)
             }

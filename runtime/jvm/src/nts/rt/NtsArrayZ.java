@@ -99,6 +99,17 @@ public final class NtsArrayZ {
         }
         a.items[i] = value;
     }
+
+    /**
+     * {@link #set(NtsArrayZ, double, boolean)} for a subscript the compiler
+     * holds as an `int`, as {@link #get(NtsArrayZ, int)} is for a read: a
+     * write inside the length stores in place, and only an append or a
+     * refusal takes the `double` form, which is the one that decides them.
+     */
+    public static void set(NtsArrayZ a, int at, boolean value) {
+        if (at >= 0 && at < a.length) { a.items[at] = value; return; }
+        set(a, (double) at, value);
+    }
     private static void reserve(NtsArrayZ a, int wanted) {
         if (wanted > a.items.length) {
             a.items = Arrays.copyOf(a.items, NtsArrays.growCapacity(a.items.length, wanted));

@@ -133,6 +133,12 @@ public final class NtsArrayL {
         }
         a.items[i] = value;
     }
+
+    /** As `NtsArrayZ.set(NtsArrayZ, int, boolean)`: in place inside the length, else the `double` form. */
+    public static void set(NtsArrayL a, int at, Object value) {
+        if (at >= 0 && at < a.length) { a.items[at] = value; return; }
+        set(a, (double) at, value);
+    }
     private static void reserve(NtsArrayL a, int wanted) {
         if (wanted > a.items.length) {
             a.items = Arrays.copyOf(a.items, NtsArrays.growCapacity(a.items.length, wanted));

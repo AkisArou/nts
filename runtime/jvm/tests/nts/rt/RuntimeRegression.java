@@ -126,12 +126,14 @@ public final class RuntimeRegression {
         final NtsArrayL l = NtsArrayL.of(2);
         final NtsArrayZ z = NtsArrayZ.of(2);
         final NtsValue v = NtsValue.ofNumber(9);
-        NtsArrayD.set(d, 1, 5);
-        NtsArrayD.set(d, 2, 6);
+        // `double` subscripts, spelled so: an `int` literal would bind to the
+        // `int` overload below and leave this form untested.
+        NtsArrayD.set(d, 1.0, 5);
+        NtsArrayD.set(d, 2.0, 6);
         NtsArrayD.set(d, -0.0, 4);
         check(NtsArrayD.length(d) == 3 && NtsArrayD.get(d, 0) == 4 && NtsArrayD.get(d, 2) == 6, "in range, -0, and an append at length");
-        NtsArrayL.set(l, 2, v);
-        NtsArrayZ.set(z, 2, true);
+        NtsArrayL.set(l, 2.0, v);
+        NtsArrayZ.set(z, 2.0, true);
         check(NtsArrayL.length(l) == 3 && NtsArrayZ.length(z) == 3, "each wrapper appends exactly at length");
         for (final double bad : new double[] {4, -1, 1.5, Double.NaN, Double.POSITIVE_INFINITY}) {
             check(setRefuses(() -> NtsArrayD.set(d, bad, 1)), "NtsArrayD refuses " + bad);
@@ -139,6 +141,23 @@ public final class RuntimeRegression {
             check(setRefuses(() -> NtsArrayZ.set(z, bad, true)), "NtsArrayZ refuses " + bad);
         }
         check(NtsArrayD.length(d) == 3 && NtsArrayL.length(l) == 3 && NtsArrayZ.length(z) == 3, "and a refused store changed nothing");
+
+        // The `int` subscript a counter the compiler holds as one arrives as:
+        // the same three answers -- a slot it has, an append at exactly
+        // `length`, and a refusal for anything past it or below zero.
+        NtsArrayD.set(d, 0, 7);
+        NtsArrayD.set(d, 3, 8);
+        check(NtsArrayD.length(d) == 4 && NtsArrayD.get(d, 0) == 7 && NtsArrayD.get(d, 3) == 8, "an int store in range, and an int append at length");
+        NtsArrayL.set(l, 3, v);
+        NtsArrayZ.set(z, 0, false);
+        NtsArrayZ.set(z, 3, true);
+        check(NtsArrayL.length(l) == 4 && NtsArrayZ.length(z) == 4 && !NtsArrayZ.get(z, 0) && NtsArrayZ.get(z, 3), "each wrapper's int store");
+        for (final int bad : new int[] {5, -1, Integer.MIN_VALUE, Integer.MAX_VALUE}) {
+            check(setRefuses(() -> NtsArrayD.set(d, bad, 1)), "NtsArrayD refuses int " + bad);
+            check(setRefuses(() -> NtsArrayL.set(l, bad, v)), "NtsArrayL refuses int " + bad);
+            check(setRefuses(() -> NtsArrayZ.set(z, bad, true)), "NtsArrayZ refuses int " + bad);
+        }
+        check(NtsArrayD.length(d) == 4 && NtsArrayL.length(l) == 4 && NtsArrayZ.length(z) == 4, "and a refused int store changed nothing");
     }
 
     private static void testErasedBigInt() {
