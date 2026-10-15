@@ -72,7 +72,25 @@ public final class NtsSymbol {
 
     /** `String(s)`: `Symbol(d)`, and `Symbol()` when there is no description. */
     public static String describe(NtsSymbol symbol) {
+        return spelled(symbol == null ? null : symbol.description);
+    }
+
+    /**
+     * {@link #describe} as V8 abbreviates it in a diagnostic: a description
+     * longer than 128 UTF-16 units keeps its first and last 56 around
+     * `...<omitted>...`. Cut by units, as V8 cuts them, so a surrogate pair
+     * split at either cut stays split -- node prints the lone half.
+     */
+    public static String describeAbbreviated(NtsSymbol symbol) {
         String inside = symbol == null ? null : symbol.description;
+        if (inside != null && inside.length() > 128) {
+            inside = inside.substring(0, 56) + "...<omitted>..."
+                + inside.substring(inside.length() - 56);
+        }
+        return spelled(inside);
+    }
+
+    private static String spelled(String inside) {
         return inside == null ? "Symbol()" : "Symbol(" + inside + ")";
     }
 }

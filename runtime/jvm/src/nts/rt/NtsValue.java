@@ -287,6 +287,36 @@ public final class NtsValue {
     }
 
     /**
+     * The key a `TypeError` about a `null` or `undefined` receiver names --
+     * `reading 'k'`, `setting 'k'` -- or null to leave that clause out.
+     *
+     * <p>Node's text for every primitive, and nothing that runs program code:
+     * an object, a function or a foreign value answers null rather than asking
+     * its `toString`, which could throw a different error on the way to
+     * reporting this one. Node says `#<Object>` for a plain object and prints a
+     * function's source, and this runtime keeps neither, so the key is left out.
+     * `runtime/c`'s `nts_access_key_description` is the same rule.
+     */
+    public static String accessKeyDescription(NtsValue key) {
+        if (key == null) {
+            throw new NtsRefusal("an access error's key that is not there");
+        }
+        switch (key.tag) {
+            case UNDEFINED:
+            case NULL:
+            case BOOLEAN:
+            case NUMBER:
+            case STRING:
+            case BIGINT:
+                return valueToString(key);
+            case SYMBOL:
+                return NtsSymbol.describeAbbreviated((NtsSymbol) key.ref);
+            default:
+                return null;
+        }
+    }
+
+    /**
      * `String(o)` for an erased object, which is three questions in one.
      *
      * <p>An object that declares its own `toString` answers with it; an array

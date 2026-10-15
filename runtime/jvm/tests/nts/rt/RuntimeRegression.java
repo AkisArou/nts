@@ -820,6 +820,64 @@ public final class RuntimeRegression {
     }
 
     /**
+     * The key in `Cannot read properties of null (reading 'k')`, over every tag.
+     *
+     * <p>Every expectation was printed by node v24.20.0 from `null[k]` and
+     * copied. The two that reasoning gets wrong are `-0`, which is `'0'`, and
+     * a long symbol description, which V8 cuts by UTF-16 units and so can
+     * split a surrogate pair. An object or a function answers null: the
+     * message omits the key rather than run its `toString`.
+     */
+    private static void testAccessKeyDescription() {
+        equal(NtsValue.accessKeyDescription(NtsValue.ofString("abc")), "abc", "string");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofString("")), "", "empty string");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(1.5)), "1.5", "1.5");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(-0.0)), "0", "negative zero");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(Double.NaN)), "NaN", "NaN");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(Double.POSITIVE_INFINITY)),
+            "Infinity", "Infinity");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(Double.NEGATIVE_INFINITY)),
+            "-Infinity", "-Infinity");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(1e21)), "1e+21", "1e21");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofNumber(1e-7)), "1e-7", "1e-7");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofBigInt(NtsBigInt.fromLong(9007199254740993L))),
+            "9007199254740993", "bigint, without its n");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofBoolean(true)), "true", "true");
+        equal(NtsValue.accessKeyDescription(NtsValue.NULL_VALUE), "null", "null");
+        equal(NtsValue.accessKeyDescription(NtsValue.UNDEFINED_VALUE), "undefined", "undefined");
+
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol("desc"))),
+            "Symbol(desc)", "symbol");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(null))),
+            "Symbol()", "symbol without a description");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(""))),
+            "Symbol()", "symbol with an empty description");
+        String exactly128 = "x".repeat(128);
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(exactly128))),
+            "Symbol(" + exactly128 + ")", "128 units is not abbreviated");
+        String past128 = "a".repeat(56) + "M".repeat(17) + "z".repeat(56);
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(past128))),
+            "Symbol(" + "a".repeat(56) + "...<omitted>..." + "z".repeat(56) + ")",
+            "129 units keeps the first and last 56");
+        String face = "😀";
+        String splitHead = "a".repeat(55) + face + "b".repeat(80);
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(splitHead))),
+            "Symbol(" + "a".repeat(55) + "\uD83D...<omitted>..." + "b".repeat(56) + ")",
+            "the first cut splits a surrogate pair");
+        String splitTail = "b".repeat(80) + face + "z".repeat(55);
+        equal(NtsValue.accessKeyDescription(NtsValue.ofReference(NtsSymbol.newSymbol(splitTail))),
+            "Symbol(" + "b".repeat(56) + "...<omitted>...\uDE00" + "z".repeat(55) + ")",
+            "the last cut splits a surrogate pair");
+
+        equal(NtsValue.accessKeyDescription(NtsValue.ofObject(new Labelled(7))), null,
+            "an object with its own toString is not asked");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofObject(new Plain(7))), null, "a plain object");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofObject(new double[] {1, 2})), null, "an array");
+        equal(NtsValue.accessKeyDescription(NtsValue.ofTagged(NtsValue.FUNCTION, new Closure())), null,
+            "a function");
+    }
+
+    /**
      * `Number(v)` over every tag, against node's answers.
      *
      * <p>The helper is five arms and four of them are one line, which is
@@ -1078,6 +1136,7 @@ public final class RuntimeRegression {
         testPromises(); System.out.println("promise and queue tests passed");
         testTimers(); System.out.println("timer heap tests passed");
         testValueToString(); System.out.println("String() of every tag passed");
+        testAccessKeyDescription(); System.out.println("access error keys passed");
         testValueToNumber(); System.out.println("Number() of every tag passed");
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
         testPresenceHas(); System.out.println("presenceHas passed");

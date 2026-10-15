@@ -440,6 +440,12 @@ fn value_external(name: &str) -> Option<(&'static str, &'static str, &'static st
             "valueToString",
             "(Lnts/rt/NtsValue;)Ljava/lang/String;",
         ),
+        // Null, which the lowering tests for, when the key is an object.
+        "nts_access_key_description" => (
+            types::VALUE,
+            "accessKeyDescription",
+            "(Lnts/rt/NtsValue;)Ljava/lang/String;",
+        ),
         "nts_function_name" => (
             types::VALUE,
             "functionName",
