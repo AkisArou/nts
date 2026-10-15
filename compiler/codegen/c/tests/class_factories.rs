@@ -16,8 +16,7 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
         return;
     };
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let config = root
-        .join("tooling/conformance/blockers/an-exported-class-with-a-shared-layout/tsconfig.json");
+    let config = root.join("tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
     assert!(!snapshot.has_errors());
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {

@@ -11,9 +11,8 @@ fn shared_and_unique_layout_classes_keep_their_public_members() {
         eprintln!("SKIP class export roots: tsgo is required");
         return;
     };
-    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "../../tooling/conformance/blockers/an-exported-class-with-a-shared-layout/tsconfig.json",
-    );
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&config)
         .expect("snapshot");
@@ -104,9 +103,8 @@ fn a_live_layout_test_keeps_the_shape_but_a_dead_test_does_not() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
     };
-    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
-        "../../tooling/conformance/blockers/an-exported-class-with-a-shared-layout/tsconfig.json",
-    );
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/refusals/an-exported-class-with-a-shared-layout/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
     let mut program = hir::lower::lower(&snapshot).program;
     let layout = program

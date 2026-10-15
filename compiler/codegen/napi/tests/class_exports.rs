@@ -22,7 +22,7 @@ fn shared_storage_keeps_each_exported_constructor_and_its_members() {
     );
     for (fixture, first, second, control) in [
         (
-            "tooling/conformance/blockers/an-exported-class-with-a-shared-layout",
+            "tests/refusals/an-exported-class-with-a-shared-layout",
             "Shared",
             "Twin",
             "Unique",
