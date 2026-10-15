@@ -33,7 +33,11 @@ fn a_materialised_case_reuses_the_real_frontend_capture() {
 
 #[test]
 fn cached_checker_errors_keep_their_count_diagnostics_and_exit() {
-    assert_frontend_reuse("const value = 1; value(); missingName;", 2);
+    // Plain-JS mode filters type-only errors; TS1189 is a real early error.
+    assert_frontend_reuse(
+        "for (const key = 0 in {}) {} for (const other = 0 in {}) {}",
+        2,
+    );
 }
 
 fn assert_frontend_reuse(text: &str, errors: usize) {

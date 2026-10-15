@@ -693,3 +693,23 @@ fn parallel_publishers_keep_the_bound_and_a_just_hit_entry() {
         "last use must protect the just-hit entry"
     );
 }
+
+#[test]
+fn an_oversized_capture_returns_fresh_without_persisting_payloads() {
+    if budget_child() {
+        return;
+    }
+    let project = Project::new("oversized-budget");
+    assert_budget_child(spawn_budget_child(
+        &project,
+        "cache::content_tests::an_oversized_capture_returns_fresh_without_persisting_payloads",
+        0,
+        2,
+        1,
+    ));
+    assert_eq!(
+        payload_bytes(&project.cache),
+        0,
+        "neither an oversized entry nor its hint is published"
+    );
+}
