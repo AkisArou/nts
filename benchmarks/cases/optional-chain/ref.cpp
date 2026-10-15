@@ -33,10 +33,10 @@ static double run_loop(std::int64_t rounds) {
     std::int64_t total = 0;
     for (std::int64_t i = 0; i < rounds; i++) {
         Held h{nullptr};
-        if (i % 2 == 0) {
+        if ((total & 1) == 0) {
             h.fn = plus_one;
         }
-        total += h.fn ? h.fn(1) : 1;
+        total += h.fn ? h.fn(total & 7) : 1;
     }
     return static_cast<double>(total);
 }

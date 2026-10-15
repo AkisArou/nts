@@ -19,10 +19,10 @@ final class Ref extends Bench.Work {
         final int step = seed;
         int total = 0;
         for (int i = 0; i < 4096; i++) {
-            final int size = (i ^ step) & 0xffff;
+            final int size = (i ^ step ^ total) & 0xffff;
             final Box<Integer> counted = new Box<>(size);
             final Box<Boolean> flagged = new Box<>((i & 1) == 0);
-            total = total ^ counted.get() ^ (flagged.get() ? 1 : 0);
+            total = (total * 33 + counted.get() + (flagged.get() ? 1 : 0)) & 0xffffff;
         }
         return total;
     }

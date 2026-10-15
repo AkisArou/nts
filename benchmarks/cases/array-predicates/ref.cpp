@@ -3,6 +3,7 @@
 // subtraction is spelled out, which is the idiom; `copy_if` needs somewhere to
 // put its output, which is the allocation `filter` also pays.
 #include <algorithm>
+#include <iterator>
 #include <vector>
 #include "harness.h"
 

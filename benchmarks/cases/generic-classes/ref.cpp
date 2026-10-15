@@ -19,10 +19,10 @@ static std::int32_t work(std::int32_t seed) {
     const std::int32_t step = seed;
     std::int32_t total = 0;
     for (std::int32_t i = 0; i < 4096; i++) {
-        const std::int32_t size = (i ^ step) & 0xffff;
+        const std::int32_t size = (i ^ step ^ total) & 0xffff;
         Box<std::int32_t> counted(size);
         Box<bool> flagged((i & 1) == 0);
-        total = total ^ counted.get() ^ (flagged.get() ? 1 : 0);
+        total = (total * 33 + counted.get() + (flagged.get() ? 1 : 0)) & 0xffffff;
     }
     return total;
 }

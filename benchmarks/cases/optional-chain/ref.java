@@ -1,4 +1,4 @@
-// What a Java programmer writes for `h.fn?.(1) ?? 1`: a null check.
+// What a Java programmer writes for `h.fn?.(total & 7) ?? 1`: a null check.
 //
 // Java has no optional-call operator, so the reference spells it out, and the
 // translation is exact because the field holds a reference: `?.` fires on null
@@ -19,14 +19,14 @@
 // fresh capture per assignment.
 final class Ref extends Bench.Work {
     interface Fn {
-        double apply(double x);
+        long apply(long x);
     }
 
     static final class Held {
         Fn fn;
     }
 
-    private static double plusOne(double x) {
+    private static long plusOne(long x) {
         return x + 1;
     }
 
@@ -36,13 +36,13 @@ final class Ref extends Bench.Work {
     private static volatile double rounds = 100000;
 
     static double run(int rounds) {
-        double total = 0;
+        long total = 0;
         for (int i = 0; i < rounds; i = i + 1) {
             Held h = new Held();
-            if (i % 2 == 0) {
+            if ((total & 1) == 0) {
                 h.fn = PLUS_ONE;
             }
-            total = total + (h.fn != null ? h.fn.apply(1) : 1);
+            total = total + (h.fn != null ? h.fn.apply(total & 7) : 1);
         }
         return total;
     }

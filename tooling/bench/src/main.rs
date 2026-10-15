@@ -1661,16 +1661,16 @@ fn validate_lanes() -> Result<()> {
 }
 
 /// The tripwire on a C++ reference that did no work as WASI
-/// (`Row::cpp_wasm_idle`): a listed case loses its WASI cells, said why; any
-/// other fails the run, and so does a listed case that did the work, so the
-/// list cannot outlive its cause.
-fn idle_reference(row: &mut Row) -> Result<()> {
+/// (`Row::cpp_wasm_idle`): a case in `listed` (`WASI_IDLE_TODAY`) loses its
+/// WASI cells, said why; any other fails the run, and so does a listed case
+/// that did the work, so the list cannot outlive its cause.
+fn idle_reference(row: &mut Row, listed: &[(&str, &str)]) -> Result<()> {
     let case = row
         .case
         .strip_suffix(" (rc)")
         .unwrap_or(&row.case)
         .to_owned();
-    let listed = WASI_IDLE_TODAY.iter().find(|(name, _)| *name == case);
+    let listed = listed.iter().find(|(name, _)| *name == case);
     match (row.cpp_wasm_idle(), listed) {
         (true, Some((_, why))) => {
             println!(
@@ -1762,7 +1762,7 @@ fn finish_row(
         assemblyscript: optional(9),
         varied: Vec::new(),
     };
-    idle_reference(&mut row)?;
+    idle_reference(&mut row, WASI_IDLE_TODAY)?;
     // A row whose own passes disagree has no single number, and printing one of
     // them as though it were the answer is the failure this table exists to
     // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
@@ -3335,18 +3335,9 @@ const IDLE_FACTOR: f64 = 50.0;
 /// The cases whose C++ reference does no work as WASI, until their loop is
 /// made to carry each round into the next: their C++ (wasm) cells are left
 /// out, said why, and a listed case that does the work again fails the run
-/// too, so the list cannot outlive its cause.
-const WASI_IDLE_TODAY: &[(&str, &str)] = &[
-    (
-        "optional-chain",
-        "its loop has a closed form, which LLVM takes for wasm32 where for x86 it \
-         vectorises the loop and runs it",
-    ),
-    (
-        "generic-classes",
-        "its loop has a closed form, which LLVM takes for wasm32",
-    ),
-];
+/// too, so the list cannot outlive its cause. Empty since `optional-chain`
+/// and `generic-classes` carry each round into the next.
+const WASI_IDLE_TODAY: &[(&str, &str)] = &[];
 
 /// Cases whose node column measures work nts does not do at all, and what.
 /// Their ratios against node are marked, and say nothing about generated code.
@@ -3523,6 +3514,10 @@ mod tests {
     /// its WASI cells go; unlisted, the run fails; listed and working, too.
     #[test]
     fn a_reference_that_did_no_work_as_wasi_is_caught() {
+        const LISTED: &[(&str, &str)] = &[
+            ("optional-chain", "for the tests"),
+            ("generic-classes", "for the tests"),
+        ];
         let idle = |case: &str| Row {
             cpp: Some(10_000.0),
             cpp_wasm: Some(1.5),
@@ -3530,10 +3525,10 @@ mod tests {
             ..row(case)
         };
         let mut listed = idle("optional-chain");
-        assert!(idle_reference(&mut listed).is_ok());
+        assert!(idle_reference(&mut listed, LISTED).is_ok());
         assert_eq!(listed.cpp_wasm, None);
         assert_eq!(listed.cpp_wasmtime, None);
-        let said = idle_reference(&mut idle("fib"))
+        let said = idle_reference(&mut idle("fib"), LISTED)
             .expect_err("an unlisted reference that did no work fails the run")
             .to_string();
         assert!(said.contains("did no work"), "{said}");
@@ -3542,7 +3537,7 @@ mod tests {
             cpp_wasm: Some(12_000.0),
             ..row("generic-classes")
         };
-        let said = idle_reference(&mut working)
+        let said = idle_reference(&mut working, LISTED)
             .expect_err("a listed reference that did the work fails the run")
             .to_string();
         assert!(said.contains("take it out"), "{said}");
@@ -3551,7 +3546,7 @@ mod tests {
             cpp_wasm: Some(12_000.0),
             ..row("generic-classes")
         };
-        assert!(idle_reference(&mut filtered).is_ok());
+        assert!(idle_reference(&mut filtered, LISTED).is_ok());
     }
 
     #[test]
