@@ -702,6 +702,84 @@ fn source_constructor_values_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// Each `return_call` the module makes, as (caller, callee) by name.
+fn tail_calls(bytes: &[u8]) -> std::collections::BTreeSet<(String, String)> {
+    let mut names = std::collections::BTreeMap::new();
+    let mut imported = 0;
+    let mut sites = vec![];
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        match payload.unwrap() {
+            wasmparser::Payload::ImportSection(imports) => {
+                for import in imports.into_imports() {
+                    if matches!(import.unwrap().ty, wasmparser::TypeRef::Func(_)) {
+                        imported += 1;
+                    }
+                }
+            }
+            wasmparser::Payload::CodeSectionEntry(body) => {
+                let mut reader = body.get_operators_reader().unwrap();
+                while !reader.eof() {
+                    if let wasmparser::Operator::ReturnCall { function_index } =
+                        reader.read().unwrap()
+                    {
+                        sites.push((imported + defined, function_index));
+                    }
+                }
+                defined += 1;
+            }
+            wasmparser::Payload::CustomSection(section) => {
+                if let wasmparser::KnownCustom::Name(reader) = section.as_known() {
+                    for name in reader {
+                        if let wasmparser::Name::Function(map) = name.unwrap() {
+                            for naming in map {
+                                let naming = naming.unwrap();
+                                names.insert(naming.index, naming.name.to_owned());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    sites
+        .into_iter()
+        .map(|(caller, callee)| (names[&caller].clone(), names[&callee].clone()))
+        .collect()
+}
+
+/// Calls in tail position are `return_call`: a recursion 100,000 deep
+/// completes, directly and through a join that only returns the call's
+/// answer, where node runs out of stack. A call inside a `try` whose callee
+/// may throw, and one whose result is added to, keep their frames and answer
+/// the same.
+#[test]
+fn source_tail_calls_do_not_grow_the_stack() {
+    let fixture = common::repository().join("tests/wasm/tail-calls");
+    let emitted = emit_project(&fixture);
+    let tail = tail_calls(&emitted.bytes);
+    for recursive in ["countdown#whole", "throughJoin#whole"] {
+        assert!(
+            tail.contains(&(recursive.to_owned(), recursive.to_owned())),
+            "{recursive} in {tail:?}"
+        );
+    }
+    assert!(
+        !tail
+            .iter()
+            .any(|(caller, _)| caller.starts_with("caught") || caller.starts_with("addedTo")),
+        "{tail:?}"
+    );
+    let output = common::run(
+        "tail-calls",
+        &emitted,
+        "tooling/wasm/check-tail-calls.ts",
+        &[],
+    );
+    assert_eq!(output["cases"], 22, "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

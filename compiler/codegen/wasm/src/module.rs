@@ -45,6 +45,7 @@ pub(crate) fn encoded_size(body: &ir::Function) -> usize {
         encoded.instruction(&match inst {
             ir::Inst::Op(i) => i.clone(),
             ir::Inst::Call(f) => I::Call(f.0),
+            ir::Inst::ReturnCall(f) => I::ReturnCall(f.0),
             ir::Inst::RefFunc(f) => I::RefFunc(f.0),
             ir::Inst::GlobalGet(g) => I::GlobalGet(g.0),
             ir::Inst::GlobalSet(g) => I::GlobalSet(g.0),
@@ -718,6 +719,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     }
     crate::outline::program(&mut m);
     crate::inline::program(&mut m);
+    crate::tail::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
     manifest.builtins = assembled.builtins;
@@ -1154,6 +1156,7 @@ impl Indices {
             }
             ir::Inst::Op(i) => i.clone(),
             ir::Inst::Call(f) => I::Call(self.funcs[f.0 as usize]),
+            ir::Inst::ReturnCall(f) => I::ReturnCall(self.funcs[f.0 as usize]),
             ir::Inst::RefFunc(f) => I::RefFunc(self.funcs[f.0 as usize]),
             ir::Inst::GlobalGet(g) => I::GlobalGet(self.globals[g.0 as usize]),
             ir::Inst::GlobalSet(g) => I::GlobalSet(self.globals[g.0 as usize]),

@@ -56,6 +56,7 @@ mod string_split;
 mod strings;
 mod support;
 mod symbols;
+mod tail;
 mod timers;
 mod transfer;
 mod types;
@@ -258,6 +259,7 @@ pub(crate) fn validate_named(bytes: &[u8], bodies: &[String]) -> Result<(), Emit
         | F::GC
         | F::GC_TYPES
         | F::EXCEPTIONS
+        | F::TAIL_CALL
         | F::SIMD;
     let Err(error) = wasmparser::Validator::new_with_features(features).validate_all(bytes) else {
         return Ok(());

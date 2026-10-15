@@ -20,6 +20,9 @@ pub(crate) enum Inst {
     /// the module only through a symbol.
     Op(I<'static>),
     Call(Func),
+    /// `return_call`: a call in tail position, made by [`crate::tail`] once
+    /// every other pass is done with the body.
+    ReturnCall(Func),
     RefFunc(Func),
     GlobalGet(Global),
     GlobalSet(Global),
