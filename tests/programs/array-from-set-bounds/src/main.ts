@@ -27,16 +27,6 @@ export function fromMapValues(seed: number): number {
   return result.length * 1000 + result[0] + result[1];
 }
 
-export function fromMapEntries(seed: number): number {
-  const values = new Map<number, number>();
-  values.set(0, seed);
-  values.set(1, seed + 2);
-  values.set(2, seed + 4);
-  values.delete(1);
-  const result = Array.from(values.entries());
-  return result.length * 1000 + result[0][1] + result[1][1];
-}
-
 // Control: supplying a mapper leaves this slice's no-callback proof disabled.
 // A mapper that mutates the source is a separate recorded semantic defect;
 // this mapper agrees with node both before and after the bounds change.

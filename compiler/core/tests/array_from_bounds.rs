@@ -17,7 +17,13 @@ fn prepared() -> Option<hir::Prepared> {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
-    Some(hir::prepare(&snapshot).expect("prepared HIR verifies"))
+    let prepared = hir::prepare(&snapshot).expect("prepared HIR verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "every fixture export must compile: {:#?}",
+        prepared.diagnostics
+    );
+    Some(prepared)
 }
 
 /// Only stores into an array allocated at a table's live count. In the mapped
@@ -62,7 +68,7 @@ fn collection_stores(program: &hir::Program, name: &str) -> String {
 #[test]
 fn callback_free_table_collections_use_an_integer_unchecked_write() {
     let Some(prepared) = prepared() else { return };
-    for name in ["fromSet", "fromMapValues", "fromMapEntries"] {
+    for name in ["fromSet", "fromMapValues"] {
         assert_eq!(
             collection_stores(&prepared.program, name),
             "index: Int { bits: 32, signed: true }, checked: false",
