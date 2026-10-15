@@ -19,8 +19,17 @@ mod common;
 
 /// Two closures stored as values at one signature, so each is a class under
 /// the signature's callable base and is called through the uniform entry.
-const SOURCE: &str = "const fs: Array<(x: number) => number> = [(x: number): number => x * 2, (x: number): number => x + 1];\n\
+/// The second declares fewer parameters than the call passes, which is what
+/// keeps the signature off `Program::typed_signatures`: with two that agree,
+/// the call is typed, nothing calls the uniform entry, and prune removes it
+/// (`TYPED_SOURCE`).
+const SOURCE: &str = "const fs: Array<(x: number) => number> = [(x: number): number => x * 2, (): number => 1];\n\
                       export function run(n: number): number {\n  return fs[n & 1]!(n);\n}\n";
+
+/// Two closures that agree with the signature they are stored at, so the call
+/// through it is typed: `invokevirtual` of the signature class's own `call`.
+const TYPED_SOURCE: &str = "const fs: Array<(x: number) => number> = [(x: number): number => x * 2, (x: number): number => x + 1];\n\
+                            export function run(n: number): number {\n  return fs[n & 1]!(n);\n}\n";
 
 /// The same, with one closure that can throw and a caller that catches: the
 /// signature's root then has the raising uniform entry, `erased_call$raises`,
@@ -150,7 +159,7 @@ fn a_closure_static_no_block_holds_gets_no_singleton() {
 /// (an `AbstractMethodError`) or bridged to a body it does not have.
 #[test]
 fn an_uncallable_closure_refuses_by_name() {
-    let Some(said) = uncallable("uncallable", SOURCE, false) else {
+    let Some(said) = uncallable("uncallable", SOURCE, false, Entry::Uniform) else {
         return;
     };
     assert!(
@@ -166,7 +175,7 @@ fn an_uncallable_closure_refuses_by_name() {
 /// So the fixture's raising body is asserted before it is taken away.
 #[test]
 fn an_uncallable_closure_refuses_its_raising_entry_by_name() {
-    let Some(said) = uncallable("uncallable-raising", RAISING_SOURCE, true) else {
+    let Some(said) = uncallable("uncallable-raising", RAISING_SOURCE, true, Entry::Uniform) else {
         return;
     };
     assert!(
@@ -175,11 +184,37 @@ fn an_uncallable_closure_refuses_its_raising_entry_by_name() {
     );
 }
 
-/// Empty `Closure1`'s methods, emit, and call every uniform entry it has from
-/// Java under `-Xverify:all`; what each one said, a line apiece. `raising`
-/// asserts the fixture still has a `@raises` body, which is what makes the
-/// root's raising entry.
-fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
+/// The typed entry's twin: under a signature the core calls typed, the call
+/// is `invokevirtual` of the signature class's own `call`, so a closure under
+/// it with no body is given a `call` that refuses by name, where it would
+/// otherwise inherit the abstract one and be an `AbstractMethodError`.
+#[test]
+fn an_uncallable_closure_under_a_typed_signature_refuses_by_name() {
+    let Some(said) = uncallable("uncallable-typed", TYPED_SOURCE, false, Entry::Typed) else {
+        return;
+    };
+    assert!(
+        said.contains("call: nts: refused at run time: `Closure1` has no `call` to call"),
+        "the typed stub refuses by name as the missing-feature abort: {said}"
+    );
+}
+
+/// Which entries a fixture's call reaches, asserted before anything is taken
+/// away: the uniform-stub tests went vacuous the day the call they relied on
+/// became typed and prune removed the uniform entry they called.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    /// The call takes the uniform entries; no signature is typed.
+    Uniform,
+    /// The call takes a typed signature's own `call`.
+    Typed,
+}
+
+/// Empty `Closure1`'s methods, emit, and call every entry of the kind `entry`
+/// names from Java under `-Xverify:all`; what each one said, a line apiece.
+/// `raising` asserts the fixture still has a `@raises` body, which is what
+/// makes the root's raising entry.
+fn uncallable(name: &str, source: &str, raising: bool, entry: Entry) -> Option<String> {
     let (mut program, dir) = lowered_from(name, source)?;
     let Some(java) = common::tool("java") else {
         eprintln!("SKIP dead_closures/{name}: no JDK");
@@ -193,6 +228,16 @@ fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
         "the fixture's raising bodies: {:?}",
         program.funcs.iter().map(|f| &f.name).collect::<Vec<_>>()
     );
+    assert_eq!(
+        program.typed_signatures.is_empty(),
+        entry == Entry::Uniform,
+        "the fixture's typed signatures: {:?}",
+        program.typed_signatures
+    );
+    let reached = match entry {
+        Entry::Uniform => "m.getName().startsWith(\"erased_call\")",
+        Entry::Typed => "m.getName().equals(\"call\")",
+    };
     for layout in program.layouts.iter_mut().filter(|l| l.name == "Closure1") {
         layout.methods.iter_mut().for_each(|m| *m = None);
     }
@@ -205,18 +250,24 @@ fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
     }
     let jar = out.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
+    // A typed entry takes its parameters at their representations, narrowed
+    // with the signature, so each argument is one of its parameter's type: a
+    // primitive is zero, anything else `undefined`.
     std::fs::write(
         out.join("Drive.java"),
-        "public class Drive { public static void main(String[] a) throws Exception {\n\
-         Class<?> c = Class.forName(\"nts.gen.Closure1\");\n\
-         Object it = c.getDeclaredConstructor().newInstance();\n\
-         for (java.lang.reflect.Method m : c.getDeclaredMethods()) {\n\
-           if (!m.getName().startsWith(\"erased_call\")) continue;\n\
-           Object[] args = new Object[m.getParameterCount()];\n\
-           java.util.Arrays.fill(args, nts.rt.NtsValue.UNDEFINED_VALUE);\n\
-           try { m.invoke(it, args); System.out.println(m.getName() + \" answered\"); }\n\
-           catch (java.lang.reflect.InvocationTargetException e) { System.out.println(m.getName() + \": \" + e.getCause().getMessage()); }\n\
-         }\n}}\n",
+        format!(
+            "public class Drive {{ public static void main(String[] a) throws Exception {{\n\
+             Class<?> c = Class.forName(\"nts.gen.Closure1\");\n\
+             Object it = c.getDeclaredConstructor().newInstance();\n\
+             for (java.lang.reflect.Method m : c.getDeclaredMethods()) {{\n\
+               if (!{reached}) continue;\n\
+               Class<?>[] types = m.getParameterTypes();\n\
+               Object[] args = new Object[types.length];\n\
+               for (int i = 0; i < args.length; i++) args[i] = types[i] == double.class ? (Object) 0.0 : types[i] == int.class ? (Object) 0 : types[i] == long.class ? (Object) 0L : types[i] == boolean.class ? (Object) false : (Object) nts.rt.NtsValue.UNDEFINED_VALUE;\n\
+               try {{ m.invoke(it, args); System.out.println(m.getName() + \" answered\"); }}\n\
+               catch (java.lang.reflect.InvocationTargetException e) {{ System.out.println(m.getName() + \": \" + e.getCause().getMessage()); }}\n\
+             }}\n}}}}\n"
+        ),
     )
     .unwrap();
     let cp = format!("{}:{}", out.display(), jar.display());
@@ -243,7 +294,7 @@ fn uncallable(name: &str, source: &str, raising: bool) -> Option<String> {
     );
     assert!(
         !said.contains("answered"),
-        "no uniform entry of a bodiless closure may answer: {said}"
+        "no entry of a bodiless closure may answer: {said}"
     );
     Some(said)
 }

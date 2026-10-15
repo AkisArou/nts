@@ -984,7 +984,7 @@ fn interface_instance(
 /// The uniform entries the callable root declares, as `(member, descriptor)`:
 /// the erased entry and, where some callable has a raising body, its raising
 /// variant. One derivation for the root and for every class that must fill
-/// them (`unfilled_uniform_stubs`, the lambda adapter).
+/// them (`unfilled_entry_stubs`, the lambda adapter).
 ///
 /// Either entry makes a program need the root: a closure every call to which
 /// is inside a `try` fills only the raising one, and is callable all the same
@@ -1012,15 +1012,17 @@ fn uniform_entries(package: &str, program: &JvmProgram<'_>) -> Vec<(String, Stri
     entries
 }
 
-/// A concrete class under the callable root that does not fill a uniform
-/// entry gets one that refuses by name, the way a declined function's stub
-/// does. Two shapes reach this, and neither may be given a body: a closure
-/// every body of which lowering refused (`dns`' `Closure122`, timers'
-/// `Closure59` -- refused honestly, so its raising entry must not become its
-/// ordinary one), and a class-value token whose calls are refused
+/// A concrete class under the callable root that does not fill an entry its
+/// bases declare gets one that refuses by name, the way a declined function's
+/// stub does. The entries are the root's uniform ones and, under a signature
+/// the core calls typed, that signature's typed `call` ([`typed_entry`]).
+/// Two shapes reach this, and neither may be given a body: a closure every
+/// body of which lowering refused (`dns`' `Closure122`, timers' `Closure59`
+/// -- refused honestly, so its raising entry must not become its ordinary
+/// one), and a class-value token whose calls are refused
 /// (`Ctor_PromiseResolver`). Left abstract, either is an `AbstractMethodError`
 /// the first time a dispatch reaches it, and UNFILLED in `jvm-verifies`.
-fn unfilled_uniform_stubs(
+fn unfilled_entry_stubs(
     package: &str,
     program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
@@ -1038,7 +1040,19 @@ fn unfilled_uniform_stubs(
         return Ok(());
     }
     let class = types::class_name(package, layout);
-    for (member, descriptor) in uniform_entries(package, program) {
+    let mut entries: Vec<(String, String, Vec<VType>)> = uniform_entries(package, program)
+        .into_iter()
+        .map(|(member, descriptor)| {
+            let width =
+                nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
+            let params = (0..width)
+                .map(|_| VType::Object(types::VALUE.to_owned()))
+                .collect();
+            (member, descriptor, params)
+        })
+        .collect();
+    entries.extend(typed_entry(package, program, layout));
+    for (member, descriptor, params) in entries {
         if builder
             .methods
             .iter()
@@ -1046,11 +1060,9 @@ fn unfilled_uniform_stubs(
         {
             continue;
         }
-        let width =
-            nts_jvm_emitter::descriptor::parameters(&descriptor).map_or(0, |list| list.len());
         let mut locals = vec![VType::Object(class.clone())];
-        locals.extend((0..width).map(|_| VType::Object(types::VALUE.to_owned())));
-        let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
+        locals.extend(params);
+        let slots: u16 = locals.iter().map(VType::slots).sum();
         let mut code = Code::new(locals, slots);
         // Only what is true of every case: a closure whose bodies lowering refused,
         // a class-value token that was never callable, one raising arm missing.
@@ -1075,6 +1087,37 @@ fn unfilled_uniform_stubs(
         builder.method(access::PUBLIC, member, descriptor, Some(stub));
     }
     Ok(())
+}
+
+/// The typed `call` a class under a typed signature (`types::is_typed_signature`)
+/// must fill: the signature's own declaration at `closure_slot`, by its member
+/// name and written descriptor, with the verification types of its
+/// parameters. A call through the signature is `invokevirtual` on it, so a
+/// closure under it without that member is an `AbstractMethodError` unless it
+/// is given a stub. `None` for a class under no typed signature.
+fn typed_entry(
+    package: &str,
+    program: &JvmProgram<'_>,
+    layout: &nts_core::hir::Layout,
+) -> Option<(String, String, Vec<VType>)> {
+    let slot = program.closure_slot? as usize;
+    let signature = hierarchy::ancestry(program, layout)
+        .into_iter()
+        .skip(1)
+        .find(|at| types::is_typed_signature(program, at))?;
+    let name = signature.methods.get(slot)?.as_ref()?;
+    let func = program.funcs.iter().find(|f| &f.name == name)?;
+    let descriptor = instance_descriptor(package, program, func)?;
+    let shape = types::Shape::packaged(program, package);
+    let params = func
+        .params
+        .iter()
+        .skip(1)
+        .map(|param| types::vtype(shape, &param.ty))
+        .collect::<Option<Vec<_>>>()?;
+    let member = hierarchy::declared_member(program, signature, slot)
+        .unwrap_or_else(|| hierarchy::member_name(name));
+    Some((member, descriptor, params))
 }
 
 fn callable_root(package: &str, program: &JvmProgram<'_>) -> Result<Option<Class>, Diagnostic> {
@@ -1463,7 +1506,7 @@ fn object_class(
             &origin,
         )?;
     }
-    unfilled_uniform_stubs(package, program, layout, &mut builder, &mut pool, &origin)?;
+    unfilled_entry_stubs(package, program, layout, &mut builder, &mut pool, &origin)?;
     typed_face(package, program, layout, &mut builder, &mut pool, &origin)?;
     // A bound interface declares its own widths; see `foreign_bridges`.
     foreign_bridges(

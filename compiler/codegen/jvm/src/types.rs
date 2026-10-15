@@ -143,7 +143,8 @@ pub fn is_callable_storage(program: &JvmProgram<'_>, layout: &Layout) -> bool {
 
 /// Whether a layout is a *signature*: callable storage, and no closure's
 /// own class. A value of a signature type is any closure the program can store
-/// there, so it is referred to as [`callable_class`].
+/// there, so it is referred to as [`callable_class`] -- unless the core calls
+/// the signature typed; see [`reference_class`].
 #[must_use]
 pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     is_callable_storage(program, layout)
@@ -155,20 +156,39 @@ pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
 
 /// The class a value of this layout's type is referred to as -- in a
 /// descriptor, a frame, a dispatch -- which is [`class_name`] except for a
-/// signature and a split face. Constructing, declaring and naming a class still
-/// use `class_name`: a signature class is still written, and still what a
-/// closure with a signature base extends; a split face's class still holds its
-/// fields, and its values are referred to as the interface every holder
-/// implements (`split_faces`).
+/// signature called through the uniform entries and a split face.
+/// Constructing, declaring and naming a class still use `class_name`: a
+/// signature class is still written, and still what a closure with a
+/// signature base extends; a split face's class still holds its fields, and
+/// its values are referred to as the interface every holder implements
+/// (`split_faces`).
+///
+/// A signature the core calls typed ([`is_typed_signature`]) is referred to as
+/// its own class, which declares the typed `call` every closure under it
+/// fills, so a call through it is `invokevirtual Fn….call` at the written
+/// descriptor. Any other signature's value may be any callable the program
+/// stores there, so it is referred to as the root, which declares only the
+/// uniform entries.
 #[must_use]
 pub fn reference_class(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> String {
     if program.is_split(layout) {
         crate::split_faces::interface_name(package, layout)
-    } else if is_signature(program, layout) && !crate::hierarchy::is_interface(program, layout) {
+    } else if is_signature(program, layout)
+        && !crate::hierarchy::is_interface(program, layout)
+        && !is_typed_signature(program, layout)
+    {
         callable_class(package)
     } else {
         class_name(package, layout)
     }
+}
+
+/// Whether the core calls this signature through its typed entry
+/// (`Program::typed_signatures`): every closure that can arrive at it extends
+/// it and fills `closure_slot` at its written descriptor.
+#[must_use]
+pub fn is_typed_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
+    program.typed_signatures.contains(&layout.name)
 }
 
 /// The class `new` allocates for a layout: its own, except for one this backend
