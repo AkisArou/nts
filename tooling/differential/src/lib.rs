@@ -2382,6 +2382,23 @@ fn run_wasm(
         }
         Err(error) => return Err(error.into()),
     };
+    // A check calls every export it keeps, so one the boundary declined stops
+    // it as a declined shape does, where the module would otherwise be emitted
+    // without it.
+    if !emitted.declined.is_empty() {
+        for declined in &emitted.declined {
+            let line = declined.diagnostic().map_or_else(
+                || declined.to_string(),
+                |diagnostic| nts_diagnostics::diagnostic_line(sources, &diagnostic),
+            );
+            eprintln!("  not emitted: {line}");
+        }
+        bail!(
+            "the Wasm backend declined {} export(s), listed above; nothing can be \
+             checked until they are removed or supported",
+            emitted.declined.len()
+        );
+    }
     let glue = nts_codegen_wasm::glue(&emitted.manifest, nts_codegen_wasm::Host::Node)
         .map_err(anyhow::Error::msg)?;
     let module = dir.join("wasm");

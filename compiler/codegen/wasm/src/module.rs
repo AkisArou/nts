@@ -10,12 +10,11 @@
 //! design: the whole-program type plan fixes them before lowering.
 
 use crate::{
-    BoundaryType, EmitError, Emitted, FunctionExport, GlobalExport, InfiniteBound,
+    BoundaryType, DeclinedExport, EmitError, Emitted, FunctionExport, GlobalExport, InfiniteBound,
     InstructionOrigin, Manifest, NumberBound, NumberGuard, Parameter, body, demand, error::Failure,
-    gc, ir, refuse, types::Physical,
+    gc, ir, types::Physical,
 };
 use nts_core::hir::{Func as HirFunc, HirType, ParamShape, Program, ValueId};
-use nts_diagnostics::Diagnostic;
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{
@@ -700,7 +699,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     for global in &program.globals {
         validate_global(&m, global)?;
     }
-    let mut manifest = manifest(program, &funcs, &mut m)?;
+    let (mut manifest, declined_exports) = manifest(program, &funcs, &mut m)?;
     let mut routes = Vec::new();
     let mut declines = Vec::new();
     for func in &funcs {
@@ -731,6 +730,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
         bytes: assembled.bytes,
         manifest,
         origins: assembled.origins,
+        declined: declined_exports,
     })
 }
 
@@ -751,12 +751,6 @@ fn export_result(func: &HirFunc) -> Result<BoundaryType, String> {
 }
 
 fn preflight(program: &Program) -> Result<(), EmitError> {
-    if let Some((name, _)) = program.public_namespaces.first() {
-        return Err(EmitError::UnsupportedSurface {
-            name: name.clone(),
-            reason: "public namespace objects are outside M1a".to_owned(),
-        });
-    }
     if let Some(class) = program.foreign_classes.first() {
         return Err(EmitError::UnsupportedSurface {
             name: class.name.clone(),
@@ -870,15 +864,25 @@ fn initial(value: f64, ty: &HirType) -> Result<I<'static>, Failure> {
 }
 
 /// The public surface: exports, their logical boundary types and the module
-/// initializer. It runs before any body is lowered, so a public-shape refusal
-/// takes precedence over body refusals.
+/// initializer, and the published names it declines. It runs before any body
+/// is lowered. A declined name is only left out of the exports: its
+/// definition is compiled as every other one is, so nothing else changes.
 fn manifest(
     program: &Program,
     funcs: &[&HirFunc],
     m: &mut Builder<'_>,
-) -> Result<Manifest, EmitError> {
+) -> Result<(Manifest, Vec<DeclinedExport>), EmitError> {
     let mut exports = Vec::new();
     let mut globals = Vec::new();
+    let mut declined: Vec<_> = program
+        .public_namespaces
+        .iter()
+        .map(|(name, _)| DeclinedExport {
+            name: name.clone(),
+            reason: "a namespace object at the public boundary".to_owned(),
+            at: None,
+        })
+        .collect();
     let mut names = BTreeSet::new();
     let definitions: FxHashMap<_, _> = funcs
         .iter()
@@ -896,8 +900,19 @@ fn manifest(
                 "duplicate published name `{published}`"
             )));
         }
+        let decline = |reason, at| DeclinedExport {
+            name: published.clone(),
+            reason,
+            at,
+        };
         if let Some(func) = definitions.get(emitted.as_str()) {
-            unpublishable(func, published)?;
+            let (params, result) = match function_surface(func) {
+                Ok(surface) => surface,
+                Err(reason) => {
+                    declined.push(decline(reason, Some(func.origin.location)));
+                    continue;
+                }
+            };
             let id = m
                 .program_func(emitted)
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
@@ -905,38 +920,20 @@ fn manifest(
                 .and_then(|id| crate::boundary::entry(m, id, func))
                 .map_err(|failure| failure.at(&func.name, &func.origin))?;
             m.export_func(published, id);
-            let params = func
-                .params
-                .iter()
-                .map(parameter)
-                .collect::<Result<_, _>>()
-                .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?;
             exports.push(FunctionExport {
                 name: published.clone(),
                 params,
-                result: export_result(func)
-                    .map_err(|why| EmitError::Declined(vec![refuse(func, &func.origin, why)]))?,
+                result,
             });
-        } else if let Some((at, global)) = global_definitions.get(emitted.as_str()) {
-            initialized_global(program, index(*at), global, published)?;
-            let ty = BoundaryType::from_hir(&global.ty)
-                .and_then(|ty| match ty {
-                    BoundaryType::Promise => {
-                        Err("a promise global at the public boundary".to_owned())
-                    }
-                    BoundaryType::Value => {
-                        Err("an open value as a global at the public boundary".to_owned())
-                    }
-                    _ => Ok(ty),
-                })
-                .map_err(|why| {
-                    EmitError::Declined(vec![Diagnostic::error(
-                        "NTS5001",
-                        format!("wasm declines public global `{published}`: {why}"),
-                        global.origin.location,
-                    )])
-                })?;
-            let id = program_global(m, index(*at)).map_err(|failure| {
+        } else if let Some(&(at, global)) = global_definitions.get(emitted.as_str()) {
+            let ty = match global_surface(program, index(at), global) {
+                Ok(ty) => ty,
+                Err(reason) => {
+                    declined.push(decline(reason, Some(global.origin.location)));
+                    continue;
+                }
+            };
+            let id = program_global(m, index(at)).map_err(|failure| {
                 failure.at(&format!("global {}", global.name), &global.origin)
             })?;
             m.export_global(published, id);
@@ -944,10 +941,10 @@ fn manifest(
                 name: published.clone(),
                 symbol: published.clone(),
                 ty,
-                live: assigned_after_init(program, index(*at)),
+                live: assigned_after_init(program, index(at)),
             });
         } else {
-            return Err(surface_decline(program, published));
+            declined.push(decline(unexported(program, emitted, published), None));
         }
     }
     if exports
@@ -959,7 +956,7 @@ fn manifest(
         })?;
     }
     let init = initializer(&definitions, &names, m)?;
-    Ok(Manifest {
+    let manifest = Manifest {
         abi: 3,
         host: "js".to_owned(),
         exports,
@@ -969,7 +966,8 @@ fn manifest(
         builtins: Vec::new(),
         features: Vec::new(),
         functions: Vec::new(),
-    })
+    };
+    Ok((manifest, declined))
 }
 
 /// Whether a function other than the module initializer assigns the global.
@@ -1011,53 +1009,59 @@ fn initializer(
     Ok(Some(symbol))
 }
 
-fn initialized_global(
-    program: &Program,
-    at: u32,
-    global: &nts_core::hir::Global,
-    published: &str,
-) -> Result<(), EmitError> {
-    if global.deferred && !program.global_is_initialized(at) {
-        return Err(EmitError::Declined(vec![Diagnostic::error(
-            "NTS5001",
-            format!(
-                "wasm declines `{published}`: its module initializer did not initialize the global"
-            ),
-            global.origin.location,
-        )]));
-    }
-    Ok(())
-}
-
-fn surface_decline(program: &Program, name: &str) -> EmitError {
-    let reason = program
-        .uncompiled
-        .iter()
-        .find(|(at, _)| at == name)
-        .map_or("public shape is outside M1a", |(_, reason)| reason.as_str());
-    EmitError::UnsupportedSurface {
-        name: name.to_owned(),
-        reason: reason.to_owned(),
-    }
-}
-
-/// An export whose parameter shape no host call can fill: an optional or a
-/// rest parameter. A defaulted one crosses as a required one, as N-API's
-/// does: no host caller can evaluate the initializer, which the core inlines
-/// at each compiled call.
-fn unpublishable(func: &HirFunc, published: &str) -> Result<(), EmitError> {
+/// What an export of `func` takes and answers at the boundary, or why no host
+/// call can make it. A defaulted parameter crosses as a required one, as
+/// N-API's does: no host caller can evaluate the initializer, which the core
+/// inlines at each compiled call. An optional or a rest one no host call can
+/// fill.
+fn function_surface(func: &HirFunc) -> Result<(Vec<Parameter>, BoundaryType), String> {
     if func
         .params
         .iter()
         .any(|p| matches!(p.shape, ParamShape::Optional | ParamShape::Rest))
     {
-        return Err(EmitError::Declined(vec![refuse(
-            func,
-            &func.origin,
-            format!("optional/rest public boundary `{published}`"),
-        )]));
+        return Err("an optional or rest parameter at the public boundary".to_owned());
     }
-    Ok(())
+    let params = func
+        .params
+        .iter()
+        .map(parameter)
+        .collect::<Result<_, _>>()?;
+    Ok((params, export_result(func)?))
+}
+
+/// The type a published global crosses the boundary as, or why it cannot.
+fn global_surface(
+    program: &Program,
+    at: u32,
+    global: &nts_core::hir::Global,
+) -> Result<BoundaryType, String> {
+    if global.deferred && !program.global_is_initialized(at) {
+        return Err("its module initializer did not initialize the global".to_owned());
+    }
+    match BoundaryType::from_hir(&global.ty)? {
+        BoundaryType::Promise => Err("a promise global at the public boundary".to_owned()),
+        BoundaryType::Value => Err("an open value as a global at the public boundary".to_owned()),
+        ty => Ok(ty),
+    }
+}
+
+/// Why a published name has no definition to export: the lowering's refusal
+/// where it recorded one -- under the published name for a module-scope value
+/// it could not store, under the emitted one for a function it refused -- and
+/// otherwise what such a name is.
+fn unexported(program: &Program, emitted: &str, published: &str) -> String {
+    program
+        .uncompiled
+        .iter()
+        .find(|(at, _)| at == published || at == emitted)
+        .map_or_else(
+            || {
+                "no function or global holds it, as for a class or a constant the lowering folded"
+                    .to_owned()
+            },
+            |(_, reason)| reason.clone(),
+        )
 }
 
 fn parameter(p: &nts_core::hir::Param) -> Result<Parameter, String> {

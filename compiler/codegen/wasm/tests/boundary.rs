@@ -118,10 +118,22 @@ fn publication_uses_public_api_and_requires_public_default_parameters() {
             .contains("an omitted argument of a defaulted parameter"),
         "the glue refuses an omitted defaulted argument by name"
     );
-    // An optional one is still refused at publication.
+    // An optional one is still refused at publication: that export is
+    // declined, and the rest of the surface is published without it.
     let index = p.funcs.iter().position(|f| f.name == "internal").unwrap();
     p.funcs[index].params[0].shape = ParamShape::Optional;
-    let error = nts_codegen_wasm::emit(&p).unwrap_err();
-    assert!(error.to_string().contains("NTS5001"));
-    assert!(error.to_string().contains("optional/rest public boundary"));
+    let emitted = nts_codegen_wasm::emit(&p).unwrap();
+    let [declined] = emitted.declined.as_slice() else {
+        panic!("one declined export: {:?}", emitted.declined);
+    };
+    assert_eq!(declined.name, "defaulted");
+    assert!(declined.to_string().contains("NTS5001"));
+    assert!(declined.reason.contains("an optional or rest parameter"));
+    let names: Vec<_> = emitted
+        .manifest
+        .exports
+        .iter()
+        .map(|e| e.name.as_str())
+        .collect();
+    assert_eq!(names, ["published"]);
 }

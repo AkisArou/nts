@@ -77,11 +77,59 @@ pub use support::{Support, helper_support};
 pub use types::{Absence, BoundaryType};
 
 /// A complete artifact; failed/declined programs never return partial bytes.
+/// Its surface may lack a published name the boundary cannot carry, and then
+/// `declined` says which and why.
 #[derive(Debug)]
 pub struct Emitted {
     pub bytes: Vec<u8>,
     pub manifest: Manifest,
     pub origins: Vec<InstructionOrigin>,
+    pub declined: Vec<DeclinedExport>,
+}
+
+/// A published name the artifact does not export, and why.
+///
+/// One export the boundary cannot carry declined the whole module, which C
+/// does not: it emits the program and reports the name
+/// (`published_without_a_symbol`), as the Node-API addon declines one export
+/// at a time. 62 test262 cases that ran on C were declined on Wasm for an
+/// export the program never calls (2026-10-15): a fixture module's `export
+/// default` of a constant the lowering folded away, or a module-scope name
+/// whose closure the lowering refused. Whether a missing name matters is the
+/// caller's: an artifact is still a program, while `nts check` calls its
+/// exports by name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclinedExport {
+    pub name: String,
+    pub reason: String,
+    /// The declaration's location, when the surface has one. A name with no
+    /// definition has none, and none is invented: a diagnostic without a
+    /// location is a bug.
+    pub at: Option<nts_diagnostics::Location>,
+}
+
+impl DeclinedExport {
+    /// The same report as a warning at the declaration, where there is one.
+    #[must_use]
+    pub fn diagnostic(&self) -> Option<Diagnostic> {
+        self.at.map(|at| Diagnostic {
+            severity: nts_diagnostics::Severity::Warning,
+            ..Diagnostic::error("NTS5001", self.message(), at)
+        })
+    }
+
+    fn message(&self) -> String {
+        format!(
+            "wasm declines public export `{}`: {}",
+            self.name, self.reason
+        )
+    }
+}
+
+impl std::fmt::Display for DeclinedExport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NTS5001: {}", self.message())
+    }
 }
 
 /// What the module exports and imports, at logical types. The generated glue

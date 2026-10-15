@@ -80,18 +80,27 @@ fn every_unsupported_public_shape_is_named_even_without_function_origin() {
         )],
         ..Program::default()
     };
-    let error = nts_codegen_wasm::emit(&p).unwrap_err();
-    assert!(matches!(error, EmitError::UnsupportedSurface { .. }));
-    assert!(error.to_string().contains("NTS5001"));
-    assert!(error.to_string().contains("published"));
-    assert!(error.to_string().contains("declared callback"));
+    // The name is declined, not the module: what else it has is emitted.
+    let emitted = nts_codegen_wasm::emit(&p).unwrap();
+    let [declined] = emitted.declined.as_slice() else {
+        panic!("one declined export: {:?}", emitted.declined);
+    };
+    assert_eq!(declined.name, "published");
+    assert!(declined.reason.contains("declared callback"));
+    assert!(declined.to_string().contains("NTS5001"));
+    assert!(
+        declined.at.is_none() && declined.diagnostic().is_none(),
+        "no location is invented for a name with no origin"
+    );
+    assert!(emitted.manifest.exports.is_empty());
     p.public_api.clear();
     p.public_namespaces.push(("namespace".to_owned(), vec![]));
+    let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert!(
-        nts_codegen_wasm::emit(&p)
-            .unwrap_err()
-            .to_string()
-            .contains("namespace")
+        emitted
+            .declined
+            .iter()
+            .any(|declined| declined.name == "namespace" && declined.reason.contains("namespace"))
     );
 }
 
@@ -102,10 +111,25 @@ fn optional_public_parameters_decline_without_filling_them_with_zero() {
     let arg = value(&mut f, OpKind::Param(0), F64);
     f.blocks
         .push(block(&[], &[arg], Terminator::Return(Some(arg))));
-    assert!(matches!(
-        nts_codegen_wasm::emit(&program(vec![f])),
-        Err(EmitError::Declined(_))
-    ));
+    let emitted = nts_codegen_wasm::emit(&program(vec![f])).unwrap();
+    assert!(
+        emitted
+            .declined
+            .iter()
+            .any(|declined| declined.name == "optional"
+                && declined.reason.contains("optional or rest")
+                && declined.diagnostic().is_some()),
+        "declined at its declaration: {:?}",
+        emitted.declined
+    );
+    assert!(
+        emitted
+            .manifest
+            .exports
+            .iter()
+            .all(|export| export.name != "optional"),
+        "an export no host call can fill is not published"
+    );
 }
 
 #[test]

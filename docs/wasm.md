@@ -1034,11 +1034,17 @@ also why the failure's text was missing.
 `compiler/codegen/wasm` emits a core module directly from prepared HIR. It
 predeclares callable signatures and imports, assigns typed locals, emits every
 reachable body, records instruction Origins, and validates the completed bytes
-before returning an `Emitted`. Unsupported scalar representations, operations,
-external helpers and public shapes return a named `NTS5001`; malformed HIR and
-generated-byte validation errors remain distinct integrity failures. No declined
-program returns partial bytes. The CLI also stops on preparation errors before
-creating its output directory.
+before returning an `Emitted`. Unsupported scalar representations, operations
+and external helpers return a named `NTS5001`; malformed HIR and generated-byte
+validation errors remain distinct integrity failures. No declined program
+returns partial bytes. A public export the boundary cannot carry declines only
+that export: `Emitted::declined` names it and why, and the module is emitted
+without it, as `emit-c` leaves out a name it cannot publish and the Node-API
+addon declines one export at a time. `nts emit-wasm` says so in a note on
+stdout, as C does, not as an NTS line: every reader of those takes one for code
+that was not compiled. `nts check` calls its exports by name, so there a
+declined one still stops the check. The CLI also stops on preparation errors
+before creating its output directory.
 
 The current module has numeric storage, bools, direct calls and recursion,
 numeric globals and module initialization. It supports f32/f64 and signed or
@@ -1077,12 +1083,12 @@ defaulted parameter crosses as a required one, as N-API's does: lowering
 evaluates the initializer at each compiled call that omits the argument, so a
 host caller has nowhere to get it from, and omitting it is refused by name
 ("an omitted argument of a defaulted parameter") rather than given an invented
-value. Public optional and rest parameters decline; compiled private calls use
-all three shapes.
+value. A public optional or rest parameter declines its export; compiled private
+calls use all three shapes.
 
-Publication tables carry names without Origins. An unsupported public surface
-therefore has an explicitly named `UnsupportedSurface` refusal, rather than a
-fabricated location. Operation/type refusals retain their HIR source Origins.
+Publication tables carry names without Origins. A declined export with no
+definition (a class, a constant the lowering folded, a namespace) therefore has
+no location, rather than a fabricated one. Operation/type refusals retain their HIR source Origins.
 The CLI writes `program.origins.json` beside the production artifacts, with
 function indices, offsets inside function payloads, Origins and normalized
 source URIs/digests/rewrite metadata. It includes no source text or diagnostic

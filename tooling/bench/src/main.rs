@@ -2392,6 +2392,13 @@ fn wasm_case(
         ),
         Err(error) => bail!("declined: {error}"),
     };
+    if let Some(declined) = emitted
+        .declined
+        .iter()
+        .find(|declined| declined.name == callee)
+    {
+        bail!("declined: {declined}");
+    }
     if !emitted
         .manifest
         .exports

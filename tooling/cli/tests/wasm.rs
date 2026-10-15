@@ -45,13 +45,15 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
     );
     let checked: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(checked["cases"].as_u64().unwrap() >= 150_000);
+    // A body the backend cannot compile, or a whole-program refusal, declines
+    // the module before anything is written.
     for (label, flags, source, code, name) in [
         (
-            "unsupported",
+            "body",
             vec![],
-            root.join("tests/wasm/declines"),
+            root.join("tests/wasm/check-compiles-every-body"),
             "NTS5001",
-            "unsupportedBigInt",
+            "keyed",
         ),
         ("rc", vec!["--rc"], supported.clone(), "NTS2001", "--rc"),
     ] {
@@ -102,6 +104,40 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
         "{said}"
     );
     std::fs::remove_dir_all(scratch).unwrap();
+}
+
+/// An export outside the Wasm boundary is left out by name and the module is
+/// written without it, as `emit-c` leaves out a name it cannot publish -- and
+/// said in a note, as C says it, not as an NTS line on stderr, which every
+/// reader takes for code that was not compiled.
+#[test]
+fn emit_wasm_declines_an_export_it_cannot_publish_and_writes_the_rest() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let out = std::env::temp_dir().join(format!("nts-wasm-declined-{}", std::process::id()));
+    let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["emit-wasm", "--no-acquire", "--out"])
+        .arg(&out)
+        .arg(root.join("tests/wasm/declines"))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        result.status.success() && !stderr.contains("NTS"),
+        "{stderr}"
+    );
+    assert!(
+        stdout.contains("`unsupportedBigInt` is exported but the module does not publish it")
+            && stdout.contains("declared at"),
+        "{stdout}"
+    );
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(out.join("program.wasm.json")).unwrap()).unwrap();
+    assert!(manifest["exports"].as_array().unwrap().is_empty());
+    std::fs::remove_dir_all(out).unwrap();
 }
 
 /// `--host` is read in either spelling and in any position, and a missing,

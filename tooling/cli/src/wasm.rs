@@ -99,6 +99,21 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         emitted.manifest.exports.len(),
         emitted.manifest.globals.len()
     );
+    // **Said, not refused.** A published name the boundary cannot carry is left
+    // out of the module while every body compiles, as `emit-c` leaves out a name
+    // with no symbol, so it is a note here in C's shape rather than an NTS line
+    // on stderr: tools read one of those as code that was not compiled, and the
+    // test262 runner judged 63 programs that compiled and ran refused for it.
+    for declined in &emitted.declined {
+        let at = declined
+            .at
+            .map(|at| format!(" (declared at {})", locations.where_it_is(&at)))
+            .unwrap_or_default();
+        println!(
+            "  `{}` is exported but the module does not publish it: {}{at}",
+            declined.name, declined.reason
+        );
+    }
     Ok(())
 }
 
