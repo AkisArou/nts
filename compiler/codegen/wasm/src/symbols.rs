@@ -65,6 +65,9 @@ pub(crate) enum Helper {
     KeyFor,
     /// `(symbol) -> text`: `Symbol(description)`.
     Text,
+    /// `(symbol) -> text`: `Symbol(description)` as V8 names a key in an
+    /// error, a long description cut ([`key_text`]).
+    KeyText,
 }
 
 /// The symbol type, its descriptor, and the registry's table when one is
@@ -153,7 +156,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             vec![strings::STRING],
             Some(Physical::Reference(symbol_ref(t, false))),
         ),
-        Helper::KeyFor | Helper::Text => (vec![symbol], Some(strings::STRING)),
+        Helper::KeyFor | Helper::Text | Helper::KeyText => (vec![symbol], Some(strings::STRING)),
     };
     m.helper(
         FuncKey::Symbol(helper),
@@ -164,6 +167,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, helper: Helper) -> Result<Func, Failur
             Helper::For => for_key(m, t),
             Helper::KeyFor => key_for(m, t),
             Helper::Text => text(m, t),
+            Helper::KeyText => abbreviated(m, t),
         },
     )
 }
@@ -307,6 +311,85 @@ fn text(m: &mut Builder<'_>, t: SymbolTypes) -> Result<Function, Failure> {
     f.call(concat);
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// The most code units of a description V8 writes whole in an error, and how
+/// many it keeps from each end of a longer one around `...<omitted>...`
+/// (node v24.20.0, `NoSideEffectsToMaybeString`; C's
+/// `nts_access_key_description`). Code units, a lone surrogate at a cut
+/// included.
+const WHOLE: i32 = 128;
+const KEPT: i32 = 56;
+
+/// `Symbol(description)` with a description past [`WHOLE`] code units cut to
+/// its first and last [`KEPT`].
+///
+/// Params: symbol. Locals: its description, its length.
+fn abbreviated(m: &mut Builder<'_>, t: SymbolTypes) -> Result<Function, Failure> {
+    let plain = callee(m, Helper::Text)?;
+    let length = strings::callee(m, strings::Helper::Length)?;
+    let substring = strings::callee(m, strings::Helper::SubstringBuiltin)?;
+    let concat = strings::callee(m, strings::Helper::Concat)?;
+    let open = m.literal("Symbol(");
+    let omitted = m.literal("...<omitted>...");
+    let close = m.literal(")");
+    let (description, units) = (1, 2);
+    let mut f = Function::new([ValType::Ref(RefType::EXTERNREF), ValType::I32]);
+    f.instructions(&[
+        I::LocalGet(0),
+        I::StructGet {
+            struct_type_index: t.symbol,
+            field_index: DESCRIPTION,
+        },
+        I::LocalTee(description),
+        I::RefIsNull,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+    ]);
+    f.call(plain);
+    f.instructions(&[I::Return, I::End, I::LocalGet(description)]);
+    f.call(length);
+    f.instructions(&[
+        I::LocalTee(units),
+        I::I32Const(WHOLE),
+        I::I32LeU,
+        I::If(BlockType::Empty),
+        I::LocalGet(0),
+    ]);
+    f.call(plain);
+    f.instructions(&[I::Return, I::End]);
+    f.global_get(open);
+    f.instructions(&[I::LocalGet(description), I::I32Const(0), I::I32Const(KEPT)]);
+    f.call(substring);
+    f.call(concat);
+    f.global_get(omitted);
+    f.call(concat);
+    f.instructions(&[
+        I::LocalGet(description),
+        I::LocalGet(units),
+        I::I32Const(KEPT),
+        I::I32Sub,
+        I::LocalGet(units),
+    ]);
+    f.call(substring);
+    f.call(concat);
+    f.global_get(close);
+    f.call(concat);
+    f.instruction(&I::End);
+    Ok(f)
+}
+
+/// The key text of an erased value already known to be a symbol, for a
+/// `TypeError`'s message ([`abbreviated`]).
+pub(crate) fn key_text(m: &mut Builder<'_>, f: &mut Function, value: u32) -> Result<(), Failure> {
+    let t = types(m)?;
+    let text = callee(m, Helper::KeyText)?;
+    f.instructions(&[
+        I::LocalGet(value),
+        I::RefCastNonNull(HeapType::Concrete(t.symbol)),
+    ]);
+    f.call(text);
+    Ok(())
 }
 
 /// The text of an erased value already known to be a symbol, for

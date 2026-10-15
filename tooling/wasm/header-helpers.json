@@ -4,6 +4,7 @@
     "runtime/c/nts_unicode.h"
   ],
   "native": [
+    "nts_access_key_description",
     "nts_alloc",
     "nts_append_slot",
     "nts_array_at",

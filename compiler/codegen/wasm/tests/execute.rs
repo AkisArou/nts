@@ -780,6 +780,24 @@ fn source_tail_calls_do_not_grow_the_stack() {
     assert_eq!(output["cases"], 22, "{output}");
 }
 
+/// A null or undefined receiver's `TypeError` names its key as node does: a
+/// primitive by its text, a long symbol description cut, an object not at all.
+#[test]
+fn source_null_receiver_keys_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/null-receiver-keys");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "null-receiver-keys",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 153, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

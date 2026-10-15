@@ -1,6 +1,7 @@
 //! Literal decisions: adding a helper requires an explicit reviewed row.
 use super::Support;
 pub(super) const ROWS: &[(&str, Support)] = &[
+    ("nts_access_key_description", Support::WasmHelper),
     (
         "nts_alloc",
         Support::Decline("native memory/provider contract"),

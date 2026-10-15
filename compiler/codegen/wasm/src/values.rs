@@ -17,7 +17,7 @@ use crate::{
     strings,
 };
 use nts_core::hir::{HirType, ManagedType, ValueId};
-use wasm_encoder::{BlockType, Instruction as I, RefType, ValType};
+use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
@@ -31,6 +31,9 @@ pub(crate) enum Helper {
     BoolText,
     /// `String(v)` of an erased value.
     ValueText,
+    /// A property key as a null receiver's `TypeError` names it: a
+    /// primitive's text, a symbol's abbreviated, null for anything else.
+    AccessKey,
     /// `util.inspect(v)` of an erased value, as console prints it.
     Inspect,
     /// `typeof`, spelled from a tag.
@@ -46,7 +49,7 @@ impl Helper {
     pub(crate) const fn inline(self) -> bool {
         !matches!(
             self,
-            Self::ValueText | Self::Inspect | Self::TagName | Self::ConsoleWrite
+            Self::ValueText | Self::AccessKey | Self::Inspect | Self::TagName | Self::ConsoleWrite
         )
     }
 }
@@ -58,6 +61,7 @@ pub(crate) fn external(name: &str) -> Option<Helper> {
         "nts_no_arm_of" => Some(Helper::NoArm),
         "nts_bool_to_string" => Some(Helper::BoolText),
         "nts_value_to_string" => Some(Helper::ValueText),
+        "nts_access_key_description" => Some(Helper::AccessKey),
         "nts_value_inspect" => Some(Helper::Inspect),
         "nts_tag_name" => Some(Helper::TagName),
         "nts_console_write" => Some(Helper::ConsoleWrite),
@@ -83,7 +87,7 @@ pub(crate) fn call(
     let wanted = match helper {
         Helper::Refused | Helper::AssertionFailed => HirType::Managed(ManagedType::String),
         Helper::BoolText => HirType::Bool,
-        Helper::ValueText | Helper::Inspect => HirType::Erased,
+        Helper::ValueText | Helper::AccessKey | Helper::Inspect => HirType::Erased,
         Helper::TagName => HirType::Int {
             bits: 32,
             signed: false,
@@ -117,9 +121,10 @@ pub(crate) fn call(
         Helper::ConsoleWrite | Helper::NoArm => {
             return Err(Failure::Invariant(format!("{helper:?} past its arm")));
         }
-        Helper::ValueText | Helper::Inspect | Helper::TagName => {
+        Helper::ValueText | Helper::AccessKey | Helper::Inspect | Helper::TagName => {
             let text = match helper {
                 Helper::ValueText => value_text(b.m)?,
+                Helper::AccessKey => access_key(b.m)?,
                 Helper::Inspect => inspect(b.m)?,
                 _ => tag_name(b.m)?,
             };
@@ -343,6 +348,64 @@ pub(crate) fn value_text(m: &mut Builder<'_>) -> Result<Func, Failure> {
                 "String() of a value with no tag this runtime knows",
             )?;
             f.instructions(&[I::End, I::End]);
+            Ok(f)
+        },
+    )
+}
+
+/// `nts_access_key_description(key)`: the key a `TypeError` for a null or
+/// `undefined` receiver names, as C's. A primitive's text is its `String`; a
+/// symbol's is `Symbol(...)` with a long description cut as V8 cuts it
+/// ([`crate::symbols::key_text`]); an object, a function or a foreign value
+/// answers null, and the message omits the key. Nothing here runs program
+/// code: `String` of a primitive calls none.
+///
+/// Params: the key, and the calling function's name for a refusal.
+/// Locals: the tag.
+fn access_key(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    m.helper(
+        FuncKey::AccessKey,
+        "value.accessKey",
+        vec![
+            crate::types::Physical::Reference(RefType::ANYREF),
+            strings::STRING,
+        ],
+        Some(strings::STRING),
+        |m| {
+            let tag = erased::callee(m, erased::Helper::Tag)?;
+            let text = value_text(m)?;
+            let mut f = Function::new([ValType::I32]);
+            f.instruction(&I::LocalGet(0));
+            f.call(tag);
+            f.instruction(&I::LocalSet(2));
+            let primitives = [
+                erased::UNDEFINED,
+                erased::NULL,
+                erased::BOOLEAN,
+                erased::NUMBER,
+                erased::BIGINT,
+                erased::STRING,
+            ];
+            for (at, primitive) in primitives.into_iter().enumerate() {
+                f.instructions(&[I::LocalGet(2), I::I32Const(primitive), I::I32Eq]);
+                if at > 0 {
+                    f.instruction(&I::I32Or);
+                }
+            }
+            f.instructions(&[I::If(BlockType::Empty), I::LocalGet(0), I::LocalGet(1)]);
+            f.call(text);
+            f.instructions(&[I::Return, I::End]);
+            if m.types.symbol.is_some() {
+                f.instructions(&[
+                    I::LocalGet(2),
+                    I::I32Const(erased::SYMBOL),
+                    I::I32Eq,
+                    I::If(BlockType::Empty),
+                ]);
+                crate::symbols::key_text(m, &mut f, 0)?;
+                f.instructions(&[I::Return, I::End]);
+            }
+            f.instructions(&[I::RefNull(HeapType::EXTERN), I::End]);
             Ok(f)
         },
     )

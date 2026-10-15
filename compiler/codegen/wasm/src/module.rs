@@ -99,6 +99,8 @@ pub(crate) enum FuncKey {
     Raising(crate::raising::Helper),
     DeclineInput,
     ValueText,
+    /// A property key as a null receiver's `TypeError` names it, or null.
+    AccessKey,
     /// `util.inspect` of an open value, as console prints it.
     ValueInspect,
     TagName,
