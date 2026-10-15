@@ -620,6 +620,7 @@ INSPECTING
   frontend     what the frontend answered, before lowering
   types        every type the frontend resolved, as the schema records it
   hir          the lowered program; --prepared [--backend c|llvm|jvm|wasm] shows backend preparation
+  stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
   facts        the facts lowering derived; --prepared for the prepared program
   refusals     every construct this program was refused for, with its reason
   layouts      the object layouts the program produces
@@ -815,6 +816,16 @@ fn main() -> Result<()> {
             let rest: Vec<String> = args.collect();
             let tsconfig = project(&rest)?;
             dump_hir(&tsconfig)
+        }
+        // What preparation did to a program, as counts: the `Prepared`
+        // counters nothing printed, and what the prepared program holds --
+        // erasures, calls by kind, typed signatures. One `key value` line each,
+        // in a fixed order, so a run can record them per case and a change can
+        // be read as a diff of numbers rather than of listings. Takes
+        // `hir --prepared`'s flags (`--backend`, `--rc`, `--main`).
+        Some("stats") => {
+            let rest: Vec<String> = args.collect();
+            dump_stats(&project(&rest)?)
         }
         // `--obligations`: every store into a slot of a written scalar kind
         // -- a native argument, a native store, a written parameter -- and
@@ -2590,7 +2601,86 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
     Ok((backend, provider))
 }
 
-fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
+/// The program a backend receives, as `hir --prepared` and `stats` show it:
+/// the preparation's header, the prepared program, and the verifier's
+/// complaints if it has any. One function, so the two commands cannot describe
+/// two different preparations.
+fn prepare_for_listing(
+    tsconfig: &Utf8Path,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Result<(String, hir::Prepared, Option<String>)> {
+    let (backend, provider) = hir_preparation()?;
+    let header = format!(
+        "preparation: backend={} provider={provider:?}",
+        backend.name()
+    );
+    let emission = Emission::from_flags();
+    let entry = selected_roots(emission.shape);
+    // **The foreign table, which this did not pass and every emitter does.**
+    // `prepare_unverified` copies `options.foreign` into `program.foreign`,
+    // so without it a GIR, Objective-C or COM program printed here is not
+    // the program a backend receives -- the listing this command exists to
+    // show. `entry_files` is the same omission one field over: it decides
+    // whose exports the surface is computed from.
+    //
+    // **Roots are deliberately still the flags', and that is a known gap
+    // rather than an oversight.** `emit` takes them from the config through
+    // `configured_surface`, so a project with an `nts.config.ts` is rooted
+    // at `EntrySurface` there and at `EveryExport` here -- the Assistant
+    // lane measured the cost on React's apps, 3,831 functions against
+    // 2,088, an over-report of 18% and 32%, and the GTK lane read a bare
+    // `nts hir` as "what the build keeps" and spent an hour on a pruning
+    // mechanism that was not there.
+    //
+    // Sharing `emit_options` outright was tried and is worse: `Shape::from_flags`
+    // cannot know a config's product is an executable, so `configured_surface`
+    // reaches `configured_product` and bails with `this config declares
+    // ["host", "host-llvm"]; name one with --product` -- and `--product` is
+    // not plumbed into this path, so there is no way to answer it. Closing
+    // the roots half means resolving the config's product here the way
+    // `nts build` does, and deriving the shape from it. Until then
+    // `hir --prepared --main` gives an app's real roots.
+    let (entry_files, configured) = match configured_surface(tsconfig, snapshot, emission)? {
+        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
+        None => (nts_frontend_ts::entry_uris(tsconfig, snapshot), None),
+    };
+    let foreign = foreign_tables(snapshot);
+    let targets = match emission.product {
+        Some(_) => emission.scalar_targets(),
+        None => configured_abis(tsconfig)?,
+    };
+    let options = hir::Options {
+        provider,
+        foreign: &foreign,
+        entry_files: &entry_files,
+        targets,
+        // Through `selected_roots`, so this prints the program a backend
+        // receives rather than a neighbouring one. It did not: the old
+        // parser here never appended module initialization, so
+        // `hir --prepared --entry published` dropped `module#init` while
+        // `emit-c --entry published` kept it. An instrument describing a
+        // state nothing consumes is the failure this command exists to
+        // avoid, and `named_entry`'s own comment is about what a missing
+        // `module#init` costs -- five module-level `const`s left null and a
+        // benchmark answering 32768 against node's 10240.
+        roots: entry.as_deref().map_or_else(
+            || configured.unwrap_or(hir::reachable::Roots::EveryExport),
+            hir::reachable::Roots::Entry,
+        ),
+        ..hir::Options::default()
+    };
+    // An invalid program is exactly the one worth reading, so the
+    // complaints are returned beside the program rather than in its place.
+    let invalid = hir::prepare_with(snapshot, &options)
+        .err()
+        .map(|unprepared| unprepared.render(&snapshot.sources));
+    let prepared = hir::prepare_unverified(snapshot, &options);
+    Ok((header, prepared, invalid))
+}
+
+/// The project's snapshot, with its warnings printed, refused if it does not
+/// typecheck: what `hir` and `stats` read.
+fn typechecked_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::SemanticSnapshot> {
     let tsgo_binary = frontend_binary();
     // Call resolution is not optional here: without it a call site has no known
     // target and lowering refuses it.
@@ -2613,78 +2703,99 @@ fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
         }
         bail!("the program does not typecheck");
     }
+    Ok(snapshot)
+}
+
+/// `nts stats`: see the command's comment in `main`.
+fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
+    let snapshot = typechecked_snapshot(tsconfig)?;
+    let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
+    println!("{header}");
+    let program = &prepared.program;
+    let mut ops = 0usize;
+    let mut erases = 0usize;
+    let mut unerases = 0usize;
+    let mut calls = [0usize; 6];
+    let [direct, virtual_calls, typed, uniform, external, native] = &mut calls;
+    for func in &program.funcs {
+        for id in func.blocks.iter().flat_map(|block| &block.ops) {
+            ops += 1;
+            match &func.values[id.0 as usize].kind {
+                OpKind::Erase { .. } => erases += 1,
+                OpKind::Unerase { .. } => unerases += 1,
+                OpKind::Call { callee, .. } => match callee {
+                    hir::Callee::Direct(_) => *direct += 1,
+                    hir::Callee::Virtual { .. } => *virtual_calls += 1,
+                    hir::Callee::Closure { slot } if Some(*slot) == program.closure_slot => {
+                        *typed += 1;
+                    }
+                    hir::Callee::Closure { .. } => *uniform += 1,
+                    hir::Callee::External(_) => *external += 1,
+                    hir::Callee::Native(_) => *native += 1,
+                },
+                _ => {}
+            }
+        }
+    }
+    let rows: [(&str, usize); 25] = [
+        ("verified", usize::from(invalid.is_none())),
+        ("functions", program.funcs.len()),
+        ("layouts", program.layouts.len()),
+        ("ops", ops),
+        ("refused", prepared.diagnostics.len()),
+        ("pruned", prepared.pruned),
+        ("specialized", prepared.specialized),
+        ("conversions", prepared.conversions),
+        ("checks_removed", prepared.checks_removed),
+        ("checks_kept", prepared.checks_kept),
+        ("erased_reads_answered", prepared.erased_reads_answered),
+        ("narrowed", prepared.narrowed),
+        ("cloned", prepared.cloned),
+        ("copied", prepared.copied),
+        ("devirtualized", prepared.devirtualized),
+        ("framed", prepared.framed),
+        ("simplified", prepared.simplified),
+        ("erases", erases),
+        ("unerases", unerases),
+        ("calls.direct", calls[0]),
+        ("calls.virtual", calls[1]),
+        ("calls.closure.typed", calls[2]),
+        ("calls.closure.uniform", calls[3]),
+        ("calls.external", calls[4] + calls[5]),
+        ("typed_signatures", program.typed_signatures.len()),
+    ];
+    for (key, value) in rows {
+        println!("{key} {value}");
+    }
+    // Counting only where the provider counts: a zero would read as "no
+    // retains were needed" on a program that was never asked.
+    if matches!(program.provider, hir::Provider::ReferenceCounting) {
+        let counting = &prepared.counting;
+        println!("rc.retains {}", counting.retains);
+        println!("rc.releases {}", counting.releases);
+        println!("rc.moves {}", counting.moves);
+        println!("rc.borrows {}", counting.borrows);
+    }
+    if let Some(invalid) = invalid {
+        eprintln!("{invalid}");
+    }
+    Ok(())
+}
+
+fn dump_hir(tsconfig: &Utf8Path) -> Result<()> {
+    let snapshot = typechecked_snapshot(tsconfig)?;
+    let mut locations = SourceLocations::new(&snapshot.sources);
 
     // `--prepared` shows the program the backend actually receives, which is
     // where every pass's output can be read at once; `--rc` adds the counting.
     // Raw lowering stays the default because it is what maps onto the source.
     let want_passes = std::env::args().any(|arg| arg == "--prepared" || arg == "--rc");
     let (program, diagnostics) = if want_passes {
-        let (backend, provider) = hir_preparation()?;
-        println!(
-            "preparation: backend={} provider={provider:?}",
-            backend.name()
-        );
-        let emission = Emission::from_flags();
-        let entry = selected_roots(emission.shape);
-        // **The foreign table, which this did not pass and every emitter does.**
-        // `prepare_unverified` copies `options.foreign` into `program.foreign`,
-        // so without it a GIR, Objective-C or COM program printed here is not
-        // the program a backend receives -- the listing this command exists to
-        // show. `entry_files` is the same omission one field over: it decides
-        // whose exports the surface is computed from.
-        //
-        // **Roots are deliberately still the flags', and that is a known gap
-        // rather than an oversight.** `emit` takes them from the config through
-        // `configured_surface`, so a project with an `nts.config.ts` is rooted
-        // at `EntrySurface` there and at `EveryExport` here -- the Assistant
-        // lane measured the cost on React's apps, 3,831 functions against
-        // 2,088, an over-report of 18% and 32%, and the GTK lane read a bare
-        // `nts hir` as "what the build keeps" and spent an hour on a pruning
-        // mechanism that was not there.
-        //
-        // Sharing `emit_options` outright was tried and is worse: `Shape::from_flags`
-        // cannot know a config's product is an executable, so `configured_surface`
-        // reaches `configured_product` and bails with `this config declares
-        // ["host", "host-llvm"]; name one with --product` -- and `--product` is
-        // not plumbed into this path, so there is no way to answer it. Closing
-        // the roots half means resolving the config's product here the way
-        // `nts build` does, and deriving the shape from it. Until then
-        // `hir --prepared --main` gives an app's real roots.
-        let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
-            Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-            None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
-        };
-        let foreign = foreign_tables(&snapshot);
-        let targets = match emission.product {
-            Some(_) => emission.scalar_targets(),
-            None => configured_abis(tsconfig)?,
-        };
-        let options = hir::Options {
-            provider,
-            foreign: &foreign,
-            entry_files: &entry_files,
-            targets,
-            // Through `selected_roots`, so this prints the program a backend
-            // receives rather than a neighbouring one. It did not: the old
-            // parser here never appended module initialization, so
-            // `hir --prepared --entry published` dropped `module#init` while
-            // `emit-c --entry published` kept it. An instrument describing a
-            // state nothing consumes is the failure this command exists to
-            // avoid, and `named_entry`'s own comment is about what a missing
-            // `module#init` costs -- five module-level `const`s left null and a
-            // benchmark answering 32768 against node's 10240.
-            roots: entry.as_deref().map_or_else(
-                || configured.unwrap_or(hir::reachable::Roots::EveryExport),
-                hir::reachable::Roots::Entry,
-            ),
-            ..hir::Options::default()
-        };
-        // An invalid program is exactly the one worth reading, so the
-        // complaints are printed and the program is dumped anyway.
-        if let Err(unprepared) = hir::prepare_with(&snapshot, &options) {
-            eprintln!("{}", unprepared.render(&snapshot.sources));
+        let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
+        println!("{header}");
+        if let Some(invalid) = invalid {
+            eprintln!("{invalid}");
         }
-        let prepared = hir::prepare_unverified(&snapshot, &options);
         (prepared.program, prepared.diagnostics)
     } else {
         let lowered = hir::lower::lower(&snapshot);
