@@ -23,9 +23,9 @@
 // `null`, which agrees.
 //
 // 2026-10-15: `sort()` and `at(i)` are fixed (the null slot asked of the
-// receiver; `nts_array_at_element`), 87 disagreeing cases to 29. What is left
-// is the erased read, which needs the array to say at run time which absence
-// its null slots hold.
+// receiver; `nts_array_at_element`), 87 disagreeing cases to 29, and then the
+// erased read (`OpKind::Erase`'s `slots`: the erased array says its null slots
+// are `null`). It agrees on every case now and stays as the guard of all three.
 export function sortWithNull(n: number): string {
   const xs: (string | null)[] = ["z", null, "a".repeat((n & 1) + 1)];
   xs.sort();
