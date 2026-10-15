@@ -37,10 +37,56 @@ pub(crate) struct Code {
 
 impl Code {
     pub(crate) fn instruction(&mut self, i: &I<'static>) {
-        self.insts.push(Inst::Op(i.clone()));
+        self.op(i.clone());
     }
     pub(crate) fn instructions(&mut self, code: &[I<'static>]) {
-        self.insts.extend(code.iter().cloned().map(Inst::Op));
+        for i in code {
+            self.op(i.clone());
+        }
+    }
+    /// Append `i`, reading a local back from the `local.set` just before it
+    /// as one `local.tee`: the same value left on the stack, a `local.get`
+    /// shorter. Two adjacent instructions run in sequence, so no branch can
+    /// arrive between them.
+    fn op(&mut self, i: I<'static>) {
+        if let I::LocalGet(read) = i
+            && let Some(last) = self.insts.last_mut()
+            && matches!(last, Inst::Op(I::LocalSet(set)) if *set == read)
+        {
+            *last = Inst::Op(I::LocalTee(read));
+            return;
+        }
+        self.insts.push(Inst::Op(i));
+    }
+    /// Forget the locals nothing reads: a `local.tee` of one leaves its value
+    /// where it was, so it goes; a `local.set` of one becomes a `drop`. What
+    /// is left is the value flowing on the stack from where it is made to
+    /// where it is used, with no local between.
+    pub(crate) fn settle(&mut self) {
+        let mut read = std::collections::BTreeSet::new();
+        for inst in &self.insts {
+            if let Inst::Op(I::LocalGet(local)) = inst {
+                read.insert(*local);
+            }
+        }
+        let mut kept = Vec::with_capacity(self.insts.len());
+        // Where each old position lands, for the origin marks.
+        let mut moved = Vec::with_capacity(self.insts.len() + 1);
+        for inst in self.insts.drain(..) {
+            moved.push(kept.len());
+            match inst {
+                Inst::Op(I::LocalTee(local)) if !read.contains(&local) => {}
+                Inst::Op(I::LocalSet(local)) if !read.contains(&local) => {
+                    kept.push(Inst::Op(I::Drop));
+                }
+                other => kept.push(other),
+            }
+        }
+        moved.push(kept.len());
+        self.insts = kept;
+        for (at, _) in &mut self.marks {
+            *at = moved[*at];
+        }
     }
     pub(crate) fn call(&mut self, f: Func) {
         self.insts.push(Inst::Call(f));

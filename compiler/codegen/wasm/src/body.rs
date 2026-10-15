@@ -131,6 +131,7 @@ pub(crate) fn lower(
     }
     body.instruction(&I::Unreachable);
     body.instruction(&I::End);
+    body.code.settle();
     let route = FunctionRoute {
         name: func.name.clone(),
         route: plan.route(),
@@ -248,9 +249,32 @@ impl<'b, 'p> Body<'b, 'p> {
             .ok_or_else(|| Failure::Invariant(format!("%{} has no value local", value.0)))
     }
     pub(crate) fn load(&mut self, value: ValueId) -> Result<(), Failure> {
+        if self.constant(value)? {
+            return Ok(());
+        }
         let local = self.local(value)?;
         self.instruction(&I::LocalGet(local));
         Ok(())
+    }
+    /// Emit `value` itself where it is a constant, and say whether it was.
+    ///
+    /// A constant is written where it is used rather than set into a local
+    /// where it is defined and read back: the same value, from an instruction
+    /// as short as the `local.get` it replaces, without the `local.set`. The
+    /// round trips were a third of the bytes of a short method, and V8 inlines
+    /// by size. A bigint constant allocates, so it keeps its local.
+    fn constant(&mut self, value: ValueId) -> Result<bool, Failure> {
+        let op = self.func.value(value);
+        match &op.kind {
+            OpKind::ConstBool(it) => self.instruction(&I::I32Const(i32::from(*it))),
+            OpKind::ConstInt(_) if crate::bigints::is_bigint(&op.ty) => return Ok(false),
+            OpKind::ConstInt(it) => numeric::constant_int(self, *it, &op.ty)?,
+            OpKind::ConstFloat(it) => numeric::constant_float(self, *it, &op.ty)?,
+            OpKind::ConstString(it) => crate::strings::constant(self, it),
+            OpKind::ConstNull => crate::erased::constant(self, value, crate::erased::NULL)?,
+            _ => return Ok(false),
+        }
+        Ok(true)
     }
     pub(crate) fn ty(&self, value: ValueId) -> &nts_core::hir::HirType {
         &self.func.value(value).ty
@@ -507,18 +531,21 @@ impl<'b, 'p> Body<'b, 'p> {
     fn op(&mut self, id: ValueId) -> Result<(), Failure> {
         let op = self.func.value(id);
         match &op.kind {
-            OpKind::Param(_) | OpKind::BlockParam(_) => return Ok(()),
-            OpKind::ConstBool(value) => self.instruction(&I::I32Const(i32::from(*value))),
             OpKind::ConstInt(value) if crate::bigints::is_bigint(&op.ty) => {
                 crate::bigints::constant(self, *value);
             }
-            OpKind::ConstInt(value) => numeric::constant_int(self, *value, &op.ty)?,
-            OpKind::ConstFloat(value) => numeric::constant_float(self, *value, &op.ty)?,
-            OpKind::ConstString(value) => crate::strings::constant(self, value),
+            // A parameter is its own local; any other constant is written
+            // where each use loads it (`constant`).
+            OpKind::Param(_)
+            | OpKind::BlockParam(_)
+            | OpKind::ConstBool(_)
+            | OpKind::ConstInt(_)
+            | OpKind::ConstFloat(_)
+            | OpKind::ConstString(_)
+            | OpKind::ConstNull => return Ok(()),
             OpKind::Erase { value, absent } => self.erase(id, *value, *absent)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
-            OpKind::ConstNull => crate::erased::constant(self, id, crate::erased::NULL)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
             OpKind::ClosureStatic => crate::callables::static_value(self, id)?,
             OpKind::FieldGet { object, field } => crate::objects::get(self, id, *object, *field)?,

@@ -57,6 +57,8 @@ pub(crate) enum FuncKey {
     UnfilledUniform(u32),
     /// A slot whose method has no body, by its signature and the method.
     AbstractEntry(u32, String),
+    /// A function's named refusal, by the function and the cause.
+    Refusal(String, String),
     Raising(crate::raising::Helper),
     DeclineInput,
     ValueText,

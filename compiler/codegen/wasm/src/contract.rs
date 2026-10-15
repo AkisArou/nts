@@ -79,16 +79,42 @@ pub(crate) fn require(b: &mut Body<'_, '_>, why: &str) -> Result<(), Failure> {
 /// The refusal itself, for `why`, where control reaching it is the failed
 /// condition.
 pub(crate) fn refuse(b: &mut Body<'_, '_>, why: &str) -> Result<(), Failure> {
-    let target = decline(b.m)?;
-    strings::constant(b, &b.func.name.clone());
-    strings::constant(b, why);
+    let target = refusal(b.m, &b.func.name.clone(), why)?;
     b.call(target);
     b.instruction(&I::Unreachable);
     Ok(())
 }
+
+/// One function's refusal for `why`, out of line.
+///
+/// A site is then one call, not the two names it reports and the call that
+/// reports them. A short method carries a refusal for every field it reads of
+/// a value that may be null, and V8 inlines by size: AWFY's towers spent a
+/// third of its time in two six-line methods the engine would not inline.
+fn refusal(m: &mut Builder<'_>, function: &str, why: &str) -> Result<Func, Failure> {
+    m.helper(
+        FuncKey::Refusal(function.to_owned(), why.to_owned()),
+        format!("refuse<{function}>: {why}"),
+        Vec::new(),
+        None,
+        |m| {
+            let target = decline(m)?;
+            let name = m.literal(function);
+            let reason = m.literal(why);
+            let mut f = Function::default();
+            f.global_get(name);
+            f.global_get(reason);
+            f.call(target);
+            f.instructions(&[I::Unreachable, I::End]);
+            Ok(f)
+        },
+    )
+}
 pub(crate) fn nonnull(b: &mut Body<'_, '_>, value: ValueId, why: &str) -> Result<(), Failure> {
     b.load(value)?;
     b.instruction(&I::RefIsNull);
-    b.instruction(&I::I32Eqz);
-    require(b, why)
+    b.instruction(&I::If(BlockType::Empty));
+    refuse(b, why)?;
+    b.instruction(&I::End);
+    Ok(())
 }
