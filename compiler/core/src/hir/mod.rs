@@ -84,6 +84,7 @@ pub mod simplify;
 pub mod specialize;
 pub mod split;
 pub mod substring;
+mod typed_signatures;
 pub mod verify;
 pub mod views;
 pub mod zero_sign;
@@ -2997,6 +2998,15 @@ pub struct Program {
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every
     /// layout, so the backends write one answer rather than each deriving it.
     pub printed: std::collections::BTreeMap<String, Printed>,
+    /// The signature layouts, by name, whose calls take the typed entry
+    /// (`closure_slot`): every layout extending one is a closure class whose
+    /// `#call` takes exactly the signature's parameter representations and
+    /// returns its result or a subclass of it, and nothing reaches one without
+    /// a record. A backend stores a value of one at the signature's own type,
+    /// with that entry; every other signature's values keep the uniform
+    /// entries alone. Decided once after lowering (`lower::typed_signatures`),
+    /// so the four backends cannot disagree about which calls are typed.
+    pub typed_signatures: std::collections::BTreeSet<String>,
     /// What a function value of each layout is called, by layout name. The
     /// runtime reads it off the descriptor (`NtsDescriptor.function_name`; on
     /// the JVM, `NtsNamed.nts$name`) for a `.name` the type does not settle and

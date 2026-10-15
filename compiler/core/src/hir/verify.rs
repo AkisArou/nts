@@ -21,6 +21,17 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// A value that is not one of a signature's own closures enters a
+    /// signature whose calls take its typed entry
+    /// ([`Program::typed_signatures`]): an unerase into it, an exported
+    /// parameter of it, or a value of another type moved into a position typed
+    /// as it. A typed call through the signature would reach that value's
+    /// `#call` at the signature's ABI, which need not be its own.
+    TypedSignatureEntered { signature: String, func: String },
+    /// A call through a typed signature's slot passes or reads other than what
+    /// the entry it reaches takes and returns: the signature's ABI, which the
+    /// backends call without converting.
+    TypedSignatureCall { func: String, entry: String },
     /// Native local storage escaped or could be reused while an alias survives.
     NativeStorage { func: String, reason: &'static str },
     /// A live parameter definition differs from the actual incoming ABI.
@@ -353,10 +364,110 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     check_layouts(program, &mut problems);
     check_subscriptions(program, &mut problems);
     check_native_dispatch(program, &mut problems);
+    check_typed_signatures(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Nothing but a signature's own closures enters a signature whose calls take
+/// its typed entry ([`Program::typed_signatures`]).
+///
+/// The lowering decides which signatures those are from this same reading
+/// (`hir::typed_signatures`); checking it again here, on every prepared
+/// program, is what keeps a later pass from letting another value in -- one
+/// whose `#call` is not the signature's, which a typed call would then reach
+/// through the wrong ABI, a fault no backend but the JVM's verifier would see.
+fn check_typed_signatures(program: &Program, problems: &mut Vec<Invalid>) {
+    if program.typed_signatures.is_empty() {
+        return;
+    }
+    for (signature, func) in super::typed_signatures::entries_from_elsewhere(program) {
+        let signature = &program.layouts[signature].name;
+        if program.typed_signatures.contains(signature) {
+            problems.push(Invalid::TypedSignatureEntered {
+                signature: signature.clone(),
+                func: program.funcs[func].name.clone(),
+            });
+        }
+    }
+    check_typed_signature_calls(program, problems);
+}
+
+/// Each call through a typed signature's slot passes and reads exactly what
+/// the entry it reaches takes and returns.
+///
+/// A closure call's arguments and result are otherwise unchecked, and through a
+/// typed signature they are an ABI: narrowing the signature with every closure
+/// under it (`signatures`) and leaving one call at the old types is a double
+/// read out of an integer return on C, and a stack-height error on the JVM --
+/// a specialized clone whose receiver is the closure's own class did exactly
+/// that (tests/programs/a-generic-pinned-only-through-a-callback).
+fn check_typed_signature_calls(program: &Program, problems: &mut Vec<Invalid>) {
+    let Some(slot) = program.closure_slot else {
+        return;
+    };
+    let mut entry_of: rustc_hash::FxHashMap<nts_semantic_schema::TypeId, &Func> =
+        rustc_hash::FxHashMap::default();
+    let by_name: rustc_hash::FxHashMap<&str, &Func> = program
+        .funcs
+        .iter()
+        .map(|func| (func.name.as_str(), func))
+        .collect();
+    for signature in &program.typed_signatures {
+        for layout in super::typed_signatures::group_layouts(program, signature) {
+            let layout = &program.layouts[layout];
+            let Some(entry) = layout
+                .methods
+                .get(slot as usize)
+                .and_then(|name| name.as_deref())
+                .and_then(|name| by_name.get(name))
+            else {
+                continue;
+            };
+            for ty in &layout.types {
+                entry_of.insert(*ty, entry);
+            }
+        }
+    }
+    if entry_of.is_empty() {
+        return;
+    }
+    for func in &program.funcs {
+        for op in func.blocks.iter().flat_map(|block| &block.ops) {
+            let op = &func.values[op.0 as usize];
+            let OpKind::Call {
+                callee: Callee::Closure { slot: called },
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let Some(HirType::Managed(super::ManagedType::Object(receiver))) = args
+                .first()
+                .map(|receiver| &func.values[receiver.0 as usize].ty)
+            else {
+                continue;
+            };
+            let Some(entry) = entry_of.get(receiver).filter(|_| *called == slot) else {
+                continue;
+            };
+            let passes = args.len() == entry.params.len()
+                && args
+                    .iter()
+                    .zip(&entry.params)
+                    .skip(1)
+                    .all(|(arg, param)| compatible(&func.values[arg.0 as usize].ty, &param.ty));
+            if !passes || !compatible(&op.ty, &entry.return_type) {
+                problems.push(Invalid::TypedSignatureCall {
+                    func: func.name.clone(),
+                    entry: entry.name.clone(),
+                });
+            }
+        }
     }
 }
 

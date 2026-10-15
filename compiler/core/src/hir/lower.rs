@@ -62,6 +62,15 @@ impl FuncBuilder<'_> {
             .at_signature
             .append(&mut self.arrivals.at_signature);
         arrivals.conversions.append(&mut self.conversions);
+        arrivals
+            .uniform_sites
+            .append(&mut self.arrivals.uniform_sites);
+        arrivals
+            .signature_flows
+            .append(&mut self.arrivals.signature_flows);
+        arrivals
+            .opaque_arrivals
+            .append(&mut self.arrivals.opaque_arrivals);
     }
 }
 
@@ -77,6 +86,41 @@ pub struct Arrivals {
     /// Functions bridges call to convert an argument C passes. See
     /// [`Conversion`].
     pub conversions: Vec<Conversion>,
+    /// Calls through a signature's erased entry, each named by its function
+    /// once that function is finished. See [`UniformSite`].
+    pub uniform_sites: Vec<UniformSite>,
+    /// The same, while the function they are in is still being lowered.
+    pending_sites: Vec<UniformSite>,
+    /// A value of one signature type coerced into another, `(from, to)`: every
+    /// closure that can reach `from` can reach `to` this way, though no
+    /// [`Arrival`] records it.
+    pub signature_flows: Vec<(TypeId, TypeId)>,
+    /// A signature type an object that is neither a closure nor a signature was
+    /// coerced into -- a class token, a bound function: it fills no `#call` of
+    /// the signature's shape, so the signature cannot be typed
+    /// (`typed_signatures`).
+    pub opaque_arrivals: Vec<TypeId>,
+}
+
+/// A call through a signature that took the erased entry, recorded with what a
+/// typed call there would pass and read, so [`type_signature_calls`] can make
+/// it one where every closure that can arrive agrees.
+#[derive(Debug, Clone)]
+pub struct UniformSite {
+    /// The function the call is in; empty until [`FuncBuilder::finish`].
+    function: String,
+    /// The signature the receiver is typed as.
+    signature: TypeId,
+    /// The erased call.
+    answered: ValueId,
+    /// What the site reads: the unerase of `answered`, or `answered` itself
+    /// where the site reads the erased answer or nothing.
+    value: ValueId,
+    /// The closure, then the arguments as the signature spells them -- the
+    /// written ABI, before anything was erased or padded.
+    args: Vec<ValueId>,
+    /// What the site reads the answer as.
+    ty: HirType,
 }
 
 /// A function a bridge calls to convert an argument C passes
@@ -180,6 +224,8 @@ fn disagreeing_arrivals(program: &Program, arrivals: &Arrivals) -> Vec<(String, 
 pub struct Arrival {
     /// The closure's own class, which names its `#call` through its layout.
     pub closure: TypeId,
+    /// The signature it was admitted into.
+    pub signature: TypeId,
     /// Where it was admitted, for the diagnostic.
     pub origin: Origin,
     /// What that slot expects, **resolved at the coercion** rather than kept as a
@@ -15730,6 +15776,16 @@ pub fn lower_with(
     printed::decide(snapshot, &hierarchy, &closures, &mut lowered.program);
     printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
     function_names::decide(snapshot, &closures, &mut lowered.program);
+    // After every step that makes a function or publishes one: the interface
+    // adapters and bridges `finish_dispatch_tables` writes move values across
+    // signatures too, and `publish_surface` says which parameters a host fills.
+    typed_signatures::type_signature_calls(
+        snapshot,
+        &closures,
+        &hierarchy,
+        &lowered.arrivals,
+        &mut lowered.program,
+    );
     prune_class_tests(&mut lowered.program);
     report_unaccounted(
         snapshot,
@@ -27410,6 +27466,15 @@ impl<'a> FuncBuilder<'a> {
         let Some((params, ret)) = signature_key(self.snapshot, *to) else {
             return;
         };
+        if self
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(from))
+            .is_some_and(|layout| is_signature_name(&layout.name))
+        {
+            self.arrivals.signature_flows.push((*from, *to));
+            return;
+        }
         let closure = self
             .layouts
             .iter()
@@ -27423,6 +27488,7 @@ impl<'a> FuncBuilder<'a> {
                         .any(|m| m.ends_with("#call"))
             });
         if !closure {
+            self.arrivals.opaque_arrivals.push(*to);
             return;
         }
         let parameters = params.iter().map(|t| self.represent(*t)).collect();
@@ -27434,6 +27500,7 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         self.arrivals.at_signature.push(Arrival {
             closure: *from,
+            signature: *to,
             origin,
             parameters,
             returns,
@@ -32852,6 +32919,11 @@ impl<'a> FuncBuilder<'a> {
                 terminator: block.terminator.unwrap_or(Terminator::Unreachable),
             })
             .collect();
+        // The calls through a signature this body made, now that it has a name.
+        for mut site in std::mem::take(&mut self.arrivals.pending_sites) {
+            site.function.clone_from(&name);
+            self.arrivals.uniform_sites.push(site);
+        }
 
         Func {
             name,
@@ -73940,6 +74012,13 @@ impl<'a> FuncBuilder<'a> {
             }
             ClosureEntry::Uniform(slot) => slot,
         };
+        // What a typed call here would pass, kept before anything is erased:
+        // `type_signature_calls` makes this site one where every closure that
+        // can arrive agrees with it. Only the ordinary entry -- a raising call
+        // keeps the uniform raising one.
+        let written = (Some(slot) == self.hierarchy.erased_call_slot)
+            .then(|| args.clone())
+            .filter(|args| this.is_none() && !args.is_empty());
         let width = self.hierarchy.erased_call_arity;
         let mut erased = Vec::with_capacity(width + super::UNIFORM_ARGUMENTS);
         let mut args = args.into_iter();
@@ -73985,13 +74064,27 @@ impl<'a> FuncBuilder<'a> {
         // above; unerasing the answer is the inverse of its own request, and the
         // type is what the checker gave the call. It is the same entitlement any
         // typed read has and no more.
-        Ok(match &ty {
+        let value = match &ty {
             // Nothing to read back. An erased site wanted the erased answer, and
             // a `void` one discards it -- the entry returned `undefined` there,
             // which is what makes the two one arm rather than two spellings.
             HirType::Erased | HirType::Void | HirType::Never => answered,
-            _ => self.push(OpKind::Unerase { value: answered }, ty, origin),
-        })
+            _ => self.push(OpKind::Unerase { value: answered }, ty.clone(), origin),
+        };
+        if let Some(args) = written
+            && let HirType::Managed(ManagedType::Object(signature)) =
+                self.values[args[0].0 as usize].ty
+        {
+            self.arrivals.pending_sites.push(UniformSite {
+                function: String::new(),
+                signature,
+                answered,
+                value,
+                args,
+                ty,
+            });
+        }
+        Ok(value)
     }
 
     /// Refused where a call through a member holds no object to pass as its
@@ -83144,6 +83237,7 @@ mod literal_methods;
 mod native_memory;
 mod printed;
 mod property_keys;
+mod typed_signatures;
 mod virtual_returns;
 
 /// An Objective-C property: its declaration, and the selectors that read and
