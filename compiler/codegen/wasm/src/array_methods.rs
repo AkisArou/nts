@@ -127,7 +127,8 @@ fn call_inner(
     args: &[ValueId],
 ) -> Result<(), Failure> {
     // An element read also takes the tag a null slot reads as
-    // (`nts_array_element`); a null slot is still refused by name below.
+    // (`nts_array_element`), which the array's own mark overrides
+    // (`arrays::null_slot`).
     let arity = match method {
         Method::Pop(_) | Method::Shift(_) => 1,
         Method::Element => 3,
@@ -138,7 +139,7 @@ fn call_inner(
     }
     let array = if method == Method::Element {
         let Some(array) = erased_from(b, args[0]) else {
-            return open_element(b, result, args[0], args[1]);
+            return open_element(b, result, args[0], args[1], args[2]);
         };
         array
     } else {
@@ -150,7 +151,7 @@ fn call_inner(
     }
     contract::nonnull(b, array, "a method of a null array")?;
     match method {
-        Method::Element => element_value(b, result, shape, array, args[1]),
+        Method::Element => element_value(b, result, shape, array, args[1], args[2]),
         Method::Push(_) => put(b, result, shape, args[0], args[1], End::Back),
         Method::Unshift(_) => put(b, result, shape, args[0], args[1], End::Front),
         Method::Pop(family) => take(b, result, shape, args[0], family, End::Back),
@@ -252,6 +253,7 @@ fn open_element(
     result: ValueId,
     value: ValueId,
     at: ValueId,
+    null_slot: ValueId,
 ) -> Result<(), Failure> {
     if b.ty(at) != &HirType::NUMBER {
         return Err(Failure::Invariant("nts_array_element index type".into()));
@@ -266,6 +268,7 @@ fn open_element(
             Physical::Reference(RefType::ANYREF),
             Physical::Scalar(crate::types::Slot::F64),
             strings::STRING,
+            Physical::Scalar(crate::types::Slot::I32),
         ],
         Some(Physical::Reference(RefType::ANYREF)),
         open_element_body,
@@ -273,14 +276,16 @@ fn open_element(
     b.load(value)?;
     b.load(at)?;
     strings::constant(b, &b.func.name.clone());
+    b.load(null_slot)?;
     b.call(target);
     output(b, result, &HirType::Erased)
 }
 
-/// Params: value, index, caller's name.
+/// Params: value, index, caller's name, the tag a null slot reads as.
 fn open_element_body(m: &mut Builder<'_>) -> Result<Function, Failure> {
     let types = m.types;
     let undefined = erased::singleton(m, erased::Singleton::Undefined)?;
+    let null = erased::singleton(m, erased::Singleton::Null)?;
     let mut f = Function::new([]);
     for shape in types.arrays.values() {
         let wrapper = HeapType::Concrete(shape.wrapper);
@@ -338,15 +343,26 @@ fn open_element_body(m: &mut Builder<'_>) -> Result<Function, Failure> {
             I::I32TruncSatF64U,
             arrays::get_instruction(shape)?,
         ]);
+        // A null slot is `null` where the read site says so or the array's
+        // mark does (`arrays::null_slot`), `undefined` otherwise.
         if present.is_some() {
             f.instruction(&I::BrOnNonNull(0));
-            contract::refuse_in(
-                &mut f,
-                m,
-                2,
-                "a null slot, which may stand for undefined or for null",
-            )?;
-            f.instruction(&I::End);
+            f.instructions(&[I::LocalGet(3), I::I32Const(erased::NULL), I::I32Eq]);
+            f.instructions(&array);
+            f.instructions(&[
+                I::StructGet {
+                    struct_type_index: shape.wrapper,
+                    field_index: gc::ARRAY_FLAGS,
+                },
+                I::I32Const(gc::NULL_SLOTS),
+                I::I32And,
+                I::I32Or,
+                I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))),
+            ]);
+            f.global_get(null);
+            f.instruction(&I::Else);
+            f.global_get(undefined);
+            f.instructions(&[I::End, I::Return, I::End]);
         }
         erased::erase_in(m, &mut f, &shape.element)?;
         f.instructions(&[I::Return, I::End]);
@@ -423,6 +439,7 @@ fn element_value(
     shape: &gc::Array,
     array: ValueId,
     at: ValueId,
+    null_slot: ValueId,
 ) -> Result<(), Failure> {
     if b.ty(at) != &HirType::NUMBER {
         return Err(Failure::Invariant("nts_array_element index type".into()));
@@ -444,8 +461,8 @@ fn element_value(
     b.instruction(&arrays::get_instruction(shape)?);
     if present.is_some() {
         b.instruction(&I::BrOnNonNull(0));
-        contract::refuse(b, "a null slot, which may stand for undefined or for null")?;
-        b.instruction(&I::End);
+        arrays::null_slot(b, array, shape.wrapper, null_slot)?;
+        b.instructions(&[I::Br(1), I::End]);
     }
     erased::erase_stack(b, &shape.element)?;
     b.instruction(&I::Else);

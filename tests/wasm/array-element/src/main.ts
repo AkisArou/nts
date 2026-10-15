@@ -20,8 +20,8 @@ export function unknownAt(x: string, y: number, at: number): number {
   const v = xs[at];
   return v === undefined ? 1 : typeof v === 'string' ? 2 : 3;
 }
-// A null stored in an object array: node reads `null`, and the storage does not
-// say whether a null slot held `null` or `undefined`, so Wasm refuses it.
+// A null stored in an object array: node reads `null`, and so does Wasm, because
+// the read site's type says a null slot of a `(Point | null)[]` is `null`.
 export function nullSlot(at: number): number {
   const xs: (Point | null)[] = [new Point(1), null];
   const v = xs[at];

@@ -454,9 +454,15 @@ pub(crate) const ROOT_FIELDS: u32 = 2;
 /// The root's identity hash: zero until something hashes the object, then
 /// fixed, which is what an object as a Map or Set key needs.
 pub(crate) const IDENTITY_HASH: u32 = 1;
-/// An array wrapper's fields after the root: its length, then its backing.
+/// An array wrapper's fields after the root: its length, its backing, then
+/// its flags.
 pub(crate) const ARRAY_LENGTH: u32 = ROOT_FIELDS;
 pub(crate) const ARRAY_BACKING: u32 = ROOT_FIELDS + 1;
+pub(crate) const ARRAY_FLAGS: u32 = ROOT_FIELDS + 2;
+/// The flag an erasure of a `(T | null)[]` sets, which nothing clears: a null
+/// slot of the array is `null`, read where its type is gone. C's
+/// `NTS_NULL_SLOTS`.
+pub(crate) const NULL_SLOTS: i32 = 1;
 
 /// Where a descriptor's field holding its row sits, after identity, kind and
 /// ancestry.
@@ -1948,6 +1954,7 @@ impl<'a> Builder<'a> {
         };
         fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
         fields.push(Field::value(PendingSlot::Defined(backing, false), true));
+        fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
         self.nodes[id.0].shape = Shape::Struct(fields);
         Ok(())
     }

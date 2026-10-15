@@ -127,6 +127,7 @@ fn body(
         I::LocalGet(PIECES),
         I::LocalGet(STORE),
         I::RefAsNonNull,
+        I::I32Const(0),
         I::StructNew(wrapper),
         I::End,
     ]);

@@ -1,10 +1,11 @@
 //! `nts_array_element`: an erased read that answers `undefined` where node
-//! does, for every element kind, at every kind of index.
+//! does, for every element kind, at every kind of index, and a null slot as
+//! the read site's tag or the erasure's mark says.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 mod common;
 use common::hir::{F64, U32, block, function, program, value};
 use nts_core::hir::{
-    Absent, ArrayFill, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+    Absent, ArrayFill, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId, tags,
 };
 
 fn array(element: HirType) -> HirType {
@@ -16,12 +17,18 @@ fn string() -> HirType {
 struct Build {
     f: Func,
     ops: Vec<ValueId>,
+    /// The tag the read site says a null slot reads as.
+    site: u32,
+    /// What the erasure says the array's null slots are.
+    slots: Absent,
 }
 impl Build {
     fn new(name: &str, result: HirType) -> Self {
         Self {
             f: function(name, &[F64], result),
             ops: vec![],
+            site: tags::UNDEFINED,
+            slots: Absent::Impossible,
         }
     }
     fn op(&mut self, kind: OpKind, ty: HirType) -> ValueId {
@@ -54,7 +61,7 @@ impl Build {
     }
     fn element(&mut self, erased: ValueId) -> ValueId {
         let at = self.op(OpKind::Param(0), F64);
-        let null_slot = self.op(OpKind::ConstInt(0), U32);
+        let null_slot = self.op(OpKind::ConstInt(i128::from(self.site)), U32);
         self.op(
             OpKind::Call {
                 callee: Callee::External("nts_array_element".into()),
@@ -66,7 +73,7 @@ impl Build {
     }
     /// The tag of `array[at]`, read through its erasure as the lowering emits it.
     fn tag_of_element(mut self, a: ValueId) -> Func {
-        let erased = self.erase(a);
+        let erased = self.erase_array(a);
         let read = self.element(erased);
         let tag = self.op(OpKind::TagOf { value: read }, U32);
         self.finish(tag)
@@ -81,6 +88,18 @@ impl Build {
             HirType::Erased,
         )
     }
+    /// The array's erasure, saying what its null slots are.
+    fn erase_array(&mut self, value: ValueId) -> ValueId {
+        let slots = self.slots;
+        self.op(
+            OpKind::Erase {
+                value,
+                absent: Absent::Impossible,
+                slots,
+            },
+            HirType::Erased,
+        )
+    }
     fn finish(mut self, result: ValueId) -> Func {
         self.f
             .blocks
@@ -89,10 +108,29 @@ impl Build {
     }
 }
 
-/// A reference array with a null in its second slot, which the read refuses:
-/// its storage does not say whether that null was `null` or `undefined`.
+/// A reference array with a null in its second slot, which reads as
+/// `undefined`: neither the read site nor the erasure says it is `null`.
 fn strings() -> Func {
     let mut b = Build::new("stringElement", U32);
+    let s = b.op(OpKind::ConstString("s".into()), string());
+    let null = b.op(OpKind::ConstNull, string());
+    let a = b.array(string(), &[s, null]);
+    b.tag_of_element(a)
+}
+/// The same array erased as a `(string | null)[]`: the mark makes its null
+/// slot `null` where the read site's type is gone.
+fn marked() -> Func {
+    let mut b = Build::new("markedElement", U32);
+    b.slots = Absent::Null;
+    let s = b.op(OpKind::ConstString("s".into()), string());
+    let null = b.op(OpKind::ConstNull, string());
+    let a = b.array(string(), &[s, null]);
+    b.tag_of_element(a)
+}
+/// Unmarked, read where the site's type says a null slot is `null`.
+fn null_site() -> Func {
+    let mut b = Build::new("nullSiteElement", U32);
+    b.site = tags::NULL;
     let s = b.op(OpKind::ConstString("s".into()), string());
     let null = b.op(OpKind::ConstNull, string());
     let a = b.array(string(), &[s, null]);
@@ -142,6 +180,8 @@ fn number_value() -> Func {
 fn element_reads_answer_what_node_answers() {
     let funcs = vec![
         strings(),
+        marked(),
+        null_site(),
         nested(),
         numbers(),
         booleans(),
@@ -155,8 +195,7 @@ fn element_reads_answer_what_node_answers() {
         "tooling/wasm/check-array-element.mjs",
         &[],
     );
-    assert_eq!(output["cases"], 56, "{output}");
-    assert_eq!(output["named_declines"], 2, "{output}");
+    assert_eq!(output["cases"], 80, "{output}");
 }
 
 /// The read goes to the array an erasure was made from where the call can see

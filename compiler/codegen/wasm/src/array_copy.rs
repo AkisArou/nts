@@ -208,6 +208,7 @@ fn wrap(
         I::LocalGet(count),
         I::LocalGet(local),
         I::RefAsNonNull,
+        I::I32Const(0),
         I::StructNew(shape.wrapper),
     ]);
     Ok(())

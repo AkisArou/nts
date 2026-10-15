@@ -577,7 +577,11 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::ConstFloat(_)
             | OpKind::ConstString(_)
             | OpKind::ConstNull => return Ok(()),
-            OpKind::Erase { value, absent, .. } => self.erase(id, *value, *absent)?,
+            OpKind::Erase {
+                value,
+                absent,
+                slots,
+            } => self.erase(id, *value, *absent, *slots)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
@@ -723,7 +727,11 @@ impl<'b, 'p> Body<'b, 'p> {
         id: ValueId,
         value: ValueId,
         absent: nts_core::hir::Absent,
+        slots: nts_core::hir::Absent,
     ) -> Result<(), Failure> {
+        if slots == nts_core::hir::Absent::Null {
+            crate::arrays::mark_null_slots(self, value)?;
+        }
         if self
             .m
             .raising_results

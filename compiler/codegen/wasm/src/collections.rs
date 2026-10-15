@@ -1570,6 +1570,7 @@ fn keys_str(m: &mut Builder<'_>, c: &Collection, result: &HirType) -> Result<Fun
                 I::LocalGet(written),
                 I::LocalGet(backing),
                 I::RefAsNonNull,
+                I::I32Const(0),
                 I::StructNew(wrapper),
                 I::End,
             ]);

@@ -228,6 +228,7 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     objects::default(b, &array.element)?;
     index(b, length)?;
     b.instruction(&I::ArrayNew(array.backing));
+    b.instruction(&I::I32Const(0));
     b.instruction(&I::StructNew(array.wrapper));
     Ok(())
 }
@@ -258,6 +259,7 @@ fn template(
                 array_type_index: backing,
                 array_size: length,
             },
+            I::I32Const(0),
             I::StructNew(wrapper),
         ]);
         Ok((crate::module::constant_type(wrapper), code))
@@ -271,6 +273,85 @@ pub(crate) fn length(b: &mut Body<'_, '_>, result: ValueId, array: ValueId) -> R
     logical_length(b, array, ty)?;
     numeric::convert(b, &U32, &b.ty(result).clone())
 }
+/// Mark `array`, a `(T | null)[]` being erased, as holding `null` in its null
+/// slots: a read where its type is gone answers one as `null` rather than
+/// `undefined` (`null_slot`). C's `nts_array_mark_null_slots`; a null array
+/// has nothing to mark.
+pub(crate) fn mark_null_slots(b: &mut Body<'_, '_>, array: ValueId) -> Result<(), Failure> {
+    let wrapper = b.types().array(b.ty(array))?.wrapper;
+    let nullable = matches!(
+        b.types().value_slot(b.ty(array))?,
+        Physical::Reference(RefType { nullable: true, .. })
+    );
+    if nullable {
+        b.instruction(&I::Block(BlockType::Empty));
+        b.load(array)?;
+        b.instruction(&I::BrOnNull(0));
+        b.instruction(&I::Drop);
+    }
+    b.load(array)?;
+    b.load(array)?;
+    b.instruction(&I::StructGet {
+        struct_type_index: wrapper,
+        field_index: gc::ARRAY_FLAGS,
+    });
+    b.instructions(&[
+        I::I32Const(gc::NULL_SLOTS),
+        I::I32Or,
+        I::StructSet {
+            struct_type_index: wrapper,
+            field_index: gc::ARRAY_FLAGS,
+        },
+    ]);
+    if nullable {
+        b.instruction(&I::End);
+    }
+    Ok(())
+}
+
+/// What a null slot of `array` reads as where its type is gone, as an open
+/// value: `null` where the read site's type says so (`site` is `null`'s tag)
+/// or the array was marked when it was erased (`mark_null_slots`),
+/// `undefined` otherwise. `site` is the element read's third operand.
+pub(crate) fn null_slot(
+    b: &mut Body<'_, '_>,
+    array: ValueId,
+    wrapper: u32,
+    site: ValueId,
+) -> Result<(), Failure> {
+    let null = erased::singleton(b.m, erased::Singleton::Null)?;
+    let undefined = erased::singleton(b.m, erased::Singleton::Undefined)?;
+    match b.func.value(site).kind {
+        OpKind::ConstInt(tag) if tag == i128::from(erased::NULL) => {
+            b.global_get(null);
+            return Ok(());
+        }
+        OpKind::ConstInt(tag) if tag == i128::from(erased::UNDEFINED) => {}
+        _ => {
+            b.load(site)?;
+            b.instructions(&[I::I32Const(erased::NULL), I::I32Eq]);
+        }
+    }
+    b.load(array)?;
+    b.instructions(&[
+        I::StructGet {
+            struct_type_index: wrapper,
+            field_index: gc::ARRAY_FLAGS,
+        },
+        I::I32Const(gc::NULL_SLOTS),
+        I::I32And,
+    ]);
+    if !matches!(b.func.value(site).kind, OpKind::ConstInt(_)) {
+        b.instruction(&I::I32Or);
+    }
+    b.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
+    b.global_get(null);
+    b.instruction(&I::Else);
+    b.global_get(undefined);
+    b.instruction(&I::End);
+    Ok(())
+}
+
 pub(crate) fn backing(b: &mut Body<'_, '_>, array: ValueId, ty: u32) -> Result<(), Failure> {
     b.load(array)?;
     b.instruction(&I::StructGet {

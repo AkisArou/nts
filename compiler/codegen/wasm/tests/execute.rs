@@ -235,8 +235,7 @@ fn source_array_element_reads_agree_with_node() {
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 1409, "{output}");
-    assert_eq!(output["named_declines"], 1, "{output}");
+    assert_eq!(output["cases"], 1410, "{output}");
 }
 
 #[test]
@@ -644,6 +643,25 @@ fn source_string_affixes_agree_with_node() {
         &["--experimental-transform-types"],
     );
     assert_eq!(output["cases"], 34, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
+/// A `(T | null)[]` read where its type is gone answers a null slot `null`,
+/// from the mark its erasure set, read through a call and in line; its
+/// `(T | undefined)[]` control answers `undefined`.
+#[test]
+fn source_erased_null_slots_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/erased-null-slots");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "erased-null-slots",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
