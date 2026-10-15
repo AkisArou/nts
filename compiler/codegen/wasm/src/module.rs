@@ -62,6 +62,14 @@ pub(crate) struct Global(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct Tag(u32);
 
+#[cfg(test)]
+impl Tag {
+    /// A tag for a body built by hand, outside any builder.
+    pub(crate) const fn by_hand(index: u32) -> Self {
+        Self(index)
+    }
+}
+
 /// Every function the module can contain, named by what it means.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum FuncKey {

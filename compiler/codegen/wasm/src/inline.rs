@@ -18,6 +18,7 @@
 //! bottom-up over the call graph.
 
 use crate::{
+    flow::{self, Flow},
     ir::{self, Inst},
     module::{Builder, Func, encoded_size},
     types::Physical,
@@ -243,168 +244,26 @@ fn zero(ty: ValType) -> Option<I<'static>> {
 /// The locals of `body` past its `params` that some path reads before it
 /// writes them: the ones whose zero on entry the body may use.
 ///
-/// A must-be-written dataflow over the structured code. Writes only add, so a
-/// loop's header holds what its entry held; a block's or an `if`'s end holds
-/// what every arriving path holds; a `try_table`'s catches arrive with what
-/// its entry held, the least any throw inside it can carry; and code after an
-/// unconditional exit is unreachable, which every meet ignores.
+/// A must-be-written analysis (`flow`): a write only adds, so a loop's header
+/// keeps all of what its entry held.
 pub(crate) fn unwritten_reads(body: &ir::Function, params: usize) -> BTreeSet<u32> {
-    let mut walk = Walk {
-        params,
-        state: Some(vec![false; body.locals.len()]),
-        frames: Vec::new(),
-        unwritten: BTreeSet::new(),
-    };
-    for inst in &body.code.insts {
-        if !walk.step(inst) {
-            break;
-        }
-    }
-    walk.unwritten
-}
-
-/// The locals written on every path to a point, or `None` where no path is.
-type Written = Option<Vec<bool>>;
-
-/// `into` narrowed to what `from` also holds; an unreachable side adds no
-/// constraint.
-fn meet(into: &mut Written, from: &Written) {
-    match (into.as_mut(), from) {
-        (_, None) => {}
-        (None, Some(from)) => *into = Some(from.clone()),
-        (Some(into), Some(from)) => {
-            for (written, also) in into.iter_mut().zip(from) {
-                *written &= *also;
-            }
-        }
-    }
-}
-
-/// An open structure: what held at its entry, and what holds where it exits.
-struct Frame {
-    looping: bool,
-    is_if: bool,
-    entry: Written,
-    exit: Written,
-    has_else: bool,
-}
-
-/// The dataflow, one instruction at a time.
-struct Walk {
-    params: usize,
-    state: Written,
-    frames: Vec<Frame>,
-    unwritten: BTreeSet<u32>,
-}
-
-impl Walk {
-    /// Take one instruction; `false` at the function's own end.
-    fn step(&mut self, inst: &Inst) -> bool {
-        let Inst::Op(i) = inst else {
-            if matches!(inst, Inst::Throw(_)) {
-                self.state = None;
-            }
-            return true;
-        };
-        match i {
-            I::LocalGet(index) => self.read(*index),
-            I::LocalSet(index) | I::LocalTee(index) => self.write(*index),
-            I::Block(_) => self.open(false, false),
-            I::Loop(_) => self.open(true, false),
-            I::If(_) => self.open(false, true),
-            I::TryTable(_, catches) => {
-                for catch in catches.iter() {
-                    let (wasm_encoder::Catch::One { label, .. }
-                    | wasm_encoder::Catch::OneRef { label, .. }
-                    | wasm_encoder::Catch::All { label }
-                    | wasm_encoder::Catch::AllRef { label }) = catch;
-                    self.arrive(*label);
+    struct Unwritten(BTreeSet<u32>);
+    impl Flow for Unwritten {
+        fn step(&mut self, _: usize, inst: &Inst, holds: &mut [bool]) {
+            match inst {
+                Inst::Op(I::LocalGet(local)) if !holds[*local as usize] => {
+                    self.0.insert(*local);
                 }
-                self.open(false, false);
+                Inst::Op(I::LocalSet(local) | I::LocalTee(local)) => holds[*local as usize] = true,
+                _ => {}
             }
-            I::Else => {
-                if let Some(frame) = self.frames.last_mut() {
-                    meet(&mut frame.exit, &self.state);
-                    frame.has_else = true;
-                    self.state = frame.entry.clone();
-                }
-            }
-            I::End => return self.close(),
-            I::Br(depth) => {
-                self.arrive(*depth);
-                self.state = None;
-            }
-            I::BrIf(depth) | I::BrOnNull(depth) | I::BrOnNonNull(depth) => self.arrive(*depth),
-            I::BrOnCast { relative_depth, .. } | I::BrOnCastFail { relative_depth, .. } => {
-                self.arrive(*relative_depth);
-            }
-            I::BrTable(targets, default) => {
-                for depth in targets.iter().chain(std::iter::once(default)) {
-                    self.arrive(*depth);
-                }
-                self.state = None;
-            }
-            I::Return | I::Unreachable | I::ThrowRef => self.state = None,
-            _ => {}
-        }
-        true
-    }
-
-    fn local(&self, index: u32) -> Option<usize> {
-        (index as usize).checked_sub(self.params)
-    }
-
-    fn read(&mut self, index: u32) {
-        if let (Some(at), Some(written)) = (self.local(index), &self.state)
-            && !written[at]
-        {
-            self.unwritten.insert(index);
         }
     }
-
-    fn write(&mut self, index: u32) {
-        if let Some(at) = self.local(index)
-            && let Some(written) = &mut self.state
-        {
-            written[at] = true;
-        }
-    }
-
-    fn open(&mut self, looping: bool, is_if: bool) {
-        self.frames.push(Frame {
-            looping,
-            is_if,
-            entry: self.state.clone(),
-            exit: None,
-            has_else: false,
-        });
-    }
-
-    /// The end of a structure, or `false` at the function's own.
-    fn close(&mut self) -> bool {
-        let Some(mut frame) = self.frames.pop() else {
-            return false;
-        };
-        if !frame.looping {
-            meet(&mut frame.exit, &self.state);
-            if frame.is_if && !frame.has_else {
-                meet(&mut frame.exit, &frame.entry);
-            }
-            self.state = frame.exit;
-        }
-        true
-    }
-
-    /// A branch to the label `depth` structures out, with what holds here.
-    fn arrive(&mut self, depth: u32) {
-        let Some(at) = self.frames.len().checked_sub(depth as usize + 1) else {
-            return; // the function's own label: a return
-        };
-        let frame = &mut self.frames[at];
-        if !frame.looping {
-            meet(&mut frame.exit, &self.state);
-        }
-    }
+    let mut written = vec![true; params];
+    written.resize(params + body.locals.len(), false);
+    let mut unwritten = Unwritten(BTreeSet::new());
+    flow::run(&body.code, written, &mut unwritten);
+    unwritten.0
 }
 
 fn index32(index: usize) -> u32 {

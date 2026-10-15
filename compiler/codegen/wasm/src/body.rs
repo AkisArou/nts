@@ -134,6 +134,8 @@ pub(crate) fn lower(
     }
     body.instruction(&I::Unreachable);
     body.instruction(&I::End);
+    let locals = func.params.len() + body.code.locals.len();
+    crate::checks::drop_repeated(&mut body.code, locals);
     body.code.settle();
     // Every local a structured body reads is written on every path to the
     // read: its locals are SSA values and edge moves. The inliner leaves such

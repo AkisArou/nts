@@ -69,17 +69,22 @@ impl Code {
                 read.insert(*local);
             }
         }
+        self.rewrite(|_, inst| match inst {
+            Inst::Op(I::LocalTee(local)) if !read.contains(&local) => None,
+            Inst::Op(I::LocalSet(local)) if !read.contains(&local) => Some(Inst::Op(I::Drop)),
+            other => Some(other),
+        });
+    }
+    /// Each instruction replaced by what `keep` makes of it, by position, or
+    /// dropped where it answers `None`; an origin mark moves with the
+    /// instruction it named, or to the next one kept.
+    pub(crate) fn rewrite(&mut self, mut keep: impl FnMut(usize, Inst) -> Option<Inst>) {
         let mut kept = Vec::with_capacity(self.insts.len());
-        // Where each old position lands, for the origin marks.
         let mut moved = Vec::with_capacity(self.insts.len() + 1);
-        for inst in self.insts.drain(..) {
+        for (at, inst) in self.insts.drain(..).enumerate() {
             moved.push(kept.len());
-            match inst {
-                Inst::Op(I::LocalTee(local)) if !read.contains(&local) => {}
-                Inst::Op(I::LocalSet(local)) if !read.contains(&local) => {
-                    kept.push(Inst::Op(I::Drop));
-                }
-                other => kept.push(other),
+            if let Some(inst) = keep(at, inst) {
+                kept.push(inst);
             }
         }
         moved.push(kept.len());
