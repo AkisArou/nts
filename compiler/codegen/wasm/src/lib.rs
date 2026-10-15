@@ -51,6 +51,7 @@ mod presence;
 mod printed;
 mod promises;
 mod raising;
+mod roundtrip;
 mod rows;
 mod string_split;
 mod strings;

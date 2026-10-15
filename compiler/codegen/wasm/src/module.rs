@@ -722,6 +722,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     }
     crate::outline::program(&mut m);
     crate::inline::program(&mut m);
+    crate::roundtrip::program(&mut m);
     crate::tail::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
