@@ -90,7 +90,10 @@ fn unchanged_control_captures_once() {
     let first = project.ask(&mut source);
     let second = project.ask(&mut source);
     assert_eq!(source.captures, 1);
-    assert_eq!(first.digest(), second.digest());
+    assert_eq!(
+        first.digest().expect("digest"),
+        second.digest().expect("digest")
+    );
 }
 
 #[test]
@@ -102,10 +105,16 @@ fn restored_local_input_reuses_the_original_capture() {
     let original = std::fs::read(input).expect("original");
     std::fs::write(input, "export const a = 2;").expect("B");
     let changed = project.ask(&mut source);
-    assert_ne!(first.digest(), changed.digest());
+    assert_ne!(
+        first.digest().expect("digest"),
+        changed.digest().expect("digest")
+    );
     std::fs::write(&source.files[0], original).expect("restore A");
     let restored = project.ask(&mut source);
-    assert_eq!(first.digest(), restored.digest());
+    assert_eq!(
+        first.digest().expect("digest"),
+        restored.digest().expect("digest")
+    );
     assert_eq!(source.captures, 2, "A/B/A must retain both content entries");
 }
 
@@ -118,9 +127,15 @@ fn restored_external_input_reuses_the_original_capture() {
     source.files.push(external.clone());
     let first = project.ask(&mut source);
     std::fs::write(&external, "export const b = 2;").expect("B");
-    assert_ne!(first.digest(), project.ask(&mut source).digest());
+    assert_ne!(
+        first.digest().expect("digest"),
+        project.ask(&mut source).digest().expect("digest")
+    );
     std::fs::write(&external, "export const b = 1;").expect("restore A");
-    assert_eq!(first.digest(), project.ask(&mut source).digest());
+    assert_eq!(
+        first.digest().expect("digest"),
+        project.ask(&mut source).digest().expect("digest")
+    );
     assert_eq!(
         source.captures, 2,
         "external bytes belong to the full content key"
