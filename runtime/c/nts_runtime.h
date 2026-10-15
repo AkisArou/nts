@@ -1183,6 +1183,28 @@ _Static_assert(NTS_PRESENCE_BITS == 26u,
                "change there is a layout the compiler admits and this cannot "
                "record");
 
+/* An array whose null slots are `null`, not `undefined`.
+ *
+ * A reference slot holds a null pointer for `null` or for `undefined`, never
+ * both, and while the array's type is known the compiler knows which. Once the
+ * array is erased that type is gone: `Array.isArray(a) ? a[1] : 0` read a
+ * stored `null` of a `(string | null)[]` as `undefined`. The lowering says
+ * which where it erases one (`OpKind::Erase`'s `slots`), this marks the array
+ * object, and `nts_array_element` reads the mark ahead of the read site's own
+ * answer. An array has no optional properties, so the presence bits are free
+ * on one, and array flags live there: `NTS_ARRAY_IMMUTABLE` takes the first,
+ * this the second. Set, never cleared. NULL is left alone -- an absent array
+ * has no slots, and taking one keeps the call out of a branch, which LLVM's
+ * straight-line erase has no room for -- and so is an immutable array, which
+ * may be read-only memory and whose template strings are never null. */
+#define NTS_NULL_SLOTS (1u << (NTS_PRESENCE_SHIFT + 1u))
+_Static_assert(NTS_ARRAY_IMMUTABLE == (1u << NTS_PRESENCE_SHIFT) &&
+                   (NTS_NULL_SLOTS & (NTS_ARRAY_IMMUTABLE |
+                                      ((1u << NTS_PRESENCE_SHIFT) - 1u))) == 0u,
+               "an array's flags are the presence bits, one each, above every "
+               "flag an object shares");
+void nts_array_mark_null_slots(NtsArray *array);
+
 /* Record every optional property the construction itself wrote, in one store.
  *
  * A class field declaration defines its property even with no initialiser, so

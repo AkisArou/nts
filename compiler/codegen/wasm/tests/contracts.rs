@@ -12,6 +12,7 @@ fn cast(name: &str, source: HirType, target: HirType, helper: Option<&str>) -> F
         OpKind::Erase {
             value: input,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );

@@ -567,6 +567,7 @@ pub(in crate::hir) mod tests {
             op(OpKind::Erase {
                 value: ValueId(1),
                 absent: super::super::Absent::Impossible,
+                slots: super::super::Absent::Impossible,
             }), // %2
             op(OpKind::Binary {
                 op: crate::hir::BinOp::Lt,
@@ -577,6 +578,7 @@ pub(in crate::hir) mod tests {
             op(OpKind::Erase {
                 value: ValueId(4),
                 absent: super::super::Absent::Impossible,
+                slots: super::super::Absent::Impossible,
             }), // %5
             op(OpKind::Unerase { value: ValueId(6) }), // %7  read in the handler
         ];

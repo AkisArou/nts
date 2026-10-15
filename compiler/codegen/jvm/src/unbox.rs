@@ -136,6 +136,7 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
             OpKind::Erase {
                 value: source,
                 absent: nts_core::hir::Absent::Impossible,
+                ..
             } => {
                 if !matches!(
                     func.values.get(source.0 as usize).map(|it| &it.ty),

@@ -4364,7 +4364,11 @@ fn tagging(
         // converted before it is stored, exactly as the C backend's
         // `nts_value_of_number(x)` converts it, and a bool and a pointer are
         // widened to the same eightbyte.
-        OpKind::Erase { value, absent } => {
+        OpKind::Erase {
+            value,
+            absent,
+            slots,
+        } => {
             use nts_core::hir::{Absent, tags};
             let from = &func.values[value.0 as usize].ty;
             let tag = tag_of(from)
@@ -4407,8 +4411,19 @@ fn tagging(
                     )
                 }
             };
+            // What the array's null slots mean, said by the array object
+            // itself (`OpKind::Erase`'s `slots`). The helper ignores a null
+            // operand, so this needs no branch either.
+            let mark = if *slots == Absent::Null {
+                format!(
+                    "call void @nts_array_mark_null_slots(ptr {})\n  ",
+                    name(*value)
+                )
+            } else {
+                String::new()
+            };
             format!(
-                "{widen}\n  {test}{out}.half = insertvalue {ERASED_TYPE} undef, i32 {chosen}, 0\n  \
+                "{widen}\n  {mark}{test}{out}.half = insertvalue {ERASED_TYPE} undef, i32 {chosen}, 0\n  \
                  {out} = insertvalue {ERASED_TYPE} {out}.half, i64 {bits}, 1"
             )
         }

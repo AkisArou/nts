@@ -129,6 +129,7 @@ mod tests {
                     OpKind::Erase {
                         value: ValueId(0),
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                 ),
@@ -147,7 +148,8 @@ mod tests {
             f.values[1].kind,
             OpKind::Erase {
                 value: ValueId(2),
-                absent: Absent::Impossible
+                absent: Absent::Impossible,
+                slots: Absent::Impossible,
             }
         ));
         // Re-running preparation cannot box an existing payload again.
@@ -187,6 +189,7 @@ mod tests {
                     OpKind::Erase {
                         value: ValueId(0),
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                 ),
@@ -208,6 +211,7 @@ mod tests {
                     OpKind::Erase {
                         value: ValueId(0),
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                 ),

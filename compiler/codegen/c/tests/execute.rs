@@ -193,6 +193,7 @@ fn counterfeit_closure_return(program: &mut hir::Program) {
             kind: hir::OpKind::Erase {
                 value: hir::ValueId(0),
                 absent: hir::Absent::Impossible,
+                slots: hir::Absent::Impossible,
             },
             ty: hir::HirType::Erased,
             origin,

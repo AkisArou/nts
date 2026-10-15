@@ -173,6 +173,7 @@ fn erased(name: &str, from: &HirType) -> hir::Func {
             OpKind::Erase {
                 value: ValueId(0),
                 absent: hir::Absent::Impossible,
+                slots: hir::Absent::Impossible,
             },
             HirType::Erased,
         ),

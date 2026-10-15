@@ -4233,7 +4233,11 @@ fn erased_conversion(
         )
     };
     match kind {
-        OpKind::Erase { value, absent } => {
+        OpKind::Erase {
+            value,
+            absent,
+            slots,
+        } => {
             let from = &func.value(*value).ty;
             let (tag, field) = erased_tag(from).ok_or_else(|| refuse(from, "erased"))?;
             // A function value held at its signature's type is no closure's own
@@ -4297,6 +4301,17 @@ fn erased_conversion(
                 _ if tag == "NTS_TAG_UNDEFINED" => "nts_value_of_undefined()".to_owned(),
                 _ => format!("nts_value_of_number({})", value_name(*value)),
             };
+            // What the array's null slots mean, said by the array object
+            // itself now that the type that knew is about to be gone. See
+            // `OpKind::Erase`'s `slots`.
+            // `NULL` is the helper's to ignore, an absent array having no
+            // slots, so `absent` needs no test here.
+            if *slots == nts_core::hir::Absent::Null {
+                return Ok(format!(
+                    "nts_array_mark_null_slots((NtsArray *){}); {name} = {built};",
+                    value_name(*value)
+                ));
+            }
             Ok(format!("{name} = {built};"))
         }
         OpKind::Unerase { value } => {

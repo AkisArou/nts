@@ -98,6 +98,7 @@ fn aliasing_cannot_hide_an_uninitialized_slot() {
         OpKind::Erase {
             value: a,
             absent: nts_core::hir::Absent::Impossible,
+            slots: nts_core::hir::Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -178,6 +179,7 @@ fn stores_after_a_guard_that_throws_initialize_every_slot() {
         OpKind::Erase {
             value: a,
             absent: nts_core::hir::Absent::Impossible,
+            slots: nts_core::hir::Absent::Impossible,
         },
         HirType::Erased,
     );

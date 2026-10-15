@@ -1247,9 +1247,24 @@ pub enum OpKind {
     /// the IR holds it -- by the time a pass sees `managed<obj#1>` the union it
     /// came from is gone, which is why it is recorded where the erase is
     /// inserted and the TypeScript type is still in hand.
+    ///
+    /// # And what an array's null slots mean
+    ///
+    /// `slots` is the same fact one level down: what a **null element slot**
+    /// of an erased array means. A `(string | null)[]` holds `null` as a null
+    /// pointer, and once the array is erased the element type that said so is
+    /// gone -- an erased read (`Array.isArray(a) ? a[1] : 0`) answered
+    /// `undefined` for it. `Null` only where the operand is an array of
+    /// references whose element admits `null` and not `undefined`; `Impossible`
+    /// for everything else, which costs nothing. Each backend keeps it where its
+    /// erased form has room: C and LLVM mark the array object
+    /// (`nts_array_mark_null_slots`), the JVM the erased value itself. The two
+    /// differ only for one array erased both as `(T | null)[]` and as `T[]`,
+    /// which needs a `null` inside a `T[]` that the types forbid.
     Erase {
         value: ValueId,
         absent: Absent,
+        slots: Absent,
     },
     /// The tag an erased value currently carries.
     ///
@@ -4453,6 +4468,7 @@ pub(super) fn call_directly(
             // null` and `string` share a pointer, and assuming no absence made
             // a null result a string tag over a null pointer.
             absent: result_absent,
+            slots: Absent::Impossible,
         };
         return true;
     }

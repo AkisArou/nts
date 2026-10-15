@@ -557,6 +557,7 @@ mod tests {
                 OpKind::Erase {
                     value: ValueId(0),
                     absent: super::super::Absent::Impossible,
+                    slots: super::super::Absent::Impossible,
                 },
                 HirType::Erased,
             ),
@@ -678,6 +679,7 @@ mod tests {
                 OpKind::Erase {
                     value: ValueId(0),
                     absent: super::super::Absent::Impossible,
+                    slots: super::super::Absent::Impossible,
                 },
                 HirType::Erased,
             ),
@@ -742,6 +744,7 @@ mod tests {
                 OpKind::Erase {
                     value: ValueId(0),
                     absent: super::super::Absent::Impossible,
+                    slots: super::super::Absent::Impossible,
                 },
                 HirType::Erased,
             ),

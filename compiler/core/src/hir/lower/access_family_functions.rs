@@ -789,7 +789,11 @@ fn converted(
     // keeps `writableHighWaterMark` as an `NtsValue` and its getter suppliers
     // return `double`, and a `Convert` there was C that does not compile.
     let kind = if *to == HirType::Erased {
-        OpKind::Erase { value, absent }
+        OpKind::Erase {
+            value,
+            absent,
+            slots: crate::hir::Absent::Impossible,
+        }
     } else if *from == HirType::Erased {
         OpKind::Unerase { value }
     } else {

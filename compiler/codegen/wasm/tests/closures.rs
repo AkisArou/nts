@@ -126,6 +126,7 @@ fn direct(class: u32, erased: bool, slot: u32) -> Func {
             OpKind::Erase {
                 value: receiver,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );
@@ -224,6 +225,7 @@ fn tag() -> Func {
         OpKind::Erase {
             value: receiver,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );

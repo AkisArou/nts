@@ -208,6 +208,7 @@ fn erased_concat() -> Func {
         OpKind::Erase {
             value: x,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -215,6 +216,7 @@ fn erased_concat() -> Func {
         OpKind::Erase {
             value: y,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );

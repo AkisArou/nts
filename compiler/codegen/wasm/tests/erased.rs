@@ -17,6 +17,7 @@ fn roundtrip(name: &str, ty: HirType, tag: bool) -> Func {
         OpKind::Erase {
             value: input,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -51,6 +52,7 @@ fn absence(name: &str, kind: OpKind, absent: Option<Absent>) -> Func {
             OpKind::Erase {
                 value: input,
                 absent,
+                slots: nts_core::hir::Absent::Impossible,
             },
             HirType::Erased,
         );
@@ -76,6 +78,7 @@ fn nullable_unerasure(name: &str, kind: OpKind, absent: Absent) -> Func {
         OpKind::Erase {
             value: reference,
             absent,
+            slots: nts_core::hir::Absent::Impossible,
         },
         HirType::Erased,
     );

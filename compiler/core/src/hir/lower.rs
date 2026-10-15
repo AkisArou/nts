@@ -17009,6 +17009,7 @@ fn erased_call(
                     // say -- the two share a pointer -- and assuming none made
                     // a null result a string tag over a null pointer.
                     absent: result_absent,
+                    slots: Absent::Impossible,
                 },
                 ty: HirType::Erased,
                 origin: origin.clone(),
@@ -26374,6 +26375,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),
@@ -27673,7 +27675,29 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         let absent = self.absence_at_excluding(source, &have, undefined_is_the_other_arm);
-        Ok(self.push(OpKind::Erase { value, absent }, HirType::Erased, origin))
+        // What a null element slot of the array means, read off the array's
+        // own type while it is still in hand -- the erased read that comes
+        // later sees `any[]`. See `OpKind::Erase`.
+        let slots = match &have {
+            HirType::Managed(ManagedType::Array(element))
+                if matches!(**element, HirType::Managed(_))
+                    && self
+                        .read_type(source)
+                        .is_some_and(|ty| self.null_only_element(ty)) =>
+            {
+                Absent::Null
+            }
+            _ => Absent::Impossible,
+        };
+        Ok(self.push(
+            OpKind::Erase {
+                value,
+                absent,
+                slots,
+            },
+            HirType::Erased,
+            origin,
+        ))
     }
 
     /// What a **null** pointer means for the value this node holds.
@@ -32005,6 +32029,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Erase {
                 value: read,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
             origin.clone(),
@@ -38730,6 +38755,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value: subject,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),
@@ -39897,6 +39923,7 @@ impl<'a> FuncBuilder<'a> {
                     OpKind::Erase {
                         value,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                     origin.clone(),
@@ -39934,6 +39961,7 @@ impl<'a> FuncBuilder<'a> {
                     OpKind::Erase {
                         value,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                     origin.clone(),
@@ -42352,6 +42380,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Erase {
                 value,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
             origin.clone(),
@@ -43422,6 +43451,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value: text,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),
@@ -50924,6 +50954,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value: object,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin,
@@ -51516,6 +51547,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Erase {
                 value: error,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
             origin,
@@ -52179,6 +52211,7 @@ impl<'a> FuncBuilder<'a> {
                     OpKind::Erase {
                         value,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                     origin.clone(),
@@ -52426,7 +52459,11 @@ impl<'a> FuncBuilder<'a> {
                 }
             };
             self.push(
-                OpKind::Erase { value, absent },
+                OpKind::Erase {
+                    value,
+                    absent,
+                    slots: crate::hir::Absent::Impossible,
+                },
                 HirType::Erased,
                 origin.clone(),
             )
@@ -56584,6 +56621,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value: array,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),
@@ -61424,6 +61462,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value,
                     absent: Absent::Impossible,
+                    slots: Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),
@@ -74174,6 +74213,7 @@ impl<'a> FuncBuilder<'a> {
                 if let OpKind::Erase {
                     value: inner,
                     absent: Absent::Impossible,
+                    ..
                 } = self.values[value.0 as usize].kind
                     && matches!(
                         self.values[inner.0 as usize].ty,
@@ -75716,6 +75756,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Erase {
                 value,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
             origin.clone(),
@@ -77084,6 +77125,7 @@ impl<'a> FuncBuilder<'a> {
             OpKind::Erase {
                 value,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
             origin.clone(),
@@ -80808,6 +80850,7 @@ impl<'a> FuncBuilder<'a> {
                 OpKind::Erase {
                     value: receiver,
                     absent,
+                    slots: crate::hir::Absent::Impossible,
                 },
                 HirType::Erased,
                 origin.clone(),

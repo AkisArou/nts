@@ -44,6 +44,7 @@ fn eraser(name: &str, ty: &HirType, absent: Absent) -> hir::Func {
                 OpKind::Erase {
                     value: ValueId(0),
                     absent,
+                    slots: nts_core::hir::Absent::Impossible,
                 },
                 HirType::Erased,
             ),

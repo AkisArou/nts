@@ -60,6 +60,7 @@ impl Kind {
             OpKind::Erase {
                 value: input,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );

@@ -53,6 +53,7 @@ fn erase(f: &mut Func, ops: &mut Vec<ValueId>, input: ValueId) -> ValueId {
         OpKind::Erase {
             value: input,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     )

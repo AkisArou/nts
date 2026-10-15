@@ -88,6 +88,7 @@ fn search(name: &str, ty: HirType, helper: &str, count: usize, needle: HirType) 
             OpKind::Erase {
                 value: needle,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         )

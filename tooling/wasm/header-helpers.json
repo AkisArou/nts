@@ -40,6 +40,7 @@
     "nts_array_keep_first",
     "nts_array_last_index_of",
     "nts_array_length",
+    "nts_array_mark_null_slots",
     "nts_array_new",
     "nts_array_new_uninitialized",
     "nts_array_of_numbers",

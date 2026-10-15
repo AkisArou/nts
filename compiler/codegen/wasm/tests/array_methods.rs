@@ -222,6 +222,7 @@ fn empty_ref() -> Func {
         OpKind::Erase {
             value: v,
             absent: Absent::Undefined,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -266,6 +267,7 @@ fn erased_push() -> Func {
         OpKind::Erase {
             value: input,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -309,6 +311,7 @@ fn growth() -> Func {
         OpKind::Erase {
             value: storage,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );

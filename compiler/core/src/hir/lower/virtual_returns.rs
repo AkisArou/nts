@@ -280,6 +280,7 @@ fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Fun
             OpKind::Erase {
                 value: answered,
                 absent: projection.result_absent,
+                slots: crate::hir::Absent::Impossible,
             },
             HirType::Erased,
         ))
@@ -335,6 +336,7 @@ fn projected_arguments(
                         .get(at)
                         .copied()
                         .unwrap_or(Absent::Impossible),
+                    slots: Absent::Impossible,
                 },
                 ty: HirType::Erased,
                 origin: origin.clone(),

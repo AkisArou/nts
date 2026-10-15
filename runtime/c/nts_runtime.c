@@ -2331,6 +2331,12 @@ uint32_t nts_array_length(NtsValue array) {
   return object->length;
 }
 
+void nts_array_mark_null_slots(NtsArray *array) {
+  if (array != NULL && (array->header.flags & NTS_ARRAY_IMMUTABLE) == 0u) {
+    array->header.flags |= NTS_NULL_SLOTS;
+  }
+}
+
 /* `xs[i]` where the compiler knows `xs` is an array and not what it holds.
  *
  * A guard is what produces this: `Array.isArray(xs)` proves the value is an
@@ -2396,8 +2402,11 @@ NtsValue nts_array_element(NtsValue array, double index, uint32_t null_slot) {
      * passes: a `(T | null)[]` holds a null, and answering `undefined` read
      * it wrong wherever the read could also be past the end. */
     if (!element) {
-      return null_slot == NTS_TAG_NULL ? nts_value_of_null()
-                                       : nts_value_of_undefined();
+      /* Or the array says so itself, where the read site's type is `any[]`
+       * and the erasure recorded it (`nts_array_mark_null_slots`). */
+      const bool null = null_slot == NTS_TAG_NULL ||
+                        (object->header.flags & NTS_NULL_SLOTS) != 0u;
+      return null ? nts_value_of_null() : nts_value_of_undefined();
     }
     nts_retain(element);
     return nts_value_of_reference(element, nts_tag_of_reference(element));

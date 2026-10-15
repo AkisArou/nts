@@ -581,6 +581,7 @@ fn dispatch_contexts(
                     OpKind::Erase {
                         value: answered,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                     origin.clone(),

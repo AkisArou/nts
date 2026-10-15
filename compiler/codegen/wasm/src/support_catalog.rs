@@ -71,6 +71,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("array helper not yet implemented"),
     ),
     (
+        "nts_array_mark_null_slots",
+        Support::Decline("an Erase's null-slot mark is the backend's own, never a call"),
+    ),
+    (
         "nts_array_new",
         Support::Decline("array helper not yet implemented"),
     ),

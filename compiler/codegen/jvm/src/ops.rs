@@ -3570,7 +3570,7 @@ impl Emitter<'_> {
             ));
         }
         match kind {
-            OpKind::Erase { value, absent } => {
+            OpKind::Erase { value, absent, .. } => {
                 self.erase(code, pool, Some(result), *value, *absent, origin)
             }
             // A `Void` erases to `undefined` and has nothing to load.

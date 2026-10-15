@@ -162,6 +162,7 @@ pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId
         let OpKind::Erase {
             value,
             absent: nts_core::hir::Absent::Impossible,
+            ..
         } = op.kind
         else {
             continue;

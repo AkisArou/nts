@@ -576,6 +576,7 @@ pub fn answer_erased_reads(func: &mut Func) -> usize {
                     OpKind::Erase {
                         value: array,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     },
                     HirType::Erased,
                 );

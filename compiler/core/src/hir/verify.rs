@@ -1114,7 +1114,12 @@ fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
         .iter()
         .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
     {
-        let OpKind::Erase { value, absent } = &op.kind else {
+        let OpKind::Erase {
+            value,
+            absent,
+            slots,
+        } = &op.kind
+        else {
             continue;
         };
         let found = &func.value(*value).ty;
@@ -1122,6 +1127,17 @@ fn check_erasures(func: &Func, problems: &mut Vec<Invalid>) {
             problems.push(Invalid::OperandType {
                 func: func.name.clone(),
                 op: "an erasure recording an absence a payload that is not a reference cannot hold",
+                found: found.clone(),
+            });
+        }
+        // The same rule one level down: only an array of references has null
+        // slots to say anything about.
+        let reference_slots = matches!(found, HirType::Managed(super::ManagedType::Array(element))
+            if matches!(**element, HirType::Managed(_)));
+        if *slots != super::Absent::Impossible && !reference_slots {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: "an erasure recording what null slots mean for a value with no reference slots",
                 found: found.clone(),
             });
         }

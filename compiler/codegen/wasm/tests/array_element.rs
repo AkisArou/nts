@@ -76,6 +76,7 @@ impl Build {
             OpKind::Erase {
                 value,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         )

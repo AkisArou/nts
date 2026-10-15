@@ -109,6 +109,7 @@ fn call(class: u32, slot: u32, widened: bool, erased: bool) -> Func {
             OpKind::Erase {
                 value: receiver,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );

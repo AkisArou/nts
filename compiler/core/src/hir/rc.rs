@@ -2053,6 +2053,7 @@ mod tests {
             OpKind::Erase {
                 value: erasing,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         ));
@@ -2113,6 +2114,7 @@ mod tests {
             OpKind::Erase {
                 value: ValueId(1),
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );

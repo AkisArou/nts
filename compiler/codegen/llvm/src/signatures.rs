@@ -329,6 +329,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_mark_null_slots",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_new",
         returns: "noalias nonnull ptr",
         params: &["ptr", "double"],

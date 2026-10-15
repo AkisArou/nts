@@ -496,6 +496,7 @@ fn explicit_casts_and_erased_container_pairs_keep_the_scan_answers() {
                     kind: OpKind::Erase {
                         value: ValueId(0),
                         absent: Absent::Null,
+                        slots: Absent::Impossible,
                     },
                     ty: HirType::Erased,
                     origin: origin(),

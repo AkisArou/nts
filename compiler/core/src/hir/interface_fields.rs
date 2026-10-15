@@ -210,6 +210,7 @@ fn guard_func(
             OpKind::Erase {
                 value: access.object,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );

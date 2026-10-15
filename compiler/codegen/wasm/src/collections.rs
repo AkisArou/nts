@@ -637,6 +637,7 @@ fn erased_from(b: &Body<'_, '_>, operand: ValueId, storage: &HirType) -> Option<
         OpKind::Erase {
             value,
             absent: Absent::Impossible,
+            ..
         } if b.ty(value) == storage => Some(value),
         _ => None,
     }
@@ -653,6 +654,7 @@ fn key_operand(b: &mut Body<'_, '_>, c: &Collection, key: ValueId) -> Result<(),
         if let OpKind::Erase {
             value,
             absent: Absent::Impossible,
+            ..
         } = b.func.value(key).kind
             && matches!(
                 b.ty(value),

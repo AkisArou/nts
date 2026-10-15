@@ -107,6 +107,7 @@ fn erased(name: &str, element: Option<HirType>) -> Func {
             OpKind::Erase {
                 value: input,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );
@@ -203,6 +204,7 @@ fn grow() -> Func {
         OpKind::Erase {
             value: storage,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );
@@ -485,6 +487,7 @@ fn absent_array(name: &str, wrong: bool) -> Func {
             OpKind::Erase {
                 value: input,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             HirType::Erased,
         );

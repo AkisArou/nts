@@ -338,7 +338,11 @@ fn erase(
         return value;
     }
     builder.push(
-        OpKind::Erase { value, absent },
+        OpKind::Erase {
+            value,
+            absent,
+            slots: crate::hir::Absent::Impossible,
+        },
         HirType::Erased,
         origin.clone(),
     )

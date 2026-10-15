@@ -692,6 +692,7 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                     Some(OpKind::Erase {
                         value: erased,
                         absent: Absent::Impossible,
+                        slots: Absent::Impossible,
                     })
                 }
                 OpKind::GlobalSet {
@@ -1066,6 +1067,7 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
             (concrete, HirType::Erased) if *concrete != HirType::Erased => OpKind::Erase {
                 value: call,
                 absent: Absent::Impossible,
+                slots: Absent::Impossible,
             },
             (HirType::Erased, concrete) if *concrete != HirType::Erased => {
                 OpKind::Unerase { value: call }
@@ -1615,6 +1617,7 @@ fn convert(
         _ if *wanted == HirType::Erased => OpKind::Erase {
             value: operand,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         _ if func.values[operand.0 as usize].ty == HirType::Erased => {
             OpKind::Unerase { value: operand }

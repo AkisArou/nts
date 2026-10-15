@@ -225,7 +225,7 @@ fn recover_matching(
     // This also removes a proved erasure round trip before any guard or ABI
     // conversion is emitted. Absence remains a separate proof obligation.
     let (concrete, absent) = match builder.values[value.0 as usize].kind {
-        OpKind::Erase { value, absent } => (
+        OpKind::Erase { value, absent, .. } => (
             value,
             match absent {
                 Absent::Impossible => None,

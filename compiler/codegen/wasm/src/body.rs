@@ -577,7 +577,7 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::ConstFloat(_)
             | OpKind::ConstString(_)
             | OpKind::ConstNull => return Ok(()),
-            OpKind::Erase { value, absent } => self.erase(id, *value, *absent)?,
+            OpKind::Erase { value, absent, .. } => self.erase(id, *value, *absent)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,

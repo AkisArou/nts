@@ -119,6 +119,7 @@ fn erase(f: &mut Func, ops: &mut Vec<ValueId>, input: ValueId) -> ValueId {
         OpKind::Erase {
             value: input,
             absent: Absent::Impossible,
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     )
@@ -484,6 +485,7 @@ fn absent_projection(name: &str, undefined: bool) -> Func {
             } else {
                 Absent::Null
             },
+            slots: Absent::Impossible,
         },
         HirType::Erased,
     );

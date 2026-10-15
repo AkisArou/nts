@@ -46,7 +46,7 @@ use super::{
 /// distinguish. Keep that value erased. Valid primitive erasures already carry
 /// `Impossible`, so zero and false can still recover their concrete storage.
 fn payload_without_absence(func: &Func, erased: ValueId) -> Option<ValueId> {
-    let OpKind::Erase { value, absent } = func.value(erased).kind else {
+    let OpKind::Erase { value, absent, .. } = func.value(erased).kind else {
         return None;
     };
     (absent == Absent::Impossible).then_some(value)
