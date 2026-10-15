@@ -36965,6 +36965,43 @@ impl<'a> FuncBuilder<'a> {
         self.build_array_from(id, argument, false)
     }
 
+    /// Keep the table cursor test, then test the output position on the body's
+    /// incoming edge. Both comparisons read only compiler-owned values.
+    ///
+    /// Flow's relational facts describe the immediate guard, while its interval
+    /// refinements survive both edges. The returned condition therefore places
+    /// the length relation where bounds analysis can read it.
+    fn collection_bound(
+        &mut self,
+        cursor_present: ValueId,
+        position: ValueId,
+        array: ValueId,
+        record: &Loop,
+        origin: &Origin,
+    ) -> ValueId {
+        let bounds_test = self.new_block();
+        let (exit, _) = self.exit_of(record.depth);
+        let reached = self.carried_now(&record.carried);
+        self.terminate(Terminator::Branch {
+            cond: cursor_present,
+            then_target: bounds_test,
+            then_args: Vec::new(),
+            else_target: exit,
+            else_args: reached,
+        });
+        self.switch_to(bounds_test);
+        let length = self.push(OpKind::Length(array), HirType::NUMBER, origin.clone());
+        self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: position,
+                rhs: length,
+            },
+            HirType::Bool,
+            origin.clone(),
+        )
+    }
+
     /// Walk a sequence and collect every element into a new array.
     ///
     /// The core of [`Self::build_array_from`], extracted so that a **rest element** can use it
@@ -37091,32 +37128,7 @@ impl<'a> FuncBuilder<'a> {
             // output counter's bound to flow/bounds; the second still refuses
             // to read an exhausted table cursor. A mapper may add entries and
             // does not have this fixed-count contract.
-            //
-            // Test the cursor first and put the bound on the body's incoming
-            // edge: flow's relational facts describe the immediate guard,
-            // while its interval refinements survive both edges. These tests
-            // read only compiler-owned values, so their order has no effect.
-            let bounds_test = self.new_block();
-            let (exit, _) = self.exit_of(record.depth);
-            let reached = self.carried_now(&record.carried);
-            self.terminate(Terminator::Branch {
-                cond,
-                then_target: bounds_test,
-                then_args: Vec::new(),
-                else_target: exit,
-                else_args: reached,
-            });
-            self.switch_to(bounds_test);
-            let length = self.push(OpKind::Length(out), HirType::NUMBER, origin.clone());
-            self.push(
-                OpKind::Binary {
-                    op: BinOp::Lt,
-                    lhs: self.bindings[&filled],
-                    rhs: length,
-                },
-                HirType::Bool,
-                origin.clone(),
-            )
+            self.collection_bound(cond, self.bindings[&filled], out, &record, &origin)
         } else {
             cond
         };
