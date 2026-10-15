@@ -23,7 +23,7 @@ fn exported_classes_on_one_shape_have_distinct_native_identities() {
         let options = hir::Options {
             provider,
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options).unwrap();
         let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);

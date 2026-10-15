@@ -40,7 +40,7 @@ fn shared_storage_keeps_each_exported_constructor_and_its_members() {
         assert!(!snapshot.has_errors());
         let options = hir::Options {
             roots: hir::reachable::Roots::EntrySurface,
-            ..hir::Options::new(hir::InterfaceAccess::Materialize)
+            ..hir::Options::default()
         };
         let prepared = hir::prepare_with(&snapshot, &options).unwrap();
         let program = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
