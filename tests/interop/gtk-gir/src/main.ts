@@ -309,7 +309,15 @@ async function bytesAwaited(): Promise<void> {
   let head = "";
   for (let at = 0; at < 5; at++) head += String.fromCharCode(contents[at]);
   console.log("awaited " + head + " " + String(contents.length > 1000));
+  awaited = true;
 }
+
+// Whether `bytesAwaited` has logged: the timeout below waits for it as it
+// waits for `kind` and `folders`, because the read settles on GIO's thread
+// pool and a loaded machine finished the three ticks first (the log then read
+// `label=tick 3` before `awaited`, and the gate's interop step went red on
+// unrelated landings).
+let awaited = false;
 
 function main(): void {
   outParameters();
@@ -420,14 +428,15 @@ function main(): void {
       return false;
     });
     g_timeout_add_full(PRIORITY_DEFAULT, 10, () => {
-      // Count only to three, and keep the source until the query has
-      // answered too: on a loaded machine the query can outlast three
-      // ticks, and the log must read tick 3 either way.
+      // Count only to three, and keep the source until the query, the
+      // directories and the awaited read have answered too: on a loaded
+      // machine any of them can outlast three ticks, and the log must read
+      // tick 3 after them either way.
       if (ticks < 3) {
         ticks++;
         label.label = "tick " + String(ticks);
       }
-      if (ticks < 3 || kind === -1 || folders === "") return true;
+      if (ticks < 3 || kind === -1 || folders === "" || !awaited) return true;
       console.log("label=" + label.label);
       application.quit();
       return false;
