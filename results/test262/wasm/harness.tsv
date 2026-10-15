@@ -1,0 +1,15 @@
+# Test262 test/harness cases that ran, and what each did. Written by
+# tooling/census/conformance262.ts --record; compared by --check.
+# compiler a236c37af9401a01, commit 64fe6c9fc5ec5d49468c66cbc6a87ea179b0a6ac, backend wasm, harness d6442dbc09f91ad0; machine at start: 16.1 GB available, swap 6.3/31.5 GB, load 52.5/47.4 (1m/5m), 16 cores; 2 worker(s)
+test/harness/assert-notsamevalue-notsame.js	pass	
+test/harness/assert-notsamevalue-objects.js	pass	
+test/harness/assert-notsamevalue-zeros.js	pass	
+test/harness/assert-samevalue-nan.js	pass	
+test/harness/assert-samevalue-same.js	pass	
+test/harness/assert-throws-native.js	pass	
+test/harness/assert-true.js	pass	
+test/harness/byteConversionValues.js	pass	
+test/harness/compare-array-same-elements-same-order.js	pass	
+test/harness/dateConstants.js	pass	
+test/harness/nans.js	pass	
+test/harness/tcoHelper.js	pass	
