@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null (reading '#<Object>');erased object key=A non-null assertion received null or undefined;explicit function throw control=has function source;erased function key=A non-null assertion received null or undefined;",
+  "nts": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null (reading '#<Object>');erased object key=Cannot read properties of null;explicit function throw control=has function source;erased function key=Cannot read properties of null;",
   "node": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null (reading '#<Object>');erased object key=Cannot read properties of null (reading '#<Object>');explicit function throw control=has function source;erased function key=has function source;",
-  "measured_with": "5b792327706fba5e",
+  "measured_with": "b8b8bec8b74cbbb1",
   "source": "measured"
 }

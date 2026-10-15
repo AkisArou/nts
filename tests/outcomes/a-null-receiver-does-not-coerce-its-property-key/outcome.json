@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null;;null receiver=A non-null assertion received null or undefined;;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null;;null receiver=Cannot read properties of null;;",
   "node": "exit 1; nts: uncaught Observed: explicit throw control=Cannot read properties of null;;null receiver=Cannot read properties of null;;",
-  "measured_with": "5b792327706fba5e",
+  "measured_with": "b8b8bec8b74cbbb1",
   "source": "measured"
 }
