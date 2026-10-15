@@ -6,6 +6,14 @@
 // rather than winning, independently of the runner's cross-variant checksum.
 //
 // The iteration count arrives opaque, so nothing about the workload folds.
+//
+// **Node pays for this file's field declarations, and that is the program's
+// own semantics.** The fixtures target ESNext, so a field declared without
+// an initializer is defined as `undefined` when the object is built; V8 then
+// types it for any value rather than for the numbers it holds. The same file
+// with those fields as `declare` runs 1.2x faster on node 24.20,
+// so `nts/V8` here is quoted with that factor beside it. The source stays
+// as a TypeScript programmer writes it, which is what every column compiles.
 
 import { Benchmark } from "../../common/awfy-benchmark.ts";
 import { Random } from "../../common/awfy-som.ts";

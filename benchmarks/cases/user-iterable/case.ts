@@ -14,6 +14,14 @@
 // pins that for nts -- the result object `next()` returns is one frame slot
 // reused, because each dies before the next is made -- and the C++ iterator is
 // a value on the stack.
+//
+// **Node pays for this file's field declarations, and that is the program's
+// own semantics.** The fixtures target ESNext, so a field declared without
+// an initializer is defined as `undefined` when the object is built; V8 then
+// types it for any value rather than for the numbers it holds. The same file
+// with those fields as `declare` runs 3.4x faster on node 24.20,
+// so `nts/V8` here is quoted with that factor beside it. The source stays
+// as a TypeScript programmer writes it, which is what every column compiles.
 
 type Step = { value: number; done: boolean };
 

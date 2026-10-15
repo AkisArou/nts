@@ -287,7 +287,7 @@ fn publish(
     }
     if requested.is_empty()
         && rows.len() == cases.len()
-        && let Some(drift) = refusal_drift(rows)
+        && let Some(drift) = refusal_drift(rows, REFUSES_TODAY)
     {
         println!("\nREADME not updated: {drift}");
         return Ok(());
@@ -612,6 +612,31 @@ const WASM_LEGEND: &str = "\n\
     (`benchmarks/assemblyscript`, AWFY's eight only) and compiled by its own \
     compiler, on V8 too.\n";
 
+/// Where node's column is V8 paying for a TypeScript idiom, for the legend.
+///
+/// Measured by turning each case's uninitialised class fields into `declare`
+/// fields and timing node on both shapes, paired: the factor is as-written
+/// over declared, and the sources are not changed.
+const FIELD_IDIOM_LEGEND: &str = "\n\
+    **Some `nts/V8` rows are V8 paying for a TypeScript idiom, not this \
+    compiler winning.** The cases target ESNext, so a class field declared \
+    without an initializer (`x: number;`) is defined as `undefined` when the \
+    object is built, and node runs it so, as the semantics say. V8 then types \
+    the field for any value rather than for the numbers it will hold, and a \
+    double stored into it is a freshly allocated number. The same programs \
+    with `declare x: number;` instead -- or as JavaScript, which declares no \
+    fields -- run on node 7.5x faster on `awfy-nbody`, 3.4x on \
+    `user-iterable`, 1.3x on `instanceof` and 1.2x on `awfy-bounce` (node \
+    24.20, a quiet machine, 2026-10-15). The sources stay as a TypeScript programmer writes \
+    them, so those rows' `nts/V8` is quoted twice: as measured, and divided \
+    by the factor, against the node a JavaScript programmer would run. The \
+    second is the one that says where this compiler stands -- \
+    `user-iterable`'s 1.60x as measured is about 5.4x against the declared \
+    shape, one of the worst rows rather than a mild one. `objects` is the \
+    exception that keeps this from being a rule: declared, node runs it 1.2x \
+    *slower*. `awfy-permute` pays 1.07x, and the other ten cases with such \
+    fields nothing measurable.\n";
+
 fn legend(root: &Utf8Path) -> String {
     let legend = "\n\
         Every ratio is nts divided by the other, so **lower is better and 1.00 is \
@@ -703,7 +728,10 @@ fn legend(root: &Utf8Path) -> String {
             || "an unknown commit".to_owned(),
             |out| String::from_utf8_lossy(&out.stdout).trim().to_owned(),
         );
-    let legend = format!("{legend}{WASM_LEGEND}{}", reading_a_ratio());
+    let legend = format!(
+        "{legend}{WASM_LEGEND}{FIELD_IDIOM_LEGEND}{}",
+        reading_a_ratio()
+    );
     // **Which tree's binary wrote this, beside which commit it measured.**
     //
     // The sha answers "what was measured" and had been the whole of the
@@ -3147,19 +3175,22 @@ impl Basis {
 /// So a new entry here is a regression to explain, a missing one is a fix to
 /// celebrate and record, and either way the run says so rather than printing a
 /// table with four quiet `--`s in it.
-const REFUSES_TODAY: &[(&str, &str)] = &[(
-    "json-stringify-doc",
-    "`c9f3d3a0` refuses a structural-to-subclass pointer cast that used to be a \
-     SIGSEGV. `stringifyJsonValue(DOCUMENT, { gap: \"\" })` reads `options.replacer` \
-     off an anonymous type that does not declare it, so lowering drops `work`",
-)];
+///
+/// Empty since 2026-10-15. `json-stringify-doc`, the last entry, was refused
+/// from `c9f3d3a09` (2026-09-10): a structural-to-subclass pointer cast, from
+/// `stringifyJsonValue(DOCUMENT, { gap: "" })` reading `options.replacer` off
+/// an anonymous type. Every surviving pinned compiler from `f35a873b4`
+/// (2026-09-27) on lowers `work` under `--rc`, so the fix is in
+/// `c9f3d3a09..f35a873b4`; no pin in that range survives to narrow it, and the
+/// README row that still showed it refused was carried over, not re-measured.
+const REFUSES_TODAY: &[(&str, &str)] = &[];
 
 /// Whether the cases that refused are the cases expected to refuse.
 ///
 /// Returns the sentence to print, or `None` when the set matches. Separate from
 /// `publish` so it can be asserted rather than watched -- the same reason
 /// `lost_case_decline` is.
-fn refusal_drift(rows: &[Row]) -> Option<String> {
+fn refusal_drift(rows: &[Row], known: &[(&str, &str)]) -> Option<String> {
     use std::fmt::Write as _;
     let mut refused: Vec<&str> = rows
         .iter()
@@ -3167,7 +3198,7 @@ fn refusal_drift(rows: &[Row]) -> Option<String> {
         .map(|row| row.case.strip_suffix(" (rc)").unwrap_or(&row.case))
         .collect();
     refused.sort_unstable();
-    let mut expected: Vec<&str> = REFUSES_TODAY.iter().map(|(case, _)| *case).collect();
+    let mut expected: Vec<&str> = known.iter().map(|(case, _)| *case).collect();
     expected.sort_unstable();
     if refused == expected {
         return None;
@@ -3362,25 +3393,24 @@ mod tests {
         }
     }
 
+    /// A refusal the tests list, so every arm below is exercised whether or not
+    /// `REFUSES_TODAY` has an entry today.
+    const KNOWN: &[(&str, &str)] = &[("json-stringify-doc", "for the tests")];
+
     /// The set that matches is the only quiet answer.
     #[test]
     fn the_expected_refusals_are_not_drift() {
-        let rows: Vec<Row> = REFUSES_TODAY
-            .iter()
-            .map(|(case, _)| refused_row(case))
-            .collect();
-        assert_eq!(refusal_drift(&rows), None);
+        let rows: Vec<Row> = KNOWN.iter().map(|(case, _)| refused_row(case)).collect();
+        assert_eq!(refusal_drift(&rows, KNOWN), None);
+        assert_eq!(refusal_drift(&[row("fib")], REFUSES_TODAY), None);
     }
 
     /// A case that starts refusing is a regression, and is named.
     #[test]
     fn a_new_refusal_is_named_as_a_regression() {
-        let mut rows: Vec<Row> = REFUSES_TODAY
-            .iter()
-            .map(|(case, _)| refused_row(case))
-            .collect();
+        let mut rows: Vec<Row> = KNOWN.iter().map(|(case, _)| refused_row(case)).collect();
         rows.push(refused_row("awfy-bounce"));
-        let said = refusal_drift(&rows).expect("a new refusal is drift");
+        let said = refusal_drift(&rows, KNOWN).expect("a new refusal is drift");
         assert!(said.contains("awfy-bounce"), "{said}");
         assert!(said.contains("regression"), "{said}");
     }
@@ -3389,7 +3419,7 @@ mod tests {
     /// quietly become a description of the past.
     #[test]
     fn a_case_that_now_compiles_is_named_too() {
-        let said = refusal_drift(&[row("fib")]).expect("an empty refusal set is drift");
+        let said = refusal_drift(&[row("fib")], KNOWN).expect("an empty refusal set is drift");
         assert!(said.contains("json-stringify-doc"), "{said}");
         assert!(said.contains("now compile"), "{said}");
     }
@@ -3403,7 +3433,7 @@ mod tests {
             .iter()
             .map(|case| refused_row(case))
             .collect();
-        let said = refusal_drift(&rows).expect("61 of 61 refusing is not a pass");
+        let said = refusal_drift(&rows, KNOWN).expect("61 of 61 refusing is not a pass");
         assert!(said.contains("absences"), "{said}");
         assert!(said.contains("accumulate"), "{said}");
     }

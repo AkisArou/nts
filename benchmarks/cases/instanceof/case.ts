@@ -3,6 +3,14 @@
 // The classes that satisfy `s instanceof Circle` are fixed when the program is
 // built, so the test is a comparison against a descriptor pointer. Nothing here
 // allocates: the shapes do not leave the loop.
+//
+// **Node pays for this file's field declarations, and that is the program's
+// own semantics.** The fixtures target ESNext, so a field declared without
+// an initializer is defined as `undefined` when the object is built; V8 then
+// types it for any value rather than for the numbers it holds. The same file
+// with those fields as `declare` runs 1.3x faster on node 24.20,
+// so `nts/V8` here is quoted with that factor beside it. The source stays
+// as a TypeScript programmer writes it, which is what every column compiles.
 class Shape {
   size: number;
   constructor(size: number) {
