@@ -458,3 +458,50 @@ export function collectCaseRoots({ base, now = Date.now(), maxAge = 7 * 86400_00
   }
   return { removed };
 }
+
+/**
+ * The cases a run measures, out of what the selector found under its
+ * directory: a deterministic sample, or the cases a record (`--recorded`) or a
+ * path list (`--paths-from`) names, less what the backend never runs.
+ *
+ * A sample is ordered by each file's content hash, so two runs of one size
+ * ask about the same files, spread across directories rather than the first N
+ * of one of them.
+ *
+ * **A parse or resolution negative is judged before any backend runs**: the
+ * frontend rejects it or the case is "accepted", whatever happens next. So it
+ * runs on C alone; every other backend would pay the frontend to repeat C's
+ * verdict. 4,049 of the 8,318 recorded language rows are such negatives.
+ *
+ * **An empty population is refused, never measured.** A record that names no
+ * case the selection has -- a header-only file, or one written for another
+ * directory -- would select nothing and then reconcile, since nothing it
+ * names went missing: the one way a gate step could pass having checked
+ * nothing, and the only floor a backend's step has is its record (all.sh's
+ * test262_backend).
+ */
+export function populationOf(records, { sample = 0, backend = "c", named = null }) {
+  let population = sample > 0
+    ? [...records].sort((a, b) => a.source_hash.localeCompare(b.source_hash)).slice(0, sample)
+    : records;
+  if (named !== null) {
+    const wanted = new Set(
+      named.text
+        .split("\n")
+        .filter((line) => line !== "" && !line.startsWith("#"))
+        .map((line) => line.split("\t")[0]),
+    );
+    if (wanted.size === 0) return { refused: `${named.file} names no case: an empty record measures nothing` };
+    population = records.filter((record) => wanted.has(record.path));
+    if (population.length === 0) {
+      return { refused: `none of the ${wanted.size} case(s) ${named.file} names is under this directory` };
+    }
+  }
+  if (backend !== "c") {
+    population = population.filter((record) => !record.negative || record.negative.phase === "runtime");
+    if (population.length === 0) {
+      return { refused: `nothing selected runs on ${backend}: every case is a negative the frontend judges` };
+    }
+  }
+  return { population };
+}

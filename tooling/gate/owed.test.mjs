@@ -116,7 +116,7 @@ test("a crate no rule names owes what the crates that use it owe", () => {
 test("a backend the CLI selects owes the steps that select it, not everything the CLI owes", () => {
   // Only its own tests and the `wasm` step run the Wasm backend, through the
   // CLI or the differential's NTS_BACKEND=wasm: none of the C steps.
-  owes("compiler/codegen/wasm/src/lib.rs", ["tests", "wasm"], { not: ["interop", "examples", "profile", "test262-cases", "outcomes", "blockers"] });
+  owes("compiler/codegen/wasm/src/lib.rs", ["tests", "wasm", "test262-wasm"], { not: ["interop", "examples", "profile", "test262-cases", "test262-jvm", "outcomes", "blockers"] });
   owes("compiler/codegen/napi/src/lib.rs", ["addons", "profile", "divergence"], { not: ["interop", "examples"] });
   // The JVM and LLVM backends build interop projects and pinned outcomes
   // through the CLI, so their own rules owe those.
@@ -155,6 +155,9 @@ test("what a step runs owes that step", () => {
   owes("tooling/android/dexes.sh", ["dex"]);
   owes("tooling/gate/definitions", ["definitions"]);
   owes("results/test262/c/language.tsv", ["test262-cases"]);
+  // A backend's records owe that backend's step alone.
+  owes("results/test262/jvm/language.tsv", ["test262-jvm"], { not: ["test262-wasm", "test262-cases", "examples"] });
+  owes("results/test262/wasm/builtins.tsv", ["test262-wasm"], { not: ["test262-jvm", "test262-cases", "examples"] });
   owes("tooling/gate/compile-times.tsv", ["compile-time"]);
 });
 
@@ -258,7 +261,28 @@ test("documentation owes its two readers, not the gate", () => {
 test("the hand-written rules still decide what they name", () => {
   owes("tests/programs/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
   owes("runtime/c/nts_runtime.h", ["tests", "bench-agree", "format"]);
-  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "jvm-verifies", "benches"]);
+  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-wasm", "jvm-verifies", "benches"]);
+  // The JVM runtime owes the program step that runs it and the JVM's test262
+  // rows, not only the lane's wide trio. (It owes the other test262 steps too,
+  // but through their shared runner, which names the jar: `stepInputs`.)
+  owes("runtime/jvm/src/nts/rt/NtsValue.java", ["jvm", "jvm-verifies", "test262-jvm"], { not: ["examples"] });
+  // (Every compiler crate also reaches the CLI's crate, whose diagnostics rule
+  // owes all the test262 steps; so a backend's own rule is its floor, not its
+  // ceiling.)
+  owes("compiler/codegen/jvm/src/ops.rs", ["jvm", "test262-jvm"]);
+  // The jar too, and the class writer every JVM class goes through; the
+  // lane's direct wide trio stays as it was.
+  owes("runtime/jvm/nts-runtime.jar", ["jvm", "jvm-verifies", "test262-jvm", "dex", "bench-agree", "interop"]);
+  owes("compiler/jvm-emitter/src/lib.rs", ["jvm", "jvm-verifies", "test262-jvm"]);
+  // The Wasm test host, named at run time, owes what runs it, not the full gate.
+  owes("tooling/wasm/run-program.ts", ["tests", "test262-wasm"], { not: ["examples", "test262-jvm"] });
+  // The CLI's manifest and the runner's shared pieces owe both backends' rows.
+  owes("tooling/cli/Cargo.toml", ["test262-jvm", "test262-wasm"]);
+  for (const file of ["tooling/census/attempt262.ts", "tooling/census/project.ts", "tooling/census/conformance262.ts"]) {
+    owes(file, ["test262-cases", "test262-jvm", "test262-wasm"]);
+  }
+  // And the runner's tests are the tool step's now.
+  owes("tooling/census/project.test.ts", ["tooling"]);
   owes("runtime/node/path/index.ts", ["definitions", "integrity-runtime", "addons", "compile-time"]);
 });
 

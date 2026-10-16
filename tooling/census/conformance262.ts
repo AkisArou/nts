@@ -109,7 +109,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
-import { bodyOf, collectCaseRoots, HARNESS_HASH, pinCompiler } from "./project.ts";
+import { bodyOf, collectCaseRoots, HARNESS_HASH, pinCompiler, populationOf } from "./project.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -313,30 +313,14 @@ try {
 }
 if (records.length === 0) cannotMeasure(`${under} selected no test`);
 
-// A sample is a *deterministic* subset: ordered by the file's content hash, so
-// two runs of one sample size ask about the same files, and the subset is
-// spread across directories rather than being the first N of one of them.
-/** The paths a record file names, in the order written. */
-const recordedPaths = (file) =>
-  readFileSync(file, "utf8")
-    .split("\n")
-    .filter((line) => line !== "" && !line.startsWith("#"))
-    .map((line) => line.split("\t")[0]);
-
-let population = sample > 0
-  ? [...records].sort((a, b) => a.source_hash.localeCompare(b.source_hash)).slice(0, sample)
-  : records;
-if (recordedFile || pathsFromFile) {
-  const wanted = new Set(recordedPaths(recordedFile ?? pathsFromFile));
-  population = records.filter((record) => wanted.has(record.path));
-}
-// **A parse or resolution negative is judged before any backend runs**: the
-// frontend rejects it or the case is "accepted", whatever happens next. So it
-// runs on C alone; every other backend would pay the frontend to repeat C's
-// verdict. 4,049 of the 8,318 recorded language rows are such negatives.
-if (BACKEND !== "c") {
-  population = population.filter((record) => !record.negative || record.negative.phase === "runtime");
-}
+const named = recordedFile ?? pathsFromFile;
+const chosen = populationOf(records, {
+  sample,
+  backend: BACKEND,
+  named: named === null ? null : { file: named, text: readFileSync(named, "utf8") },
+});
+if ("refused" in chosen) cannotMeasure(chosen.refused);
+const population = chosen.population;
 const partial = sample > 0 || recordedFile !== null;
 
 // --- exclusions ------------------------------------------------------------

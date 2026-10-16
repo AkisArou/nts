@@ -116,6 +116,11 @@ const STEPS = [
   { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
   { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
+  // The five records on one backend each (all.sh's test262_backend): one
+  // frontend per case as on C, plus the backend's own run -- a JVM per case
+  // under its fixed -Xmx, node for Wasm.
+  { name: "test262-jvm", slots: 8, min: 2, mem: 8, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM" },
+  { name: "test262-wasm", slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every recorded test262 row reproduces on Wasm" },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
   { name: "expect-ir", slots: 1, mem: 2, nts: true, fe: true, doc: "representation facts in the corpora hold" },
   { name: "integrity", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },

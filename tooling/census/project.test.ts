@@ -151,3 +151,34 @@ test("concurrent publishers agree on the complete read-only root", async (t) => 
   assert.equal(new Set(results.map((r) => r.key)).size, 1);
   assert.equal(results.filter((r) => r.created).length, 1);
 });
+
+test("a run's population: a sample, a record's cases, a backend's share", async () => {
+  const { populationOf } = await import("./project.ts");
+  const records = [
+    { path: "a.js", source_hash: "3" },
+    { path: "b.js", source_hash: "1" },
+    { path: "c.js", source_hash: "2", negative: { phase: "parse" } },
+    { path: "d.js", source_hash: "4", negative: { phase: "runtime" } },
+  ];
+  const paths = (r) => ("population" in r ? r.population.map((c) => c.path) : r);
+  assert.deepEqual(paths(populationOf(records, {})), ["a.js", "b.js", "c.js", "d.js"]);
+  assert.deepEqual(paths(populationOf(records, { sample: 2 })), ["b.js", "c.js"], "ordered by content hash");
+  const named = { file: "r.tsv", text: "# nts-record 1 {}\nc.js\tpass\na.js\tfail\nzzz.js\tpass\n" };
+  assert.deepEqual(paths(populationOf(records, { named })), ["a.js", "c.js"], "what the record names, in the selector's order");
+  assert.deepEqual(paths(populationOf(records, { named, backend: "jvm" })), ["a.js"], "a frontend-judged negative runs on C alone");
+});
+
+test("an empty population is refused, so a step cannot pass having checked nothing", async () => {
+  const { populationOf } = await import("./project.ts");
+  const records = [
+    { path: "a.js", source_hash: "1" },
+    { path: "n.js", source_hash: "2", negative: { phase: "resolution" } },
+  ];
+  const headerOnly = populationOf(records, { named: { file: "empty.tsv", text: "# nts-record 1 {}\n" } });
+  assert.match(headerOnly.refused ?? "", /names no case/);
+  const elsewhere = populationOf(records, { named: { file: "other.tsv", text: "x.js\tpass\n" } });
+  assert.match(elsewhere.refused ?? "", /none of the 1 case/);
+  const negatives = populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" }, backend: "wasm" });
+  assert.match(negatives.refused ?? "", /nothing selected runs on wasm/);
+  assert.ok("population" in populationOf(records, { named: { file: "neg.tsv", text: "n.js\tpass\n" } }), "on C it runs");
+});

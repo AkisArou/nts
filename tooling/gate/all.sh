@@ -2028,6 +2028,57 @@ test262_rest_cases() {
     "$TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING" TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING
 }
 
+# The recorded test262 slices on another backend: each of the five records
+# under results/test262/<backend>/ re-run on that backend and held to itself.
+# test262 runs on every backend (the user, 2026-10-14), and until these steps
+# a backend's records were checked only by hand, in its lane's reviews -- a
+# core change could regress a JVM or Wasm row and land.
+#
+# **The record is the ratchet, so there is no floor.** A recorded pass that
+# does anything else is REGRESSED, a changed failure CHANGED, a row that did
+# not run MISSING, and any of them is the runner's non-zero exit. A FIXED or
+# NEW PASS row prints "re-record" and passes, as on C. Parse and resolution
+# negatives are judged by the frontend before any backend runs, so off C they
+# are not in the record and there is no negatives ceiling to hold.
+#
+# About two minutes for the five on either backend at the gate's eight
+# workers (285 s and 245 s at two, 2026-10-16).
+test262_backend() {
+  backend=$1
+  if [ ! -d third_party/test262/.git ]; then
+    echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
+    return 77
+  fi
+  # The same cap as test262_recorded's, for the same reason: memory.
+  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
+  failed=""
+  for pair in test/language:language test/built-ins:builtins test/annexB:annexb test/staging:staging test/harness:harness; do
+    under=${pair%%:*}
+    record=results/test262/$backend/${pair##*:}.tsv
+    echo "  $under on $backend, against $record:"
+    out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
+      --backend "$backend" --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
+    status=$?
+    printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+    if [ "$status" -ne 0 ]; then
+      failed="$failed $under"
+    elif [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
+      echo "  no pass-count line: the run measured nothing, which is not zero"
+      failed="$failed $under"
+    fi
+  done
+  if [ -n "$failed" ]; then
+    echo "  not held to their records on $backend:$failed"
+    return 1
+  fi
+}
+test262_jvm() {
+  test262_backend jvm
+}
+test262_wasm() {
+  test262_backend wasm
+}
+
 # Defects pinned to what they do: `tests/outcomes/`, where a wrong
 # answer, invalid HIR, uncompilable C or a runtime abort lives when it refuses
 # nothing and so has no `blockers/` expect line to write.
@@ -2501,16 +2552,20 @@ step "test262" test262
 step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
+step "test262-jvm" test262_jvm
+step "test262-wasm" test262_wasm
 step "outcomes" outcomes
 step "expect-ir" expect_ir
 step "integrity" integrity
 step "definitions" definitions
 step "compile-time" compile_time
 # The gate's own tools: the tokens (tokens.test.mjs), what owed.mjs maps a
-# path to (owed.test.mjs, and its --self-test), and land.ts's train
-# (land.test.ts). Seconds.
+# path to (owed.test.mjs, and its --self-test), land.ts's train
+# (land.test.ts), and the test262 runner's case roots and population
+# (tooling/census/project.test.ts, which no step ran until the population
+# guard the backend steps rely on was added there). Seconds.
 tooling_tests() {
-  node --test tooling/gate/*.test.mjs tooling/lanes/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
+  node --test tooling/gate/*.test.mjs tooling/lanes/*.test.ts tooling/census/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
   status=$?
   awk '/^(✖|ℹ (tests|pass|fail))/ { print "  " $0 }' "${TMPDIR:-/tmp}/nts-gate-tooling.$$"
   [ $status -eq 0 ] || sed -n '/^✖ failing tests/,$p' "${TMPDIR:-/tmp}/nts-gate-tooling.$$" | head -40
