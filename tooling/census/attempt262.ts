@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
+import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
 import { jvmRun } from "../jvm/launch.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
@@ -400,10 +400,27 @@ export const BACKENDS = {
   },
 };
 
-/** Compile, link and run one program body. Never reads an exit status alone. */
+/**
+ * Compile, link and run one program body. Never reads an exit status alone.
+ *
+ * **The program is compiled from its own content-addressed root**
+ * (`caseRoot`): read-only, named by a hash of exactly what it holds, and
+ * shared by every worker, backend and compiler build that compiles the same
+ * case. That is what lets the frontend's snapshot cache answer a case it has
+ * typechecked before -- 3.2 ms against 85 against tsgo, measured on 300 cases
+ * -- since its key holds the tsconfig's path, and every case in a worker's
+ * scratch had the same one. The outputs stay in `dir`, outside the root.
+ * `tools.fresh` compiles from `dir` instead, with the cache off, which is
+ * what every run did before.
+ */
 export function attempt(dir, body, tools, origin?) {
   const { nts } = tools;
-  materialise(dir, body, origin);
+  const project = tools.fresh
+    ? (materialise(dir, body, origin), dir)
+    : caseRoot((root) => {
+        workspace(root);
+        materialise(root, body, origin);
+      }).root;
   const out = join(dir, "out");
 
   // **`spawnSync`, because both streams have to be read on success.**
@@ -429,11 +446,11 @@ export function attempt(dir, body, tools, origin?) {
   // in it, so the arm that would have fired never ran. `refused()` is that arm.
   const backend = BACKENDS[tools.backend ?? "c"];
   if (!backend) return { bucket: "infrastructure-error", why: `no backend \`${tools.backend}\`` };
-  const emit = spawnSync("sh", capped(tools, nts, backend.emit(join(dir, "tsconfig.json"), out)), {
+  const emit = spawnSync("sh", capped(tools, nts, backend.emit(join(project, "tsconfig.json"), out)), {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
-    env: environment(),
+    env: environment({ snapshotCache: !tools.fresh }),
     stdio: ["ignore", "pipe", "pipe"],
   });
   const stdout = emit.stdout ?? "";

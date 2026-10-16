@@ -4,7 +4,7 @@
 //   node tooling/census/conformance262.ts [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
-//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv>]
+//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv>] [--fresh]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
 // die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
@@ -109,7 +109,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
-import { bodyOf, HARNESS_HASH, pinCompiler } from "./project.ts";
+import { bodyOf, collectCaseRoots, HARNESS_HASH, pinCompiler } from "./project.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -135,6 +135,10 @@ const jobs = Number(flag("--jobs", String(Math.min(8, availableParallelism()))))
 const sample = Number(flag("--sample", "0")) || 0;
 const rowsFile = flag("--rows", null);
 const resume = argv.includes("--resume");
+// `--fresh`: every case typechecked anew, from each worker's scratch, as every
+// run did before case roots. For telling a cache defect from a compiler one;
+// rows are the same either way, which the snapshot-cache landing measured.
+const FRESH = argv.includes("--fresh");
 const jsonFile = flag("--json", null);
 const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
@@ -174,19 +178,18 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 // every lane that runs out of inodes before bytes. Set on this process so the
 // workers and everything they spawn inherit it, and removed with the scratch.
 //
-// **No case is served from the snapshot cache.** Each attempt runs with it off
-// (`environment()` in project.ts sets `NTS_NO_SNAPSHOT_CACHE=1`, because the
-// cache keys on the tsconfig and every case's tsconfig is the same file), so a
-// case's snapshot is always fresh. Before 90aa37954 a bare `nts frontend` and a
-// build shared a cache key and a build could load a narrower snapshot; this is
-// why no recorded census can have been measured on one.
+// **A case is served from the snapshot cache when its inputs are the same.**
+// Each attempt compiles from the case's own content-addressed root
+// (`caseRoot`, in `attempt`), and the cache's key is the question it was asked
+// -- the tsconfig, the frontend's own source, tsgo's identity -- validated
+// against a hash of every file the answer read. So a case is typechecked once
+// and answered from then on, across workers, backends and compiler builds that
+// leave the frontend alone, and a changed case or frontend is a new question.
+// Until case roots every case's tsconfig was one path in a worker's scratch,
+// so each attempt ran with the cache off; `--fresh` still does.
 //
-// This comment used to say the property followed from `TMPDIR`, which held the
-// cache's default. It never did -- the cases turn the cache off -- and when the
-// default moved to `~/.cache/nts` for the `/tmp` quota that sentence would have
-// been the only thing claiming isolation. Anything this process runs outside
-// `environment()` gets a private cache by name, which wins over any value the
-// caller set.
+// Anything this process runs outside `environment()` gets a private cache by
+// name, which wins over any value the caller set.
 // The frontend the compiler under test runs with: NTS_TSGO, else the one a
 // pin recorded beside the binary (pin.ts), else the tree's. Set on this
 // process so every attempt inherits it -- a pinned copy in the scratch has no
@@ -282,7 +285,7 @@ for (const file of [recordedFile, checkFile]) {
     cannotMeasure(`${file} records the ${recordedBackendOf(file)} backend and this run is ${BACKEND}: a record answers for the backend that wrote it`);
   }
 }
-const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND };
+const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND, fresh: FRESH };
 
 // --- the population --------------------------------------------------------
 
@@ -474,7 +477,7 @@ async function runAll(all) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND],
+        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots"],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       const feed = () => {
@@ -674,6 +677,9 @@ function judgeNegative(row, negative) {
 
 // --- the run -----------------------------------------------------------------
 
+// Roots no run has used in a week, before this one adds its own: what bounds
+// their directory (`collectCaseRoots`). A root in use is never collected.
+if (!FRESH) collectCaseRoots();
 const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
 
 const cases = population.map((record) => {
