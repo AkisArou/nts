@@ -91,8 +91,10 @@ const KINDS = ["timeout", "immediate", "tick", "microtask", "interval"];
 const WORK_MS = [0, 0, 0, 0, 2];
 
 const sleepCell = new Int32Array(new SharedArrayBuffer(4));
+/** How much longer than written each callback's work takes: see `slowerOrder`. */
+let workScale = 1;
 function burn(ms) {
-  if (ms > 0) Atomics.wait(sleepCell, 0, 0, ms);
+  if (ms > 0) Atomics.wait(sleepCell, 0, 0, ms * workScale);
 }
 
 let nextId = 0;
@@ -208,6 +210,37 @@ function run(program, api, expected) {
  */
 const RUNS_FOR_STABILITY = 5;
 
+/**
+ * Node's order with every callback's blocking work twice as long.
+ *
+ * Five identical runs per scheduler catch a program that is a coin flip on
+ * this machine. They do not catch one whose order is fixed *at a given speed*
+ * and turns at another: each scheduler then agrees with itself, and the two
+ * land on opposite sides. Seed 1 has one. `interval5` blocks two milliseconds,
+ * and whether `timeout4`, due three after `interval0`, counts as due in the
+ * next pass depends on whether that pass begins within a millisecond of the
+ * block ending. Node begins it sooner than this module's JavaScript scheduler
+ * on top of node does, so on an idle machine both say `immediate3` first; under
+ * a loaded gate ours said `timeout4` first, ten runs of ten, confirmed three
+ * times, on four trains that did not touch timers. Node says the same when its
+ * callbacks block twice as long.
+ *
+ * So a divergence whose order is node's own at that speed is a race on
+ * callback duration, not a scheduling rule, and is counted apart rather than
+ * reported. Only that: an order node does not produce at either speed is still
+ * a finding. Blanket-skipping every program whose node order moves cost a
+ * seed of the re-arm-from-finish sabotage (5 of the 6 the header measures);
+ * this rule keeps it.
+ */
+async function slowerOrder(program, expected) {
+  workScale = 2;
+  try {
+    return await stableTrace(program, nodeApi, expected);
+  } finally {
+    workScale = 1;
+  }
+}
+
 /** One agreed order, or null when the scheduler is not deterministic here. */
 async function stableTrace(program, api, expected) {
   const first = (await run(program, api, expected)).join(",");
@@ -221,6 +254,8 @@ async function stableTrace(program, api, expected) {
 const random = makeRandom(SEED);
 let compared = 0;
 let skipped = 0;
+/** Divergences that are node's own order at a slower speed: `slowerOrder`. */
+const races = [];
 const differ = [];
 
 for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
@@ -283,7 +318,11 @@ for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
       const mineConfirm = await stableTrace(program, ourApi, expected);
       confirmed = theirsConfirm === theirs && mineConfirm === mine;
     }
-    if (confirmed) {
+    if (confirmed && (await slowerOrder(program, expected)) === mine) {
+      // Node's own order when its callbacks are slower (`slowerOrder`).
+      compared--;
+      races.push(program);
+    } else if (confirmed) {
       differ.push({ program, theirs, mine });
     } else {
       compared--;
@@ -304,8 +343,13 @@ for (let i = 0; i < PROGRAMS && differ.length < 5; i++) {
 
 console.log(
   `${compared} programs agree, ${differ.length} differ, ${skipped} skipped as ` +
-    `nondeterministic (seed ${SEED})`,
+    `nondeterministic, ${races.length} as races on callback duration (seed ${SEED})`,
 );
+// `--show-races`: the divergences `slowerOrder` set aside, to see what it
+// takes out of the comparison.
+if (process.argv.includes("--show-races")) {
+  for (const program of races) console.log(`  race: ${JSON.stringify(program)}`);
+}
 for (const { program, theirs, mine } of differ) {
   console.log(`  program: ${JSON.stringify(program)}`);
   console.log(`    node: ${theirs.split(",").join(" ")}`);
