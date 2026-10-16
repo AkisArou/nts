@@ -8518,10 +8518,10 @@ NtsString *nts_symbol_key_for(const NtsSymbol *symbol) {
   /* `used` rather than `header.length`: the registry never deletes, so the two
    * are equal, and `used` is what indexes the entry array. */
   for (uint32_t at = 0; at < nts_env->symbol_registry->used; at++) {
-    NtsValue value = nts_map_value_at(nts_env->symbol_registry, (double)at);
+    NtsValue value = nts_map_value_at(nts_env->symbol_registry, (int32_t)at);
     if (nts_value_tag(value) == NTS_TAG_SYMBOL &&
         (const NtsSymbol *)nts_value_reference(value) == symbol) {
-      NtsValue key = nts_map_key_at(nts_env->symbol_registry, (double)at);
+      NtsValue key = nts_map_key_at(nts_env->symbol_registry, (int32_t)at);
       /* Owned already: `nts_map_key_at` retains before it returns. */
       return (NtsString *)nts_value_reference(key);
     }
@@ -8683,8 +8683,23 @@ static inline __attribute__((always_inline)) int32_t nts_map_find(
  * real feature rather than a tweak to this function.
  */
 static void nts_map_rehash(NtsMap *map) {
-  /* On `used` rather than on the live count, because the holes are staying. */
-  uint32_t wanted = map->used * 2u;
+  /* A table's cursor is an `int32_t` entry index, and an entry keeps its
+   * index for the table's life, so a table holds at most `NTS_MAX_LENGTH`
+   * entries, holes included: the bound `hir::flow` states for
+   * `nts_map_next`, and the one `index`'s `int32_t` slots needed already.
+   * Past it, the allocation-failure path, as for an array or a string --
+   * V8 stops a `Map` at 2^24 entries, so no program node runs reaches it. */
+  if (map->used >= (uint32_t)NTS_MAX_LENGTH) {
+    fprintf(stderr, "nts: a map cannot hold more than %u entries\n",
+            (unsigned)NTS_MAX_LENGTH);
+    abort();
+  }
+  /* On `used` rather than on the live count, because the holes are staying.
+   * In 64 bits, and capped: doubling a `uint32_t` past 2^31 wraps. */
+  uint64_t doubled = (uint64_t)map->used * 2u;
+  uint32_t wanted = doubled > (uint64_t)NTS_MAX_LENGTH
+                        ? (uint32_t)NTS_MAX_LENGTH
+                        : (uint32_t)doubled;
   if (wanted < 8u) {
     wanted = 8u;
   }
@@ -8972,17 +8987,16 @@ __attribute__((always_inline)) NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
  *
  * `used` is read on every call rather than once, which is what makes an entry
  * appended during the walk visible to it. */
-double nts_map_next(const NtsMap *map, double from) {
-  if (!(from >= 0.0)) {
-    return -1.0;
+int32_t nts_map_next(const NtsMap *map, int32_t from) {
+  if (from < 0) {
+    return -1;
   }
-  uint32_t at = from >= 4294967295.0 ? UINT32_MAX : (uint32_t)from;
-  for (; at < map->used; at++) {
+  for (uint32_t at = (uint32_t)from; at < map->used; at++) {
     if (!nts_map_is_hole(map->keys[at])) {
-      return (double)at;
+      return (int32_t)at;
     }
   }
-  return -1.0;
+  return -1;
 }
 
 /* Read an entry the cursor has already landed on.
@@ -9009,7 +9023,7 @@ NtsMap *nts_map_copy(const NtsMap *map) {
   /* The source's type with its contents: a table's copy is a table. */
   NtsMap *out =
       nts_map_alloc(map->header.descriptor, map->kind, map->holds_values);
-  for (double at = nts_map_next(map, 0); at >= 0;
+  for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     nts_map_set(out, nts_map_key_at(map, at), nts_map_value_at(map, at));
   }
@@ -9017,7 +9031,7 @@ NtsMap *nts_map_copy(const NtsMap *map) {
 }
 
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source) {
-  for (double at = nts_map_next(source, 0); at >= 0;
+  for (int32_t at = nts_map_next(source, 0); at >= 0;
        at = nts_map_next(source, at + 1)) {
     nts_map_set(target, nts_map_key_at(source, at),
                 nts_map_value_at(source, at));
@@ -9078,7 +9092,7 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
      every key an index, so any enumeration of it was wrong unless the insertion
      happened to be ascending. */
   uint32_t indices = 0;
-  for (double at = nts_map_next(map, 0); at >= 0;
+  for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
     uint32_t slot = 0;
@@ -9111,7 +9125,7 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
     }
     NTS_ITEMS(out, NtsHeader *)[j] = held;
   }
-  for (double at = nts_map_next(map, 0); at >= 0;
+  for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
     uint32_t slot = 0;
@@ -9125,12 +9139,12 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
   return out;
 }
 
-NtsValue nts_map_key_at(const NtsMap *map, double at) {
+NtsValue nts_map_key_at(const NtsMap *map, int32_t at) {
   nts_value_retain(map->keys[(uint32_t)at]);
   return map->keys[(uint32_t)at];
 }
 
-NtsValue nts_map_value_at(const NtsMap *map, double at) {
+NtsValue nts_map_value_at(const NtsMap *map, int32_t at) {
   if (!map->values) {
     return nts_value_of_undefined();
   }

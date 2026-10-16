@@ -876,6 +876,11 @@ const INDEX: &[&str] = &[
     "nts_array_index_of",
     "nts_array_last_index_of",
 ];
+/// A table's cursor: the next live entry's index, or -1. Declared an `int32_t`,
+/// and bounded by the table, which never holds more than `NTS_MAX_LENGTH`
+/// entries (`nts_map_rehash`): so the walk's `at + 1` is an `int32` too, where
+/// the declared type alone would let it reach 2^31 and widen.
+const CURSOR: &[&str] = &["nts_map_next"];
 /// The length after one element was added: one at least. A number's array,
 /// a reference's, an erased value's.
 const LENGTH: &[&str] = &[
@@ -903,6 +908,15 @@ const STORAGE: &[&str] = &[
 fn runtime_result(name: &str) -> Option<Facts> {
     if INDEX.contains(&name) {
         return Some(Facts::new(-1.0, facts::U32_MAX, true, false, false));
+    }
+    if CURSOR.contains(&name) {
+        return Some(Facts::new(
+            -1.0,
+            facts::MAX_LENGTH - 1.0,
+            true,
+            false,
+            false,
+        ));
     }
     if LENGTH.contains(&name) {
         return Some(Facts::new(1.0, facts::U32_MAX, true, false, false));
@@ -1933,6 +1947,20 @@ mod tests {
                 Some(&HirType::Float { bits: 64 }),
                 "{name}: its facts would retype a call whose declared result is unknown"
             );
+        }
+        // The cursor is declared what it is, and its facts fit the declaration
+        // with room for the walk's one step past them.
+        for name in CURSOR {
+            let facts = runtime_result(name).expect("a cursor has facts");
+            assert_eq!(
+                crate::hir::runtime::result(name),
+                Some(&HirType::Int {
+                    bits: 32,
+                    signed: true
+                }),
+                "{name}: a cursor is an int32"
+            );
+            assert!(facts.lo >= facts::I32_MIN && facts.hi + 1.0 <= facts::I32_MAX);
         }
     }
 

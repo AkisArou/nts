@@ -29,6 +29,14 @@ use numeric_arguments::Builtin as NumericBuiltin;
 /// distinguishable from every other, which the decoder leaves `Structured`.
 const UNIQUE_SYMBOL: u32 = 1 << 14;
 
+/// A table walk's cursor: `nts_map_next`'s `int32_t`, below `NTS_MAX_LENGTH`
+/// (`runtime::SIGNATURES` and the header beside the helper). Started, tested
+/// and stepped in its own type, so the walk converts nothing.
+const TABLE_CURSOR: HirType = HirType::Int {
+    bits: 32,
+    signed: true,
+};
+
 /// Closures crossing the type they were written at, recorded where that is known.
 ///
 /// **Recorded rather than checked, because the two halves of the question are
@@ -40628,7 +40636,7 @@ impl<'a> FuncBuilder<'a> {
                 )
             }
             Walk::Table { .. } | Walk::Entries { .. } => {
-                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                let zero = self.push(OpKind::ConstInt(0), TABLE_CURSOR, origin.clone());
                 self.push(
                     OpKind::Binary {
                         op: BinOp::Ge,
@@ -40679,15 +40687,12 @@ impl<'a> FuncBuilder<'a> {
             self.bindings.insert(index, start);
             return Ok((iterator, Some(index), Some(sequence)));
         }
-        let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let start = match walk {
-            Walk::Table { .. } | Walk::Entries { .. } => self.call_runtime(
-                "nts_map_next",
-                vec![sequence, zero],
-                HirType::NUMBER,
-                origin,
-            ),
-            _ => zero,
+            Walk::Table { .. } | Walk::Entries { .. } => {
+                let zero = self.push(OpKind::ConstInt(0), TABLE_CURSOR, origin.clone());
+                self.call_runtime("nts_map_next", vec![sequence, zero], TABLE_CURSOR, origin)
+            }
+            _ => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
         };
         self.bindings.insert(index, start);
         Ok((sequence, Some(index), None))
@@ -42029,22 +42034,17 @@ impl<'a> FuncBuilder<'a> {
                 )
             }
             Walk::Table { .. } | Walk::Entries { .. } => {
-                let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+                let one = self.push(OpKind::ConstInt(1), TABLE_CURSOR, origin.clone());
                 let after = self.push(
                     OpKind::Binary {
                         op: BinOp::Add,
                         lhs: at,
                         rhs: one,
                     },
-                    HirType::NUMBER,
+                    TABLE_CURSOR,
                     origin.clone(),
                 );
-                self.call_runtime(
-                    "nts_map_next",
-                    vec![sequence, after],
-                    HirType::NUMBER,
-                    origin,
-                )
+                self.call_runtime("nts_map_next", vec![sequence, after], TABLE_CURSOR, origin)
             }
         })
     }

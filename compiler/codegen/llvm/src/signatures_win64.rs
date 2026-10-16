@@ -1541,7 +1541,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         params: &[
             "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
             "ptr",
-            "double",
+            "i32",
         ],
         attributes: &[],
     },
@@ -1559,8 +1559,8 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     },
     Signature {
         name: "nts_map_next",
-        returns: "double",
-        params: &["ptr", "double"],
+        returns: "i32",
+        params: &["ptr", "i32"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -1579,7 +1579,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         params: &[
             "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
             "ptr",
-            "double",
+            "i32",
         ],
         attributes: &[],
     },

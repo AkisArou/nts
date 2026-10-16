@@ -297,7 +297,7 @@ static void *nts_nsdictionary_of(const NtsMap *map, bool strings) {
   CFMutableDictionaryRef made =
       CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks,
                                 &kCFTypeDictionaryValueCallBacks);
-  for (double at = nts_map_next(map, 0); at >= 0;
+  for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     /* Both come back owned, and are given back once read. */
     NtsValue key = nts_map_key_at(map, at);
@@ -374,7 +374,7 @@ static void *nts_nsset_of(const NtsMap *set, bool strings) {
     return NULL;
   }
   CFMutableSetRef made = CFSetCreateMutable(NULL, 0, &kCFTypeSetCallBacks);
-  for (double at = nts_map_next(set, 0); at >= 0;
+  for (int32_t at = nts_map_next(set, 0); at >= 0;
        at = nts_map_next(set, at + 1)) {
     /* Comes back owned, and is given back once read. */
     NtsValue key = nts_map_key_at(set, at);

@@ -1386,7 +1386,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_map_key_at",
         returns: "{ i32, i64 }",
-        params: &["ptr", "double"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {
@@ -1403,8 +1403,8 @@ pub const SIGNATURES: &[Signature] = &[
     },
     Signature {
         name: "nts_map_next",
-        returns: "double",
-        params: &["ptr", "double"],
+        returns: "i32",
+        params: &["ptr", "i32"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -1416,7 +1416,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_map_value_at",
         returns: "{ i32, i64 }",
-        params: &["ptr", "double"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {

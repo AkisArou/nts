@@ -1739,15 +1739,24 @@ void nts_map_clear(NtsMap *map);
 
 /* Walking a table: a cursor, not an iterator object.
  *
- * `nts_map_next` returns the next live entry at or after `from`, or -1. It
- * re-reads the table every call, which is what makes an entry appended during
- * a walk visible to it and one deleted ahead of the cursor invisible -- both
- * of which node does and neither of which a snapshot would. The whole of the
- * iteration state is therefore one number, so the loop that carries it
- * allocates nothing and specializes like any other counter. */
-NTS_READS_ONLY double nts_map_next(const NtsMap *map, double from);
-NtsValue nts_map_key_at(const NtsMap *map, double at);
-NtsValue nts_map_value_at(const NtsMap *map, double at);
+ * `nts_map_next` returns the next live entry at or after `from`, or -1 --
+ * also for a negative `from`. It re-reads the table every call, which is what
+ * makes an entry appended during a walk visible to it and one deleted ahead of
+ * the cursor invisible -- both of which node does and neither of which a
+ * snapshot would. The whole of the iteration state is therefore one number, so
+ * the loop that carries it allocates nothing and specializes like any other
+ * counter.
+ *
+ * **The number is an `int32_t`, below `NTS_MAX_LENGTH`.** An entry keeps its
+ * index for the table's life -- holes stay, `clear` does not reset `used` --
+ * so the cursor is absolute, and `nts_map_rehash` refuses to grow a table past
+ * `NTS_MAX_LENGTH` entries. So `at + 1` is an `int32` as well, which is what
+ * `hir::flow`'s fact for `nts_map_next` states and every backend's loop over a
+ * table relies on. It was a `double` that every walk converted three times a
+ * step on the JVM and Wasm. */
+NTS_READS_ONLY int32_t nts_map_next(const NtsMap *map, int32_t from);
+NtsValue nts_map_key_at(const NtsMap *map, int32_t at);
+NtsValue nts_map_value_at(const NtsMap *map, int32_t at);
 /* A copy of a string-keyed table, in insertion order and with the source's
  * hash. `{ ...table }` and the object-literal spread. */
 NTS_ALLOCATES NtsMap *nts_map_copy(const NtsMap *map);

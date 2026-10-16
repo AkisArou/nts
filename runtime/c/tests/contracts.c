@@ -72,7 +72,7 @@ static void a_cursor_survives_a_clear(void) {
   nts_set_add(set, nts_value_of_number(1));
   nts_set_add(set, nts_value_of_number(2));
 
-  double first = nts_map_next(set, 0);
+  int32_t first = nts_map_next(set, 0);
   NtsValue seen = nts_map_key_at(set, first);
   ok("the walk starts at the first entry", nts_value_number(seen) == 1);
   nts_value_release(seen);
@@ -80,12 +80,15 @@ static void a_cursor_survives_a_clear(void) {
   nts_map_clear(set);
   nts_set_add(set, nts_value_of_number(3));
 
-  double second = nts_map_next(set, first + 1);
+  int32_t second = nts_map_next(set, first + 1);
   ok("an entry appended after a clear is reachable", second >= 0);
   seen = nts_map_key_at(set, second);
   ok("and it is the one that was appended", nts_value_number(seen) == 3);
   nts_value_release(seen);
   ok("and the walk then ends", nts_map_next(set, second + 1) == -1);
+  /* The int32 contract made total: a negative start is no entry, not a
+   * clamp to the first -- every runtime answers it the same way. */
+  ok("a negative start answers -1", nts_map_next(set, -5) == -1);
   nts_release((NtsHeader *)set);
 }
 

@@ -971,7 +971,7 @@ static napi_status nts_to_napi_entries(napi_env env, const NtsMap *table,
     if (table == NULL) return napi_get_undefined(env, out);
     napi_status status = napi_create_object(env, out);
     if (status != napi_ok) return status;
-    for (double at = nts_map_next(table, 0); at >= 0;
+    for (int32_t at = nts_map_next(table, 0); at >= 0;
          at = nts_map_next(table, at + 1)) {
         napi_value name = NULL;
         status = nts_to_napi_string(
