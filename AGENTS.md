@@ -65,6 +65,13 @@ half an hour whether it carries one landing or six, so queue a change as soon
 as it is reviewed and ready; `lane status` lists the queue. Never `git merge`
 onto `main` yourself.
 
+A landing runs the core steps. The wide ones -- integrity, the profile,
+addons, interop, counting, memory and the rest (`WIDE` in `tooling/gate/owed.mjs`
+says which, and why) -- run in the **full run**, `node tooling/census/full.ts`,
+on a pin of main, started by hand when the queue is quiet. A step red there is
+red on main: bisect it over the landings since the last green full run and fix
+it before new work.
+
 Before a lowering change goes to the gate, also run the five test262 records
 the gate checks (all.sh's `test262_cases`, `test262_builtins_cases`,
 `test262_rest_cases`: `conformance262.ts --under <dir> --recorded <tsv>`

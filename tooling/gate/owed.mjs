@@ -100,6 +100,45 @@ const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
  *   valid     whether an artefact or record is well-formed
  *   hygiene   the tree's own rules
  */
+/**
+ * The steps a landing does not run: the full run does, on a pin of main
+ * (`tooling/census/full.ts`, plan phase 3).
+ *
+ * The gate grew to guard the real programs the lanes were building -- addons,
+ * the profile, the runtime's integrity, interop, the device -- and every
+ * landing paid for all of it, twenty-odd minutes of steps sharing a loaded
+ * machine. That guards work nobody is doing while conformance drives the
+ * compiler, and on 2026-10-15/16 it held main still for five hours: trains
+ * halved over steps no landing in them touched. So a landing runs the core:
+ * build, lint, tests, the recorded conformance rows, the programs on every
+ * backend, outcomes, blockers, output validity and the representation facts.
+ * These run in the full run instead, and one that goes red there is bisected
+ * over the landings since the last.
+ *
+ * A rule whose path *is* a wide step's subject marks itself `wide`, and
+ * still owes that step per landing: the N-API backend owes `addons`, a
+ * runtime module its integrity, a step's own scripts that step. Moving a step
+ * back into every landing is deleting it from this set.
+ */
+export const WIDE = new Set([
+  "integrity",
+  "integrity-runtime",
+  "profile",
+  "definitions",
+  "compile-time",
+  "addons",
+  "interop",
+  "on-device",
+  "dex",
+  "react-sources",
+  "divergence",
+  "memory",
+  "rc",
+  "llvm-rc",
+  "sweep",
+  "bench-agree",
+]);
+
 export const ASKS = {
   build: ["hygiene", "does it build"],
   clippy: ["hygiene", "does it lint clean"],
@@ -305,6 +344,7 @@ export const RULES = [
   },
   {
     name: "a runtime module",
+    wide: true,
     when: (p) => /^runtime\/(node|web-platform)\//.test(p),
     steps: ["definitions", "integrity-runtime", "assembles", "addons"],
     arms: [{ kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" }],
@@ -342,7 +382,9 @@ export const RULES = [
     // a change to it can change any step's answer.
     name: "the gate's runner",
     when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
+    // Every step, the wide ones too: it runs them all, the full run's among them.
     full: true,
+    wide: true,
     steps: [],
     arms: [
       { kind: "valid", asks: "does it parse, and do the touched steps run", run: "sh -n tooling/gate/all.sh; node --test tooling/gate/*.test.mjs; then the steps, from a worktree" },
@@ -377,6 +419,7 @@ export const RULES = [
   // it. A crate the graph reaches that has no rule owes the full gate.
   {
     name: "the N-API backend",
+    wide: true,
     when: (p) => /^compiler\/codegen\/napi\//.test(p),
     steps: ["addons", "profile", "divergence"],
     arms: [],
@@ -467,6 +510,7 @@ export const RULES = [
     // checked by tooling/chromium/verify.ts (both backends, against the V8
     // oracle).
     name: "the Chromium lane",
+    wide: true,
     when: (p) => /^(tooling|runtime)\/chromium\//.test(p),
     settled: true,
     steps: [],
@@ -483,6 +527,7 @@ export const RULES = [
     // harness says is checked where it runs: the compiled axis against its
     // floor, and the web platform's own suite.
     name: "the node lane's harness",
+    wide: true,
     when: (p) => nodeHarness(p),
     settled: true,
     steps: [],
@@ -498,12 +543,20 @@ export const RULES = [
     arms: [],
   },
   {
+    // `pinned.sh` builds every gate tree with it, the full run's too, so it
+    // owes every step, as the runner does.
+    name: "the gate trees' inputs",
+    when: (p) => p === "tooling/lanes/inputs.sh",
+    full: true,
+    wide: true,
+    steps: [],
+    arms: [],
+  },
+  {
     // The landing and lane tools. No gate step runs `land.ts` or `lane.ts`:
     // they run the gate rather than the other way round, so a change to one
     // is checked by running it -- a dry run names what a range owes and
-    // touches nothing. `inputs.sh` is deliberately not here: `pinned.sh`
-    // builds every gate tree with it, so it owes the full gate, which is
-    // what a path no rule names owes.
+    // touches nothing.
     name: "the landing tools",
     when: (p) => /^tooling\/lanes\/(land|lane)\.ts$/.test(p),
     settled: true,
@@ -687,12 +740,12 @@ export function dependents(dir) {
 // program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
   { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
-  { name: "the interop projects", member: /^tests\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
+  { name: "the interop projects", wide: true, member: /^tests\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
-  { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex", "expect-ir"] },
-  { name: "the memory cases", member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
+  { name: "the runtime modules", wide: true, member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
+  { name: "the bench cases", wide: true, member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex", "expect-ir"] },
+  { name: "the memory cases", wide: true, member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];
 function kids(dir) {
   try {
@@ -1005,7 +1058,7 @@ export function owed(changes) {
     let unplaced = null; // why the path owes the full gate, when it does
     let unrun = false; // an instrument no step's scripts were found to run
     for (const rule of rulesFor(path, added)) {
-      add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full }, rule.interop?.());
+      add(rule.name, path, rule.steps, { arms: rule.arms, full: rule.full, wide: rule.wide }, rule.interop?.());
       gave += rule.steps.length;
       if (rule.full) gave += 1;
       if (rule.settled) settled = true;
@@ -1047,14 +1100,17 @@ export function owed(changes) {
     for (const c of covering(corpusInputs(), path)) corpora.add(c);
     for (const name of corpora) {
       const c = CORPORA.find((x) => x.name === name);
-      add(`an input to ${name}`, path, c.steps, {}, projects);
+      add(`an input to ${name}`, path, c.steps, { wide: c.wide }, projects);
       gave += c.steps.length;
     }
 
     // What the steps run.
     const steps = [...covering(stepInputs(), path)];
     if (steps.length) {
-      add("an input to what a gate step runs", path, steps, {}, projects);
+      // A step's own scripts owe that step, wide or not; the corpora it reads
+      // are owed by their own rules, and a fixture's wide steps run in the
+      // full run like any other change's.
+      add("an input to what a gate step runs", path, steps, { wide: /^tooling\//.test(path) }, projects);
       gave += steps.length;
     }
 
@@ -1109,12 +1165,18 @@ export function interopOwed(rules) {
 
 export function gateSteps(rules) {
   if (rules.length === 0) return [];
+  // A wide step is a landing's only where a rule that is its subject owes it.
+  const kept = new Set(rules.filter((r) => r.wide).flatMap((r) => r.steps));
+  const landing = (s) => !WIDE.has(s) || kept.has(s);
   if (rules.some((r) => r.full)) {
     const all = allSteps();
-    return ["build", ...ALWAYS.steps, ...all.filter((s) => s !== "build" && !ALWAYS.steps.includes(s))];
+    // The full gate is every core step; a rule both full and wide (the runner,
+    // the gate trees' inputs) owes every step there is.
+    const every = rules.some((r) => r.full && r.wide);
+    return ["build", ...ALWAYS.steps, ...all.filter((s) => s !== "build" && !ALWAYS.steps.includes(s) && (every || landing(s)))];
   }
   const always = new Set(ALWAYS.steps);
-  const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s) && s !== "build");
+  const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s) && s !== "build" && landing(s));
   return ["build", ...ALWAYS.steps, ...new Set(rest)];
 }
 
@@ -1143,7 +1205,7 @@ function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 8).join(" ") !== "build clippy tests rustfmt old-paths llvm llvm-rc assembles" || !order.includes("corpus") || !order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 8).join(" ") !== "build clippy tests rustfmt old-paths llvm assembles benches" || !order.includes("corpus") || order.includes("llvm-rc") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
@@ -1181,7 +1243,13 @@ function main() {
   const steps = gateSteps(rules);
   const projects = interopOwed(rules);
   const narrowed = Array.isArray(projects) ? ` NTS_INTEROP_PROJECTS="${projects.join(" ")}"` : "";
-  const gate = rules.some((r) => r.full) ? "sh tooling/gate/all.sh   # the full gate" : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed} sh tooling/gate/all.sh`;
+  // A bare all.sh is every step there is, which only the runner and the gate
+  // trees' inputs owe; the full gate is every core step, so it is a list, and
+  // `land.ts` runs exactly that list (`WIDE` is the full run's).
+  const every = rules.some((r) => r.full && r.wide);
+  const gate = every
+    ? "sh tooling/gate/all.sh   # the full gate"
+    : `NTS_GATE_STEPS="${steps.join(" ")}"${narrowed} sh tooling/gate/all.sh${rules.some((r) => r.full) ? "   # every core step" : ""}`;
   const arm = (a) => `${a.if ? `if ${a.if}: ` : ""}${a.asks}\n        ${a.run}`;
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
   for (const r of rules) {

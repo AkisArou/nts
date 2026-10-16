@@ -11,10 +11,22 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, owed, parseNameStatus, targetFiles } from "./owed.mjs";
+import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, owed, parseNameStatus, targetFiles, WIDE } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
+/** What a landing runs when it owes the full gate: every step but the wide ones. */
+const landing = () => allSteps().filter((s) => !WIDE.has(s));
+/**
+ * What the rules reach, the wide steps included: a landing runs the core of it
+ * and the full run the rest, so a claim of reach is a claim about the rules.
+ */
+const reachOf = (rules) => {
+  const named = rules.some((r) => r.full) ? allSteps() : rules.flatMap((r) => r.steps);
+  return [...new Set([...gateSteps(rules), ...named.filter((s) => WIDE.has(s))])];
+};
+const reach = (...paths) => reachOf(owed(paths.map((path) => ({ path, added: false }))));
+const changeReach = (changes) => reachOf(owed(changes));
 const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
@@ -22,10 +34,11 @@ const full = () => stepsFor("no/rule/matches/this.txt");
 
 function owes(path, want, { not = [] } = {}) {
   const got = stepsFor(path);
+  const reached = reach(path);
   // Owing everything would satisfy any `want`: these are claims of reach.
-  assert.ok(got.length < allSteps().length, `${path} owes the full gate, so this case shows nothing about its reach`);
-  for (const s of want) assert.ok(got.includes(s), `${path} should owe ${s}; owes ${got.join(" ")}`);
-  for (const s of not) assert.ok(!got.includes(s), `${path} should not owe ${s}; owes ${got.join(" ")}`);
+  assert.ok(got.length < landing().length, `${path} owes the full gate, so this case shows nothing about its reach`);
+  for (const s of want) assert.ok(reached.includes(s), `${path} should owe ${s}; owes ${reached.join(" ")}`);
+  for (const s of not) assert.ok(!reached.includes(s), `${path} should not owe ${s}; owes ${reached.join(" ")}`);
   return got;
 }
 
@@ -45,13 +58,31 @@ test("a representation fact is checked wherever the program it describes can cha
   assert.ok(!stepsFor("compiler/codegen/wasm/src/lib.rs").includes("expect-ir"));
 });
 
+test("a compiler change runs the core and leaves the wide steps to the full run", () => {
+  const got = stepsFor("compiler/core/src/hir/lower.rs");
+  for (const s of ["examples", "llvm", "jvm", "wasm", "test262-cases", "outcomes", "blockers", "expect-ir", "benches", "c-compiles"]) {
+    assert.ok(got.includes(s), `lowering should run ${s} per landing; runs ${got.join(" ")}`);
+  }
+  for (const s of WIDE) assert.ok(!got.includes(s), `lowering should leave ${s} to the full run`);
+  // The rule still names them: the full run is where they are owed.
+  superset(reach("compiler/core/src/hir/lower.rs"), ["integrity", "rc", "dex", "bench-agree"], "lowering, with the full run");
+});
+
+test("a path that is a wide step's subject still owes it per landing", () => {
+  superset(stepsFor("compiler/codegen/napi/src/lib.rs"), ["addons"], "the N-API backend");
+  superset(stepsFor("tooling/conformance/integrity.ts"), ["integrity"], "integrity's own tool");
+  superset(stepsFor("tests/memory/closure-capture/src/main.ts"), ["memory"], "a memory case");
+  superset(stepsFor("runtime/node/path/index.ts"), ["integrity-runtime", "definitions"], "a runtime module");
+});
+
 test("a path no rule names owes the full gate", () => {
-  assert.deepEqual([...full()].sort(), [...allSteps()].sort());
-  assert.equal(stepsFor("Cargo.lock").length, allSteps().length);
+  assert.deepEqual([...full()].sort(), [...landing()].sort());
+  assert.equal(stepsFor("Cargo.lock").length, landing().length);
 });
 
 test("the runner owes the full gate", () => {
   for (const p of ["tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/token.sh", "tooling/gate/tokenpool.mjs", "tooling/gate/pinned.sh"]) {
+    // Every step, the wide ones too: the runner runs them all.
     assert.equal(stepsFor(p).length, allSteps().length, p);
   }
 });
@@ -83,20 +114,23 @@ test("a backend the CLI selects owes the steps that select it, not everything th
   owes("compiler/jvm-emitter/src/lib.rs", ["jvm", "dex", "jvm-verifies", "interop", "outcomes"]);
   owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "interop", "outcomes", "benches"]);
   // The C backend is what the CLI runs by default: it keeps the CLI's reach.
-  superset(stepsFor("compiler/codegen/c/src/lib.rs"), ["interop", "addons", "profile", "config"], "the C backend");
+  superset(reach("compiler/codegen/c/src/lib.rs"), ["interop", "addons", "profile", "config"], "the C backend");
 });
 
 test("interop builds only the projects a range reaches, when it can say which", () => {
   const projects = (...paths) => interopOwed(owed(paths.map((path) => ({ path, added: false }))));
   const jvm = interopBuiltWith("jvm");
   assert.ok(jvm.includes("java-from-ts") && jvm.includes("android-shape") && !jvm.includes("gtk-hello"), jvm.join(" "));
-  assert.deepEqual(projects("compiler/codegen/jvm/src/lib.rs"), jvm);
+  // A compiler change leaves interop to the full run (`WIDE`), whose
+  // projects are all of them; a project's own change still builds it.
+  assert.equal(projects("compiler/codegen/jvm/src/lib.rs"), null);
+  assert.equal(projects("compiler/core/src/hir/lower.rs"), null);
   assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts"), ["gtk-hello"]);
   assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts", "tests/interop/native-fd/build.sh"), ["gtk-hello", "native-fd"]);
-  // Anything that cannot be narrowed owes every project.
-  assert.equal(projects("compiler/codegen/llvm/src/lib.rs"), "all");
-  assert.equal(projects("compiler/core/src/hir/lower.rs"), "all");
-  assert.equal(projects("compiler/codegen/jvm/src/lib.rs", "compiler/core/src/hir/lower.rs"), "all");
+  // Once interop runs for a project, it builds the ones the JVM change reaches
+  // too: the narrowing still decides which.
+  assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts", "compiler/codegen/jvm/src/lib.rs"), [...new Set(["gtk-hello", ...jvm])].sort());
+  // The runner owes every project.
   assert.equal(projects("tooling/gate/token.sh"), "all");
   assert.equal(projects("compiler/codegen/wasm/src/lib.rs"), null);
 });
@@ -116,7 +150,7 @@ test("what a step runs owes that step", () => {
 test("a data file a step's tool reads beside itself owes that step", () => {
   owes("tooling/gate/compile-times.tsv", ["compile-time"], { not: ["examples"] });
   owes("tooling/conformance/integrity.known", ["integrity", "integrity-runtime"]);
-  assert.ok(stepsFor("tooling/gate/times.tsv").length < allSteps().length);
+  assert.ok(stepsFor("tooling/gate/times.tsv").length < landing().length);
 });
 
 test("the Chromium lane's own files owe only what every change owes", () => {
@@ -150,7 +184,7 @@ test("a node harness file a gate step runs still owes that step", () => {
 
 test("an instrument outside the node lane that no step runs still owes the full gate", () => {
   // The node rule settles the lane's own paths, not tooling/conformance.
-  assert.equal(stepsFor("tooling/conformance/not-the-node-lanes.mjs").length, allSteps().length);
+  assert.equal(stepsFor("tooling/conformance/not-the-node-lanes.mjs").length, landing().length);
 });
 
 test("what a target brings owes the corpora built for it", () => {
@@ -186,7 +220,7 @@ test("what the bindings generator writes still owes its readers", () => {
   owes("runtime/chromium/dom/types/lib-dom-bindings.d.ts", ["blockers", "integrity"]);
   owes("runtime/chromium/dom/types/dom-idl.d.ts", ["blockers", "integrity"]);
   // And together, the generator's change owes what its output owes.
-  superset(stepsFor("tooling/chromium/bindgen/generate.py", "runtime/chromium/dom/types/dom-idl.d.ts"), ["blockers", "integrity"], "a regeneration");
+  superset(reach("tooling/chromium/bindgen/generate.py", "runtime/chromium/dom/types/dom-idl.d.ts"), ["blockers", "integrity"], "a regeneration");
 });
 
 test("a gate test owes the tooling step, not the full gate", () => {
@@ -195,7 +229,7 @@ test("a gate test owes the tooling step, not the full gate", () => {
   for (const p of ["tooling/gate/owed.test.mjs", "tooling/gate/cputime.test.mjs"]) {
     const steps = stepsFor(p);
     assert.ok(steps.includes("tooling"), `${p} owes ${steps.join(" ")}`);
-    assert.ok(steps.length < allSteps().length, `${p} owes the full gate`);
+    assert.ok(steps.length < landing().length, `${p} owes the full gate`);
   }
 });
 
@@ -245,21 +279,21 @@ test("the N-API backend owes the addon steps", () => {
 
 test("runtime/c is compiled into the C backend, so it owes at least what the C backend owes", () => {
   const backend = stepsFor("compiler/codegen/c/src/lib.rs");
-  superset(stepsFor("runtime/c/nts_runtime.c"), backend, "runtime/c/nts_runtime.c");
+  superset(reach("runtime/c/nts_runtime.c"), backend, "runtime/c/nts_runtime.c");
   // A new file there, which nothing includes yet, owes the same.
-  superset(stepsFor("runtime/c/a-file-nobody-includes-yet.c"), backend, "a new runtime/c file");
+  superset(reach("runtime/c/a-file-nobody-includes-yet.c"), backend, "a new runtime/c file");
 });
 
 test("a crate owes its own rule and every rule of the crates that depend on it", () => {
-  superset(stepsFor("compiler/semantic-schema/src/lib.rs"), stepsFor("compiler/core/src/lib.rs"), "semantic-schema");
-  superset(stepsFor("compiler/core/src/lib.rs"), stepsFor("compiler/codegen/c/src/lib.rs"), "core");
+  superset(reach("compiler/semantic-schema/src/lib.rs"), stepsFor("compiler/core/src/lib.rs"), "semantic-schema");
+  superset(reach("compiler/core/src/lib.rs"), stepsFor("compiler/codegen/c/src/lib.rs"), "core");
   for (const crate of ["compiler/codegen/common", "compiler/jvm-emitter", "build"]) {
-    superset(stepsFor(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
+    superset(reach(`${crate}/src/lib.rs`), ["corpus", "benches", "bench-agree"], crate);
   }
 });
 
 test("a deleted example still owes every step that compiles the examples", () => {
-  const got = changeOwes([{ path: "tests/programs/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
+  const got = changeReach([{ path: "tests/programs/an-example-that-was-removed/src/main.ts", added: false, deleted: true }]);
   superset(got, ["examples", "llvm", "llvm-rc", "jvm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"], "a deleted example");
 });
 
@@ -273,7 +307,7 @@ test("a rename is both paths: a blocker moved out still owes blockers, and moved
   ]);
   const rules = owed(changes).map((r) => r.name);
   assert.ok(rules.includes("a new example"), rules.join(", "));
-  superset(changeOwes(changes), ["blockers", "integrity", "examples", "llvm", "jvm", "rc"], "a renamed blocker");
+  superset(changeReach(changes), ["blockers", "integrity", "examples", "llvm", "jvm", "rc"], "a renamed blocker");
 });
 
 test("the census files a tool runs or reads beside itself owe the test262 steps", () => {
@@ -283,7 +317,7 @@ test("the census files a tool runs or reads beside itself owe the test262 steps"
 });
 
 test("an instrument no step is found to run owes the full gate", () => {
-  assert.equal(stepsFor("tooling/conformance/an-instrument-nobody-runs.ts").length, allSteps().length);
+  assert.equal(stepsFor("tooling/conformance/an-instrument-nobody-runs.ts").length, landing().length);
 });
 
 test("integrity.ts, which blockers-check.mjs spawns, owes blockers", () => {
@@ -316,9 +350,9 @@ test("an example's nts.config.ts owes config, new or changed, interop's too", ()
 
 test("without cargo, a path in a crate or compiled into one owes the full gate", () => {
   const script = `
-    const { allSteps, gateSteps, owed } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
+    const { allSteps, gateSteps, owed, WIDE } = await import(${JSON.stringify(new URL("./owed.mjs", import.meta.url).href)});
     const n = (p) => gateSteps(owed([{ path: p, added: false }])).length;
-    console.log(JSON.stringify({ all: allSteps().length, rs: n("compiler/core/src/lib.rs"), c: n("runtime/c/nts_runtime.c"), toml: n("compiler/codegen/c/Cargo.toml"), docs: n("docs/primitives.md") }));`;
+    console.log(JSON.stringify({ all: allSteps().filter((s) => !WIDE.has(s)).length, rs: n("compiler/core/src/lib.rs"), c: n("runtime/c/nts_runtime.c"), toml: n("compiler/codegen/c/Cargo.toml"), docs: n("docs/primitives.md") }));`;
   const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
     encoding: "utf8",
     env: { ...process.env, RUSTUP_TOOLCHAIN: "no-such-toolchain-for-this-test" },
@@ -337,7 +371,7 @@ test("the landing tools owe what every change owes; the registry owes the gate's
     assert.deepEqual([...stepsFor(p)].sort(), always, p);
   }
   owes("tooling/lanes/lanes.json", ["tooling"]);
-  assert.ok(stepsFor("tooling/lanes/lanes.json").length < allSteps().length, "lanes.json owes the full gate");
+  assert.ok(stepsFor("tooling/lanes/lanes.json").length < landing().length, "lanes.json owes the full gate");
   // pinned.sh builds every gate tree through it.
   assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
 });
