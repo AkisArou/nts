@@ -3,7 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, OpKind};
+use nts_core::hir::{self, OpKind, UnOp};
 use nts_frontend_ts::SemanticSource;
 
 fn snapshot() -> Option<nts_semantic_schema::SemanticSnapshot> {
@@ -93,4 +93,66 @@ fn a_static_number_round_trip_reaches_no_backend() {
             }
         }
     }
+}
+
+#[test]
+fn constant_digits_reach_the_formatter_without_a_conversion_merge() {
+    let Some(snapshot) = snapshot() else { return };
+    let lowered = hir::lower::lower(&snapshot);
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    for (name, expected) in [
+        ("fixedThree", 3.0_f64),
+        ("fixedNegativeFraction", 0.0),
+        ("fixedPositiveFraction", 100.0),
+        ("fixedZero", 0.0),
+        ("fixedNegativeZero", 0.0),
+        ("fixedNan", 0.0),
+        ("fixedInfinity", f64::INFINITY),
+        ("fixedNegativeInfinity", f64::NEG_INFINITY),
+    ] {
+        let func = lowered
+            .program
+            .funcs
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap();
+        let digits = live(func)
+            .find_map(|op| match op {
+                OpKind::Call {
+                    callee: hir::Callee::External(name),
+                    args,
+                    ..
+                } if name == "nts_number_to_fixed" => Some(args[1]),
+                _ => None,
+            })
+            .expect("the raw lowering includes the formatter after its bounds check");
+        let OpKind::ConstFloat(actual) = func.value(digits).kind else {
+            panic!("{name}: a constant digit count must not need a conversion merge");
+        };
+        assert_eq!(actual.to_bits(), expected.to_bits(), "{name}");
+        assert!(
+            !live(func).any(|op| matches!(
+                op,
+                OpKind::Unary {
+                    op: UnOp::Trunc | UnOp::Abs,
+                    ..
+                }
+            )),
+            "{name}"
+        );
+    }
+    let dynamic = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "fixedDynamic")
+        .unwrap();
+    assert!(live(dynamic).any(|op| matches!(
+        op,
+        OpKind::Unary {
+            op: UnOp::Trunc,
+            ..
+        }
+    )));
+    assert!(live(dynamic).any(|op| matches!(op, OpKind::Unary { op: UnOp::Abs, .. })));
 }

@@ -80,3 +80,36 @@ export function erasedEndpointsControl(n: number): string {
   try { return (1.25).toFixed((n & 1) === 0 ? 0 : 100); }
   catch (error) { return (error as Error).name + ": " + (error as Error).message; }
 }
+
+// These literal digit counts use the lowering-time constant path. The helper
+// above still takes a parameter, exercising the dynamic conversion as well.
+export function constantDigits(n: number): string {
+  const value = (n & 7) + 1.25;
+  try {
+    let result = value.toFixed(3) + ";" + value.toFixed(-0.9) + ";"
+      + value.toFixed(100.9) + ";" + value.toFixed(NaN) + ";"
+      + value.toFixed(-0) + ";" + value.toFixed(0.9) + ";";
+    try { result += value.toFixed(Infinity); }
+    catch (error) { result += (error as Error).name + ": " + (error as Error).message; }
+    try { result += value.toFixed(-Infinity); }
+    catch (error) { result += (error as Error).name + ": " + (error as Error).message; }
+    return result;
+  } catch (error) {
+    return (error as Error).name + ": " + (error as Error).message;
+  }
+}
+export function constantDigitsControl(n: number): string {
+  const value = (n & 7) + 1.25;
+  try {
+    let result = value.toFixed(3) + ";" + value.toFixed(0) + ";"
+      + value.toFixed(100) + ";" + value.toFixed(0) + ";"
+      + value.toFixed(0) + ";" + value.toFixed(0) + ";";
+    try { result += value.toFixed(Infinity); }
+    catch (error) { result += (error as Error).name + ": " + (error as Error).message; }
+    try { result += value.toFixed(-Infinity); }
+    catch (error) { result += (error as Error).name + ": " + (error as Error).message; }
+    return result;
+  } catch (error) {
+    return (error as Error).name + ": " + (error as Error).message;
+  }
+}

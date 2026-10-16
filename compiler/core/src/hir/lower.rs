@@ -62831,6 +62831,39 @@ impl<'a> FuncBuilder<'a> {
     /// float-to-integer cast. Domain checks must read this result, and the
     /// runtime receives the same integer that was checked.
     fn lower_to_integer_or_infinity(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+        // Keep constant calls such as `toFixed(3)` free of conversion control
+        // flow on every backend. Numeric signs are pure too; do not evaluate
+        // a load, call, conversion or a narrower float as a literal.
+        let mut literal = value;
+        let mut negative = false;
+        loop {
+            let argument = &self.values[literal.0 as usize];
+            if argument.ty != HirType::NUMBER {
+                break;
+            }
+            match argument.kind {
+                OpKind::ConstFloat(number) => {
+                    let whole = (if negative { -number } else { number }).trunc();
+                    let integer = if whole.is_nan() || whole == 0.0 {
+                        0.0
+                    } else {
+                        whole
+                    };
+                    if integer.to_bits() == number.to_bits() {
+                        return literal;
+                    }
+                    return self.push(OpKind::ConstFloat(integer), HirType::NUMBER, origin.clone());
+                }
+                OpKind::Unary {
+                    op: UnOp::Neg,
+                    operand,
+                } => {
+                    literal = operand;
+                    negative = !negative;
+                }
+                _ => break,
+            }
+        }
         let whole = self.push(
             OpKind::Unary {
                 op: UnOp::Trunc,
