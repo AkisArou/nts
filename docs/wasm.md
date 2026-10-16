@@ -211,11 +211,47 @@ builds at one program-wide width.
   every reference outside `eq` as a string. A null erased value is unreachable
   by construction (an erased slot starts as the undefined singleton); a
   would-be null still fails the predicate and reaches the cast that traps.
-- **Speed is unchanged** on `benchmarks/wasm/erased` (exploratory, load 5):
+- In the earlier string-box removal probe, speed was unchanged on
+  `benchmarks/wasm/erased` (exploratory, load 5):
   eraseStrings 1.42 ns both ways, eraseNumbers 2.32 both. Every erased kernel
-  is 2.7–7.5x behind node. V8 inlines all of the loop's helper calls (traced
-  with `--trace-wasm-inlining`) but does not fold box → tag → unbox, which C
-  gets from clang. That is R7's work.
+  was 2.7–7.5x behind node. V8 inlined all of the loop's helper calls (traced
+  with `--trace-wasm-inlining`) but did not fold box → tag → unbox, which C
+  gets from clang. The numeric box-web fold below came later.
+
+### Explicit string predicate (2026-10-16)
+
+The positive string predicate is a prerequisite for the reviewed GC-string
+representation. This step preserves host strings and their externref
+boundaries. The existing erasure execution matrix also requires the
+`wasm:js-string.test` builtin import.
+
+Clean full release builds at `85a7985baab6` and `6068dfc6f6aa` were compared
+on P-cores 0–15, nice 19, under the measurement lock. Two alternating
+before/after pairs use five fresh processes per cell, each with bounded
+warmup and best of five timed batches. One-minute load ranged from 3.22 to
+18.41; no memory pause occurred.
+
+All 62 measured checksums agree with node. Forty-six rows have byte-identical
+modules and glue, with equivalent relocated harnesses. Each of the sixteen
+changed modules differs only in `value.tag` after resolving import-index
+relocation and redundant signature indices; other function bodies match.
+Both repeats reproduce their variant's module and runtime hashes exactly.
+
+Optional-chain's normalized A/B is 0.947/0.927, faster in both pairs. The
+other changed rows show small or mixed movement, including awfy-list at
+1.001/0.918. No general speedup is claimed. The full table retains large
+movement on identical artifacts too: json-scan is 1.239/0.984 and
+json-serialize 0.603/0.993, which cannot establish a compiler effect.
+[The complete comparison](../benchmarks/wasm/explicit-string-tag-20261016.tsv)
+includes all 63 rows, raw times, ratios, spreads, module hashes, load ranges
+and verdicts. Elementwise remains its named harness gap.
+
+Validation passed rustfmt, strict workspace/all-target clippy, all four
+backend suites (611 tests), and 557/557 comparable Wasm programs. The gate
+also reports its existing 12 empty and 10 partial entries. All five recorded
+Wasm slices reconcile without any outcome changes: 5,132 cases, comprising
+4,820 strict passes and 312 retained failures, with zero refusals or
+no-verdict results.
 
 ### Numeric box webs (2026-10-16)
 
