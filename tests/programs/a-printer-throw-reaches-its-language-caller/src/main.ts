@@ -5,6 +5,9 @@
 // expect-ir: all: count call.extern in primitive == 1
 // expect-ir: all: count call.extern in primitiveErased == 1
 // expect-ir: all: no call.extern in quiet
+// expect-ir: all: no call.extern(nts_raising) in primitive
+// expect-ir: all: no call.extern(nts_raising) in primitiveErased
+// expect-ir: all: no call.extern(nts_raising) in quiet
 
 let trace = 0;
 
