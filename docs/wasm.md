@@ -247,7 +247,34 @@ on P-core 4 (200 warmups, 301 samples, load 40–43) measured folded medians
 167.8–168.1 µs against baseline 573.4–883.0 µs and node 163.9–166.2 µs.
 Baseline drift prevents quoting one speedup, but its fastest p10 still exceeded
 the folded artifact's slowest p90 by 3×. The folded median was 1.01–1.03× node.
-This is the artifact experiment; the compiler's all-row comparison is separate.
+The compiler's full alternating comparison used plain release builds from
+`131ac1c52fdb` and `e0f92fd22bcd`, fixed source and immutable binaries,
+P-cores 0–15, nice 19 and the measurement lock. Each cell takes the minimum
+of five fresh processes, each with up to 20,000 warmups bounded by 300 ms
+and the best of five timed batches. Times below are µs; normalized A/B is
+the ratio of the two within-run Wasm/node ratios, with lower faster.
+
+| Pass | Before Wasm | Before node | Ratio | Folded Wasm | Folded node | Ratio | Normalized A/B |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 538.17 | 149.72 | 3.594 | 146.04 | 146.28 | 0.998 | 0.278 |
+| 2 | 511.94 | 141.04 | 3.630 | 138.06 | 144.13 | 0.958 | 0.264 |
+
+All 63 rows, raw times, ratios, conditions and verdicts are recorded in
+[the complete A/B table](../benchmarks/wasm/box-web-20261016.tsv). Of the
+62 measured rows, 61 have identical Wasm, glue and harness files: their
+movements are noise. `erasure-unknown` alone changes, losing two box calls,
+two numeric projections and four tag calls in its hot function. `elementwise`
+remains a named harness gap because its custom driver imports TypeScript
+directly. Every measured checksum agrees with node. No memory pause occurred.
+
+Validation: rustfmt, strict workspace/all-target clippy, the required four
+backend test run (608 tests), and the final Wasm suite with the added real
+emitter contract all passed. Disabling the pass after committing the fix
+reds the actual structural fixture; the previous clean compiler also fails
+that check while agreeing on all 192 value cases. The clean folded pin
+passes 547/547 comparable programs (10 partial, 12 without comparisons),
+and all 5,084 recorded Wasm test262 outcomes reconcile unchanged across the
+five slices, including their 313 known failures.
 
 ### Arrays (1e)
 
