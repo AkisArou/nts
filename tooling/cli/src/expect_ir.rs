@@ -13,6 +13,7 @@
 //! ```text
 //! // expect-ir: all: no erase in sum
 //! // expect-ir: c llvm: count call.virtual in work <= 1
+//! // expect-ir: all: count call.extern(nts_raising) in work == 1
 //! // expect-ir: all: block params in run#whole are integer
 //! // expect-ir: jvm: field Box.value is f64
 //! // expect-ir: all: weigh returns i32
@@ -33,7 +34,10 @@
 //!
 //! `<op>` is the word `nts hir` prints for the operation (`erase`,
 //! `call.virtual`, `toint32`, `object.new`, ...), plus `object.new.heap` and
-//! `object.new.frame` for one placement. `<type>` is a type as `nts hir`
+//! `object.new.frame` for one placement.
+//! `call.extern(<helper>)` selects one declared runtime helper; an unknown
+//! helper is a parse error, so a misspelled negative fact cannot pass.
+//! `<type>` is a type as `nts hir`
 //! prints it (`i32`, `f64`, `bool`, ...) or one of `integer`, `float`,
 //! `number`. `<fn>` names a function and every copy specialization made of it:
 //! `run` is `run`, `run#whole` and any other `run#...`.
@@ -390,11 +394,18 @@ const fn unary_index(op: UnOp) -> usize {
 
 /// Whether an operation is one a fact's word names.
 fn named(word: &str, kind: &OpKind) -> bool {
+    if let Some(helper) = external_name(word) {
+        return matches!(kind, OpKind::Call { callee: hir::Callee::External(name), .. } if name == helper);
+    }
     match (word, kind) {
         ("object.new.heap", OpKind::ObjectNew { frame }) => !frame,
         ("object.new.frame", OpKind::ObjectNew { frame }) => *frame,
         _ => op_word(kind) == word,
     }
+}
+
+fn external_name(word: &str) -> Option<&str> {
+    word.strip_prefix("call.extern(")?.strip_suffix(')')
 }
 
 /// Parse one comment's text after `expect-ir:`.
@@ -420,7 +431,10 @@ pub(crate) fn parse(text: &str) -> Result<(Vec<Backend>, Fact), String> {
     }
     let words: Vec<&str> = fact.split_whitespace().collect();
     let op = |word: &str| -> Result<String, String> {
-        if vocabulary().contains(&word) {
+        if vocabulary().contains(&word)
+            || external_name(word)
+                .is_some_and(|name| hir::runtime::declared_names().any(|known| known == name))
+        {
             Ok(word.to_owned())
         } else {
             Err(format!(
@@ -792,6 +806,27 @@ mod tests {
             parsed("all: no object.new.heap in run").1,
             Fact::No { .. }
         ));
+        assert!(matches!(
+            parsed("all: count call.extern(nts_raising) in work == 1").1,
+            Fact::Count { op, n: 1, .. } if op == "call.extern(nts_raising)"
+        ));
+    }
+
+    #[test]
+    fn a_named_external_selects_only_that_helper() {
+        let external = |name: &str| OpKind::Call {
+            callee: hir::Callee::External(name.to_owned()),
+            args: Vec::new(),
+        };
+        let poll = external("nts_raising");
+        assert!(named("call.extern(nts_raising)", &poll));
+        assert!(named("call.extern", &poll));
+        assert!(!named("call.extern(nts_value_to_string)", &poll));
+        assert!(!named(
+            "call.extern(nts_raising)",
+            &external("nts_raise_take")
+        ));
+        assert!(!named("call.extern(nts_raising)", &OpKind::ConstInt(0)));
     }
 
     #[test]
@@ -804,6 +839,9 @@ mod tests {
             "all no erase in sum",
             "all: count erase in sum about 3",
             "all: count erase in sum <= three",
+            "all: no call.extern(nts_raisng) in sum",
+            "all: no call.extern() in sum",
+            "all: no call.extern(nts_raising in sum",
         ] {
             assert!(parse(wrong).is_err(), "`{wrong}` parsed");
         }

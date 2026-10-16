@@ -98,6 +98,27 @@ fn a_false_fact_fails_and_says_what_it_found() {
 }
 
 #[test]
+fn named_helper_counts_do_not_count_other_external_calls() {
+    if !frontend_available() {
+        return;
+    }
+    let root = fixture("expect-ir-helper-count", "");
+    std::fs::write(
+        root.join("src/main.ts"),
+        "export function format(value: any): string { return String(value); }\n\
+         // expect-ir: all: count call.extern(nts_value_to_string) in format == 1\n\
+         // expect-ir: all: count call.extern(nts_raising) in format == 0\n\
+         // expect-ir: all: count call.extern(nts_raising) in format == 1\n",
+    )
+    .expect("writing the helper count fixture");
+    let (passed, text) = expect_ir(&root);
+    assert!(!passed, "{text}");
+    assert_eq!(text.matches("PASS").count(), 2, "{text}");
+    assert_eq!(text.matches("FAIL").count(), 1, "{text}");
+    assert!(text.contains("0 found:"), "{text}");
+}
+
+#[test]
 fn a_fact_about_a_function_that_is_not_there_is_unresolved_and_fails() {
     if !frontend_available() {
         return;
