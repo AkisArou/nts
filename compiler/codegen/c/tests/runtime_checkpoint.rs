@@ -305,6 +305,15 @@ fn an_erased_value_keeps_its_tag_across_a_promise() {
 }
 
 #[test]
+fn a_foreign_release_preserves_an_unrelated_pending_raise() {
+    let report = run_suite(
+        "pending_release",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+    );
+    assert!(checks(&report) >= 12, "{report}");
+}
+
+#[test]
 fn an_erased_bigint_keeps_value_semantics_and_owned_storage() {
     // Both providers: the boxes are the runtime's under either, and only
     // reference counting gives them back, which the suite checks under it.
