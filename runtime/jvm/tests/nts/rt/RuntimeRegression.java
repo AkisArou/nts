@@ -408,7 +408,7 @@ public final class RuntimeRegression {
                 check(NtsMap.delete(map, key) == (hit >= 0), "delete result");
                 if (hit >= 0) {
                     Entry removed = entries.remove(hit);
-                    check(NtsMap.keyAt(map, removed.cursor) == NtsValue.UNDEFINED_VALUE, "dead cursor");
+                    check(NtsMap.keyAtI(map, removed.cursor) == NtsValue.UNDEFINED_VALUE, "dead cursor");
                 }
             } else if (action == 99) { NtsMap.clear(map); entries.clear(); }
             else {
@@ -417,24 +417,24 @@ public final class RuntimeRegression {
             }
             check(NtsMap.size(map) == entries.size(), "map size");
             if (round % 23 == 0) {
-                double cursor = 0;
+                int cursor = 0;
                 for (Entry entry : entries) {
-                    cursor = NtsMap.next(map, cursor);
+                    cursor = NtsMap.nextI(map, cursor);
                     check(cursor == entry.cursor, "stable cursor position");
-                    NtsValue got = NtsMap.keyAt(map, cursor);
+                    NtsValue got = NtsMap.keyAtI(map, cursor);
                     check(svz(got, entry.key), "iteration key");
                     if (got.tag == NtsValue.NUMBER && got.num == 0) { number(got.num, 0.0, "canonical zero"); }
-                    check(NtsMap.valueAt(map, cursor) == entry.value, "iteration value");
+                    check(NtsMap.valueAtI(map, cursor) == entry.value, "iteration value");
                     ++cursor;
                 }
-                check(NtsMap.next(map, cursor) == -1, "iteration exhausted");
+                check(NtsMap.nextI(map, cursor) == -1, "iteration exhausted");
             }
         }
         // Clear and prefix recycling must preserve cursors without growing historical storage.
         map = NtsMap.newMap(0);
         for (int i = 0; i < 100000; ++i) {
             NtsMap.set(map, keys.get(0), keys.get(1));
-            check(NtsMap.next(map, i) == i, "clear cursor");
+            check(NtsMap.nextI(map, i) == i, "clear cursor");
             NtsMap.clear(map);
         }
         // `NtsTable`, not `NtsMap`: the storage moved to the shared base when
@@ -450,14 +450,14 @@ public final class RuntimeRegression {
             NtsMap.set(map, keys.get(i % 80), keys.get(i % 80));
         }
         check(((Object[]) storage.get(map)).length <= 256, "prefix storage bounded");
-        double cursor = NtsMap.next(map, 0);
+        int cursor = NtsMap.nextI(map, 0);
         NtsMap.clear(map);
         NtsMap.set(map, keys.get(300), keys.get(301));
-        check(NtsMap.next(map, cursor + 1) > cursor, "append after clear visible");
+        check(NtsMap.nextI(map, cursor + 1) > cursor, "append after clear visible");
         NtsSet set = NtsSet.newSet(0);
         NtsSet.add(set, NtsValue.ofNumber(-0.0));
-        number(NtsTable.keyAt(set, 0).num, 0.0, "set key +0");
-        number(NtsTable.valueAt(set, 0).num, 0.0, "set value +0");
+        number(NtsTable.keyAtI(set, 0).num, 0.0, "set key +0");
+        number(NtsTable.valueAtI(set, 0).num, 0.0, "set value +0");
         // The split is the point of these four: a Set is a `java.util.Set` and
         // is not a `java.util.Map`, which is what a Java caller sees.
         check(set instanceof java.util.Set, "a Set is a java.util.Set");
@@ -469,6 +469,63 @@ public final class RuntimeRegression {
         check(!(asObject instanceof java.util.Map), "a Set is not a java.util.Map");
         check(NtsValue.isSet(NtsValue.ofObject(set)), "isSet");
         check(!NtsValue.isMap(NtsValue.ofObject(set)), "a Set is not a Map");
+    }
+    /** Cursor sentinels and the absolute insertion bound, without allocating a huge table. */
+    private static void testMapCursorDomain() throws Exception {
+        java.lang.reflect.Field base = NtsTable.class.getDeclaredField("base");
+        base.setAccessible(true);
+        java.lang.reflect.Field limit = NtsTable.class.getDeclaredField("MAX_ARRAY");
+        limit.setAccessible(true);
+        int maximum = limit.getInt(null);
+        check(maximum > 4 && maximum <= Integer.MAX_VALUE - 1, "cursor cap fits core MAX_LENGTH");
+        for (NtsTable table : new NtsTable[] {NtsMap.newMap(0), NtsSet.newSet(0)}) {
+            NtsValue[] keys = {
+                NtsValue.ofNumber(10), NtsValue.ofNumber(11),
+                NtsValue.ofNumber(12), NtsValue.ofNumber(13)
+            };
+            for (NtsValue key : keys) { NtsTable.insert(table, key, key); }
+            check(NtsTable.nextI(table, -1) == -1, "negative cursor does not restart a live walk");
+            check(NtsTable.nextI(table, Integer.MIN_VALUE) == -1, "minimum cursor is exhausted");
+            check(NtsTable.keyAtI(table, -1) == NtsValue.UNDEFINED_VALUE, "negative key cursor");
+            check(NtsTable.valueAtI(table, -1) == NtsValue.UNDEFINED_VALUE, "negative value cursor");
+            check(NtsTable.nextI(table, Integer.MAX_VALUE) == -1, "cursor past the table");
+            check(NtsTable.keyAtI(table, Integer.MAX_VALUE) == NtsValue.UNDEFINED_VALUE, "key past the table");
+            check(NtsTable.valueAtI(table, Integer.MAX_VALUE) == NtsValue.UNDEFINED_VALUE, "value past the table");
+
+            // Model the last four insertion positions; the same storage can
+            // reach this base through repeated clear and prefix reclamation.
+            base.setInt(table, maximum - 4);
+            check(NtsTable.delete(table, keys[0]), "retire first cursor at cap");
+            check(NtsTable.delete(table, keys[1]), "retire second cursor at cap");
+            int cursor = NtsTable.nextI(table, 0);
+            check(cursor == maximum - 2, "walk returns an absolute cursor after retired prefix");
+            check(NtsTable.keyAtI(table, cursor) == keys[2], "absolute key at cap");
+            check(NtsTable.valueAtI(table, cursor) == keys[2], "absolute value at cap");
+            check(NtsTable.nextI(table, cursor + 1) == maximum - 1, "last cursor stays below cap");
+            check(NtsTable.nextI(table, maximum) == -1, "last cursor successor is exhausted");
+            check(NtsTable.keyAtI(table, maximum - 4) == NtsValue.UNDEFINED_VALUE, "retired absolute key");
+            check(NtsTable.valueAtI(table, maximum - 4) == NtsValue.UNDEFINED_VALUE, "retired absolute value");
+            NtsTable.insert(table, keys[3], keys[3]);
+            check(NtsTable.size(table) == 2, "replacement at cap needs no new cursor");
+            for (int cleared = 0; cleared < 2; ++cleared) {
+                try {
+                    NtsTable.insert(table, NtsValue.ofNumber(99), NtsValue.NULL_VALUE);
+                    throw new AssertionError("absolute cursor exhaustion must fail allocation");
+                } catch (OutOfMemoryError expected) {
+                    equal(expected.getMessage(), "map insertion cursor space exhausted", "cursor allocation failure path");
+                }
+                check(NtsRuntime.raising() == 0, "cursor exhaustion creates no language raise");
+                if (cleared == 0) {
+                    check(NtsTable.nextI(table, 0) == maximum - 2, "failed insert preserves live cursors");
+                    check(NtsTable.valueAtI(table, maximum - 1) == keys[3], "failed insert preserves last value");
+                    NtsTable.clear(table);
+                    check(base.getInt(table) == maximum, "clear advances absolute base to cap");
+                    check(NtsTable.nextI(table, 0) == -1, "cleared table has no cursor");
+                    check(NtsTable.keyAtI(table, maximum - 1) == NtsValue.UNDEFINED_VALUE, "clear retires old key");
+                    check(NtsTable.valueAtI(table, maximum - 1) == NtsValue.UNDEFINED_VALUE, "clear retires old value");
+                }
+            }
+        }
     }
     private static int oldClamp(double x, int length) {
         double at = Double.isNaN(x) ? 0 : x < 0 ? Math.ceil(x) : Math.floor(x);
@@ -1167,6 +1224,7 @@ public final class RuntimeRegression {
         testArrayLength(); System.out.println("erased array length passed");
         testErasedBigInt(); System.out.println("bigint randomized tests passed");
         testMap(); System.out.println("map randomized and cursor tests passed");
+        testMapCursorDomain(); System.out.println("map cursor domain and exhaustion passed");
         testMapAsJavaMap(); System.out.println("NtsMap as java.util.Map passed");
         testForeignCallbacks(); System.out.println("foreign-thread callbacks passed");
         testSetLength(); System.out.println("array setLength passed");

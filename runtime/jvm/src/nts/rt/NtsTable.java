@@ -317,18 +317,6 @@ public abstract class NtsTable {
         map.used = map.count = map.head = 0;
     }
 
-    /** Next live absolute insertion position >= from; -1 when there is none. */
-    public static double next(NtsTable map, double from) {
-        if (map.count == 0) { return -1.0; }
-        int absolute = from < 0.0 ? 0 : (int) from;
-        int at = absolute <= map.base ? map.head : Math.max(map.head, absolute - map.base);
-        while (at < map.used) {
-            if (map.keys[at] != null) { return (double) map.base + at; }
-            at++;
-        }
-        return -1.0;
-    }
-
     /**
      * Every key as a `double`, in one pass, without the cursor protocol.
      *
@@ -388,39 +376,15 @@ public abstract class NtsTable {
     }
 
     /**
-     * `next` and `keyAt` with an `int` cursor instead of an `f64`.
-     *
-     * <p>**3.05x, measured before either was written into a pass.** Identical
-     * protocol -- two calls an element, the same bounds and null tests, the
-     * same output element for element -- with only the cursor's representation
-     * changed:
-     *
-     * <pre>
-     *   walked (f64 cursor)      919 ns
-     *   walkedInt (int cursor)   301 ns
-     *   bulk (no protocol)       149 ns
-     * </pre>
-     *
-     * <p>So the cursor being a `double` is **672 of the 770ns** that separates
-     * the walk from a bulk pass: 87% of what removing the protocol entirely
-     * would buy, for a change that keeps it.
-     *
-     * <p>`nts_map_next` is an `f64` in `hir::runtime` and must stay one -- that
-     * table is the single answer about conversions for three backends. These
-     * are the `arrayIndexOfI` treatment applied to a cursor: the same latitude
-     * `intcall` already takes deciding a helper's answer is exact in an `int`.
-     *
-     * <p>**Waiting on the pass, which is the harder half.** `intcall` holds a
-     * value as an `int` when *every* use converts it to an integral type, and a
-     * cursor's uses are `+ 1.0` and being handed back to `next` -- neither is a
-     * conversion, and the value flows in a cycle through the loop's block
-     * parameter. That is the extension this file has predicted twice and nobody
-     * has built.
+     * Next live absolute insertion position at or after {@code from}, or -1
+     * for a negative start or an exhausted walk. Clear and prefix reclamation
+     * advance {@code base}, so a saved cursor keeps its insertion identity.
+     * The absolute cursor space is bounded by {@code MAX_ARRAY}; its end has
+     * room for the caller's int32 {@code cursor + 1}.
      */
     public static int nextI(NtsTable map, int from) {
-        if (map.count == 0) { return -1; }
-        int absolute = from < 0 ? 0 : from;
-        int at = absolute <= map.base ? map.head : Math.max(map.head, absolute - map.base);
+        if (from < 0 || map.count == 0) { return -1; }
+        int at = from <= map.base ? map.head : Math.max(map.head, from - map.base);
         while (at < map.used) {
             if (map.keys[at] != null) { return map.base + at; }
             at++;
@@ -428,6 +392,7 @@ public abstract class NtsTable {
         return -1;
     }
 
+    /** Read the key at a live absolute cursor, or undefined if it is dead. */
     public static NtsValue keyAtI(NtsTable map, int absolute) {
         if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
         int slot = absolute - map.base;
@@ -435,16 +400,8 @@ public abstract class NtsTable {
         return map.keys[slot];
     }
 
-    public static NtsValue keyAt(NtsTable map, double at) {
-        int absolute = (int) at;
-        if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
-        int slot = absolute - map.base;
-        if (slot >= map.used || map.keys[slot] == null) { return NtsValue.UNDEFINED_VALUE; }
-        return map.keys[slot];
-    }
-
-    public static NtsValue valueAt(NtsTable map, double at) {
-        int absolute = (int) at;
+    /** Read the value at a live absolute cursor, or undefined if it is dead. */
+    public static NtsValue valueAtI(NtsTable map, int absolute) {
         if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
         int slot = absolute - map.base;
         if (slot >= map.used || map.keys[slot] == null) { return NtsValue.UNDEFINED_VALUE; }
@@ -452,7 +409,9 @@ public abstract class NtsTable {
     }
 
     private void reserveEntry() {
-        // Keep every cursor within the original signed-int slot domain.
+        // Bound absolute insertion positions, including slots retired by clear
+        // and compaction. This platform cap is below core NTS_MAX_LENGTH;
+        // exhausting it keeps the existing host allocation-failure path.
         if ((long) base + used >= MAX_ARRAY) {
             throw new OutOfMemoryError("map insertion cursor space exhausted");
         }

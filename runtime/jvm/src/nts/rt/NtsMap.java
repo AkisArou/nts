@@ -122,7 +122,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
     public boolean containsValue(Object value) {
         NtsValue wanted = fromJava(value);
         for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
-            if (sameKey(valueAt(this, at), wanted)) { return true; }
+            if (sameKey(valueAtI(this, at), wanted)) { return true; }
         }
         return false;
     }
@@ -150,7 +150,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
             public java.util.Iterator<V> iterator() {
                 return new Cursor<V>() {
                     @Override @SuppressWarnings("unchecked")
-                    V of(int absolute) { return (V) toJava(valueAt(NtsMap.this, absolute)); }
+                    V of(int absolute) { return (V) toJava(valueAtI(NtsMap.this, absolute)); }
                 };
             }
         };
@@ -168,7 +168,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
                     java.util.Map.Entry<K, V> of(int absolute) {
                         return new java.util.AbstractMap.SimpleImmutableEntry<K, V>(
                             (K) toJava(keyAtI(NtsMap.this, absolute)),
-                            (V) toJava(valueAt(NtsMap.this, absolute)));
+                            (V) toJava(valueAtI(NtsMap.this, absolute)));
                     }
                 };
             }
@@ -190,7 +190,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
         if (them.size() != count) { return false; }
         for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
             Object key = toJava(keyAtI(this, at));
-            Object mine = toJava(valueAt(this, at));
+            Object mine = toJava(valueAtI(this, at));
             Object theirs = them.get(key);
             if (mine == null ? theirs != null || !them.containsKey(key) : !mine.equals(theirs)) {
                 return false;
@@ -205,15 +205,10 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
         int total = 0;
         for (int at = nextI(this, 0); at >= 0; at = nextI(this, at + 1)) {
             Object key = toJava(keyAtI(this, at));
-            Object value = toJava(valueAt(this, at));
+            Object value = toJava(valueAtI(this, at));
             total += (key == null ? 0 : key.hashCode()) ^ (value == null ? 0 : value.hashCode());
         }
         return total;
-    }
-
-    /** Absolute-index value read, the companion `valueAt` has for doubles. */
-    private static NtsValue valueAt(NtsMap map, int absolute) {
-        return valueAt(map, (double) absolute);
     }
 
     /**
@@ -236,7 +231,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
             if (!first) { out.append(", "); }
             first = false;
             Object key = toJava(keyAtI(this, at));
-            Object value = toJava(valueAt(this, (double) at));
+            Object value = toJava(valueAtI(this, at));
             out.append(key == this ? "(this Map)" : key);
             out.append('=');
             out.append(value == this ? "(this Map)" : value);

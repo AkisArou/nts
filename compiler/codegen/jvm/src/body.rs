@@ -402,15 +402,7 @@ fn held_values(
         fused: crate::fuse::fused(func),
         object_keys: crate::fuse::object_keys(func),
         accumulated: crate::builder::accumulators(func),
-        narrowed: {
-            let mut held = crate::intcall::narrowed(func);
-            let widened = plan.values_in(func);
-            let cursors = crate::intcall::cursors(func);
-            if !cursors.iter().any(|value| widened.contains(value)) {
-                held.extend(cursors);
-            }
-            held
-        },
+        narrowed: crate::intcall::narrowed(func),
         joined: crate::closures::joined(package, program, func),
         widened: plan.values_in(func),
         widened_fields: plan.fields().clone(),
@@ -763,30 +755,6 @@ impl<'a> Emitter<'a> {
                     reason = "a widened value is an i32 by `widen`, and every i32 is exact in an f64"
                 )]
                 code.const_double(&origin, pool, number as f64);
-                return Ok(());
-            }
-            // **And the mirror of it, which was missing.** A cursor's literal
-            // is an `f64` by its declared type and an `int` by how this backend
-            // holds it, and a rematerialised constant is spelled from the
-            // declared one -- so `nts_map_next(map, 0)` pushed two words at a
-            // call declaring `I`. The emitter's own accounting said so:
-            // `depth 0 -> 3 -> 2`.
-            //
-            // Rematerialization must honor held storage just as conversion(),
-            // place() and operation() do.
-            // DispatchSlot stays f64. If it ever becomes eligible for integer
-            // narrowing, this rematerialization must also emit its logical
-            // selector as an int rather than passing it to constant() as f64.
-            if self.narrowed.contains(&value)
-                && let OpKind::ConstFloat(number) = op.kind
-                && number.fract() == 0.0
-                && number.abs() <= f64::from(i32::MAX)
-            {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "guarded above: integral and inside i32"
-                )]
-                code.const_int(&origin, pool, number as i32);
                 return Ok(());
             }
             self.constant(code, pool, &op.kind, &op.ty, &origin)?;

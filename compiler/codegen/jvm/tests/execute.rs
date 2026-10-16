@@ -205,3 +205,23 @@ fn a_loop_runs_the_number_of_times_its_condition_says() {
     };
     assert_eq!(out, "45.0\n0.0\n0.0\n");
 }
+
+/// Set iteration and Map values use the same int32 cursor ABI end to end.
+#[test]
+fn map_and_set_walks_use_the_runtime_cursor_contract() {
+    let Some(out) = run(
+        "a-set-walked-by-its-cursor",
+        r#"    for (int n = -14; n <= 14; ++n) {
+        if (nts.gen.Program.walked(n) != (n & 63) / 2) {
+            throw new AssertionError("Set cursor at " + n);
+        }
+        if (nts.gen.Program.listed(n) != 2 * (n & 15)) {
+            throw new AssertionError("Map key/value cursors at " + n);
+        }
+    }
+    System.out.println("PASS");"#,
+    ) else {
+        return;
+    };
+    assert_eq!(out, "PASS\n");
+}

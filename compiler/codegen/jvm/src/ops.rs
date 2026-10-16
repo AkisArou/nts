@@ -366,10 +366,8 @@ const D_TO_D: &str = "(D)D";
 const STRING_TO_STRING: &str = "(Ljava/lang/String;)Ljava/lang/String;";
 const STRING_D_TO_STRING: &str = "(Ljava/lang/String;D)Ljava/lang/String;";
 const MAP_KEY_TO_VALUE: &str = "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;";
-const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsTable;D)Lnts/rt/NtsValue;";
-/// The `int` cursor forms, for a walk `narrow` has proved stays in range.
-const CURSOR_NEXT: &str = "(Lnts/rt/NtsTable;I)I";
-const CURSOR_KEY: &str = "(Lnts/rt/NtsTable;I)Lnts/rt/NtsValue;";
+const MAP_AT_TO_VALUE: &str = "(Lnts/rt/NtsTable;I)Lnts/rt/NtsValue;";
+const MAP_NEXT: &str = "(Lnts/rt/NtsTable;I)I";
 const BIGINT_BINARY: &str = "(Lnts/rt/NtsBigInt;Lnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const BIGINT_BITS: &str = "(DLnts/rt/NtsBigInt;)Lnts/rt/NtsBigInt;";
 const STRING_STRING_TO_D: &str = "(Ljava/lang/String;Ljava/lang/String;)D";
@@ -944,9 +942,9 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
             "keysStr",
             "(Lnts/rt/NtsTable;)[Ljava/lang/Object;",
         ),
-        "nts_map_next" => (types::TABLE, "next", "(Lnts/rt/NtsTable;D)D"),
-        "nts_map_key_at" => (types::TABLE, "keyAt", MAP_AT_TO_VALUE),
-        "nts_map_value_at" => (types::TABLE, "valueAt", MAP_AT_TO_VALUE),
+        "nts_map_next" => (types::TABLE, "nextI", MAP_NEXT),
+        "nts_map_key_at" => (types::TABLE, "keyAtI", MAP_AT_TO_VALUE),
+        "nts_map_value_at" => (types::TABLE, "valueAtI", MAP_AT_TO_VALUE),
 
         "nts_bigint_from_number" => (types::BIGINT, "fromNumber", "(D)Lnts/rt/NtsBigInt;"),
         "nts_bigint_to_string" => (
@@ -7105,34 +7103,12 @@ impl Emitter<'_> {
                 if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
-                // An index this backend holds as an `int`; see `intcall`. The
-                // descriptor is the table's with its return replaced, so the
-                // argument spelling stays the one place it is decided.
-                // A cursor helper, and this **replaces** the table's answer
-                // rather than filling in for it. `nts_map_next` is already in
-                // `value_external`, so an `or_else` here never ran: the call
-                // emitted the `(D)D` form while the value was held as an `int`
-                // and `place` stored one word of the two it pushed. That is
-                // exactly "moved the operand stack from 0 to 1", and it named
-                // the operation rather than leaving it to be bisected -- which
-                // is what that check was added for.
-                let cursor_form =
-                    crate::intcall::cursor_helper(name).and_then(|(position, _, narrow)| {
-                        let cursor_held = position
-                            .and_then(|at| args.get(at))
-                            .is_some_and(|arg| self.narrowed.contains(arg));
-                        if !cursor_held && !self.narrowed.contains(&value) {
-                            return None;
-                        }
-                        Some(match narrow {
-                            "nextI" => (types::TABLE, "nextI", CURSOR_NEXT.to_owned()),
-                            _ => (types::TABLE, "keyAtI", CURSOR_KEY.to_owned()),
-                        })
-                    });
-                let found = cursor_form.or(found);
                 let (swapped, object_form) = self.object_key(name, args).unzip();
                 let args = swapped.as_deref().unwrap_or(args);
                 let found = object_form.or(found);
+                // An index this backend holds as an `int`; see `intcall`. The
+                // descriptor is the table's with its return replaced, so the
+                // argument spelling stays the one place it is decided.
                 // **The owner first, then the name it decides.** These were
                 // the other way round, so the name came from one table and the
                 // owner from another and nothing related them.
@@ -7186,33 +7162,11 @@ impl Emitter<'_> {
                 // `Object[]` and the slot it is stored into is a `Foo[]`. The
                 // narrowing the middle end already proved has to be spelled for
                 // the verifier, which knows only what the descriptor said.
-                // **Not when the value is held as an `int`.** `narrow_result`
-                // reconciles the descriptor's return with the HIR type, and a
-                // cursor's HIR type is the `f64` `hir::runtime` declares -- so
-                // it would widen `nextI`'s answer straight back to a double and
-                // undo the representation this lane just chose. The same
-                // asymmetry `conversion` had: the mark has to be honoured on
-                // the way out as well as on the way in, or the emitter puts a
-                // double where its own accounting says an int.
-                // **Not when the value is held differently from its
-                // declaration**, in either of the two ways this backend does
-                // that. `narrow_result` reconciles the descriptor's return with
-                // the HIR type, which is right whenever the two are talking
-                // about the same representation and wrong when they are not:
-                //
-                //   a cursor is declared `f64` and held as an `int`, so this
-                //   would widen `nextI`'s answer straight back
-                //
-                //   a fused answer is declared `Erased` and held as a `double`,
-                //   so this emits `checkcast NtsValue` against a `double` on
-                //   the stack -- which the verifier reports as `Type
-                //   double_2nd is not assignable to 'java/lang/Object'` at the
-                //   `checkcast`, and which is how `tests/programs/arrays`' `nth`
-                //   failed.
-                //
-                // Both were found the same way: read the listing at the offset
-                // the verifier named, rather than reason about which pass had
-                // claimed the value.
+                // A narrowed indexOf result is held as an int even though HIR
+                // declares f64; reconciling it would widen the result again.
+                // A fused result is declared Erased but held as a double, so
+                // reconciling it would checkcast a primitive as NtsValue.
+                // Both retain the representation selected for this value.
                 if self.wrap_bare_array(code, pool, result, returns, origin) {
                     return Ok(Placed::OnStack);
                 }
