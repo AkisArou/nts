@@ -295,7 +295,10 @@ typedef struct NtsDescriptor {
    * rather than answering a plausible `"[object Object]"`. Read only for a
    * value tagged `OBJECT` or `FUNCTION`; a string, a symbol and a bigint print
    * from their tags. */
-  /* An `NtsString *`, which is an `NtsHeader *` declared below. */
+  /* An owned `NtsString *`, which is an `NtsHeader *` declared below, on
+   * success. A raising printer records its original erased throw and returns
+   * NULL. Forwarders preserve that pending state and never consume NULL;
+   * the compiled language conversion boundary takes and throws it. */
   struct NtsHeader *(*to_string)(const struct NtsHeader *object);
   /* What a function of this type is called: `f.name` where the type does not
    * settle it, and the name in a function's text. A string the compiler
@@ -2667,9 +2670,10 @@ NtsString *nts_string_from_code_point(double point);
  * `punycode`'s `ucs2.encode` is `result += String.fromCodePoint(cp)` once per
  * code point, and every one of those strings dies on the next line. */
 NtsString *nts_string_from_code_point_into(NtsHeader *into, double point);
-/* `String(v)` on a value carrying its own tag. Exact for `undefined`, `null`,
- * a boolean, a number and a string; every other tag is a lowering that should
- * have refused, and it aborts rather than guessing. */
+/* `String(v)` on a value carrying its own tag. Primitives spell themselves;
+ * objects and functions use their descriptor's printer. A successful string
+ * is owned; a throwing printer's NULL/pending-raise result is forwarded for
+ * the compiled language conversion boundary to take and throw. */
 NtsString *nts_value_to_string(NtsValue value);
 /* A property key in a null/undefined access's TypeError. Primitives describe
  * themselves without running program code; long symbol descriptions use V8's

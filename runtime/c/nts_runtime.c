@@ -2167,21 +2167,13 @@ void nts_cell_unready(const char *name) {
   abort();
 }
 
-/* `String(v)` where `v` carries its own tag.
+/* `String(v)` where `v` carries its own tag. Primitives spell themselves;
+ * objects ask their descriptor, whose selected printer can return a null
+ * string placeholder with a language raise pending. Forward both unchanged:
+ * only the compiled conversion boundary takes and throws that payload.
  *
- * Exact for every tag this can be reached with, and it can only be reached
- * with those: the compiler admits the call when the value's *type* has no
- * member whose spelling needs a `toString` -- no object, no array, no closure.
- * `String({})` is "[object Object]" and `String([1,2])` is "1,2", and both are
- * the prototype chain's answer rather than the value's, which is §13's and not
- * this function's.
- *
- * So the `default` here is a compiler bug and says so, rather than inventing a
- * spelling that would be wrong wherever it appeared.
- *
- * The returned string is owned by the caller. A string already in the value is
- * retained rather than copied, which is what makes `String(s)` free when `s`
- * was already text. */
+ * A successful result is owned. A string already in the value is retained
+ * rather than copied, which makes `String(s)` free when s was already text. */
 NtsString *nts_value_to_string(NtsValue value) {
   switch (nts_value_tag(value)) {
   case NTS_TAG_UNDEFINED:
@@ -4213,6 +4205,18 @@ NtsString *nts_array_to_string(const NtsHeader *object) {
                     ? NTS_TEXT("")
                     : nts_value_to_string(element);
     nts_value_release(element);
+    if (nts_raising()) {
+      /* Only completed strings belong to this prefix. The failed call's
+       * placeholder must never be read, and the outer language boundary owns
+       * the pending payload. A foreign release during cleanup has its own
+       * pending state through nts_call_foreign_release. */
+      for (uint32_t done = 0; done < at; done++) {
+        nts_release((NtsHeader *)parts[done]);
+      }
+      free(parts);
+      nts_joining[--nts_joining_depth] = NULL;
+      return NULL;
+    }
     total += parts[at]->length;
     wide |= (parts[at]->flags & NTS_TWO_BYTE) != 0;
   }
@@ -4233,7 +4237,7 @@ NtsString *nts_array_to_string(const NtsHeader *object) {
   } else {
     NTS_ELEMENTS(out, unsigned char)[total] = 0;
   }
-  nts_joining_depth--;
+  nts_joining[--nts_joining_depth] = NULL;
   return out;
 }
 
