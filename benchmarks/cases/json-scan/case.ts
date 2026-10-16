@@ -32,6 +32,10 @@
 // `nts f64` column already answers the question a reference would be for.
 import { scanNumber } from "../../../runtime/web-platform/src/json/parse.ts";
 
+// The representation this row measures (`nts expect-ir`): the input below is
+// one constant, not four literals joined on every call -- which the Wasm backend
+// scanned as the engine's chain of pieces, at 1.7x the time of one literal.
+// expect-ir: all: no concat in work
 export function work(iterations: number): number {
   // Every shape the grammar branches on, and the malformed ones too: a scan that only ever sees
   // well-formed input never takes the four rejection paths, and those are half the function.

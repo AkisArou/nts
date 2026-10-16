@@ -12,7 +12,7 @@
 
 use super::facts::Facts;
 use super::flow::Analysis;
-use super::{Func, HirType, OpKind, ValueId};
+use super::{BinOp, Func, HirType, OpKind, ValueId};
 
 /// Replace pure operations of known result with constants, and report how many.
 pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
@@ -42,6 +42,19 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         if super::may_stop(&func.values[index]) {
             continue;
         }
+        // Two string constants joined are a string constant. Values come in
+        // definition order, so a chain folds from its first link outward.
+        if let OpKind::Binary {
+            op: BinOp::Concat,
+            lhs,
+            rhs,
+        } = func.values[index].kind
+            && let Some(joined) = joined_constant(func, lhs, rhs)
+        {
+            func.values[index].kind = OpKind::ConstString(joined);
+            folded += 1;
+            continue;
+        }
 
         let facts = analysis.get(id);
         if !exactly_one_value(facts) {
@@ -61,6 +74,51 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         folded += 1;
     }
     folded
+}
+
+/// The longest string constant a fold will write.
+///
+/// A source of n lines can spell a string of 2^n units -- `const b = a + a;`,
+/// `const c = b + b;`, and on -- and the compiler is not where that string should
+/// be built. Past this the concatenation stays the program's, at run time, which
+/// is where it was.
+const JOINED_MAX: usize = 1 << 16;
+
+/// Two string constants as one, where joining their bytes is joining their
+/// UTF-16 units.
+///
+/// `json-scan` builds its input as four literals joined on every call, and the
+/// Wasm backend then scanned a string the engine kept as a chain of pieces: the
+/// scan ran at 0.58 of its time once the input was one literal, with the
+/// scanner's own code unchanged. A constant is a constant on every backend.
+///
+/// Bytes are units except at one junction. A lone surrogate held in its
+/// three-byte generalized UTF-8 form, as a high one ending a constant followed
+/// by a low one starting the next, would join into the two halves' bytes where
+/// JavaScript sees one character, whose bytes are the pair's four. That
+/// junction is left to run time rather than taught a second encoding here.
+/// Today it cannot arise: a lone surrogate in a literal reaches this program as
+/// three U+FFFD (tests/outcomes/lone-surrogates-compare-as-one-character), and
+/// the fix recorded there reads the literal's own bytes -- this form.
+fn joined_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<String> {
+    let (OpKind::ConstString(left), OpKind::ConstString(right)) = (
+        &func.values[lhs.0 as usize].kind,
+        &func.values[rhs.0 as usize].kind,
+    ) else {
+        return None;
+    };
+    if left.len() + right.len() > JOINED_MAX {
+        return None;
+    }
+    let (head, tail) = (left.as_bytes(), right.as_bytes());
+    let ends_high = head.len() >= 3
+        && head[head.len() - 3] == 0xED
+        && (0xA0..=0xAF).contains(&head[head.len() - 2]);
+    let starts_low = tail.len() >= 3 && tail[0] == 0xED && (0xB0..=0xBF).contains(&tail[1]);
+    if ends_high && starts_low {
+        return None;
+    }
+    Some(format!("{left}{right}"))
 }
 
 /// Whether a set is one value that can be written as a literal.
