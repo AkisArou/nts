@@ -15504,9 +15504,9 @@ pub fn lower_with(
     entry: &[String],
     foreign: &super::runtime::ForeignTable,
 ) -> Lowered {
-    // An opt-in trace at the real work boundary, so sharing guards count work
-    // performed rather than a statistic the driver claims. One append per
-    // lowering; no file is opened when tracing is not requested.
+    // NTS_TRACE_LOWERING is a test instrument counting actual raw lowerings.
+    // It appends one line per invocation so sharing guards measure work done.
+    // Unset by default; ordinary compilation opens no trace file.
     if let Some(path) = std::env::var_os("NTS_TRACE_LOWERING") {
         use std::io::Write as _;
         let recorded = std::fs::OpenOptions::new()
