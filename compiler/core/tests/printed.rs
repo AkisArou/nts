@@ -134,6 +134,26 @@ fn an_unavailable_raising_printer_is_refused_without_an_ordinary_fallback() {
     );
 }
 
+#[test]
+fn a_printer_failure_arm_does_not_rebind_its_success_continuation() {
+    let Some(lowered) = lower_project(
+        "../../tests/programs/a-printer-failure-arm-keeps-success-bindings/tsconfig.json",
+    ) else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    assert!(
+        lowered.program.uncompiled.is_empty(),
+        "{:?}",
+        lowered.program.uncompiled
+    );
+    assert!(
+        hir::verify::verify(&lowered.program).is_ok(),
+        "{:?}",
+        hir::verify::verify(&lowered.program)
+    );
+}
+
 /// The answer for the layout named `name`.
 fn printed<'p>(program: &'p hir::Program, name: &str) -> &'p Printed {
     program

@@ -48548,8 +48548,11 @@ impl<'a> FuncBuilder<'a> {
                 else_args: Vec::new(),
             });
             self.switch_to(took);
-            let thrown = self.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
-            self.throw_erased(from, thrown, thrown, &HirType::Erased)?;
+            self.lower_arm(|this| {
+                let thrown =
+                    this.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
+                this.throw_erased(from, thrown, thrown, &HirType::Erased)
+            })?;
             self.switch_to(carry_on);
         }
         Ok(text)
