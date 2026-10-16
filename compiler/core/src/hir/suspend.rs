@@ -189,6 +189,13 @@ fn frame_names(function: &str) -> (String, String) {
     (format!("{function}#frame"), resume_name(function))
 }
 
+fn generator_constructor(func: &Func) -> &str {
+    func.frame
+        .as_ref()
+        .and_then(|frame| frame.parameter_entry.as_deref())
+        .unwrap_or(&func.name)
+}
+
 /// What a function's resumption is called.
 ///
 /// Public because a `for...of` over a generator calls it, and is lowered long
@@ -308,7 +315,7 @@ fn suspends(func: &Func) -> bool {
 /// going to be split into two provides both of its names.
 #[must_use]
 pub fn provides(func: &Func) -> Option<String> {
-    suspends(func).then(|| frame_names(&func.name).1)
+    suspends(func).then(|| frame_names(generator_constructor(func)).1)
 }
 
 /// Rewrite every `async` function that awaits into a state machine.
@@ -334,7 +341,7 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
             }) => {
                 if let Some(frame) = &program.funcs[index].frame {
                     program.generators.push(super::GeneratorResumption {
-                        constructor: entry.name.clone(),
+                        constructor: generator_constructor(&program.funcs[index]).to_owned(),
                         resume: resume.name.clone(),
                         frame: frame.clone(),
                     });
@@ -578,7 +585,7 @@ fn rewrite(func: &Func, index: usize, layouts: &[Layout]) -> Result<Rewritten, D
     // outside this pass ever says.
     let frame_id = generator.map_or_else(|| frame_type(index), |frame| frame.ty);
     let frame_ty = HirType::Managed(ManagedType::Object(frame_id));
-    let (frame_name, resume_name) = frame_names(&func.name);
+    let (frame_name, resume_name) = frame_names(generator_constructor(func));
     // An `async` frame extends nothing and dispatches nothing: it is resumed by
     // the promise that owns it, which knows its type.
     //

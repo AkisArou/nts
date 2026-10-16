@@ -639,6 +639,10 @@ pub enum GeneratorKind {
 /// accesses on the same object at the same offset.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeneratorFrame {
+    /// The original callable when eager parameter binding has split its body.
+    /// Its resumption and public `next` association keep that identity; the
+    /// private bound body's name is an implementation detail.
+    pub parameter_entry: Option<String>,
     /// The synthetic type id, from [`generator_frame`].
     pub ty: TypeId,
     /// Whether this is a `function*` or an `async function*`.

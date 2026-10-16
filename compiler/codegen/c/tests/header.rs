@@ -556,3 +556,35 @@ fn an_export_borrows_even_the_parameters_it_keeps() {
     assert!(!line("keep").contains("Takes over"), "{}", line("keep"));
     assert!(!line("size").contains("Takes over"), "{}", line("size"));
 }
+
+#[test]
+fn generator_parameter_entry_keeps_its_exported_step() {
+    let Some(tsgo) = toolchain() else {
+        return;
+    };
+    let (dir, _) = emit(
+        &tsgo,
+        "generator-parameter-entry",
+        r"let count = 0;
+function tick(): number { count++; return 7; }
+export function defaults(): number { return count; }
+export function* bound([value = tick()]: number[]): Generator<number> { yield value; }
+export function create(): Generator<number> { return bound([]); }
+",
+    );
+    run(
+        &dir,
+        r#"#include "program.h"
+int main(void) {
+    bound_return_t *g = (bound_return_t *)create();
+    if (defaults() != 1) return 1;
+    double value = -1;
+    if (!bound_next(g, &value) || value != 7) return 2;
+    if (bound_next(g, &value) || defaults() != 1) return 3;
+    nts_release((NtsHeader *)g);
+    return 0;
+}
+"#,
+        true,
+    );
+}

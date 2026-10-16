@@ -75,9 +75,9 @@ impl FuncBuilder<'_> {
         }
     }
 
-    /// The ordinary-function prerequisite. Generators use this same binding
-    /// environment once their entry is separated from the suspended body.
-    pub(super) fn plain_parameter_entry(&self, callable: NodeId) -> bool {
+    /// A capturing default belongs to the callable's parameter environment.
+    /// Pattern-only generator entries keep ordinary caller-filled defaults.
+    pub(super) fn owns_parameter_defaults(&self, callable: NodeId) -> bool {
         matches!(
             self.kind_of(callable),
             Some(
@@ -86,18 +86,67 @@ impl FuncBuilder<'_> {
         ) && !self
             .node(callable)
             .modifiers
-            .contains(DeclarationModifiers::GENERATOR)
-            && !self
+            .contains(DeclarationModifiers::ASYNC)
+            && self.closures.needs_parameter_entry(callable)
+    }
+
+    pub(super) fn needs_parameter_entry(&self, callable: NodeId) -> bool {
+        self.owns_parameter_defaults(callable)
+            || (self
                 .node(callable)
                 .modifiers
-                .contains(DeclarationModifiers::ASYNC)
-            && self.closures.needs_parameter_entry(callable)
+                .contains(DeclarationModifiers::GENERATOR)
+                && !self
+                    .node(callable)
+                    .modifiers
+                    .contains(DeclarationModifiers::ASYNC)
+                && super::parameters_of(self, callable)
+                    .into_iter()
+                    .any(|parameter| {
+                        self.children(parameter).into_iter().any(|child| {
+                            matches!(
+                                self.kind_of(child),
+                                Some(
+                                    syntax::ARRAY_BINDING_PATTERN | syntax::OBJECT_BINDING_PATTERN
+                                )
+                            )
+                        })
+                    }))
+    }
+
+    pub(super) fn parameter_defaults_in_entry(&self) -> bool {
+        self.parameter_entry
+            .is_some_and(|callable| self.owns_parameter_defaults(callable))
+    }
+
+    fn has_parameter_expressions(&self, callable: NodeId) -> bool {
+        super::parameters_of(self, callable)
+            .into_iter()
+            .any(|parameter| {
+                if self.default_of(parameter).is_some() {
+                    return true;
+                }
+                let mut pattern = Vec::new();
+                if let Some(name) = self.children(parameter).into_iter().find(|child| {
+                    matches!(
+                        self.kind_of(*child),
+                        Some(syntax::ARRAY_BINDING_PATTERN | syntax::OBJECT_BINDING_PATTERN)
+                    )
+                }) {
+                    self.subtree(name, &mut pattern);
+                }
+                pattern.into_iter().any(|node| {
+                    self.kind_of(node) == Some(syntax::COMPUTED_PROPERTY_NAME)
+                        || (self.kind_of(node) == Some(syntax::BINDING_ELEMENT)
+                            && self.default_of(node).is_some())
+                })
+            })
     }
 
     pub(super) fn parameter_entry_for_call(&self, call: NodeId) -> Option<NodeId> {
         let callable = self.snapshot.call_targets.get(&call)?.callee?;
         let callable = self.implementation_of(callable);
-        self.plain_parameter_entry(callable).then_some(callable)
+        self.owns_parameter_defaults(callable).then_some(callable)
     }
 
     pub(super) fn bind_parameter_default(
@@ -127,7 +176,9 @@ impl FuncBuilder<'_> {
         if self.parameter_entry != Some(callable) {
             return Ok(());
         }
-        self.separate_body_variables(callable)?;
+        if self.has_parameter_expressions(callable) {
+            self.separate_body_variables(callable)?;
+        }
         let block = self.new_block();
         self.terminate(Terminator::Jump {
             target: block,
@@ -277,6 +328,9 @@ fn bound_body(entry: &Func, cut: &Cut, carried: &[ValueId]) -> Func {
     let mut body = entry.clone();
     body.name = private_name(&entry.name, "bindings");
     body.exported = false;
+    if let Some(frame) = &mut body.frame {
+        frame.parameter_entry = Some(entry.name.clone());
+    }
     body.params = carried
         .iter()
         .enumerate()
@@ -734,5 +788,79 @@ mod tests {
             .find(|func| func.name == "scalarDefault@parameters")
             .expect("scalar ABI needs a raw entry");
         assert_eq!(raw.params[1].ty, HirType::Erased);
+    }
+}
+
+#[cfg(test)]
+mod generator_tests {
+    use camino::Utf8Path;
+    use nts_frontend_ts::{SemanticSource, TsgoApi};
+
+    #[test]
+    fn generator_entries_keep_the_public_resumption_and_leave_simple_parameters_alone() {
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/captured-parameter-defaults/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&config)
+            .expect("the generator fixture");
+        assert!(!snapshot.has_errors());
+        let lowered = super::super::lower(&snapshot);
+        let simple = lowered
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == "simpleGenerated")
+            .expect("simple generator");
+        assert!(
+            simple
+                .frame
+                .as_ref()
+                .expect("a suspended body")
+                .parameter_entry
+                .is_none()
+        );
+        assert!(
+            !lowered
+                .program
+                .funcs
+                .iter()
+                .any(|func| func.name.starts_with("simpleGenerated@"))
+        );
+        let bound = lowered
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == "patternGenerated@bindings")
+            .expect("one bound body");
+        assert_eq!(
+            bound
+                .frame
+                .as_ref()
+                .expect("bound suspended body")
+                .parameter_entry
+                .as_deref(),
+            Some("patternGenerated")
+        );
+        let prepared = crate::hir::prepare(&snapshot).expect("valid separated generators");
+        for name in ["patternGenerated", "generated"] {
+            let resume = format!("{name}__resume");
+            assert!(
+                prepared
+                    .program
+                    .funcs
+                    .iter()
+                    .any(|func| func.name == resume)
+            );
+            assert!(
+                prepared
+                    .program
+                    .generators
+                    .iter()
+                    .any(|generator| generator.constructor == name && generator.resume == resume)
+            );
+        }
     }
 }

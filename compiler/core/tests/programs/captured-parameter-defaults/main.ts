@@ -43,3 +43,6 @@ const outside = 3;
 export function outerOnly(x: number, read = () => outside): number {
   return x + read();
 }
+
+export function* simpleGenerated(x: number): Generator<number> { yield x; }
+export function* patternGenerated([x = 3]: number[]): Generator<number> { yield x; }

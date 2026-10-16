@@ -25827,6 +25827,10 @@ impl<'a> FuncBuilder<'a> {
         instance: Option<TypeId>,
     ) -> Result<(String, String), Diagnostic> {
         let is_static = is_static_member(self.snapshot, member);
+        if self.needs_parameter_entry(member) {
+            self.parameter_entry = Some(member);
+            self.prepare_parameter_cells(member);
+        }
         let class_name = self.class_name_for(class, instance, is_static)?;
         // An accessor shares its *name* with the property it presents, so the
         // emitted name has to say which it is: a class may declare `get x` and
@@ -26010,6 +26014,7 @@ impl<'a> FuncBuilder<'a> {
             params.extend(self.lower_param_or_labels(child, index)?);
         }
 
+        self.start_bound_body(member)?;
         self.store_parameter_properties(&declared)?;
 
         let body = self.method_body(member, is_abstract)?;
@@ -29922,7 +29927,7 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
         let children = self.children(id);
-        if self.plain_parameter_entry(id) {
+        if self.needs_parameter_entry(id) {
             self.parameter_entry = Some(id);
             self.prepare_parameter_cells(id);
         }
@@ -30216,6 +30221,7 @@ impl<'a> FuncBuilder<'a> {
         // by offset it is the difference between a subtype and a link error.
         self.layout_of(id, declared)?;
         let frame = super::GeneratorFrame {
+            parameter_entry: None,
             ty: super::generator_frame(index),
             kind,
             yields,
@@ -30387,7 +30393,7 @@ impl<'a> FuncBuilder<'a> {
         } else {
             id
         };
-        let parameter_entry = self.plain_parameter_entry(parameters_of);
+        let parameter_entry = self.needs_parameter_entry(parameters_of);
         let authored_entry = parameter_entry && matches!(info.source, ClosureSource::Authored);
         let early_return = if authored_entry {
             let result = self.reserved_return_type(id)?;
@@ -35090,7 +35096,7 @@ impl<'a> FuncBuilder<'a> {
             .map_or(Facts::TOP, |declared| {
                 known_values(self.snapshot, *declared, 0)
             });
-        let raw_default = self.parameter_entry.is_some() && self.default_of(id).is_some();
+        let raw_default = self.parameter_defaults_in_entry() && self.default_of(id).is_some();
         let initializer = self
             .default_of(id)
             .filter(|_| raw_default && binds == ParameterNames::Bound);
