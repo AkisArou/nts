@@ -1,4 +1,3 @@
-// run: check
 // Only the called signature changes: a concrete optional slot must preserve absence.
 function observe(x: number, value: any): string { return typeof value; }
 function callbackArgument(f: (x: number, value?: () => number) => string, x: number): string { return f(x); }

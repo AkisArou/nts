@@ -74097,7 +74097,7 @@ impl<'a> FuncBuilder<'a> {
         // More arguments than any closure in this program reads are dropped,
         // as JavaScript drops them; see [`Hierarchy::erased_call_arity`].
         for arg in args.take(width) {
-            erased.push(self.coerce(arg, &HirType::Erased, id)?);
+            erased.push(self.erase_uniform_argument(arg, id)?);
         }
         // Up to the entry's fixed arity, because this site does not know the
         // closure and so cannot know how many it declares. `undefined` is what
@@ -74154,6 +74154,34 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         Ok(value)
+    }
+
+    /// Preserve literal absence as an argument enters the erased uniform ABI.
+    /// The written signature can type an omitted argument as a callback or a
+    /// string; that representation must not give its `undefined` a new tag.
+    /// This is a call-argument rule: generic coercion must keep a typed null
+    /// placeholder in its managed slot, including through `unknown` assertions.
+    fn erase_uniform_argument(
+        &mut self,
+        value: ValueId,
+        id: NodeId,
+    ) -> Result<ValueId, Diagnostic> {
+        // Its tag is already correct; retain the value rather than relocating
+        // a literal's temporary when the uniform ABI needs no conversion.
+        if self.values[value.0 as usize].ty == HirType::Erased {
+            return Ok(value);
+        }
+        match self.values[value.0 as usize].kind {
+            OpKind::ConstUndefined => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin))
+            }
+            OpKind::ConstNull => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::ConstNull, HirType::Erased, origin))
+            }
+            _ => self.coerce(value, &HirType::Erased, id),
+        }
     }
 
     /// Refused where a call through a member holds no object to pass as its
