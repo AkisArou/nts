@@ -10,7 +10,7 @@ use nts_diagnostics::{Severity, SourceFile, SourceLocations};
 
 use super::{
     Emission, configured_surface_to, foreign_tables_to, frontend_binary, frontend_for,
-    selected_provider, selected_roots,
+    provider_for, selected_roots,
 };
 
 /// Live commands write directly; a combined command keeps each backend's exact
@@ -107,14 +107,7 @@ impl Metadata {
         emission: Emission<'_>,
         backend: Backend,
     ) -> Result<hir::PreparationOptions<'_>> {
-        let provider = match backend {
-            Backend::C | Backend::Llvm => selected_provider(),
-            Backend::Jvm | Backend::Wasm => nts_codegen_common::provider::host_gc(
-                backend.name(),
-                selected_provider() == hir::Provider::ReferenceCounting,
-            )
-            .map_err(anyhow::Error::msg)?,
-        };
+        let provider = provider_for(backend)?;
         Ok(hir::PreparationOptions {
             provider,
             roots: self.entry.as_deref().map_or_else(
