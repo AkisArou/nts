@@ -15,11 +15,10 @@ use super::{
 
 /// Live commands write directly; a combined command keeps each backend's exact
 /// streams for the runner, without changing process-global file descriptors.
-#[derive(Debug, Default, Clone, serde::Serialize)]
+#[derive(Debug, Default)]
 pub(super) struct Report {
     pub stdout: String,
     pub stderr: String,
-    #[serde(skip)]
     live: bool,
 }
 
