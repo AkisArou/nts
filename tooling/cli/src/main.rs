@@ -10,9 +10,11 @@ mod bind;
 mod bind_gir;
 mod bind_objc;
 mod bind_winmd;
+mod emission;
 mod expect_ir;
 mod gir_surface;
 mod jar_resources;
+mod multi_emit;
 mod objc_bindings;
 mod objc_imports;
 mod swift;
@@ -24,6 +26,7 @@ use std::fmt::Write as _;
 
 use anyhow::{Context, Result, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use emission::{Input as EmissionInput, Report as EmissionReport};
 use nts_core::hir::facts;
 use nts_core::hir::{self, ArrayFill, BinOp, HirType, ManagedType, OpKind};
 use nts_core::reachability;
@@ -47,7 +50,14 @@ use nts_semantic_schema::SCHEMA_VERSION;
 /// proj` took `published` as the tsconfig and failed with "`published` is not a
 /// tsconfig" -- flag order deciding whether a command works, which is the shape
 /// the comment in `named_project` records twice already.
-const TAKES_A_VALUE: [&str; 5] = ["--out", "--entry", "--product", "--os", "--host"];
+const TAKES_A_VALUE: [&str; 6] = [
+    "--out",
+    "--entry",
+    "--product",
+    "--os",
+    "--host",
+    "--backends",
+];
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
 ///
@@ -60,6 +70,10 @@ const TAKES_A_VALUE: [&str; 5] = ["--out", "--entry", "--product", "--os", "--ho
 ///
 /// `--no-acquire` opts out.
 fn project(rest: &[String]) -> Result<Utf8PathBuf> {
+    project_to(rest, &mut EmissionReport::live())
+}
+
+fn project_to(rest: &[String], report: &mut EmissionReport) -> Result<Utf8PathBuf> {
     let named = named_project(rest)?;
     // `--no-acquire` for a single run; `NTS_NO_ACQUIRE=1` for a whole shell.
     // The environment switch exists because this changes what *every* command
@@ -71,7 +85,7 @@ fn project(rest: &[String]) -> Result<Utf8PathBuf> {
     {
         return Ok(named);
     }
-    acquire(&named)
+    acquire_to(&named, report)
 }
 
 /// Acquire what this project's dependencies can supply, and return the config
@@ -81,6 +95,10 @@ fn project(rest: &[String]) -> Result<Utf8PathBuf> {
 /// exactly as it was found -- which is every example in this repository but
 /// one, so the common case costs a `stat`.
 fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
+    acquire_to(tsconfig, &mut EmissionReport::live())
+}
+
+fn acquire_to(tsconfig: &Utf8Path, report: &mut EmissionReport) -> Result<Utf8PathBuf> {
     let dir = tsconfig
         .parent()
         .filter(|parent| !parent.as_str().is_empty())
@@ -110,25 +128,27 @@ fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
         .filter(|package| !package.acquired())
         .collect();
     if !refused.is_empty() {
-        eprintln!(
+        report.err(format_args!(
             "{} of {} dependencies acquired; these have no TypeScript to compile:",
             acquisition.acquired(),
             acquisition.packages.len()
-        );
+        ));
         for package in refused {
-            eprintln!(
+            report.err(format_args!(
                 "  {} {} -- {}",
                 package.name,
                 package.version,
                 package.route.describe()
-            );
+            ));
         }
         // The lowerer names the *kind* of failure — "an imported name whose
         // implementation is not in this program" — and this names the package
         // it came from, which the lowerer cannot: a module specifier's text is
         // not in the snapshot. Two halves of one sentence, printed by the two
         // layers that each hold half.
-        eprintln!("  a name imported from one of these will refuse below.");
+        report.err(format_args!(
+            "  a name imported from one of these will refuse below."
+        ));
     }
     Ok(acquisition.tsconfig.unwrap_or_else(|| tsconfig.to_owned()))
 }
@@ -603,7 +623,8 @@ BUILDING
   build        build every product `nts.config.ts` declares, for every target
   check        compile, run, and compare against node
 
-EMITTING ONE BACKEND
+EMITTING
+  emit         emit --backends c,llvm,jvm,wasm into --out/<backend>, sharing raw lowering
   emit-c       render the program as C, to --out or stdout
   emit-llvm    render the program as textual LLVM IR, to stdout (--os windows)
   emit-jvm     render the program as class files, to --out
@@ -731,6 +752,7 @@ fn main() -> Result<()> {
         Some("bind-objc") => bind_objc(&args.collect::<Vec<String>>()),
         Some("bind-gir") => bind_gir(&args.collect::<Vec<String>>()),
         Some("bind-winmd") => bind_winmd(&args.collect::<Vec<String>>()),
+        Some("emit") => multi_emit::command(&args.collect::<Vec<_>>(), Emission::from_flags()),
         Some("emit-c") => {
             let rest: Vec<String> = args.collect();
             // Through `project`, like every other command that builds a
@@ -1291,19 +1313,7 @@ fn write_keeps(root: &Utf8Path, names: &[String], path: &Utf8Path) -> Result<()>
 /// suspect, so a consumer that showed diagnostics only on error would hide the
 /// one diagnostic that explains the others.
 fn report_snapshot_diagnostics(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<()> {
-    let mut locations = SourceLocations::new(&snapshot.sources);
-    for diagnostic in &snapshot.diagnostics {
-        if diagnostic.severity == nts_diagnostics::Severity::Warning {
-            eprintln!("warning: {}", locations.diagnostic_line(diagnostic));
-        }
-    }
-    if snapshot.has_errors() {
-        for diagnostic in &snapshot.diagnostics {
-            eprintln!("{}", locations.diagnostic_line(diagnostic));
-        }
-        bail!("the program does not typecheck");
-    }
-    Ok(())
+    emission::snapshot_diagnostics(snapshot, &mut EmissionReport::live())
 }
 
 /// Whether the type graph is whole, and if not why.
@@ -1661,13 +1671,7 @@ fn refused(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
     unprepared: &hir::Unprepared,
 ) -> anyhow::Error {
-    eprintln!("{}", unprepared.render(&snapshot.sources));
-    match unprepared {
-        hir::Unprepared::Rejected(errors) => {
-            anyhow::anyhow!("the program does not compile: {} error(s)", errors.len())
-        }
-        hir::Unprepared::Invalid(_) => anyhow::anyhow!("refusing to emit code from invalid HIR"),
-    }
+    emission::refused(&snapshot.sources, unprepared, &mut EmissionReport::live())
 }
 
 /// `nts facts --strict`: what the strict check ([`hir::obligations::check`])
@@ -3659,6 +3663,7 @@ fn write_standalone(
     linked: &Linked<'_>,
     linking: bool,
     host: nts_codegen_c::LoopHost,
+    report: &mut EmissionReport,
 ) -> Result<()> {
     let Linked {
         program_file: program_unit,
@@ -3716,7 +3721,7 @@ fn write_standalone(
     // not roots, so a library-shaped program built as an executable prunes every
     // binding and needs no witness. That difference looked like `--main`
     // suppressing it until a program that calls one at top level said otherwise.
-    println!(
+    report.out(format_args!(
         "wrote {program_unit}, main.c, {}, {}, {}{}{} to {out}",
         sources.join(", "),
         nts_codegen_c::UV_HOST_HEADER_NAME,
@@ -3730,7 +3735,7 @@ fn write_standalone(
         } else {
             String::new()
         },
-    );
+    ));
     // Every translation unit the program needs, which is not a fixed list: a
     // program that converts case gets `nts_unicode.c` too, and printing a
     // command that omits it is printing a link error.
@@ -3755,11 +3760,11 @@ fn write_standalone(
             // whichever host runs it.
             nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
-        println!(
+        report.out(format_args!(
             "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c {program_unit} {} {}{glib_source} -luv -lm{glib_flags} -o program",
             sources.join(" "),
             nts_codegen_c::UV_HOST_SOURCE_NAME
-        );
+        ));
     }
     Ok(())
 }
@@ -8637,6 +8642,15 @@ fn configured_surface(
     snapshot: &nts_semantic_schema::SemanticSnapshot,
     emission: Emission,
 ) -> Result<Option<Vec<String>>> {
+    configured_surface_to(tsconfig, snapshot, emission, &mut EmissionReport::live())
+}
+
+fn configured_surface_to(
+    tsconfig: &Utf8Path,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    emission: Emission,
+    report: &mut EmissionReport,
+) -> Result<Option<Vec<String>>> {
     if !entry_names().is_empty() || emission.shape == Shape::Executable {
         return Ok(None);
     }
@@ -8662,10 +8676,10 @@ fn configured_surface(
     // Said out loud, because it changes what is emitted and was not asked for on
     // this command line. A narrowed surface that happens silently is
     // indistinguishable from a compiler that lost the function.
-    eprintln!(
+    report.err(format_args!(
         "{}: product `{name}` publishes what `{}` exports",
         FILE_LABEL, product.entry
-    );
+    ));
     Ok(Some(matched))
 }
 
@@ -8673,6 +8687,13 @@ fn configured_surface(
 const FILE_LABEL: &str = nts_build::config::FILE_NAME;
 
 fn foreign_tables(snapshot: &nts_semantic_schema::SemanticSnapshot) -> hir::runtime::ForeignTable {
+    foreign_tables_to(snapshot, &mut EmissionReport::live())
+}
+
+fn foreign_tables_to(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    report: &mut EmissionReport,
+) -> hir::runtime::ForeignTable {
     let mut out = rustc_hash::FxHashMap::default();
     for (index, source) in snapshot.sources.iter().enumerate() {
         let path = source.display_path.as_str();
@@ -8685,7 +8706,7 @@ fn foreign_tables(snapshot: &nts_semantic_schema::SemanticSnapshot) -> hir::runt
         let rows = match nts_jvm_emitter::bind::read_table(&text) {
             Ok(rows) => rows,
             Err(why) => {
-                eprintln!("{stem}.bind: {why}");
+                report.err(format_args!("{stem}.bind: {why}"));
                 continue;
             }
         };
@@ -8717,7 +8738,7 @@ fn foreign_tables(snapshot: &nts_semantic_schema::SemanticSnapshot) -> hir::runt
 ///
 /// **One answer, because two disagreeing is the failure it prevents.** `emit_c`
 /// read `--rc` itself to decide whether to print the `-DNTS_PROVIDER_RC` note,
-/// and `emit_options` read it to pick the provider. The note exists because
+/// and preparation read it to pick the provider. The note exists because
 /// compiling the runtime without that define while the program counts references
 /// balances every count and still grows the heap -- so a version of this where
 /// the two reads drifted would print the wrong advice about the quiet failure it
@@ -8731,90 +8752,36 @@ fn selected_provider() -> hir::Provider {
     }
 }
 
-fn emit_options<'a>(
-    entry: Option<&'a [String]>,
-    entry_files: &'a [String],
-    foreign: &'a hir::runtime::ForeignTable,
-    configured: Option<hir::reachable::Roots<'a>>,
-    callbacks_checkpoint: bool,
-    targets: nts_core::hir::native::Targets,
-) -> hir::Options<'a> {
-    // **`!entry.is_empty()` was never false.** This read the flags itself and
-    // asked `entry.is_empty()`, and the entry list always held at least
-    // `MODULE_INIT` -- so the test was true on every invocation and the
-    // *library* arm below was unreachable code. What that costs is the whole
-    // surface: with `Roots::Entry(["module#init"])` the only functions kept are
-    // the ones module evaluation reaches, so an exported function nothing calls
-    // internally is pruned before any backend sees it.
-    //
-    // `None` now means every export, and it is a value rather than a predicate
-    // over `std::env::args()` read from inside a function that has no other
-    // business with the command line. `selected_roots` is the one place the
-    // flags and the config are read.
-    hir::Options {
-        provider: selected_provider(),
-        roots: entry.map_or_else(
-            || configured.unwrap_or(hir::reachable::Roots::EveryExport),
-            hir::reachable::Roots::Entry,
-        ),
-        // Two different questions that both read as "where does it start".
-        // `roots` is what reachability keeps and is named in *functions*;
-        // this is which source files the project called its product, and it
-        // decides whose exports the addon publishes. A tsconfig with no
-        // `files` array gives an empty slice and the old inference stands.
-        entry_files,
-        foreign,
-        callbacks_checkpoint,
-        targets,
-        ..hir::Options::default()
-    }
-}
-
 fn emit_llvm(
     tsconfig: &Utf8Path,
     emission: Emission,
     platform: nts_codegen_llvm::Platform,
 ) -> Result<()> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
-    report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots(emission.shape);
-    // The product's entry replaces the tsconfig's `files` when a config names
-    // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
-    // from the file the build says is the product.
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
-        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
-    };
-    let targets = emission.scalar_targets();
-    let prepared = match hir::prepare_with(
-        &snapshot,
-        &emit_options(
-            entry.as_deref(),
-            &entry_files,
-            &foreign_tables(&snapshot),
-            configured,
-            emission.host.checkpoints_after_callbacks(),
-            targets,
-        ),
-    ) {
-        Ok(prepared) => prepared,
-        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
-    };
-    // The lowering's refusals, not just the backend's. Printing only the
-    // second is how this command answered an empty module for a program with
-    // two refusals in it: `emit-c` reported them and this did not, so the
-    // module looked like a backend that had rendered everything asked of it.
-    let mut locations = SourceLocations::new(&snapshot.sources);
+    let mut report = EmissionReport::live();
+    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
+    let (prepared, metadata) =
+        input.prepare(emission, nts_codegen_common::Backend::Llvm, &mut report)?;
+    emit_llvm_prepared(prepared, &metadata.sources, platform, &mut report)
+}
+
+fn emit_llvm_prepared(
+    prepared: hir::Prepared,
+    sources: &[nts_diagnostics::SourceFile],
+    platform: nts_codegen_llvm::Platform,
+    report: &mut EmissionReport,
+) -> Result<()> {
+    let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     let emitted = nts_codegen_llvm::emit(&prepared.program, platform);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+        report.err(format_args!(
+            "  declined: {} {}",
+            diagnostic.code, diagnostic.message
+        ));
     }
-    print!("{}", emitted.text);
+    report.text(format_args!("{}", emitted.text));
     Ok(())
 }
 
@@ -8834,42 +8801,37 @@ fn emit_jvm(
     text: bool,
     emission: Emission,
 ) -> Result<bool> {
-    let provider = nts_codegen_common::provider::host_gc(
+    nts_codegen_common::provider::host_gc(
         "jvm",
         selected_provider() == hir::Provider::ReferenceCounting,
     )
     .map_err(anyhow::Error::msg)?;
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
-    report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots(emission.shape);
-    // The product's entry replaces the tsconfig's `files` when a config names
-    // one, so `public_api` -- what `Roots::EntrySurface` roots at -- is computed
-    // from the file the build says is the product.
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
-        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
-    };
-    let targets = emission.scalar_targets();
-    let foreign = foreign_tables(&snapshot);
-    let mut options = emit_options(
-        entry.as_deref(),
-        &entry_files,
-        &foreign,
-        configured,
-        false,
-        targets,
-    );
-    options.provider = provider;
-    let prepared = match hir::prepare_with(&snapshot, &options) {
-        Ok(prepared) => prepared,
-        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
-    };
+    let mut report = EmissionReport::live();
+    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
+    let (prepared, metadata) =
+        input.prepare(emission, nts_codegen_common::Backend::Jvm, &mut report)?;
+    emit_jvm_prepared(
+        prepared,
+        &metadata.sources,
+        out,
+        text,
+        emission,
+        &mut report,
+    )
+}
+
+fn emit_jvm_prepared(
+    prepared: hir::Prepared,
+    sources: &[nts_diagnostics::SourceFile],
+    out: Option<&Utf8Path>,
+    text: bool,
+    emission: Emission,
+    report: &mut EmissionReport,
+) -> Result<bool> {
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, "jvm");
-    let mut locations = SourceLocations::new(&snapshot.sources);
+    let mut locations = SourceLocations::new(sources);
     for diagnostic in &mismatches {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     if !mismatches.is_empty() {
         bail!(
@@ -8879,7 +8841,7 @@ fn emit_jvm(
     }
 
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     // **The package the product declares, as a binary-name prefix.** A config
     // says `com.acme.sdk` because that is how Java spells a package; the class
@@ -8893,13 +8855,16 @@ fn emit_jvm(
         );
     let emitted = nts_codegen_jvm::emit_into(&package, &prepared.program);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
+        report.err(format_args!(
+            "  declined: {} {}",
+            diagnostic.code, diagnostic.message
+        ));
     }
     if text {
         for class in &emitted.classes {
-            println!("class {}", class.binary_name);
+            report.out(format_args!("class {}", class.binary_name));
             for method in &class.lines {
-                println!("  {}{}", method.name, method.descriptor);
+                report.out(format_args!("  {}{}", method.name, method.descriptor));
             }
         }
     }
@@ -8915,10 +8880,10 @@ fn emit_jvm(
             out.join(nts_codegen_jvm::RUNTIME_JAR_NAME),
             nts_codegen_jvm::runtime_jar().as_ref(),
         )?;
-        println!(
+        report.out(format_args!(
             "wrote {} class(es) and the runtime to {out}",
             emitted.classes.len()
-        );
+        ));
     }
     Ok(prepared
         .program
@@ -9026,60 +8991,33 @@ impl Wrote {
 }
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
-    let tsgo_binary = frontend_binary();
-    let mut source = frontend_for(tsconfig, tsgo_binary)?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
-    let mut locations = SourceLocations::new(&snapshot.sources);
-    report_snapshot_diagnostics(&snapshot)?;
+    let mut report = EmissionReport::live();
+    let backend = if emission.llvm.is_some() {
+        nts_codegen_common::Backend::Llvm
+    } else {
+        nts_codegen_common::Backend::C
+    };
+    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
+    let (prepared, metadata) = input.prepare(emission, backend, &mut report)?;
+    emit_c_prepared(prepared, &metadata.sources, out, emission, &mut report)
+}
 
-    // **Through `emit_options`, like the other two emitters.**
-    //
-    // This had the provider and the roots written out again, and the copy had
-    // drifted: `standalone` was `--main` alone, so `--entry` selected nothing
-    // and the entry list was the constant `[MODULE_INIT]`. `emit-llvm` and
-    // `emit-jvm` honoured the flag and this did not, silently -- a flag that is
-    // accepted and ignored is worse than one that is rejected, because the
-    // output looks like an answer.
-    //
-    // Measured on a two-export probe, where `published` and `diagnostic` each
-    // call a private helper:
-    //
-    //     emit-llvm                      diagnostic onlyDiagnostic onlyPublished published
-    //     emit-llvm --entry published                              onlyPublished published
-    //     emit-c    --entry published    diagnostic onlyDiagnostic onlyPublished published
-    //
-    // The C column is the defect. It matters most on the one product that is
-    // real today: a Node addon is the C backend, so `exports:` in a config --
-    // whose whole job is to name fewer roots than the entry exports -- could
-    // never have reached the artifact it was written for.
-    let entry = selected_roots(emission.shape);
-    let (entry_files, configured) = match configured_surface(tsconfig, &snapshot, emission)? {
-        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-        None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), None),
-    };
-    let targets = emission.scalar_targets();
-    let prepared = match hir::prepare_with(
-        &snapshot,
-        &emit_options(
-            entry.as_deref(),
-            &entry_files,
-            &foreign_tables(&snapshot),
-            configured,
-            emission.host.checkpoints_after_callbacks(),
-            targets,
-        ),
-    ) {
-        Ok(prepared) => prepared,
-        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
-    };
+fn emit_c_prepared(
+    prepared: hir::Prepared,
+    sources: &[nts_diagnostics::SourceFile],
+    out: Option<&Utf8Path>,
+    emission: Emission,
+    report: &mut EmissionReport,
+) -> Result<Wrote> {
+    let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     let program = prepared.program;
 
     let emitted = nts_codegen_c::emit(&program, emission.abi);
     for diagnostic in &emitted.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     refuse_if_the_emitter_declined(&emitted.diagnostics)?;
 
@@ -9104,7 +9042,7 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
     // publishes its layout and nothing callable -- so the script named `Counter`,
     // which nothing answers to.
     let Some(out) = out else {
-        print!("{}", emitted.writer.text());
+        report.text(format_args!("{}", emitted.writer.text()));
         return Ok(Wrote {
             initializes,
             refused,
@@ -9112,9 +9050,17 @@ fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Re
         });
     };
 
-    let mut wrote = write_c_output(&program, &emitted, out, emission, refused, initializes)?;
+    let mut wrote = write_c_output(
+        &program,
+        &emitted,
+        out,
+        emission,
+        refused,
+        initializes,
+        report,
+    )?;
     if let Some(platform) = emission.llvm {
-        write_llvm_program(&mut locations, &program, out, platform, &mut wrote)?;
+        write_llvm_program(&mut locations, &program, out, platform, &mut wrote, report)?;
     }
     wrote.objc = program.objc;
     wrote.winappsdk = bind_winmd::winrt::uses_winappsdk(&program);
@@ -9140,10 +9086,11 @@ fn write_llvm_program(
     out: &Utf8Path,
     platform: nts_codegen_llvm::Platform,
     wrote: &mut Wrote,
+    report: &mut EmissionReport,
 ) -> Result<()> {
     let rendered = nts_codegen_llvm::emit(program, platform);
     for diagnostic in &rendered.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     if !rendered.diagnostics.is_empty() {
         bail!(
@@ -9153,9 +9100,9 @@ fn write_llvm_program(
     }
     let path = out.join(PROGRAM_IR_NAME);
     std::fs::write(&path, &rendered.text).with_context(|| format!("writing {path}"))?;
-    println!(
+    report.out(format_args!(
         "rendered {PROGRAM_IR_NAME} with the llvm backend, compiled in place of {PROGRAM_SOURCE_NAME}"
-    );
+    ));
     for source in &mut wrote.sources {
         if source == PROGRAM_SOURCE_NAME {
             PROGRAM_IR_NAME.clone_into(source);
@@ -9177,6 +9124,7 @@ fn write_c_output(
     emission: Emission,
     refused: usize,
     initializes: bool,
+    report: &mut EmissionReport,
 ) -> Result<Wrote> {
     // Read off `emitted` rather than taken as parameters. They were threaded in
     // from the caller for one revision, which is how the fact got two owners in
@@ -9253,6 +9201,7 @@ fn write_c_output(
             },
             emission.linking,
             host,
+            report,
         )?;
         return Ok(Wrote {
             sources: std::iter::once(program_unit.to_owned())
@@ -9281,13 +9230,16 @@ fn write_c_output(
         std::fs::write(&addon_path, &addon.source)
             .with_context(|| format!("writing {addon_path}"))?;
         for skipped in &addon.skipped {
-            eprintln!("no wrapper for {}: {}", skipped.function, skipped.reason);
+            report.err(format_args!(
+                "no wrapper for {}: {}",
+                skipped.function, skipped.reason
+            ));
         }
-        println!(
+        report.out(format_args!(
             "wrote program.c, program.h, {}, {} to {out}",
             extra.join(", "),
             nts_codegen_napi::ADDON_SOURCE_NAME
-        );
+        ));
         return Ok(Wrote {
             sources: std::iter::once("program.c".to_owned())
                 .chain(extra.iter().map(|name| (*name).to_owned()))
@@ -9311,10 +9263,10 @@ fn write_c_output(
     } else {
         format!(", {}", nts_codegen_c::NATIVE_WITNESS_NAME)
     };
-    println!(
+    report.out(format_args!(
         "wrote program.c, program.h, {}{witness} to {out}",
         extra.join(", ")
-    );
+    ));
     // The provider is half a runtime decision. Reference counting needs each
     // object to be its own allocation so that the last release can hand it back;
     // the bump allocator the default uses cannot free anything. Compiling the
@@ -9322,7 +9274,7 @@ fn write_c_output(
     // the counts and still grows the heap, which is the quiet failure worth
     // spending two lines of output to prevent.
     if selected_provider() == hir::Provider::ReferenceCounting {
-        println!("compile the runtime with -DNTS_PROVIDER_RC");
+        report.out(format_args!("compile the runtime with -DNTS_PROVIDER_RC"));
     }
     Ok(Wrote {
         sources: std::iter::once("program.c".to_owned())

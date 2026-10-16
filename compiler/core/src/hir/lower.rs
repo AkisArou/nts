@@ -74,7 +74,7 @@ impl FuncBuilder<'_> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Arrivals {
     /// Every closure admitted into a signature slot. See [`Arrival`].
     ///
@@ -126,7 +126,7 @@ pub struct UniformSite {
 /// A function a bridge calls to convert an argument C passes
 /// (`Bridging::converted`): requested where the bridge is made, and made once
 /// per name after every body is lowered (`lower_conversions`).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Conversion {
     pub name: String,
     converts: Converts,
@@ -134,7 +134,7 @@ pub struct Conversion {
     site: NodeId,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Converts {
     /// A sequence (`length` and `item`) made the array of its items.
     SequenceArray { sequence: TypeId, array: HirType },
@@ -247,7 +247,7 @@ pub struct Arrival {
 }
 
 /// What a lowering produced, and what it could not.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Lowered {
     pub program: Program,
     /// Constructs the lowering did not understand.
@@ -15504,6 +15504,20 @@ pub fn lower_with(
     entry: &[String],
     foreign: &super::runtime::ForeignTable,
 ) -> Lowered {
+    // An opt-in trace at the real work boundary, so sharing guards count work
+    // performed rather than a statistic the driver claims. One append per
+    // lowering; no file is opened when tracing is not requested.
+    if let Some(path) = std::env::var_os("NTS_TRACE_LOWERING") {
+        use std::io::Write as _;
+        let recorded = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| writeln!(file, "lower_with"));
+        if let Err(error) = recorded {
+            eprintln!("could not record raw lowering: {error}");
+        }
+    }
     // The instantiations generic bodies make of other generics, written into
     // the snapshot first, so every pass below meets them as the checker's
     // own. See `instantiate`. A clone only where there is something to add.

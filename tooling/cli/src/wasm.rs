@@ -1,16 +1,13 @@
 //! The wasm driver shares project acquisition and preparation with other emitters.
 
-use super::{
-    Emission, configured_surface, emit_options, foreign_tables, frontend_binary, frontend_for,
-    project, refused, report_snapshot_diagnostics, selected_roots,
-};
+use super::{Emission, project};
 use anyhow::{Result, bail};
 use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_diagnostics::{Severity, SourceLocations};
 
 pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
-    let provider =
+    let _provider =
         nts_codegen_common::provider::host_gc("wasm", args.iter().any(|arg| arg == "--rc"))
             .map_err(anyhow::Error::msg)?;
     let Some(out) = args
@@ -20,37 +17,33 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     else {
         bail!("emit-wasm requires --out <directory> for program.wasm and its JS glue");
     };
-    let host = match host(args)?.as_deref() {
+    let host = selected_host(args)?;
+    let tsconfig = project(args)?;
+    let mut report = super::EmissionReport::live();
+    let input = super::EmissionInput::open(&tsconfig, emission, &mut report)?;
+    let (prepared, metadata) =
+        input.prepare(emission, nts_codegen_common::Backend::Wasm, &mut report)?;
+    emit_prepared(prepared, &metadata.sources, &out, host, &mut report)
+}
+
+pub(super) fn selected_host(args: &[String]) -> Result<nts_codegen_wasm::Host> {
+    Ok(match host(args)?.as_deref() {
         None | Some("node") => nts_codegen_wasm::Host::Node,
         Some("browser") => nts_codegen_wasm::Host::Browser,
         Some(other) => bail!("emit-wasm --host must be `node` or `browser`, not `{other}`"),
-    };
-    let tsconfig = project(args)?;
-    let mut source = frontend_for(&tsconfig, frontend_binary())?;
-    let snapshot = nts_frontend_ts::cache::snapshot(&mut source, &tsconfig, "nts-build")?;
-    report_snapshot_diagnostics(&snapshot)?;
-    let entry = selected_roots(emission.shape);
-    let (entry_files, configured) = match configured_surface(&tsconfig, &snapshot, emission)? {
-        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-        None => (nts_frontend_ts::entry_uris(&tsconfig, &snapshot), None),
-    };
-    let foreign = foreign_tables(&snapshot);
-    let mut options = emit_options(
-        entry.as_deref(),
-        &entry_files,
-        &foreign,
-        configured,
-        false,
-        emission.scalar_targets(),
-    );
-    options.provider = provider;
-    let prepared = match hir::prepare_with(&snapshot, &options) {
-        Ok(prepared) => prepared,
-        Err(unprepared) => return Err(refused(&snapshot, &unprepared)),
-    };
-    let mut locations = SourceLocations::new(&snapshot.sources);
+    })
+}
+
+pub(super) fn emit_prepared(
+    prepared: hir::Prepared,
+    sources: &[nts_diagnostics::SourceFile],
+    out: &camino::Utf8Path,
+    host: nts_codegen_wasm::Host,
+    report: &mut super::EmissionReport,
+) -> Result<()> {
+    let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
-        eprintln!("{}", locations.diagnostic_line(diagnostic));
+        report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
     }
     if prepared
         .diagnostics
@@ -63,7 +56,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         Ok(emitted) => emitted,
         Err(nts_codegen_wasm::EmitError::Declined(diagnostics)) => {
             for diagnostic in &diagnostics {
-                eprintln!("{}", locations.diagnostic_line(diagnostic));
+                report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
             }
             bail!(
                 "wasm declined {} shape(s); no artifact written",
@@ -76,8 +69,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     // mutation.
     let glue = nts_codegen_wasm::glue(&emitted.manifest, host).map_err(anyhow::Error::msg)?;
     let manifest = serde_json::to_vec_pretty(&emitted.manifest)?;
-    let sources: Vec<_> = snapshot
-        .sources
+    let sources: Vec<_> = sources
         .iter()
         .map(|s| {
             serde_json::json!({ "uri": s.uri, "digest": s.digest,
@@ -93,12 +85,12 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     std::fs::write(out.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;
     std::fs::write(out.join("program.wasm.json"), manifest)?;
     std::fs::write(out.join("program.origins.json"), origins)?;
-    println!(
+    report.out(format_args!(
         "wrote {} wasm bytes, {} function(s), {} global(s) and their JS glue to {out}",
         emitted.bytes.len(),
         emitted.manifest.exports.len(),
         emitted.manifest.globals.len()
-    );
+    ));
     // **Said, not refused.** A published name the boundary cannot carry is left
     // out of the module while every body compiles, as `emit-c` leaves out a name
     // with no symbol, so it is a note here in C's shape rather than an NTS line
@@ -109,10 +101,10 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
             .at
             .map(|at| format!(" (declared at {})", locations.where_it_is(&at)))
             .unwrap_or_default();
-        println!(
+        report.out(format_args!(
             "  `{}` is exported but the module does not publish it: {}{at}",
             declined.name, declined.reason
-        );
+        ));
     }
     Ok(())
 }

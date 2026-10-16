@@ -5210,6 +5210,86 @@ pub const HOST: native::NativeAbi = if cfg!(windows) {
     native::NativeAbi::LP64
 };
 
+/// The choices made after raw lowering, separately for each emitted program.
+///
+/// Entry source files and foreign bindings belong to [`RawProgram::lower`].
+/// They cannot be replaced while preparing a branch of that raw program.
+#[derive(Debug, Clone, Copy)]
+pub struct PreparationOptions<'a> {
+    pub provider: Provider,
+    pub callbacks_checkpoint: bool,
+    pub specialize_numbers: bool,
+    pub roots: reachable::Roots<'a>,
+    pub targets: native::Targets,
+}
+
+impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
+    fn from(options: &Options<'a>) -> Self {
+        Self {
+            provider: options.provider,
+            callbacks_checkpoint: options.callbacks_checkpoint,
+            specialize_numbers: options.specialize_numbers,
+            roots: options.roots,
+            targets: options.targets,
+        }
+    }
+}
+
+impl Default for PreparationOptions<'_> {
+    fn default() -> Self {
+        Self::from(&Options::default())
+    }
+}
+
+/// One program lowered once, before any provider or target-dependent pass.
+///
+/// A branch always starts here, never from another backend's prepared program.
+/// The private state also keeps the foreign table paired with the lowering
+/// that consumed it. Single-backend callers consume this without cloning.
+#[derive(Debug, Clone)]
+pub struct RawProgram {
+    lowered: lower::Lowered,
+    foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
+}
+
+impl RawProgram {
+    #[must_use]
+    pub fn lower(
+        snapshot: &SemanticSnapshot,
+        entry_files: &[String],
+        foreign: &runtime::ForeignTable,
+    ) -> Self {
+        Self {
+            lowered: lower::lower_with(snapshot, entry_files, foreign),
+            foreign: foreign
+                .values()
+                .map(|bound| (bound.key.clone(), bound.clone()))
+                .collect(),
+        }
+    }
+
+    /// Prepare an independent copy, leaving the raw program pristine.
+    ///
+    /// # Errors
+    /// As [`prepare_with`].
+    pub fn prepare(&self, options: &PreparationOptions<'_>) -> Result<Prepared, Unprepared> {
+        self.clone().into_prepared(options)
+    }
+
+    /// Prepare the final branch, transferring ownership instead of cloning.
+    ///
+    /// # Errors
+    /// As [`prepare_with`].
+    pub fn into_prepared(self, options: &PreparationOptions<'_>) -> Result<Prepared, Unprepared> {
+        finish_preparation(self.into_unverified(options))
+    }
+
+    #[must_use]
+    pub fn into_unverified(self, options: &PreparationOptions<'_>) -> Prepared {
+        prepare_lowered(self.lowered, self.foreign, options)
+    }
+}
+
 /// As [`prepare`], with specialization optional.
 ///
 /// Turning it off is not a supported way to build anything — it is how the
@@ -5223,7 +5303,11 @@ pub fn prepare_with(
     snapshot: &SemanticSnapshot,
     options: &Options<'_>,
 ) -> Result<Prepared, Unprepared> {
-    let mut prepared = prepare_unverified(snapshot, options);
+    RawProgram::lower(snapshot, options.entry_files, options.foreign)
+        .into_prepared(&PreparationOptions::from(options))
+}
+
+fn finish_preparation(mut prepared: Prepared) -> Result<Prepared, Unprepared> {
     if !prepared.rejected.is_empty() {
         return Err(Unprepared::Rejected(std::mem::take(&mut prepared.rejected)));
     }
@@ -7234,8 +7318,16 @@ fn specialize_numbers_of(
 }
 
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
+    RawProgram::lower(snapshot, options.entry_files, options.foreign)
+        .into_unverified(&PreparationOptions::from(options))
+}
+
+fn prepare_lowered(
+    mut lowered: lower::Lowered,
+    foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
+    options: &PreparationOptions<'_>,
+) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
-    let mut lowered = lower::lower_with(snapshot, options.entry_files, options.foreign);
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     // On the program the lowering produced, before any pass renumbers a value
@@ -7245,11 +7337,7 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
     lowered.program.callbacks_checkpoint = options.callbacks_checkpoint;
     // Re-keyed by the foreign key as lowering finishes: same rows, indexed for
     // the reader that comes next. See `Program::foreign`.
-    lowered.program.foreign = options
-        .foreign
-        .values()
-        .map(|bound| (bound.key.clone(), bound.clone()))
-        .collect();
+    lowered.program.foreign = foreign;
     settle(&mut lowered);
     settle_host_handles(&mut lowered, options.provider);
     let mut program = lowered.program;
