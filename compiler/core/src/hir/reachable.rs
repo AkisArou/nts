@@ -582,6 +582,21 @@ fn closure_entries_from_outside<'p>(
         .collect()
 }
 
+/// What can run in a function: the operations placed in its blocks.
+///
+/// The arena also keeps operations a pass took out of every block -- `dce`
+/// leaves values alone -- and a call that cannot run reaches nothing. Walking
+/// the arena kept `Queens#placeQueen#whole` alive after `guards::retract`
+/// dropped the one block that called it, and C, which emits every function the
+/// program keeps, refused the uncalled static function under `-Werror`
+/// (`-Wunneeded-internal-declaration`).
+fn placed(func: &Func) -> impl Iterator<Item = &super::Op> {
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .map(|id| &func.values[id.0 as usize])
+}
+
 /// Remove every function the roots cannot reach, and report how many.
 pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     // Both indexes read the program once for questions this walk asks per
@@ -623,7 +638,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             continue;
         };
         let mut targets = dispatch.enter(func);
-        for op in &func.values {
+        for op in placed(func) {
             // What the runtime calls back is reached, whether or not anything here
             // calls it: see [`called_back`].
             let handed = called_back(&op.kind);

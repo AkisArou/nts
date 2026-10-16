@@ -96,9 +96,14 @@ pub fn install(program: &mut super::Program, roots: &super::reachable::RootNames
 /// here, where the answer is a fact rather than a guess.
 ///
 /// Taking it out is one edge: the original body is still there, as the path the
-/// test rejects, so the entry jumps straight to it. The test's operations and
-/// the copy are then unreachable, and the passes that remove unreachable things
-/// remove them.
+/// test rejects, so the entry jumps straight to it. That leaves the test's
+/// blocks and the fast path unreachable, and they go here, with the edge. They
+/// were left for "the passes that remove unreachable things", and the one
+/// after this, [`super::reachable::prune`], removes functions: the dead fast
+/// path still called the copy, so the copy stayed too, and the verifier refused
+/// the function -- `Unreachable { func: "halves", block: BlockId(4) }` for
+/// `tests/programs/a-boundary-test-that-bought-nothing`, which compiled
+/// nothing at all.
 pub fn retract(program: &mut super::Program) -> usize {
     let unchanged: Vec<String> = program
         .funcs
@@ -140,6 +145,7 @@ pub fn retract(program: &mut super::Program) -> usize {
             target: slow,
             args: Vec::new(),
         };
+        super::dce::prune_unreachable(func);
     }
     unchanged.len()
 }
