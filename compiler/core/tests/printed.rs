@@ -135,6 +135,23 @@ fn an_unavailable_raising_printer_is_refused_without_an_ordinary_fallback() {
 }
 
 #[test]
+fn a_refused_printer_keeps_unrelated_conversions() {
+    let Some(lowered) = lower_project(
+        "../../tests/programs/a-refused-printer-keeps-unrelated-conversions/tsconfig.json",
+    ) else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    for name in ["text", "primitive", "primitiveControl", "quiet", "quietControl"] {
+        assert!(
+            lowered.program.funcs.iter().any(|func| func.name == name),
+            "{name}: {:?}",
+            lowered.program.uncompiled
+        );
+    }
+}
+
+#[test]
 fn a_printer_failure_arm_does_not_rebind_its_success_continuation() {
     let Some(lowered) = lower_project(
         "../../tests/programs/a-printer-failure-arm-keeps-success-bindings/tsconfig.json",
