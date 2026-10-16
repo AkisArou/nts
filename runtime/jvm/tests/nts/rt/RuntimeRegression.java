@@ -890,6 +890,101 @@ public final class RuntimeRegression {
         equal(NtsValue.valueToString(NtsValue.ofObject(self)), "a,", "an array holding itself");
     }
 
+    /** A compiled printer uses the pending-value protocol, not a Java throw. */
+    private static final class PrinterProbe implements NtsPrintable {
+        private final String text;
+        private final StringBuilder calls;
+        private final NtsValue payload;
+        boolean fails;
+
+        PrinterProbe(String text, StringBuilder calls, NtsValue payload) {
+            this.text = text;
+            this.calls = calls;
+            this.payload = payload;
+        }
+
+        @Override public String nts$print() {
+            check(NtsRuntime.raising() == 0, "no printer runs over a pending payload");
+            calls.append(text);
+            if (fails) {
+                NtsRuntime.raise(payload);
+                return null;
+            }
+            return text;
+        }
+    }
+
+    /** The compiled conversion boundary, after every runtime forwarder returns. */
+    private static void takePrinterRaise(String result, NtsValue payload) {
+        check(result == null, "a raising printer returns the Java null placeholder");
+        check(NtsRuntime.raising() == 1, "runtime forwarders preserve the pending flag");
+        check(NtsRuntime.raiseTake() == payload, "the caller takes the original erased value by identity");
+        check(NtsRuntime.raising() == 0, "the caller's take clears the pending flag");
+    }
+
+    /** Reference and erased elements, each in bare and growable storage. */
+    private static Object printerArray(Object[] elements, int storage) {
+        if (storage == 0) { return elements; }
+        if (storage == 1) {
+            NtsValue[] values = new NtsValue[elements.length];
+            for (int i = 0; i < elements.length; i++) { values[i] = NtsValue.ofObject(elements[i]); }
+            return values;
+        }
+        NtsArrayL values = storage == 2 ? NtsArrayL.of(elements.length) : NtsArrayL.ofValues(elements.length);
+        for (int i = 0; i < elements.length; i++) {
+            values.items[i] = storage == 2 ? elements[i] : NtsValue.ofObject(elements[i]);
+        }
+        return values;
+    }
+
+    /** A pending null payload is distinct from the null string placeholder. */
+    private static void testPrinterRaises() {
+        NtsValue[] payloads = {
+            NtsValue.NULL_VALUE, NtsValue.UNDEFINED_VALUE, NtsValue.ofNumber(17),
+            NtsValue.ofString("printer payload"), NtsValue.ofObject(new Object())
+        };
+        for (NtsValue payload : payloads) {
+            check(NtsRuntime.raising() == 0, "no raise is pending before a conversion");
+            StringBuilder calls = new StringBuilder();
+            PrinterProbe direct = new PrinterProbe("t", calls, payload);
+            direct.fails = true;
+            takePrinterRaise(NtsValue.valueToString(NtsValue.ofObject(direct)), payload);
+            equal(calls.toString(), "t", "the object forwarder calls the printer once");
+
+            for (int storage = 0; storage < 4; storage++) {
+                for (int nested = 0; nested < 2; nested++) {
+                    calls.setLength(0);
+                    PrinterProbe prefix = new PrinterProbe("p", calls, payload);
+                    PrinterProbe failing = new PrinterProbe("t", calls, payload);
+                    PrinterProbe later = new PrinterProbe("l", calls, payload);
+                    failing.fails = true;
+                    Object array = printerArray(new Object[] {prefix, failing, later}, storage);
+                    if (nested != 0) {
+                        array = printerArray(new Object[] {
+                            new PrinterProbe("o", calls, payload), array,
+                            new PrinterProbe("z", calls, payload)
+                        }, (storage + 1) % 4);
+                    }
+                    NtsValue value = NtsValue.ofObject(array);
+                    String result = NtsValue.valueToString(value);
+                    equal(calls.toString(), nested == 0 ? "pt" : "opt",
+                        "a throwing middle printer stops both its array and outer arrays");
+                    takePrinterRaise(result, payload);
+
+                    // Reuse exactly the same array identities: an unpopped
+                    // JOINING frame would make this conversion return empty.
+                    failing.fails = false;
+                    calls.setLength(0);
+                    equal(NtsValue.valueToString(value), nested == 0 ? "p,t,l" : "o,p,t,l,z",
+                        "every join frame is removed before the caller catches");
+                    equal(calls.toString(), nested == 0 ? "ptl" : "optlz",
+                        "recovery invokes every printer once and in order");
+                    check(NtsRuntime.raising() == 0, "a successful recovery leaves no pending raise");
+                }
+            }
+        }
+    }
+
     /**
      * A map key held by reference is the same key whichever reference tag it
      * carries.
@@ -1235,6 +1330,7 @@ public final class RuntimeRegression {
         testPromises(); System.out.println("promise and queue tests passed");
         testTimers(); System.out.println("timer heap tests passed");
         testValueToString(); System.out.println("String() of every tag passed");
+        testPrinterRaises(); System.out.println("printer raise identity and join recovery passed");
         testAccessKeyDescription(); System.out.println("access error keys passed");
         testValueToNumber(); System.out.println("Number() of every tag passed");
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");

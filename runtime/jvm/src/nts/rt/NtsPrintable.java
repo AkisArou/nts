@@ -13,5 +13,13 @@ package nts.rt;
  * must therefore never refuse.
  */
 public interface NtsPrintable {
+    /**
+     * No language raise is pending on entry. Success returns the string with
+     * no raise; a language throw records its original erased value through
+     * {@link NtsRuntime#raise} and returns Java {@code null} as a placeholder.
+     * Runtime forwarders preserve both until the compiled caller tests the
+     * flag and takes the payload. They must not invoke another printer while
+     * that flag is set, or translate the throw into a Java exception.
+     */
     String nts$print();
 }

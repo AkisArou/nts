@@ -245,6 +245,12 @@ public final class NtsValue {
         }
         return valueToString(value);
     }
+    /**
+     * Forward a printer's string, or its null placeholder and pending language
+     * raise, unchanged. No raise may be pending on entry. The compiled caller
+     * tests the flag before consuming the string and takes the payload once;
+     * this runtime path never takes or clears it.
+     */
     public static String valueToString(NtsValue value) {
         if (value == null) {
             throw new NtsRefusal("String() on a value that is not there");
@@ -323,6 +329,9 @@ public final class NtsValue {
      * answers with its elements joined by a comma; anything else is
      * `"[object Object]"`, which is not a fallback but the right answer -- an
      * object whose prototype chain adds nothing *is* that string.
+     *
+     * <p>Like {@link #valueToString}, forward a program printer's null/pending
+     * result directly; only the compiled conversion boundary takes the raise.
      */
     private static String objectText(Object ref) {
         if (ref == null) {
@@ -505,13 +514,19 @@ public final class NtsValue {
         try {
             StringBuilder text = new StringBuilder();
             for (int at = 0; at < count; at++) {
+                String piece = elementText(java.lang.reflect.Array.get(items, at));
+                if (NtsRuntime.raising() != 0) {
+                    return null;
+                }
                 if (at > 0) {
                     text.append(',');
                 }
-                text.append(elementText(java.lang.reflect.Array.get(items, at)));
+                text.append(piece);
             }
             return text.toString();
         } finally {
+            // Index removal invokes no program code. Nested joins each pop
+            // their own frame without taking or replacing a pending payload.
             JOINING.remove(JOINING.size() - 1);
         }
     }
