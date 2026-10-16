@@ -33,9 +33,13 @@ use nts_semantic_schema::{GeneratedReason, Origin, SemanticSnapshot, TypeId, Typ
 
 use super::{
     BinOp, Block, BlockId, ClosureInfo, ClosureSource, Facts, Func, Hierarchy, HirType, Layout,
-    ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, ValueId, closure_index,
+    ManagedType, Naming, Op, OpKind, Param, ParamShape, Program, Terminator, ValueId,
+    closure_index,
 };
 use crate::hir::Printed;
+
+mod edges;
+pub(super) use edges::Plan;
 
 /// Decide [`Program::printed`] for every layout, and write the error rule for
 /// each error layout that prints by it.
@@ -43,12 +47,13 @@ pub(super) fn decide(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
     closures: &[ClosureInfo],
+    naming: &Naming,
     program: &mut Program,
 ) {
     let mut printed = BTreeMap::new();
     let mut written = Vec::new();
     for layout in &program.layouts {
-        let mut answer = printing(snapshot, hierarchy, closures, program, layout);
+        let mut answer = printing(snapshot, hierarchy, closures, naming, program, layout);
         if answer == Printed::By(error_rule_name(layout)) {
             match error_to_string(layout) {
                 Some(func) => written.push(func),
@@ -71,6 +76,7 @@ fn printing(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
     closures: &[ClosureInfo],
+    naming: &Naming,
     program: &Program,
     layout: &Layout,
 ) -> Printed {
@@ -99,7 +105,7 @@ fn printing(
         .iter()
         .map(|ty| {
             if hierarchy.is_an_error(*ty) {
-                return own_to_string(hierarchy, program, *ty)
+                return own_to_string(naming, program, *ty)
                     .unwrap_or_else(|| Printed::By(error_rule_name(layout)));
             }
             if ty.0 >= super::super::SYNTHETIC_TYPE_FLOOR {
@@ -108,7 +114,7 @@ fn printing(
                 return Printed::Refused;
             }
             if hierarchy.name.contains_key(ty) {
-                return own_to_string(hierarchy, program, *ty).unwrap_or(Printed::Object);
+                return own_to_string(naming, program, *ty).unwrap_or(Printed::Object);
             }
             if declares_how_it_prints(snapshot, *ty) {
                 return Printed::Refused;
@@ -126,10 +132,15 @@ fn printing(
 /// declares one: `Printed::By` it if it is compiled and takes the object and
 /// answers a string, and refused otherwise. `None` where the chain declares
 /// none.
-fn own_to_string(hierarchy: &Hierarchy, program: &Program, ty: TypeId) -> Option<Printed> {
-    let declaring = hierarchy.declaring(ty, "toString")?;
-    let owner = hierarchy.name.get(&declaring)?;
-    let name = format!("{owner}#toString");
+fn own_to_string(naming: &Naming, program: &Program, ty: TypeId) -> Option<Printed> {
+    let Some(target) = naming.printers.class_target(ty)? else {
+        return Some(Printed::Refused);
+    };
+    let name = if naming.throwing.contains(&target.symbol) {
+        format!("{}{}", target.name, super::RAISING_SUFFIX)
+    } else {
+        target.name.clone()
+    };
     let callable = program.funcs.iter().any(|func| {
         func.name == name
             && func.params.len() == 1

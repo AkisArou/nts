@@ -1,5 +1,3 @@
-// run: check
-//
 // A class toString called through erased String() throws the same RangeError
 // as the explicit-throw control. Node catches both in the caller. On the
 // clean main9761b99dd7d3 pin, the descriptor calls the ordinary toString

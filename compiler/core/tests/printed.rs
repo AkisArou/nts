@@ -13,15 +13,125 @@ use nts_core::hir::{self, Printed};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 fn lowered() -> Option<hir::lower::Lowered> {
+    lower_project("tests/programs/printed/tsconfig.json")
+}
+
+fn lower_project(project: &str) -> Option<hir::lower::Lowered> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/programs/printed/tsconfig.json")
+        .join(project)
         .canonicalize_utf8()
         .expect("the printed program is checked in");
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
     Some(hir::lower::lower(&snapshot))
+}
+
+fn calls(func: &hir::Func, helper: &str) -> usize {
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter(|id| {
+            matches!(&func.values[id.0 as usize].kind,
+            hir::OpKind::Call { callee: hir::Callee::External(name), .. } if name == helper)
+        })
+        .count()
+}
+
+#[test]
+fn a_printer_callback_raises_even_without_a_source_try() {
+    let Some(lowered) = lower_project("tests/programs/printed-raises-no-try/tsconfig.json") else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    // AggregateError's library signature mentions abstract iterator methods;
+    // those have no program implementation. Every source callable must compile.
+    assert!(
+        lowered.program.uncompiled.iter().all(|(_, reason)| reason
+            == "no class in this program implements it, so its method has no body to declare"),
+        "{:?}",
+        lowered.program.uncompiled
+    );
+    let program = &lowered.program;
+    assert_eq!(
+        printed(program, "Printer"),
+        &Printed::By("Printer#toString@raises".to_owned())
+    );
+    let selected = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "Printer#toString@raises")
+        .expect("the descriptor's raising callback is a real Func");
+    assert!(calls(selected, "nts_raise") > 0);
+    for name in ["converted", "errorMessage", "aggregateMessage"] {
+        let ordinary = program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect("ordinary exported conversion");
+        assert_eq!(calls(ordinary, "nts_raising"), 1, "{name}");
+        assert_eq!(calls(ordinary, "nts_raise_take"), 1, "{name}");
+        assert_eq!(
+            calls(ordinary, "nts_uncaught"),
+            1,
+            "{name}: an ordinary caller must throw, never return the null placeholder"
+        );
+    }
+    assert!(
+        hir::verify::verify(program).is_ok(),
+        "{:?}",
+        hir::verify::verify(program)
+    );
+}
+
+#[test]
+fn primitive_and_nonthrowing_printers_add_no_pending_flag_test() {
+    let Some(lowered) = lower_project("tests/programs/printed-raises-no-try/tsconfig.json") else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    for name in ["primitive", "primitiveErased", "quiet"] {
+        let func = lowered
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect(name);
+        assert_eq!(calls(func, "nts_raising"), 0, "{name}");
+        assert_eq!(calls(func, "nts_raise_take"), 0, "{name}");
+    }
+    assert_eq!(
+        printed(&lowered.program, "Quiet"),
+        &Printed::By("Quiet#toString".to_owned())
+    );
+}
+
+#[test]
+fn an_unavailable_raising_printer_is_refused_without_an_ordinary_fallback() {
+    let Some(lowered) = lower_project(
+        "../../tests/refusals/a-printer-needs-an-unavailable-raising-entry/tsconfig.json",
+    ) else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    assert!(
+        lowered.program.uncompiled.iter().any(|(_, reason)| {
+            reason.contains(
+        "an implicit call to `NeedsRaising#toString`, whose raising entry cannot be compiled"
+    )
+        }),
+        "{:?}",
+        lowered.program.uncompiled
+    );
+    assert_eq!(printed(&lowered.program, "NeedsRaising"), &Printed::Refused);
+    assert!(
+        lowered
+            .program
+            .funcs
+            .iter()
+            .any(|func| func.name == "control")
+    );
 }
 
 /// The answer for the layout named `name`.

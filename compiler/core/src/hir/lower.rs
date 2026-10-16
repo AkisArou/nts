@@ -5198,6 +5198,7 @@ const A_GENERIC_DECLARATION_READING_THIS: &str =
 /// Why this method cannot be used as a value, if it cannot.
 #[derive(Default, Clone)]
 struct Naming {
+    printers: std::rc::Rc<printed::Plan>,
     parameter_entries: std::rc::Rc<rustc_hash::FxHashSet<NodeId>>,
     initialization: std::rc::Rc<initialization::Analysis>,
     /// Which declarations a [raising copy](FuncBuilder::raises) is emitted for.
@@ -6086,6 +6087,13 @@ fn walk_one_declaration(
         {
             throws.insert(symbol);
         }
+        reached.extend(
+            probe
+                .printers
+                .at(at)
+                .iter()
+                .map(|target| Reached::Body(probe.printers.targets[*target].symbol)),
+        );
         // **An accessor access is a call to its body**, which this walk did
         // not see either -- the same omission as `calls_in_the_body_of`, in
         // the other of the two walks that answer "what can raise here". One
@@ -6763,10 +6771,18 @@ fn raising_callees_of(
     probe: &FuncBuilder,
     node: NodeId,
 ) -> Vec<NodeId> {
-    if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
-        return vec![callee];
+    let mut callees = probe.implicit_printer_callees(node);
+    if !probe.printers.at(node).is_empty() {
+        return callees;
     }
-    probe.accessors_run_by(node)
+    if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
+        callees.push(callee);
+    } else {
+        callees.extend(probe.accessors_run_by(node));
+    }
+    callees.sort();
+    callees.dedup();
+    callees
 }
 
 /// Every declaration a raising copy *can* be made of: the greatest fixpoint of "a copy of
@@ -6905,6 +6921,12 @@ fn raising_copies(
         .into_iter()
         .filter(|declaration| eligible.contains(declaration))
         .collect();
+    // Descriptors call printers even with no source try. Their callback must
+    // always return a pending raise, leaving the language boundary to throw it.
+    copies.extend(probe.printers.targets.iter().filter_map(|target| {
+        (throwing.any.contains(&target.symbol) && eligible.contains(&target.declaration))
+            .then_some(target.declaration)
+    }));
     // **And every eligible function, where this program has a `try` around a call at
     // all.** A closure's raising variant names its callees' raising copies exactly as
     // a plain copy does, and a closure is reached through a dispatch -- so which
@@ -7012,11 +7034,15 @@ fn raising_copies(
     // one direction only: turning it off can never make a body *more* carriable, so the
     // strict set is a subset of the optimistic one and a third pass would find nothing.
     let (eligible, _) = eligible_declarations(snapshot, probe, throwing, false);
-    let narrow = calls_guarded_by_a_try(snapshot, probe)
+    let mut narrow: rustc_hash::FxHashSet<NodeId> = calls_guarded_by_a_try(snapshot, probe)
         .0
         .into_iter()
         .filter(|declaration| eligible.contains(declaration))
         .collect();
+    narrow.extend(probe.printers.targets.iter().filter_map(|target| {
+        (throwing.any.contains(&target.symbol) && eligible.contains(&target.declaration))
+            .then_some(target.declaration)
+    }));
     let copies = close_over_callees(snapshot, probe, &eligible, narrow);
     let body_calls = raising_body_calls(probe, &copies, &[]);
     RaisingCopies {
@@ -7453,6 +7479,14 @@ fn a_copy_can_contain(
     if !a_call_that_can_raise(snapshot, probe, throwing, call) {
         return true;
     }
+    if !probe.printers.at(call).is_empty() {
+        // These sites inline a language conversion; their first AST child
+        // is an operand, not a closure callee (notably `${parameter}`).
+        return probe
+            .implicit_printer_callees(call)
+            .iter()
+            .all(|declaration| eligible.contains(declaration));
+    }
     // **A callee held in a value is carried by the raising uniform entry or not at
     // all**, which is what `value_held_is_carried` answers: there is no declaration to
     // name, so the copy cannot spell an `@raises` for it. See [`a_value_held_callee`],
@@ -7508,6 +7542,13 @@ fn a_call_that_can_raise(
     throwing: &Throwing,
     call: NodeId,
 ) -> bool {
+    if !probe.printers.at(call).is_empty() {
+        return probe.printers.at(call).iter().any(|target| {
+            throwing
+                .any
+                .contains(&probe.printers.targets[*target].symbol)
+        });
+    }
     // **An accessor access asks about the member**, which is the last child; the first
     // is the receiver. See [`FuncBuilder::an_accessor_that_can_raise`] -- the same
     // question, asked where the builder has the set rather than the caller.
@@ -7911,6 +7952,7 @@ fn calls_guarded_by_a_try(
                         | syntax::TAGGED_TEMPLATE_EXPRESSION
                 )
             ) || probe.reads_an_accessor(at)
+                || !probe.implicit_printer_callees(at).is_empty()
             {
                 guarded_a_call = true;
                 guarded_calls.insert(at);
@@ -8013,12 +8055,14 @@ fn naming(
     probe.closures = SharedClosures::new(snapshot, closures.to_vec());
     probe.module.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
+    probe.printers = std::rc::Rc::new(printed::Plan::new(&probe));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
 
     let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
+        printers: probe.printers.clone(),
         parameter_entries: probe.closures.parameter_entries(),
         initialization: probe.module.initialization.clone(),
         qualified,
@@ -8027,6 +8071,7 @@ fn naming(
         ..Naming::default()
     };
     let throwing = throwing_symbols(snapshot, &probe);
+    probe.throwing.clone_from(&throwing.any);
     let raising = raising_copies(snapshot, &probe, &throwing);
     naming.raising = raising.copies;
     naming.copyable = raising.eligible;
@@ -10562,7 +10607,7 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         // A read is the same shape, which is what their private-static-getter
         // file shows, and `reads_an_accessor` answers for both by the member
         // symbol's declarations rather than by the syntax around it.
-        _ if probe.reads_an_accessor(id) => {
+        _ if probe.reads_an_accessor(id) || !probe.implicit_printer_callees(id).is_empty() => {
             into.push(id);
         }
         _ => {}
@@ -13017,6 +13062,7 @@ impl Shared {
 /// silently, because the layout is otherwise correct and no diagnostic is
 /// involved.
 fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
+    builder.printers = naming.printers.clone();
     builder.module.initialization = naming.initialization.clone();
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
@@ -15843,7 +15889,13 @@ pub fn lower_with(
     super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
     canonicalize_objects(&mut lowered.program);
     expand_layout_tests(&mut lowered.program);
-    printed::decide(snapshot, &hierarchy, &closures, &mut lowered.program);
+    printed::decide(
+        snapshot,
+        &hierarchy,
+        &closures,
+        &shared.naming,
+        &mut lowered.program,
+    );
     printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
     function_names::decide(snapshot, &closures, &mut lowered.program);
     // After every step that makes a function or publishes one: the interface
@@ -21011,6 +21063,8 @@ struct FuncBuilder<'a> {
     generator_calls: rustc_hash::FxHashSet<ValueId>,
     /// Which functions can raise a `throw`. See [`Naming::throwing`].
     throwing: rustc_hash::FxHashSet<u32>,
+    /// The descriptor's implicit call edges, shared with throwing analysis.
+    printers: std::rc::Rc<printed::Plan>,
     /// The declarations a raising copy exists for. See [`raising_copies`].
     raising: rustc_hash::FxHashSet<NodeId>,
     /// For a `(root, member)` family whose raising slot was **withheld**: the member
@@ -21226,6 +21280,7 @@ impl<'a> FuncBuilder<'a> {
             generators: rustc_hash::FxHashMap::default(),
             generator_calls: rustc_hash::FxHashSet::default(),
             throwing: rustc_hash::FxHashSet::default(),
+            printers: std::rc::Rc::default(),
             presence_keys: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
@@ -48417,6 +48472,89 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    fn implicit_printer_callees(&self, node: NodeId) -> Vec<NodeId> {
+        self.printers
+            .at(node)
+            .iter()
+            .filter_map(|at| {
+                let target = &self.printers.targets[*at];
+                self.throwing
+                    .contains(&target.symbol)
+                    .then_some(target.declaration)
+            })
+            .collect()
+    }
+
+    /// A descriptor callback returns NULL with the original payload pending.
+    /// This language boundary takes it exactly once and uses the ordinary
+    /// throw path, including finally and an uncaught ordinary caller. Runtime
+    /// forwarders never take it; emit_the_raise_test's no-handler return is
+    /// insufficient here because this function need not be a raising copy.
+    fn printer_text(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+        let mut represented = value;
+        while let OpKind::Erase { value: inner, .. } = self.values[represented.0 as usize].kind {
+            represented = inner;
+        }
+        let candidates =
+            self.printers
+                .for_conversion(self, from, &self.values[represented.0 as usize].ty);
+        let mut can_raise = false;
+        for at in candidates.iter() {
+            let target = &self.printers.targets[*at];
+            if self.throwing.contains(&target.symbol) {
+                if !self.raising.contains(&target.declaration) {
+                    return Err(self.unsupported(
+                        from,
+                        &format!(
+                            "an implicit call to `{}`, whose raising entry cannot be compiled",
+                            target.name
+                        ),
+                    ));
+                }
+                can_raise = true;
+            }
+        }
+        let origin = self.origin(from);
+        let text = self.runtime_call(
+            "nts_value_to_string",
+            vec![value],
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        if can_raise {
+            let flag_type = HirType::Int {
+                bits: 32,
+                signed: true,
+            };
+            let flag =
+                self.runtime_call("nts_raising", Vec::new(), flag_type.clone(), origin.clone());
+            let zero = self.push(OpKind::ConstInt(0), flag_type, origin.clone());
+            let raised = self.push(
+                OpKind::Binary {
+                    op: BinOp::Ne,
+                    lhs: flag,
+                    rhs: zero,
+                },
+                HirType::Bool,
+                origin.clone(),
+            );
+            let took = self.new_block();
+            let carry_on = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: raised,
+                then_target: took,
+                then_args: Vec::new(),
+                else_target: carry_on,
+                else_args: Vec::new(),
+            });
+            self.switch_to(took);
+            let thrown = self.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
+            self.throw_erased(from, thrown, thrown, &HirType::Erased)?;
+            self.switch_to(carry_on);
+        }
+        Ok(text)
+    }
+
     fn as_string(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         let text = HirType::Managed(ManagedType::String);
         match self.values[value.0 as usize].ty {
@@ -48467,9 +48605,7 @@ impl<'a> FuncBuilder<'a> {
             //
             // `String(xs.pop())` -- `number | undefined` -- is the absent answer
             // surviving the conversion, which a typed `double` could not carry.
-            HirType::Erased => {
-                Ok(self.runtime_call("nts_value_to_string", vec![value], text, self.origin(from)))
-            }
+            HirType::Erased => self.printer_text(from, value),
             // A `bool` and a `bigint` each have an exact spelling of their
             // own: two words, and decimal with no exponent however large.
             // Neither is something a double's formatter can be handed.
@@ -48512,21 +48648,6 @@ impl<'a> FuncBuilder<'a> {
             // make a missing method look like a working one; but it is what
             // node prints, and a compiler that differs from node to warn about
             // a program's design is the wrong place for the warning.
-            HirType::Managed(ManagedType::Object(ty))
-                if self.hierarchy.declaring(ty, "toString").is_some() =>
-            {
-                let callee = self.callee_for(from, ty, "toString")?;
-                let origin = self.origin(from);
-                Ok(self.push(
-                    OpKind::Call {
-                        callee,
-                        args: vec![value],
-                        frame: None,
-                    },
-                    HirType::Managed(ManagedType::String),
-                    origin,
-                ))
-            }
             HirType::Managed(ManagedType::Symbol) => {
                 let origin = self.origin(from);
                 Ok(self.push(
@@ -48547,7 +48668,7 @@ impl<'a> FuncBuilder<'a> {
             // and the same object erased cannot print differently.
             HirType::Managed(_) if self.prints_off_its_descriptor(value) => {
                 let erased = self.coerce(value, &HirType::Erased, from)?;
-                Ok(self.runtime_call("nts_value_to_string", vec![erased], text, self.origin(from)))
+                self.printer_text(from, erased)
             }
             _ => {
                 let named = self.describe_node(from);
@@ -52909,7 +53030,7 @@ impl<'a> FuncBuilder<'a> {
             text.clone(),
             origin.clone(),
         );
-        let spelled = self.runtime_call("nts_value_to_string", vec![erased], text.clone(), origin);
+        let spelled = self.printer_text(argument, erased)?;
         self.lower_branching_value_at(
             argument,
             text,
@@ -60203,6 +60324,25 @@ impl<'a> FuncBuilder<'a> {
     /// reaches no handler by design. Refusing those would have cost the working
     /// half to fix the broken one.
     fn call_within(&self, node: NodeId, handled: &mut Vec<NodeId>) -> Option<(NodeId, String)> {
+        for callee in self.implicit_printer_callees(node) {
+            if !self.raising.contains(&callee) {
+                let name = self
+                    .printers
+                    .targets
+                    .iter()
+                    .find(|target| target.declaration == callee)
+                    .map_or("an object printer", |target| target.name.as_str());
+                return Some((
+                    node,
+                    format!("an implicit call to `{name}`, whose raising entry cannot be compiled"),
+                ));
+            }
+        }
+        if !self.printers.at(node).is_empty() {
+            return children_that_run(self, node)
+                .into_iter()
+                .find_map(|child| self.call_within(child, handled));
+        }
         if matches!(
             self.kind_of(node),
             Some(
@@ -60873,6 +61013,12 @@ impl<'a> FuncBuilder<'a> {
     /// the declaration, which is what `raising_copies` collected and what the
     /// emitted name comes from.
     fn has_a_raising_copy(&self, call: NodeId) -> bool {
+        // An inline conversion has implicit printer callees, but the builtin
+        // itself has no suffixed entry to name. printer_text tests and throws
+        // the callback's pending payload at the conversion boundary instead.
+        if !self.printers.at(call).is_empty() {
+            return false;
+        }
         if self.raising_specializations.contains(&call) {
             return true;
         }
