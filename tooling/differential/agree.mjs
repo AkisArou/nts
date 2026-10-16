@@ -414,7 +414,14 @@ function prune(keep) {
   if (!existsSync(bins)) return;
   const dayAgo = Date.now() - 86_400_000;
   readdirSync(bins)
-    .map((name) => ({ path: join(bins, name), used: statSync(join(bins, name)).mtimeMs }))
+    // Several runs prune at once -- a gate runs llvm, jvm and wasm side by
+    // side, each through this tool -- so an entry listed here can be gone by
+    // the time it is looked at. Gone is pruned, not an error: a `stat` that
+    // threw on it stopped the wasm step with no verdict (7544cd297's train).
+    .flatMap((name) => {
+      const meta = statSync(join(bins, name), { throwIfNoEntry: false });
+      return meta ? [{ path: join(bins, name), used: meta.mtimeMs }] : [];
+    })
     .sort((a, b) => b.used - a.used)
     .slice(keep)
     .filter(({ used }) => used < dayAgo)
