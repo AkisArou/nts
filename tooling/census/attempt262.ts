@@ -347,6 +347,13 @@ function linkC(stdout, out, tools) {
  * what readies its output to run, and the command that runs it. A backend
  * whose run adapter is not written yet fails the self-checks by name rather
  * than reporting verdicts it cannot reach.
+ *
+ * Every backend is told the case is a program (`--main`): its roots are the
+ * module's evaluation, and what that reaches is what compiles. Without it an
+ * emit is a library's, every export a root, so a harness function the case
+ * never calls was compiled -- and could refuse -- on the JVM and Wasm, which
+ * then measured a different program from C's: 48 of 50 sampled cases emitted
+ * other bytes on each (2026-10-16).
  */
 export const BACKENDS = {
   c: {
@@ -372,7 +379,7 @@ export const BACKENDS = {
   // start is cheap) and an AppCDS archive of the runtime jar, made once per
   // jar and shared by every case.
   jvm: {
-    emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out],
+    emit: (tsconfig, out) => ["emit-jvm", tsconfig, "--out", out, "--main"],
     prepare: () => ({ objects: undefined }),
     run: (out) => jvmRun(out),
     capsItself: true,
@@ -386,7 +393,7 @@ export const BACKENDS = {
   // Node's heap is capped by its own flag, never `ulimit -v`, which a Wasm GC
   // engine's reservations exceed.
   wasm: {
-    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--host", "node"],
+    emit: (tsconfig, out) => ["emit-wasm", tsconfig, "--out", out, "--host", "node", "--main"],
     prepare: () => ({ objects: undefined }),
     run: (out, tools) => [
       "node",
