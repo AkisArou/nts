@@ -75,6 +75,9 @@ impl FuncBuilder<'_> {
             .uniform_sites
             .append(&mut self.arrivals.uniform_sites);
         arrivals
+            .printer_checks
+            .append(&mut self.arrivals.printer_checks);
+        arrivals
             .signature_flows
             .append(&mut self.arrivals.signature_flows);
         arrivals
@@ -105,6 +108,9 @@ pub struct Arrivals {
     pub uniform_sites: Vec<UniformSite>,
     /// The same, while the function they are in is still being lowered.
     pending_sites: Vec<UniformSite>,
+    /// Possible printer polls, resolved from the settled descriptor callbacks.
+    printer_checks: Vec<printed::Check>,
+    pending_printer_checks: Vec<printed::Check>,
     /// A value of one signature type coerced into another, `(from, to)`: every
     /// closure that can reach `from` can reach `to` this way, though no
     /// [`Arrival`] records it.
@@ -308,6 +314,13 @@ impl Lowered {
     pub fn is_complete(&self) -> bool {
         self.diagnostics.is_empty()
     }
+}
+
+/// Resolve possible printer polls only after descriptor selection has seen
+/// the actual program. Repeated as the refusal cascade removes callbacks;
+/// before suspension and optimization can move or renumber recorded values.
+pub(super) fn settle_printer_checks(lowered: &mut Lowered) {
+    printed::settle_checks(&mut lowered.program, &mut lowered.arrivals.printer_checks);
 }
 
 /// What a module declares outside any function.
@@ -5752,6 +5765,10 @@ struct Throwing {
 enum Reached {
     /// A callee with a body, whose own answer can be asked.
     Body(u32),
+    /// A potential descriptor callback. Its raise is carried by the runtime
+    /// protocol; an unavailable entry stops instead of calling an ordinary
+    /// body. It may make a caller throwing, never uncopyable.
+    Printer(u32),
     /// A parameter of the declaration being walked: a callback its own caller
     /// supplies. Unresolved, and separated because the one site that knows which
     /// closures arrive may discount it -- see [`Throwing`].
@@ -5780,7 +5797,7 @@ impl Reached {
     /// The callee whose own answer can be asked, where there is one.
     const fn body(self) -> Option<u32> {
         match self {
-            Self::Body(symbol) => Some(symbol),
+            Self::Body(symbol) | Self::Printer(symbol) => Some(symbol),
             Self::OwnCallback | Self::Elsewhere | Self::Unnamed => None,
         }
     }
@@ -6092,7 +6109,7 @@ fn walk_one_declaration(
                 .printers
                 .at(at)
                 .iter()
-                .map(|target| Reached::Body(probe.printers.targets[*target].symbol)),
+                .map(|target| Reached::Printer(probe.printers.targets[*target].symbol)),
         );
         // **An accessor access is a call to its body**, which this walk did
         // not see either -- the same omission as `calls_in_the_body_of`, in
@@ -6390,7 +6407,7 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
         }
         set
     };
-    let mut set = close(|reached| !matches!(reached, Reached::Body(_)));
+    let mut set = close(|reached| !matches!(reached, Reached::Body(_) | Reached::Printer(_)));
     let mut bodily = close(|reached| matches!(reached, Reached::Unnamed));
     // An imported name is its own symbol pointing at the declaring module's, and
     // the caller asks about the *local* one. Following the alias here keeps
@@ -6472,6 +6489,9 @@ fn copyable_symbols(
             .iter()
             .filter_map(|symbol| {
                 calls.get(symbol)?.iter().find_map(|called| {
+                    if matches!(called, Reached::Printer(_)) {
+                        return None;
+                    }
                     called
                         .body()
                         .filter(|called| {
@@ -7480,12 +7500,11 @@ fn a_copy_can_contain(
         return true;
     }
     if !probe.printers.at(call).is_empty() {
-        // These sites inline a language conversion; their first AST child
-        // is an operand, not a closure callee (notably `${parameter}`).
-        return probe
-            .implicit_printer_callees(call)
-            .iter()
-            .all(|declaration| eligible.contains(declaration));
+        // The descriptor either calls a raising entry, a quiet one, or stops
+        // by name. Missing candidates cannot disqualify this caller: there is
+        // no ordinary throwing-entry fallback. Its children are checked by
+        // the same call walk independently.
+        return true;
     }
     // **A callee held in a value is carried by the raising uniform entry or not at
     // all**, which is what `value_held_is_carried` answers: there is no declaration to
@@ -15470,6 +15489,11 @@ fn raising_closure(
                     site.function.clone_from(&raising_body);
                 }
             }
+            for check in &mut second.arrivals.printer_checks {
+                if check.function == raising.name {
+                    check.function.clone_from(&raising_body);
+                }
+            }
             raising.name = raising_body;
             second.harvest(wanted, arrivals);
             let result_absent =
@@ -15896,6 +15920,7 @@ pub fn lower_with(
         &shared.naming,
         &mut lowered.program,
     );
+    settle_printer_checks(&mut lowered);
     printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
     function_names::decide(snapshot, &closures, &mut lowered.program);
     // After every step that makes a function or publishes one: the interface
@@ -33140,6 +33165,10 @@ impl<'a> FuncBuilder<'a> {
             site.function.clone_from(&name);
             self.arrivals.uniform_sites.push(site);
         }
+        for mut check in std::mem::take(&mut self.arrivals.pending_printer_checks) {
+            check.function.clone_from(&name);
+            self.arrivals.printer_checks.push(check);
+        }
         if let Some(cut) = self.parameter_cut.take() {
             self.arrivals
                 .parameter_entries
@@ -48498,22 +48527,7 @@ impl<'a> FuncBuilder<'a> {
         let candidates =
             self.printers
                 .for_conversion(self, from, &self.values[represented.0 as usize].ty);
-        let mut can_raise = false;
-        for at in candidates.iter() {
-            let target = &self.printers.targets[*at];
-            if self.throwing.contains(&target.symbol) {
-                if !self.raising.contains(&target.declaration) {
-                    return Err(self.unsupported(
-                        from,
-                        &format!(
-                            "an implicit call to `{}`, whose raising entry cannot be compiled",
-                            target.name
-                        ),
-                    ));
-                }
-                can_raise = true;
-            }
-        }
+        let entries = self.printers.raising_entries(&candidates, &self.throwing);
         let origin = self.origin(from);
         let text = self.runtime_call(
             "nts_value_to_string",
@@ -48521,13 +48535,18 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
-        if can_raise {
+        if !entries.is_empty() {
             let flag_type = HirType::Int {
                 bits: 32,
                 signed: true,
             };
             let flag =
                 self.runtime_call("nts_raising", Vec::new(), flag_type.clone(), origin.clone());
+            self.arrivals.pending_printer_checks.push(printed::Check {
+                function: String::new(),
+                flag,
+                entries,
+            });
             let zero = self.push(OpKind::ConstInt(0), flag_type, origin.clone());
             let raised = self.push(
                 OpKind::Binary {
@@ -60337,20 +60356,6 @@ impl<'a> FuncBuilder<'a> {
     /// reaches no handler by design. Refusing those would have cost the working
     /// half to fix the broken one.
     fn call_within(&self, node: NodeId, handled: &mut Vec<NodeId>) -> Option<(NodeId, String)> {
-        for callee in self.implicit_printer_callees(node) {
-            if !self.raising.contains(&callee) {
-                let name = self
-                    .printers
-                    .targets
-                    .iter()
-                    .find(|target| target.declaration == callee)
-                    .map_or("an object printer", |target| target.name.as_str());
-                return Some((
-                    node,
-                    format!("an implicit call to `{name}`, whose raising entry cannot be compiled"),
-                ));
-            }
-        }
         if !self.printers.at(node).is_empty() {
             return children_that_run(self, node)
                 .into_iter()

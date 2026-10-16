@@ -727,12 +727,16 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
             }
         }
     }
-    // And a descriptor's `to_string` naming one: nothing converts that object
-    // to a string, by the same argument.
+    retain_printed(program, &keep);
+    before - program.funcs.len()
+}
+
+/// A descriptor never names a missing callback. Lowering's pending printer
+/// checks read the same settled table as emission and reachability do.
+pub(super) fn retain_printed(program: &mut Program, keep: &FxHashSet<String>) {
     for printed in program.printed.values_mut() {
         if matches!(printed, super::Printed::By(name) if !keep.contains(name)) {
             *printed = super::Printed::Refused;
         }
     }
-    before - program.funcs.len()
 }

@@ -2,10 +2,10 @@
 //! throw analysis and shared with descriptor selection and conversion lowering,
 //! so an implicit call cannot select a different exception entry in each phase.
 
-use std::{cell::RefCell, collections::BTreeSet, rc::Rc};
+use std::{cell::RefCell, collections::BTreeSet, rc::Rc, sync::Arc};
 
 use nts_semantic_schema::{NodeId, SemanticSnapshot, TypeId, TypeKind};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::super::{FuncBuilder, Hierarchy, HirType, ManagedType, syntax};
 
@@ -16,6 +16,7 @@ pub(in crate::hir::lower) struct Plan {
     all: Rc<[usize]>,
     by_type: RefCell<FxHashMap<TypeId, Rc<[usize]>>>,
     sites: FxHashMap<NodeId, Rc<[usize]>>,
+    raising_entries: RefCell<FxHashMap<Vec<usize>, Arc<[String]>>>,
 }
 
 pub(in crate::hir::lower) struct Target {
@@ -24,7 +25,44 @@ pub(in crate::hir::lower) struct Target {
     pub name: String,
 }
 
+impl Target {
+    pub(in crate::hir::lower) fn entry_name(&self, raises: bool) -> String {
+        if raises {
+            format!("{}{}", self.name, super::super::RAISING_SUFFIX)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
 impl Plan {
+    /// Possible raising entries, shared across conversions with the same source
+    /// candidates. This is not availability: only Program::printed settles
+    /// which of these functions actually exists and is a descriptor callback.
+    pub(in crate::hir::lower) fn raising_entries(
+        &self,
+        candidates: &[usize],
+        throwing: &FxHashSet<u32>,
+    ) -> Arc<[String]> {
+        if let Some(entries) = self.raising_entries.borrow().get(candidates) {
+            return entries.clone();
+        }
+        let entries: Arc<[String]> = candidates
+            .iter()
+            .filter_map(|at| {
+                let target = &self.targets[*at];
+                throwing
+                    .contains(&target.symbol)
+                    .then(|| target.entry_name(true))
+            })
+            .collect::<Vec<_>>()
+            .into();
+        self.raising_entries
+            .borrow_mut()
+            .insert(candidates.to_vec(), entries.clone());
+        entries
+    }
+
     pub(in crate::hir::lower) fn new(probe: &FuncBuilder<'_>) -> Self {
         let mut plan = Self::default();
         let mut classes: Vec<TypeId> = probe.hierarchy.name.keys().copied().collect();

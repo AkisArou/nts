@@ -1,6 +1,6 @@
-// expect: an implicit call to `NeedsRaising#toString`, whose raising entry cannot be compiled
 // The printer calls a generic method, whose throwing entry this compiler
-// cannot yet name. A descriptor must never fall back to the ordinary printer.
+// cannot yet name. Its descriptor keeps the existing named run-time stop;
+// it must never fall back to the ordinary printer or refuse unrelated values.
 // The control throws explicitly before calling a non-throwing printer.
 
 class Picker {
@@ -29,3 +29,7 @@ export function control(n: number): string {
     return String(new Quiet());
   } catch { return "caught"; }
 }
+
+observe("control", control(1));
+observe("unavailable printer", unavailable(1));
+done();

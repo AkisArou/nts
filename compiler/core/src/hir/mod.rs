@@ -6218,6 +6218,9 @@ fn settle(lowered: &mut lower::Lowered) {
     // has a call to nothing in it.
     drop_callers_of_refused(lowered);
     drop_classes_without_layouts(&mut lowered.program);
+    lower::settle_printer_checks(lowered);
+    fold::decided_branches(&mut lowered.program);
+    dce::prune_unreachable_blocks(&mut lowered.program);
     // Before anything looks at the shape of a function: a suspension rewrites
     // one function into two and moves its locals into a frame, and every
     // analysis after this should see the result rather than the source.

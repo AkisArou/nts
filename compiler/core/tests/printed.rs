@@ -17,6 +17,10 @@ fn lowered() -> Option<hir::lower::Lowered> {
 }
 
 fn lower_project(project: &str) -> Option<hir::lower::Lowered> {
+    project_snapshot(project).map(|snapshot| hir::lower::lower(&snapshot))
+}
+
+fn project_snapshot(project: &str) -> Option<nts_semantic_schema::SemanticSnapshot> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(project)
@@ -25,7 +29,7 @@ fn lower_project(project: &str) -> Option<hir::lower::Lowered> {
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    Some(snapshot)
 }
 
 fn calls(func: &hir::Func, helper: &str) -> usize {
@@ -108,23 +112,29 @@ fn primitive_and_nonthrowing_printers_add_no_pending_flag_test() {
 }
 
 #[test]
-fn an_unavailable_raising_printer_is_refused_without_an_ordinary_fallback() {
-    let Some(lowered) = lower_project(
-        "../../tests/refusals/a-printer-needs-an-unavailable-raising-entry/tsconfig.json",
-    ) else {
+fn an_unavailable_raising_printer_keeps_the_runtime_stop() {
+    let Some(lowered) = lower_project("tests/programs/printed-raises-entries/tsconfig.json") else {
         eprintln!("SKIP printed: tsgo is not built");
         return;
     };
     assert!(
-        lowered.program.uncompiled.iter().any(|(_, reason)| {
-            reason.contains(
-        "an implicit call to `NeedsRaising#toString`, whose raising entry cannot be compiled"
-    )
-        }),
+        lowered
+            .program
+            .uncompiled
+            .iter()
+            .any(|(_, reason)| { reason.contains("a function returning the type parameter `T`") }),
         "{:?}",
         lowered.program.uncompiled
     );
-    assert_eq!(printed(&lowered.program, "NeedsRaising"), &Printed::Refused);
+    assert_eq!(printed(&lowered.program, "Unavailable"), &Printed::Refused);
+    assert!(
+        lowered
+            .program
+            .funcs
+            .iter()
+            .any(|func| func.name == "unavailable"),
+        "the absent callback stops at run time, without a conversion refusal"
+    );
     assert!(
         lowered
             .program
@@ -142,13 +152,43 @@ fn a_refused_printer_keeps_unrelated_conversions() {
         eprintln!("SKIP printed: tsgo is not built");
         return;
     };
-    for name in ["text", "primitive", "primitiveControl", "quiet", "quietControl"] {
+    for name in [
+        "text",
+        "primitive",
+        "primitiveControl",
+        "quiet",
+        "quietControl",
+    ] {
         assert!(
             lowered.program.funcs.iter().any(|func| func.name == name),
             "{name}: {:?}",
             lowered.program.uncompiled
         );
     }
+}
+
+#[test]
+fn settled_printer_checks_follow_the_parameter_entry_split() {
+    let Some(snapshot) = project_snapshot("tests/programs/printed-raises-entries/tsconfig.json")
+    else {
+        eprintln!("SKIP printed: tsgo is not built");
+        return;
+    };
+    let lowered = hir::lower::lower(&snapshot);
+    let entries: Vec<_> = lowered
+        .program
+        .funcs
+        .iter()
+        .filter(|func| func.name.starts_with("initialized"))
+        .collect();
+    assert!(entries.iter().any(|func| func.name.contains("@bindings")));
+    for func in entries {
+        assert_eq!(calls(func, "nts_raising"), 0, "{}", func.name);
+    }
+    // The manufactured missing generic callee and the split's empty prefix
+    // blocks are settled by preparation before verification.
+    let prepared = hir::prepare(&snapshot).expect("the settled program verifies");
+    assert!(hir::verify::verify(&prepared.program).is_ok());
 }
 
 #[test]

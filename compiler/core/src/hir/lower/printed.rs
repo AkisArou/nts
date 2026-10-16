@@ -41,6 +41,63 @@ use crate::hir::Printed;
 mod edges;
 pub(super) use edges::Plan;
 
+/// A potential poll, kept only while its descriptor can call one of these
+/// raising entries. Names and ValueIds follow the same entry/body split as
+/// lowering's other recorded sites, before any optimization renumbers values.
+#[derive(Debug, Clone)]
+pub(super) struct Check {
+    pub function: String,
+    pub flag: ValueId,
+    pub entries: std::sync::Arc<[String]>,
+}
+
+pub(super) fn settle_checks(program: &mut Program, checks: &mut Vec<Check>) {
+    if checks.is_empty() {
+        return;
+    }
+    let present = program.funcs.iter().map(|func| func.name.clone()).collect();
+    crate::hir::reachable::retain_printed(program, &present);
+    let selected: rustc_hash::FxHashSet<&str> = program
+        .printed
+        .values()
+        .filter_map(|printed| match printed {
+            Printed::By(name) => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let functions: rustc_hash::FxHashMap<&str, usize> = program
+        .funcs
+        .iter()
+        .enumerate()
+        .map(|(at, func)| (func.name.as_str(), at))
+        .collect();
+    // Resolve names before mutating bodies; no signature/presence criterion is
+    // re-derived here. Program::printed is the callback selection authority.
+    let mut clear = Vec::new();
+    checks.retain(|check| {
+        let Some(&at) = functions.get(check.function.as_str()) else {
+            return false;
+        };
+        if check
+            .entries
+            .iter()
+            .any(|entry| selected.contains(entry.as_str()))
+        {
+            true
+        } else {
+            clear.push((at, check.flag));
+            false
+        }
+    });
+    for (at, flag) in clear {
+        if let Some(op) = program.funcs[at].values.get_mut(flag.0 as usize)
+            && matches!(&op.kind, OpKind::Call { callee: super::Callee::External(name), .. } if name == "nts_raising")
+        {
+            op.kind = OpKind::ConstInt(0);
+        }
+    }
+}
+
 /// Decide [`Program::printed`] for every layout, and write the error rule for
 /// each error layout that prints by it.
 pub(super) fn decide(
@@ -136,11 +193,7 @@ fn own_to_string(naming: &Naming, program: &Program, ty: TypeId) -> Option<Print
     let Some(target) = naming.printers.class_target(ty)? else {
         return Some(Printed::Refused);
     };
-    let name = if naming.throwing.contains(&target.symbol) {
-        format!("{}{}", target.name, super::RAISING_SUFFIX)
-    } else {
-        target.name.clone()
-    };
+    let name = target.entry_name(naming.throwing.contains(&target.symbol));
     let callable = program.funcs.iter().any(|func| {
         func.name == name
             && func.params.len() == 1

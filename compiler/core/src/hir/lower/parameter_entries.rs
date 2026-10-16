@@ -524,6 +524,9 @@ pub(super) fn split(
             arrivals
                 .uniform_sites
                 .retain(|site| site.function != entry.name);
+            arrivals
+                .printer_checks
+                .retain(|check| check.function != entry.name);
             continue;
         }
         let carried = crossing_values(&entry, &split.cut, arrivals);
@@ -559,6 +562,17 @@ pub(super) fn split(
                     });
             }
         }
+        for check in &mut arrivals.printer_checks {
+            if check.function == split.name {
+                check
+                    .function
+                    .clone_from(if (check.flag.0 as usize) < split.cut.values {
+                        &entry.name
+                    } else {
+                        &body.name
+                    });
+            }
+        }
         if let Err(why) = compact(&mut body, arrivals).and_then(|()| compact(&mut entry, arrivals))
         {
             diagnostics.push(refuse_split(program, index, why));
@@ -566,6 +580,11 @@ pub(super) fn split(
                 site.function != split.name
                     && site.function != entry.name
                     && site.function != body.name
+            });
+            arrivals.printer_checks.retain(|check| {
+                check.function != split.name
+                    && check.function != entry.name
+                    && check.function != body.name
             });
             continue;
         }
@@ -710,6 +729,11 @@ fn compact(func: &mut Func, arrivals: &mut Arrivals) -> Result<(), &'static str>
             keep.extend(site.args.iter().copied());
         }
     }
+    for check in &arrivals.printer_checks {
+        if check.function == func.name {
+            keep.insert(check.flag);
+        }
+    }
     let mut pending: Vec<_> = keep.iter().copied().collect();
     while let Some(id) = pending.pop() {
         let Some(op) = func.values.get(id.0 as usize) else {
@@ -759,6 +783,11 @@ fn compact(func: &mut Func, arrivals: &mut Arrivals) -> Result<(), &'static str>
             for id in &mut site.args {
                 *id = remap(*id);
             }
+        }
+    }
+    for check in &mut arrivals.printer_checks {
+        if check.function == func.name {
+            check.flag = remap(check.flag);
         }
     }
     if missing.get() {
