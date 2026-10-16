@@ -243,42 +243,70 @@ impl FuncBuilder<'_> {
         self.subtree(body, &mut nodes);
         let mut initialized = FxHashSet::default();
         for declaration in nodes {
-            if self.kind_of(declaration) != Some(syntax::VARIABLE_DECLARATION)
-                || self.enclosing_callable(declaration) != Some(callable)
-                || !self
+            if self.enclosing_callable(declaration) != Some(callable) {
+                continue;
+            }
+            let function = self.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
+                && self.syntactic_parent(declaration) == Some(body);
+            let variable = self.kind_of(declaration) == Some(syntax::VARIABLE_DECLARATION)
+                && self
                     .ancestor(declaration, syntax::VARIABLE_DECLARATION_LIST)
                     .is_some_and(|list| {
                         VariableKind::from_flags(self.node(list).flags) == VariableKind::Var
-                    })
-            {
+                    });
+            if !function && !variable {
                 continue;
             }
-            let Some(name) = self
-                .children(declaration)
-                .into_iter()
-                .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-            else {
+            let Some(name) = self.children(declaration).into_iter().find(|child| {
+                matches!(
+                    self.kind_of(*child),
+                    Some(
+                        syntax::IDENTIFIER
+                            | syntax::ARRAY_BINDING_PATTERN
+                            | syntax::OBJECT_BINDING_PATTERN
+                    )
+                )
+            }) else {
                 continue;
             };
-            let Some((symbol, bound, parameter)) = self
-                .node(name)
-                .text
-                .as_ref()
-                .and_then(|name| parameters.get(name))
-                .copied()
-            else {
-                continue;
-            };
-            let Some(body_symbol) = self.node(name).symbol.map(|symbol| symbol.0) else {
-                continue;
-            };
-            if !initialized.insert(body_symbol) {
-                continue;
+            let mut names = Vec::new();
+            if self.kind_of(name) == Some(syntax::IDENTIFIER) {
+                names.push(name);
+            } else {
+                self.pattern_names(name, &mut names);
             }
-            let value = self.read_cell(symbol, bound, parameter)?.unwrap_or(bound);
-            self.bindings.remove(&body_symbol);
-            let binding = self.open_cell(body_symbol, value, name);
-            self.bindings.insert(body_symbol, binding);
+            for name in names {
+                let Some((symbol, bound, parameter)) = self
+                    .node(name)
+                    .text
+                    .as_ref()
+                    .and_then(|name| parameters.get(name))
+                    .copied()
+                else {
+                    continue;
+                };
+                let Some(body_symbol) = self.node(name).symbol.map(|symbol| symbol.0) else {
+                    continue;
+                };
+                if !initialized.insert(body_symbol) && !function {
+                    continue;
+                }
+                self.bindings.remove(&body_symbol);
+                if function {
+                    // FunctionDeclarationInstantiation initializes a body function
+                    // at the call too. Its closure must replace the body's binding,
+                    // while a default's closure keeps the parameter binding.
+                    self.bindings.remove(&symbol);
+                    self.parameter_body_functions
+                        .insert(body_symbol, declaration);
+                    self.parameter_body_functions.insert(symbol, declaration);
+                    self.bind_nested_function(declaration)?;
+                    continue;
+                }
+                let value = self.read_cell(symbol, bound, parameter)?.unwrap_or(bound);
+                let binding = self.open_cell(body_symbol, value, name);
+                self.bindings.insert(body_symbol, binding);
+            }
         }
         Ok(())
     }
@@ -470,8 +498,13 @@ fn public_entry(entry: &Func, inputs: &BTreeMap<u32, PublicInput>) -> Func {
 /// Cut at the recorded source-body boundary, never by recognizing an emitted
 /// operation pattern. The shared body's inputs are the values live across the
 /// cut, so a boxed parameter crosses as its existing cell, not its payload.
-pub(super) fn split(program: &mut Program, arrivals: &mut Arrivals, splits: Vec<Split>) {
+pub(super) fn split(
+    program: &mut Program,
+    arrivals: &mut Arrivals,
+    splits: Vec<Split>,
+) -> Vec<Diagnostic> {
     let mut redirected = BTreeMap::new();
+    let mut diagnostics = Vec::new();
     for split in splits {
         let Some(index) = program
             .funcs
@@ -481,12 +514,29 @@ pub(super) fn split(program: &mut Program, arrivals: &mut Arrivals, splits: Vec<
             continue;
         };
         let entry = program.funcs[index].clone();
+        if let Err(why) = check_cut(&entry, &split.cut, arrivals) {
+            let message = format!(
+                "the parameter environment of `{}`, whose {why}, is not supported by this lowering yet",
+                entry.name
+            );
+            diagnostics.push(Diagnostic::error(
+                "NTS1001",
+                message.clone(),
+                entry.origin.location,
+            ));
+            program.uncompiled.push((entry.name.clone(), message));
+            program.funcs.remove(index);
+            arrivals
+                .uniform_sites
+                .retain(|site| site.function != entry.name);
+            continue;
+        }
         let carried = crossing_values(&entry, &split.cut, arrivals);
         let mut body = bound_body(&entry, &split.cut, &carried);
         let mut entry = prefix(entry, &split.cut, &body.name, carried);
         // Only a fixed public ABI needs this third function. A concrete slot
         // has no undefined tag; changing it would change the exported C ABI.
-        if (entry.exported
+        let public = if (entry.exported
             || program
                 .public_api
                 .iter()
@@ -497,14 +547,13 @@ pub(super) fn split(program: &mut Program, arrivals: &mut Arrivals, splits: Vec<
             let exported = entry.exported;
             entry.name = private_name(&public_name, "parameters");
             entry.exported = false;
-            redirected.insert(public_name.clone(), entry.name.clone());
             let mut public = public_entry(&entry, &split.public_types);
             public.name = public_name;
             public.exported = exported;
-            program.funcs[index] = public;
+            Some(public)
         } else {
-            program.funcs[index] = entry.clone();
-        }
+            None
+        };
         for site in &mut arrivals.uniform_sites {
             if site.function == split.name {
                 site.function
@@ -515,9 +564,30 @@ pub(super) fn split(program: &mut Program, arrivals: &mut Arrivals, splits: Vec<
                     });
             }
         }
-        compact(&mut body, arrivals);
-        compact(&mut entry, arrivals);
-        if redirected.contains_key(&split.name) {
+        if let Err(why) = compact(&mut body, arrivals).and_then(|()| compact(&mut entry, arrivals))
+        {
+            let original = &program.funcs[index];
+            let message = format!(
+                "the parameter environment of `{}`, whose {why}, is not supported by this lowering yet",
+                original.name
+            );
+            diagnostics.push(Diagnostic::error(
+                "NTS1001",
+                message.clone(),
+                original.origin.location,
+            ));
+            program.uncompiled.push((original.name.clone(), message));
+            program.funcs.remove(index);
+            arrivals.uniform_sites.retain(|site| {
+                site.function != split.name
+                    && site.function != entry.name
+                    && site.function != body.name
+            });
+            continue;
+        }
+        if let Some(public) = public {
+            redirected.insert(public.name.clone(), entry.name.clone());
+            program.funcs[index] = public;
             program.funcs.push(entry);
         } else {
             program.funcs[index] = entry;
@@ -540,12 +610,97 @@ pub(super) fn split(program: &mut Program, arrivals: &mut Arrivals, splits: Vec<
             }
         }
     }
+    diagnostics
+}
+
+/// Hoisted definitions can live in block zero even when they were discovered
+/// while lowering the body. Refuse such a cut before cloning or remapping it;
+/// an entry may only use prefix values, and a body may never re-enter it.
+fn check_cut(entry: &Func, cut: &Cut, arrivals: &Arrivals) -> Result<(), &'static str> {
+    let first = cut.block.0 as usize;
+    if first == 0 || first >= entry.blocks.len() || cut.values > entry.values.len() {
+        return Err("body boundary is outside its lowered blocks");
+    }
+    for block in &entry.blocks {
+        for id in block.params.iter().chain(&block.ops) {
+            let Some(op) = entry.values.get(id.0 as usize) else {
+                return Err("lowered blocks refer to a missing definition");
+            };
+            if crate::hir::operands_of(&op.kind)
+                .into_iter()
+                .any(|id| id.0 as usize >= entry.values.len())
+            {
+                return Err("lowered operation refers to a missing definition");
+            }
+        }
+        if crate::hir::operands_of_terminator(&block.terminator)
+            .into_iter()
+            .any(|id| id.0 as usize >= entry.values.len())
+            || block
+                .terminator
+                .successors()
+                .into_iter()
+                .any(|target| target.0 as usize >= entry.blocks.len())
+        {
+            return Err("lowered exit refers outside its function");
+        }
+    }
+    for block in &entry.blocks[..first] {
+        for id in block.params.iter().chain(&block.ops) {
+            if id.0 as usize >= cut.values {
+                return Err("entry uses a definition hoisted from the body");
+            }
+            let Some(op) = entry.values.get(id.0 as usize) else {
+                return Err("entry refers to a missing definition");
+            };
+            if crate::hir::operands_of(&op.kind)
+                .into_iter()
+                .any(|id| id.0 as usize >= cut.values)
+            {
+                return Err("entry uses a value defined in the body");
+            }
+        }
+        if crate::hir::operands_of_terminator(&block.terminator)
+            .into_iter()
+            .any(|id| id.0 as usize >= cut.values)
+        {
+            return Err("entry exits with a value defined in the body");
+        }
+        if block
+            .terminator
+            .successors()
+            .into_iter()
+            .any(|target| target.0 as usize > first)
+        {
+            return Err("entry jumps past the body boundary");
+        }
+    }
+    if entry.blocks[first..].iter().any(|block| {
+        block
+            .terminator
+            .successors()
+            .into_iter()
+            .any(|target| (target.0 as usize) < first)
+    }) {
+        return Err("body jumps back into parameter initialization");
+    }
+    if entry.obligations.iter().any(|obligation| {
+        obligation.block.0 < cut.block.0 && obligation.value.0 as usize >= cut.values
+    }) || arrivals.uniform_sites.iter().any(|site| {
+        site.function == entry.name
+            && (site.answered.0 as usize) < cut.values
+            && (site.value.0 as usize >= cut.values
+                || site.args.iter().any(|id| id.0 as usize >= cut.values))
+    }) {
+        return Err("entry metadata uses a value defined in the body");
+    }
+    Ok(())
 }
 
 /// A cut discards definitions, not just their block membership. In particular,
 /// the original Param ops are not parameters of the bound body. Reuse the HIR's
 /// exhaustive operand mapper and preserve its recorded call sites as well.
-fn compact(func: &mut Func, arrivals: &mut Arrivals) {
+fn compact(func: &mut Func, arrivals: &mut Arrivals) -> Result<(), &'static str> {
     let mut keep = FxHashSet::default();
     for block in &func.blocks {
         keep.extend(block.params.iter().copied());
@@ -562,7 +717,10 @@ fn compact(func: &mut Func, arrivals: &mut Arrivals) {
     }
     let mut pending: Vec<_> = keep.iter().copied().collect();
     while let Some(id) = pending.pop() {
-        for operand in crate::hir::operands_of(&func.values[id.0 as usize].kind) {
+        let Some(op) = func.values.get(id.0 as usize) else {
+            return Err("body refers to a missing definition");
+        };
+        for operand in crate::hir::operands_of(&op.kind) {
             if keep.insert(operand) {
                 pending.push(operand);
             }
@@ -576,8 +734,16 @@ fn compact(func: &mut Func, arrivals: &mut Arrivals) {
             values.push(op.clone());
         }
     }
-    let remap =
-        |id: ValueId| map[id.0 as usize].expect("a retained operation's input was retained");
+    let missing = std::cell::Cell::new(false);
+    let remap = |id: ValueId| {
+        map.get(id.0 as usize)
+            .copied()
+            .flatten()
+            .unwrap_or_else(|| {
+                missing.set(true);
+                id
+            })
+    };
     for op in &mut values {
         crate::hir::simplify::substitute(&mut op.kind, remap);
     }
@@ -600,7 +766,11 @@ fn compact(func: &mut Func, arrivals: &mut Arrivals) {
             }
         }
     }
+    if missing.get() {
+        return Err("body metadata refers to a discarded definition");
+    }
     func.values = values;
+    Ok(())
 }
 
 pub(super) fn affected(
@@ -618,29 +788,39 @@ pub(super) fn affected(
                 continue;
             };
             for declaration in &symbol.declarations {
-                let mut at = Some(*declaration);
-                while let Some(node) = at {
-                    if probe.kind_of(node) == Some(syntax::PARAMETER) {
-                        if let Some(owner) = probe.syntactic_parent(node)
-                            && made_in_parameters(&probe, closure.node, owner)
-                        {
-                            found.insert(owner);
-                        }
-                        break;
+                if let Some(node) = parameter_declaration(&probe, *declaration) {
+                    if let Some(owner) = probe.syntactic_parent(node)
+                        && made_in_parameters(&probe, closure.node, owner)
+                    {
+                        found.insert(owner);
                     }
-                    // A binding pattern can stand between the symbol's declaration
-                    // and its parameter. A function boundary cannot.
-                    if probe.kind_of(node).is_some_and(|kind| {
-                        super::binds_its_own_this(kind) || kind == syntax::ARROW_FUNCTION
-                    }) {
-                        break;
-                    }
-                    at = probe.syntactic_parent(node);
                 }
             }
         }
     }
     found
+}
+
+/// Destructured names are declared by binding elements, not Parameter nodes.
+/// Use the same parameter identity for membership and cell initialization.
+pub(super) fn parameter_declaration(
+    probe: &FuncBuilder<'_>,
+    declaration: NodeId,
+) -> Option<NodeId> {
+    let mut at = Some(declaration);
+    while let Some(node) = at {
+        if probe.kind_of(node) == Some(syntax::PARAMETER) {
+            return Some(node);
+        }
+        if probe
+            .kind_of(node)
+            .is_some_and(|kind| super::binds_its_own_this(kind) || kind == syntax::ARROW_FUNCTION)
+        {
+            return None;
+        }
+        at = probe.syntactic_parent(node);
+    }
+    None
 }
 
 fn made_in_parameters(probe: &FuncBuilder<'_>, closure: NodeId, owner: NodeId) -> bool {
@@ -665,6 +845,77 @@ mod tests {
     use nts_frontend_ts::{SemanticSource, TsgoApi};
 
     use super::*;
+
+    #[test]
+    fn split_refuses_a_hoisted_body_value_and_a_body_back_edge_by_name() {
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs/captured-parameter-defaults/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&config)
+            .expect("fixture");
+        let lowered = super::super::lower(&snapshot);
+        let mut entry = lowered
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == "constant")
+            .expect("control")
+            .clone();
+        entry.values.truncate(2);
+        entry.blocks = vec![
+            Block {
+                params: vec![],
+                ops: vec![ValueId(0)],
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args: vec![],
+                },
+            },
+            Block {
+                params: vec![],
+                ops: vec![ValueId(1)],
+                terminator: Terminator::Return(Some(ValueId(1))),
+            },
+        ];
+        entry.obligations.clear();
+        let cut = Cut {
+            block: BlockId(1),
+            values: 1,
+        };
+        assert!(check_cut(&entry, &cut, &Arrivals::default()).is_ok());
+        let mut back_edge = entry.clone();
+        back_edge.blocks[1].terminator = Terminator::Jump {
+            target: BlockId(0),
+            args: vec![],
+        };
+        assert_eq!(
+            check_cut(&back_edge, &cut, &Arrivals::default()),
+            Err("body jumps back into parameter initialization")
+        );
+        entry.blocks[0].ops.push(ValueId(1));
+        let mut program = Program {
+            funcs: vec![entry],
+            ..Program::default()
+        };
+        let diagnostics = split(
+            &mut program,
+            &mut Arrivals::default(),
+            vec![Split {
+                name: "constant".into(),
+                cut,
+                public_types: BTreeMap::new(),
+            }],
+        );
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].message.contains("`constant`"));
+        assert!(diagnostics[0].message.contains("hoisted from the body"));
+        assert!(program.funcs.is_empty());
+        assert_eq!(program.uncompiled.len(), 1);
+        assert_eq!(program.uncompiled[0].0, "constant");
+    }
 
     #[test]
     fn entry_membership_uses_the_closures_actual_parameter_captures() {

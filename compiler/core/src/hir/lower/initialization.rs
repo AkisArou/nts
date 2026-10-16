@@ -220,18 +220,18 @@ impl Analysis {
                     .symbols
                     .get(*symbol as usize)
                     .is_some_and(|record| {
-                        !record.declarations.is_empty()
+                        record.declarations.iter().any(|declaration| {
+                            super::parameter_entries::parameter_declaration(probe, *declaration)
+                                .and_then(|parameter| probe.syntactic_parent(parameter))
+                                .is_some_and(|owner| probe.closures.needs_parameter_entry(owner))
+                        }) || (!record.declarations.is_empty()
                             && record.declarations.iter().all(|declaration| {
                                 probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
-                                    || (probe.kind_of(*declaration) == Some(syntax::PARAMETER)
-                                        && probe.syntactic_parent(*declaration).is_some_and(
-                                            |owner| probe.closures.needs_parameter_entry(owner),
-                                        ))
                                     || matches!(
                                         probe.variable_kind(*declaration),
                                         Some(VariableKind::Let | VariableKind::Const)
                                     )
-                            })
+                            }))
                     })
             })
             .collect();

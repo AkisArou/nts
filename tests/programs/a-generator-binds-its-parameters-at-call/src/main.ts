@@ -34,3 +34,24 @@ export function boundMethodEntry(n: number): number { trace = 0; const walker = 
 export function literalMethodEntry(n: number): number { trace = 0; const walker = { *run([value = mark(3)]: number[]): Generator<number> { trace = trace * 10 + 4; yield value; } }; const it = walker.run([]); const before = trace; const step = it.next(); return before * 1000 + trace * 10 + (step.done ? 0 : step.value) + (n | 0); }
 export function functionValueEntry(n: number): number { trace = 0; const run = patterned; const it = run([]); const before = trace; const step = it.next(); return before * 1000 + trace * 10 + (step.done ? 0 : step.value) + (n | 0); }
 export function nestedDeclaration(n: number): number { trace = 0; function* run([value = mark(3)]: number[]): Generator<number> { yield value; } const it = run([]); const before = trace; const step = it.next(); return before * 100 + (step.done ? 0 : step.value) + (n | 0); }
+
+function* objectVarBody(x: number, read = () => x): Generator<number> { var {x} = {x: 2}; yield read(); }
+function* arrayVarBody(x: number, read = () => x): Generator<number> { var [x] = [2]; yield read(); }
+// @ts-ignore JavaScript permits this distinct body var-environment binding.
+function* functionVarBody(genShadowedFunction: number, read = () => genShadowedFunction): Generator<string> { function genShadowedFunction(): number { return 2; } yield typeof genShadowedFunction + ":" + String(read()); }
+function* objectVarBodyControl(x: number, read = () => x): Generator<number> { var {other} = {other: 2}; yield read(); }
+function* arrayVarBodyControl(x: number, read = () => x): Generator<number> { var [other] = [2]; yield read(); }
+function* functionVarBodyControl(x: number, read = () => x): Generator<string> { function unrelatedGenBodyFunction(): number { return 2; } yield typeof unrelatedGenBodyFunction + ":" + String(read()); }
+export function objectVarBinding(n: number): number { const step = objectVarBody(n | 0).next(); return step.done ? 0 : step.value; }
+export function arrayVarBinding(n: number): number { const step = arrayVarBody(n | 0).next(); return step.done ? 0 : step.value; }
+export function functionVarBinding(n: number): string { const step = functionVarBody(n | 0).next(); return step.done ? "done" : step.value; }
+export function objectVarControl(n: number): number { const step = objectVarBodyControl(n | 0).next(); return step.done ? 0 : step.value; }
+export function arrayVarControl(n: number): number { const step = arrayVarBodyControl(n | 0).next(); return step.done ? 0 : step.value; }
+export function functionVarControl(n: number): string { const step = functionVarBodyControl(n | 0).next(); return step.done ? "done" : step.value; }
+
+// @ts-ignore JavaScript permits replacing the distinct body function binding.
+function* reassignedBodyFunction(genAssignedFunction: number, read = () => genAssignedFunction): Generator<string> { function genAssignedFunction(): number { return 2; } genAssignedFunction = 3; yield typeof genAssignedFunction + ":" + String(read()); }
+// @ts-ignore The pattern replaces the body's function binding only.
+function* patternedBodyFunction(genPatternFunction: number, read = () => genPatternFunction): Generator<string> { function genPatternFunction(): number { return 2; } var {genPatternFunction} = {genPatternFunction: 3}; yield typeof genPatternFunction + ":" + String(read()); }
+export function assignedFunctionBinding(n: number): string { const step = reassignedBodyFunction(n | 0).next(); return step.done ? "done" : step.value; }
+export function patternedFunctionBinding(n: number): string { const step = patternedBodyFunction(n | 0).next(); return step.done ? "done" : step.value; }

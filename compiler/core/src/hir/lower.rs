@@ -4813,8 +4813,8 @@ fn captures_of(
             // A parameter is initialized only after its initializer returns.
             // A closure made by that initializer captures the still-unready
             // binding, just as one written before a later declaration does.
-            probe.kind_of(*declaration) == Some(syntax::PARAMETER)
-                && probe.ancestor(id, syntax::PARAMETER) == Some(*declaration)
+            parameter_entries::parameter_declaration(probe, *declaration)
+                .is_some_and(|parameter| probe.ancestor(id, syntax::PARAMETER) == Some(parameter))
         });
         let readiness_only = (below || probe.kind_of(id) == Some(syntax::FUNCTION_DECLARATION))
             && initialization::runtime_reference(probe, *read)
@@ -15825,11 +15825,11 @@ pub fn lower_with(
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
     let parameter_entries = std::mem::take(&mut lowered.arrivals.parameter_entries);
-    parameter_entries::split(
+    lowered.diagnostics.extend(parameter_entries::split(
         &mut lowered.program,
         &mut lowered.arrivals,
         parameter_entries,
-    );
+    ));
 
     collect_declared_facts(&mut lowered.program, snapshot);
     super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
@@ -20930,6 +20930,9 @@ struct FuncBuilder<'a> {
     parameter_entry: Option<NodeId>,
     parameter_types: std::collections::BTreeMap<u32, parameter_entries::PublicInput>,
     parameter_cut: Option<parameter_entries::Cut>,
+    /// Body function bindings which parameter expressions separate from the
+    /// parameter of the same name, even when the checker merges their symbol.
+    parameter_body_functions: std::collections::BTreeMap<u32, NodeId>,
     /// The object each member read was made on, by the read's node
     /// ([`Self::member_of`]): the `this` a call of what it read passes, which
     /// `o.f?.()` needs after lowering `o.f` as a value.
@@ -21235,6 +21238,7 @@ impl<'a> FuncBuilder<'a> {
             parameter_entry: None,
             parameter_types: std::collections::BTreeMap::new(),
             parameter_cut: None,
+            parameter_body_functions: std::collections::BTreeMap::new(),
             read_from: rustc_hash::FxHashMap::default(),
             super_send: None,
             forced_slot: None,
@@ -22280,6 +22284,9 @@ impl<'a> FuncBuilder<'a> {
         // value in this frame, that value is what is being called.
         if self.bindings.contains_key(&symbol.0) {
             return false;
+        }
+        if self.parameter_body_functions.contains_key(&symbol.0) {
+            return true;
         }
         // Imports name their alias at the use site. Classify the declaration
         // it denotes, so discovering a callable type does not turn a direct
@@ -28643,6 +28650,21 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::lower_typeof`] reads as the two things it does -- find the answer,
     /// and run the operand -- rather than as one long match with a decision after.
     fn typeof_from_the_checkers_type(&self, operand: NodeId) -> Option<&'static str> {
+        if let Some(symbol) = self.node(operand).symbol
+            && self.parameter_body_functions.contains_key(&symbol.0)
+        {
+            // A later body store can replace the function. That is the body's
+            // current binding; the parameter environment keeps its own one.
+            let Some(bound) = self.bindings.get(&symbol.0).copied() else {
+                return Some("function");
+            };
+            let ty = self
+                .cell_of(symbol.0)
+                .filter(|index| self.opened_cell(symbol.0, *index).is_some())
+                .and_then(|index| self.program_layout_field(index))
+                .unwrap_or_else(|| self.values[bound.0 as usize].ty.clone());
+            return self.spelling_for(&ty);
+        }
         self.read_type(operand)
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
             .and_then(|record| match &record.kind {
@@ -73407,6 +73429,9 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         let symbol = self.node(at).symbol?;
+        if let Some(declaration) = self.parameter_body_functions.get(&symbol.0) {
+            return Some(*declaration);
+        }
         self.aliased_to(symbol.0)?
             .declarations
             .iter()
@@ -81333,6 +81358,14 @@ impl<'a> FuncBuilder<'a> {
     /// `@ntsGet` or a `get` accessor is the property's type as the receiver's
     /// type declares it.
     fn read_type(&self, node: NodeId) -> Option<TypeId> {
+        if self.kind_of(node) == Some(syntax::IDENTIFIER)
+            && let Some(declaration) = self
+                .node(node)
+                .symbol
+                .and_then(|symbol| self.parameter_body_functions.get(&symbol.0))
+        {
+            return self.snapshot.node_types.get(declaration).copied();
+        }
         if let Some(read) = self.actual_field_read(node) {
             return read.schema();
         }

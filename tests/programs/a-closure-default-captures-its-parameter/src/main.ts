@@ -73,3 +73,36 @@ export function readyControl(n: number): number { return afterReady() + (n | 0);
 function erasedDefault(x: any, y: any = (() => x)()): any { x = 2; return y; }
 export function erasedOmitted(n: number): string { return String(erasedDefault(n | 0)); }
 export function erasedSupplied(n: number): string { return String(erasedDefault(n | 0, 9)); }
+
+// A body pattern and a body function declare var-environment bindings too.
+function objectBodyBinding(x: number, read = () => x): number { var {x} = {x: 2}; return read(); }
+function arrayBodyBinding(x: number, read = () => x): number { var [x] = [2]; return read(); }
+// @ts-ignore JavaScript permits this distinct body var-environment binding.
+function functionBodyBinding(shadowedFunction: number, read = () => shadowedFunction): string { function shadowedFunction(): number { return 2; } return typeof shadowedFunction + ":" + String(read()); }
+function objectBodyControl(x: number, read = () => x): number { var {other} = {other: 2}; return read(); }
+function arrayBodyControl(x: number, read = () => x): number { var [other] = [2]; return read(); }
+function functionBodyControl(x: number, read = () => x): string { function unrelatedBodyFunction(): number { return 2; } return typeof unrelatedBodyFunction + ":" + String(read()); }
+export function objectVarBinding(n: number): number { return objectBodyBinding(n | 0); }
+export function arrayVarBinding(n: number): number { return arrayBodyBinding(n | 0); }
+export function functionVarBinding(n: number): string { return functionBodyBinding(n | 0); }
+export function objectVarControl(n: number): number { return objectBodyControl(n | 0); }
+export function arrayVarControl(n: number): number { return arrayBodyControl(n | 0); }
+export function functionVarControl(n: number): string { return functionBodyControl(n | 0); }
+export function exportedCaptured(x: number, read = () => x): number { x = 2; return read(); }
+export function exportedFunctionValue(n: number): number { const call = exportedCaptured; return call(n | 0); }
+
+// @ts-ignore The early read is the JavaScript ReferenceError subject.
+function selfPattern([x = (() : number => x)()]: number[]): number { return x; }
+// @ts-ignore The early read is the JavaScript ReferenceError subject.
+function laterPattern([x = (() : number => y)(), y]: number[]): number { return x; }
+function readyPattern([y, x = (() : number => y)()]: number[]): number { return x; }
+export function selfPatternCatch(n: number): string { try { return String(selfPattern([])); } catch (error) { return (error as Error).name; } }
+export function laterPatternCatch(n: number): string { try { return String(laterPattern([])); } catch (error) { return (error as Error).name; } }
+export function readyPatternControl(n: number): string { try { return String(readyPattern([n | 0])); } catch (error) { return (error as Error).name; } }
+
+// @ts-ignore JavaScript permits replacing the distinct body function binding.
+function reassignedBodyFunction(assignedFunction: number, read = () => assignedFunction): string { function assignedFunction(): number { return 2; } assignedFunction = 3; return typeof assignedFunction + ":" + String(read()); }
+// @ts-ignore The pattern replaces the body's function binding only.
+function patternedBodyFunction(patternFunction: number, read = () => patternFunction): string { function patternFunction(): number { return 2; } var {patternFunction} = {patternFunction: 3}; return typeof patternFunction + ":" + String(read()); }
+export function assignedFunctionBinding(n: number): string { return reassignedBodyFunction(n | 0); }
+export function patternedFunctionBinding(n: number): string { return patternedBodyFunction(n | 0); }
