@@ -227,8 +227,13 @@ function buildAndRun(emit, out, options) {
   // ASan reserves a large shadow address space. The normal cap is retained
   // for emit-c; only the sanitized executable runs without that address cap.
   const runTools = options.address ? { ...tools, memoryCapKb: 0 } : tools;
+  // `symbolize=0`: a verdict reads only ASan's `ERROR: AddressSanitizer: <kind>`
+  // line, which comes before any frame, and symbolizing the frames spawns
+  // llvm-symbolizer to load debug information -- under a gate's load the
+  // self-check's deliberate fault took the run past its 30 s and the step read
+  // NOT MEASURED ("the program timed out", 2026-10-16).
   const runEnv = options.address
-    ? { ...env(), ASAN_OPTIONS: "detect_stack_use_after_return=1:detect_leaks=0" }
+    ? { ...env(), ASAN_OPTIONS: "detect_stack_use_after_return=1:detect_leaks=0:symbolize=0" }
     : env();
   const ran = spawnSync("sh", capped(runTools, join(out, "program"), []), { encoding: "utf8", timeout: 30_000, env: runEnv });
   if (ran.error?.code === "ETIMEDOUT" || ran.signal === "SIGTERM") return { category: "not-measured", nts: "the program timed out" };
