@@ -111,3 +111,47 @@ export function typedReads(n: number): number {
   }
   return total + String(nums.get(n * 1.5)).length;
 }
+
+/** A live cursor skips a deleted entry, visits an append and stops after
+ * the last entry. The deleted slot must not become a reused cursor. */
+export function deletingAndAppendingDuringAWalk(n: number): number {
+  const m = new Map<number, number>([[1, 10], [2, 20], [3, 30]]);
+  let seen = 0;
+  for (const [key, value] of m) {
+    seen = seen * 100 + key + value;
+    if (key === 1) {
+      m.delete(2);
+      m.set(4, 40 + (n & 1));
+    }
+  }
+  return seen;
+}
+
+/** Typed key/value cursor reads keep fractions, NaN and signed zero values;
+ * only the cursor changes representation. Empty walks read no entry. */
+export function cursorReadsKeepTheirNumericValues(n: number): number {
+  const m = new Map<number, number>();
+  if (n & 1) {
+    m.set(1.5, -0);
+    m.set(NaN, 2.75);
+    m.set(-0, Infinity);
+  }
+  let flags = 0;
+  for (const [key, value] of m) {
+    if (key === 1.5 && Object.is(value, -0)) flags += 1;
+    if (Number.isNaN(key) && value === 2.75) flags += 2;
+    if (Object.is(key, 0) && value === Infinity) flags += 4;
+  }
+  return flags;
+}
+
+/** Erased cursor reads retain the tag, including null and undefined. */
+export function cursorReadsKeepTheirErasedTags(n: number): string {
+  const m = new Map<unknown, unknown>();
+  m.set("key", n);
+  m.set(null, undefined);
+  m.set(false, "tail");
+  let text = "";
+  for (const [key, value] of m) text += `${typeof key}:${String(key)}=${String(value)};`;
+  return text;
+}

@@ -39,8 +39,17 @@ use nts_core::hir::{Absent, Callee, HirType, ManagedType, OpKind, ValueId};
 use std::collections::{BTreeMap, BTreeSet};
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
+#[cfg(test)]
+mod tests;
+
 const EMPTY: i32 = 0;
 const DELETED: i32 = -1;
+/// The largest power-of-two entry backing below the engine's GC-array
+/// limit for eight-byte keys/values (`arrays::capacity`). The probe index
+/// takes twice this many four-byte slots, which fits too. A stricter bound
+/// than core's `MAX_LENGTH` keeps doubling, index rounding and entry+1 in i32;
+/// exhaustion traps as an allocation failure, never as a language throw.
+const MAX_ENTRIES: i32 = 1 << 26;
 /// FNV-1a's 32-bit offset basis and prime.
 const FNV_BASIS: i32 = 0x811c_9dc5_u32.cast_signed();
 const FNV_PRIME: i32 = 0x0100_0193;
@@ -257,9 +266,7 @@ pub(crate) fn call(
             let target = callee(b.m, &c, Helper::Next)?;
             b.load(subject)?;
             b.load(args[1])?;
-            numeric::convert(b, &b.ty(args[1]).clone(), &HirType::NUMBER)?;
             b.call(target);
-            numeric::convert(b, &HirType::NUMBER, &b.ty(result).clone())?;
         }
         Op::KeyAt | Op::ValueAt => at(b, op, &c, result, subject, args[1])?,
         Op::Extend => {
@@ -574,8 +581,6 @@ fn at(
     b.load(subject)?;
     b.instruction(&field(c, index));
     b.load(cursor)?;
-    numeric::convert(b, &b.ty(cursor).clone(), &HirType::NUMBER)?;
-    b.instruction(&I::I32TruncSatF64U);
     b.instruction(&I::ArrayGet(array));
     if b.typed_read(result).is_some() {
         return Ok(());
@@ -737,7 +742,6 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
     let key = key_physical(c.key);
     let value = value_physical(c);
     let i32 = Physical::Scalar(Slot::I32);
-    let f64 = Physical::Scalar(Slot::F64);
     let (params, result) = match helper {
         Helper::Find => (vec![map, key, i32], Some(i32)),
         Helper::Grow | Helper::Clear => (vec![map], None),
@@ -759,7 +763,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
             params.push(strings::STRING);
             (params, None)
         }
-        Helper::Next => (vec![map, f64], Some(f64)),
+        Helper::Next => (vec![map, i32], Some(i32)),
         Helper::Copy => (
             vec![map],
             Some(Physical::Reference(RefType {
@@ -910,6 +914,39 @@ fn chain_start(c: &Collection, index: u32, mask: u32, slot: u32, reuse: u32) -> 
     ]
 }
 
+/// Require the unsigned size on the stack to be below `limit`, before any
+/// arithmetic or allocation uses it. The existing allocation-failure trap
+/// stays distinct from the program's catchable exceptions.
+fn require_below(f: &mut Function, limit: i32) {
+    f.instructions(&[
+        I::I32Const(limit),
+        I::I32GeU,
+        I::If(BlockType::Empty),
+        I::Unreachable,
+        I::End,
+    ]);
+}
+
+/// The capacity calculation shared by growth and its allocation-free bound
+/// controls. Check before doubling: capacity <= `MAX_ENTRIES`, so twice the
+/// capacity and its next-power-of-two index length are representable too.
+fn growth_capacity(f: &mut Function, used: u32, capacity: u32) {
+    f.instruction(&I::LocalGet(used));
+    require_below(f, MAX_ENTRIES / 2 + 1);
+    f.instructions(&[
+        I::LocalGet(used),
+        I::I32Const(1),
+        I::I32Shl,
+        I::LocalTee(capacity),
+        I::I32Const(8),
+        I::LocalGet(capacity),
+        I::I32Const(8),
+        I::I32GtU,
+        I::Select,
+        I::LocalSet(capacity),
+    ]);
+}
+
 /// Grow the entry arrays to twice the entries written (at least eight),
 /// copying every entry where it is, and rebuild the index from their hashes
 /// at the smallest power of two of at least twice that many slots.
@@ -936,20 +973,8 @@ fn grow(c: &Collection) -> Function {
         locals.push(concrete(array));
     }
     let mut f = Function::new(locals);
-    f.instructions(&[
-        I::LocalGet(0),
-        field(c, c.used()),
-        I::LocalTee(used),
-        I::I32Const(1),
-        I::I32Shl,
-        I::LocalTee(capacity),
-        I::I32Const(8),
-        I::LocalGet(capacity),
-        I::I32Const(8),
-        I::I32GtU,
-        I::Select,
-        I::LocalSet(capacity),
-    ]);
+    f.instructions(&[I::LocalGet(0), field(c, c.used()), I::LocalSet(used)]);
+    growth_capacity(&mut f, used, capacity);
     for (at, &(slot_field, array)) in arrays.iter().enumerate() {
         let old = 8 + 2 * u32::try_from(at).unwrap_or(0);
         let new = old + 1;
@@ -1072,6 +1097,10 @@ fn rebuild_index(f: &mut Function, c: &Collection, locals: (u32, u32, u32, u32, 
 fn put(m: &mut Builder<'_>, c: &Collection) -> Result<Function, Failure> {
     let find = callee(m, c, Helper::Find)?;
     let grow = callee(m, c, Helper::Grow)?;
+    Ok(put_body(c, find, grow))
+}
+
+fn put_body(c: &Collection, find: Func, grow: Func) -> Function {
     let has_value = c.values.is_some();
     let (slot, entry) = if has_value { (4, 5) } else { (3, 4) };
     let mut f = Function::new([ValType::I32, ValType::I32]);
@@ -1105,9 +1134,11 @@ fn put(m: &mut Builder<'_>, c: &Collection) -> Result<Function, Failure> {
             I::ArraySet(values),
         ]);
     }
+    f.instructions(&[I::Return, I::End, I::LocalGet(0), field(c, c.used())]);
+    // Updating a present entry needs no room. A new entry must have room
+    // even if a future allocator gives the table a backing past our cap.
+    require_below(&mut f, MAX_ENTRIES);
     f.instructions(&[
-        I::Return,
-        I::End,
         I::LocalGet(0),
         field(c, c.used()),
         I::LocalGet(0),
@@ -1165,7 +1196,7 @@ fn put(m: &mut Builder<'_>, c: &Collection) -> Result<Function, Failure> {
         store(c, c.live()),
         I::End,
     ]);
-    Ok(f)
+    f
 }
 
 /// `get`, `has` and `delete`.
@@ -1386,15 +1417,13 @@ fn next(c: &Collection) -> Function {
     let mut f = Function::new([ValType::I32, ValType::I32]);
     f.instructions(&[
         I::LocalGet(1),
-        I::F64Const(0.0.into()),
-        I::F64Ge,
-        I::I32Eqz,
+        I::I32Const(0),
+        I::I32LtS,
         I::If(BlockType::Empty),
-        I::F64Const((-1.0).into()),
+        I::I32Const(-1),
         I::Return,
         I::End,
         I::LocalGet(1),
-        I::I32TruncSatF64U,
         I::LocalSet(at),
         I::LocalGet(0),
         field(c, c.used()),
@@ -1411,7 +1440,6 @@ fn next(c: &Collection) -> Function {
         I::ArrayGet(c.ints),
         I::If(BlockType::Empty),
         I::LocalGet(at),
-        I::F64ConvertI32U,
         I::Return,
         I::End,
         I::LocalGet(at),
@@ -1421,7 +1449,7 @@ fn next(c: &Collection) -> Function {
         I::Br(0),
         I::End,
         I::End,
-        I::F64Const((-1.0).into()),
+        I::I32Const(-1),
         I::End,
     ]);
     f
