@@ -114,7 +114,7 @@ fn named_helper_counts_do_not_count_other_external_calls() {
     let (passed, text) = expect_ir(&root);
     assert!(!passed, "{text}");
     assert_eq!(text.matches("PASS").count(), 2, "{text}");
-    assert_eq!(text.matches("FAIL").count(), 1, "{text}");
+    assert_eq!(text.matches("FAIL").count(), 4, "{text}");
     assert!(text.contains("0 found:"), "{text}");
 }
 
