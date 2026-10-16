@@ -10573,6 +10573,24 @@ fn children_that_run(probe: &FuncBuilder, id: NodeId) -> Vec<NodeId> {
     }
 }
 
+/// `for await` adds a keyword before the same head/source/body schedule.
+fn for_each_parts(probe: &FuncBuilder, id: NodeId) -> Option<(bool, [NodeId; 3])> {
+    let mut awaiting = false;
+    let children: Vec<_> = probe
+        .children(id)
+        .into_iter()
+        .filter(|child| {
+            if probe.kind_of(*child) == Some(syntax::AWAIT_KEYWORD) {
+                awaiting = true;
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+    Some((awaiting, children.try_into().ok()?))
+}
+
 fn calls_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<NodeId> {
     let mut calls = Vec::new();
     for child in children_in_the_body_of(probe, declaration) {
@@ -42578,19 +42596,9 @@ impl<'a> FuncBuilder<'a> {
         // keyword need not be read at all, on the argument that it would be a
         // second derivation of one fact; the two facts are different, and the
         // check below is what the measurement asked for.
-        let awaiting = self
-            .children(id)
-            .into_iter()
-            .any(|child| self.kind_of(child) == Some(syntax::AWAIT_KEYWORD));
-        let children: Vec<NodeId> = self
-            .children(id)
-            .into_iter()
-            .filter(|child| self.kind_of(*child) != Some(syntax::AWAIT_KEYWORD))
-            .collect();
-        let [initializer, sequence, body] = children.as_slice() else {
+        let Some((awaiting, [initializer, sequence, body])) = for_each_parts(self, id) else {
             return Err(self.unsupported(id, "a `for...of` of unexpected shape"));
         };
-        let (initializer, sequence, body) = (*initializer, *sequence, *body);
 
         // What the head binds: one name, the two of `[key, value]`, or a
         // pattern taken apart from the single value the walk produces. Refined

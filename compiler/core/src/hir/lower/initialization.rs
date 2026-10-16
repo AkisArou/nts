@@ -19,8 +19,8 @@ use super::{
     Branch, ClosureInfo, FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin,
     SemanticSnapshot, binds_its_own_this, children_in_the_body_of, children_that_run,
     declaration_initializer, declared_base_class, declares_a_class, evaluation_order,
-    implemented_member, instance_initializer, is_static_member, names_a_body, raising_callees_of,
-    reads_a_name, the_constructor_declared_by, the_function_of,
+    for_each_parts, implemented_member, instance_initializer, is_static_member, names_a_body,
+    raising_callees_of, reads_a_name, the_constructor_declared_by, the_function_of,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -185,6 +185,7 @@ impl Analysis {
     }
 
     fn direct_lexical_accesses(&mut self, probe: &FuncBuilder) {
+        let mut head_sources = FxHashMap::default();
         for (index, node) in probe.snapshot.nodes.iter().enumerate() {
             let Ok(index) = u32::try_from(index) else {
                 continue;
@@ -226,10 +227,27 @@ impl Analysis {
             }
             let accessed = node.origin.location;
             let declared = probe.node(*declaration).origin.location;
+            if accessed.file != declared.file {
+                continue;
+            }
             // In the declaring execution, an access before the declaration's
             // initialization finishes cannot have a ready binding. Deferred
             // bodies instead use the captured cell's runtime readiness.
-            if accessed.file == declared.file && accessed.span.start < declared.span.end {
+            let premature = accessed.span.start < declared.span.end || {
+                // A lexical loop head has an uninitialized environment while
+                // its source runs. Keep this interval distinct from defaults
+                // inside the pattern: [x, y=x] initializes x before reading it.
+                let source = *head_sources
+                    .entry(*declaration)
+                    .or_insert_with(|| head_source_of(probe, *declaration));
+                source.is_some_and(|source| {
+                    let source = probe.node(source).origin.location;
+                    accessed.file == source.file
+                        && accessed.span.start >= source.span.start
+                        && accessed.span.start < source.span.end
+                })
+            };
+            if premature {
                 self.uninitialized_locals
                     .insert((at, symbol.0), *declaration);
                 self.preserve_effect(probe, at);
@@ -397,6 +415,19 @@ impl Analysis {
 fn syntax_parent(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
     std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent)
         .find(|at| probe.kind_of(*at).is_some())
+}
+
+fn head_source_of(probe: &FuncBuilder, declaration: NodeId) -> Option<NodeId> {
+    let list = probe.ancestor(declaration, syntax::VARIABLE_DECLARATION_LIST)?;
+    let parent = syntax_parent(probe, list)?;
+    if !matches!(
+        probe.kind_of(parent),
+        Some(syntax::FOR_IN_STATEMENT | syntax::FOR_OF_STATEMENT)
+    ) {
+        return None;
+    }
+    let (_, [head, source, _]) = for_each_parts(probe, parent)?;
+    (head == list).then_some(source)
 }
 
 fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
