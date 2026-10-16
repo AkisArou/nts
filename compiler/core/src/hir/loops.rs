@@ -23,15 +23,18 @@
 //!
 //! Only the shape that is actually provable, and nothing near it:
 //!
-//! - one entry edge and one back edge, so "the loop" is unambiguous;
-//! - a counter parameter whose back edge is `counter + step` for a positive
-//!   constant `step`, guarded by `counter < bound` at the header;
-//! - accumulators whose back edge is `accumulator + increment`, where the
-//!   increment's own range is already bounded.
+//! - one entry edge, and back edges -- edges from blocks the header dominates
+//!   -- so "the loop" is unambiguous however many ways round it has;
+//! - a counter parameter guarded by `counter < bound` at the header, the
+//!   test's true edge in the loop and its false edge out, whose step on every
+//!   back edge is at least some positive amount;
+//! - accumulators whose step is a bounded range.
 //!
-//! Then `trips <= ceil((bound - start) / step)`, and an accumulator's total
-//! movement is at most `trips` increments. Every quantity comes from facts that
-//! are already over-approximations, so the bound is one too.
+//! A step is a range rather than a constant: how far what a back edge carries
+//! is from the parameter, followed through additions and merges. Then
+//! `trips <= ceil((bound - start) / least step)`, and an accumulator's total
+//! movement is at most `trips` of its largest step. Every quantity comes from
+//! facts that are already over-approximations, so the bound is one too.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -50,11 +53,11 @@ use super::{BinOp, BlockId, Func, OpKind, Terminator, ValueId};
 /// `optional-chain`'s `total`, awfy-sieve's `primeCount`.
 const MAX_TRIPS: f64 = facts::SAFE_MAX;
 
-/// How many merges deep a step may be followed.
+/// How many block parameters deep [`copies_counter`] follows a copy.
 ///
-/// One covers `if (c) { total += 1 }`; two covers a nested `if`. Past that the
-/// bound is a sum of several conditional increments and this analysis is not
-/// the right one to be asking.
+/// A step is not limited this way any more -- see [`loop_step`] -- but a *copy*
+/// is a question about identity, and three joins is as far as a counter is
+/// carried between its header and the store an initialization proof reads.
 const MERGE_DEPTH: u32 = 3;
 
 /// Interval bounds for loop-carried values that iteration counting can prove.
@@ -66,9 +69,15 @@ const MERGE_DEPTH: u32 = 3;
 pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, Facts> {
     let mut caps = FxHashMap::default();
     let predecessors = predecessors(func);
+    let owners = owners(func);
+    let edges = Edges {
+        predecessors: &predecessors,
+        owners: &owners,
+    };
+    let dominates = dominance(func);
 
-    for header in headers(func) {
-        let Some(loop_shape) = shape(func, &predecessors, header) else {
+    for header in headers(func, &dominates) {
+        let Some(loop_shape) = shape(&predecessors, &dominates, header) else {
             continue;
         };
         // The counter is bounded by its own guard, whatever the trip count
@@ -82,24 +91,18 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
         // `fptoui` of a floating-point induction variable, and LLVM's scalar
         // evolution cannot model one -- so the loop never vectorizes. See
         // `benchmarks/cases/elementwise`.
-        if let Some((counter, bound)) = counter_bound(func, analysis, header, &loop_shape) {
+        if let Some((counter, bound)) = counter_bound(func, analysis, &edges, header, &loop_shape) {
             caps.insert(counter, bound);
         }
 
-        let Some(trips) = trip_count(func, analysis, &predecessors, header, &loop_shape) else {
+        let Some(trips) = trip_count(func, analysis, &edges, header, &loop_shape) else {
             continue;
         };
 
         let params = &func.blocks[header.0 as usize].params;
         for (slot, param) in params.iter().enumerate() {
-            let Some(increment) = step_of(
-                func,
-                analysis,
-                &predecessors,
-                *param,
-                loop_shape.latch_args.get(slot).copied(),
-                MERGE_DEPTH,
-            ) else {
+            let Some(increment) = loop_step(func, analysis, &edges, &loop_shape, slot, *param)
+            else {
                 continue;
             };
             let Some(start) = loop_shape.entry_args.get(slot) else {
@@ -126,7 +129,13 @@ pub fn accumulator_caps(func: &Func, analysis: &Analysis) -> FxHashMap<ValueId, 
             if !safe.contains(&lo) || !safe.contains(&hi) {
                 continue;
             }
-            caps.insert(*param, Facts::new(lo, hi, false, true, true));
+            // Both bounds are true, so a counter -- which is a header parameter
+            // too, and is counted here like any other -- keeps the tighter of
+            // its guard's and its trips'.
+            let counted = Facts::new(lo, hi, false, true, true);
+            caps.entry(*param)
+                .and_modify(|bound| *bound = bound.narrow(counted))
+                .or_insert(counted);
         }
     }
     caps
@@ -157,21 +166,61 @@ pub(super) fn predecessors(func: &Func) -> Vec<Vec<(BlockId, Vec<ValueId>)>> {
     incoming
 }
 
+/// The block each block parameter belongs to.
+///
+/// Built once per function. A step is followed backwards through merges, and
+/// finding a parameter's block by scanning for it was a walk over every block
+/// at every merge of every step asked.
+fn owners(func: &Func) -> FxHashMap<ValueId, usize> {
+    func.blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(index, block)| block.params.iter().map(move |param| (*param, index)))
+        .collect()
+}
+
+/// A function's edges as a step is followed through them: who jumps to each
+/// block with what, and which block each parameter is a parameter of.
+struct Edges<'a> {
+    predecessors: &'a [Vec<(BlockId, Vec<ValueId>)>],
+    owners: &'a FxHashMap<ValueId, usize>,
+}
+
 /// Blocks a back edge returns to.
-fn headers(func: &Func) -> Vec<BlockId> {
+///
+/// A back edge is one whose target dominates its source: every way to the
+/// source went through the target, so arriving there again is going round.
+/// "The target can reach the source" is not the same question, and inside an
+/// outer loop every edge answers it yes -- so every inner loop's entry edge
+/// counted as a second back edge, and no inner loop had a trip count.
+fn headers(func: &Func, dominates: &impl Fn(BlockId, BlockId) -> bool) -> Vec<BlockId> {
     let mut found = Vec::new();
     for (index, block) in func.blocks.iter().enumerate() {
+        let from = BlockId(u32::try_from(index).unwrap_or(0));
         for successor in block.terminator.successors() {
-            // A back edge is one whose target can reach its source: control
-            // leaves the target, comes round, and arrives again.
-            if reaches(func, successor, BlockId(u32::try_from(index).unwrap_or(0)))
-                && !found.contains(&successor)
-            {
+            if dominates(successor, from) && !found.contains(&successor) {
                 found.push(successor);
             }
         }
     }
     found
+}
+
+/// Whether one block dominates another, from the verifier's immediate
+/// dominators. An unreachable block is dominated by nothing but itself.
+pub(super) fn dominance(func: &Func) -> impl Fn(BlockId, BlockId) -> bool {
+    let reachable = super::verify::reachable_blocks(func);
+    let idom = super::verify::dominators(func, &reachable);
+    move |over: BlockId, under: BlockId| {
+        let mut at = Some(under);
+        while let Some(block) = at {
+            if block == over {
+                return true;
+            }
+            at = idom[block.0 as usize];
+        }
+        false
+    }
 }
 
 /// Whether a block is inside a cycle: control leaves it and can come back.
@@ -203,30 +252,27 @@ fn reaches(func: &Func, from: BlockId, to: BlockId) -> bool {
     false
 }
 
-/// The arguments a loop's single entry and single back edge carry.
+/// The arguments a loop's single entry and its back edges carry.
 struct Shape {
     entry: BlockId,
-    latch: BlockId,
     entry_args: Vec<ValueId>,
-    latch_args: Vec<ValueId>,
+    /// Every back edge, with what it carries. More than one where the body
+    /// goes straight back to the header from several places, which is what a
+    /// `while` loop's `continue` does: `utf8Decode` returns from four.
+    latches: Vec<(BlockId, Vec<ValueId>)>,
 }
 
 fn shape(
-    func: &Func,
     predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    dominates: &impl Fn(BlockId, BlockId) -> bool,
     header: BlockId,
 ) -> Option<Shape> {
     let mut entry = None;
-    let mut latch = None;
+    let mut latches = Vec::new();
     for (from, args) in &predecessors[header.0 as usize] {
-        // A predecessor the header can reach is inside the loop.
-        if reaches(func, header, *from) {
-            if latch.is_some() {
-                // More than one way round. Nothing here is wrong about such a
-                // loop, but the reasoning below assumes one back edge.
-                return None;
-            }
-            latch = Some((*from, args.clone()));
+        // A predecessor the header dominates is inside the loop.
+        if dominates(header, *from) {
+            latches.push((*from, args.clone()));
         } else {
             if entry.is_some() {
                 return None;
@@ -235,12 +281,10 @@ fn shape(
         }
     }
     let (entry, entry_args) = entry?;
-    let (latch, latch_args) = latch?;
-    Some(Shape {
+    (!latches.is_empty()).then_some(Shape {
         entry,
-        latch,
         entry_args,
-        latch_args,
+        latches,
     })
 }
 
@@ -265,10 +309,20 @@ pub(super) fn prefix_loops(
     dominates: impl Fn(BlockId, BlockId) -> bool,
 ) -> Vec<PrefixLoop> {
     let mut found = Vec::new();
-    for header in headers(func) {
-        let Some(shape) = shape(func, predecessors, header) else {
+    let owners = owners(func);
+    let edges = Edges {
+        predecessors,
+        owners: &owners,
+    };
+    for header in headers(func, &dominates) {
+        let Some(shape) = shape(predecessors, &dominates, header) else {
             continue;
         };
+        // One way round: the store this proves is the one on that edge.
+        let [(latch, _)] = shape.latches.as_slice() else {
+            continue;
+        };
+        let latch = *latch;
         let Terminator::Branch {
             cond,
             then_target,
@@ -295,14 +349,7 @@ pub(super) fn prefix_loops(
         };
         let start = analysis.get(shape.entry_args[slot]);
         let length = analysis.get(limit);
-        let Some(step) = step_of(
-            func,
-            analysis,
-            predecessors,
-            counter,
-            shape.latch_args.get(slot).copied(),
-            MERGE_DEPTH,
-        ) else {
+        let Some(step) = loop_step(func, analysis, &edges, &shape, slot, counter) else {
             continue;
         };
         if !start.is_singleton()
@@ -313,14 +360,14 @@ pub(super) fn prefix_loops(
             || !length.integral()
             || length.maybe_nan
             || !(0.0..=f64::from(u32::MAX)).contains(&length.lo)
-            || !dominates(header, shape.latch)
+            || !dominates(header, latch)
             || reaches(func, header, shape.entry)
         {
             continue;
         }
         // The natural loop, using the same incoming edges as the trip proof.
         let mut members = FxHashSet::from_iter([header]);
-        let mut stack = vec![shape.latch];
+        let mut stack = vec![latch];
         while let Some(block) = stack.pop() {
             if members.insert(block) {
                 stack.extend(predecessors[block.0 as usize].iter().map(|(from, _)| *from));
@@ -340,7 +387,7 @@ pub(super) fn prefix_loops(
         }
         found.push(PrefixLoop {
             header,
-            latch: shape.latch,
+            latch,
             exit: else_target,
             counter,
             length: length.lo,
@@ -358,10 +405,6 @@ pub(super) fn copies_counter(
     copies(func, predecessors, value, counter, MERGE_DEPTH)
 }
 
-/// What a header parameter gains each time round, if it gains a fixed amount.
-///
-/// Returned as facts rather than a value, because `i--` gains `-1` and there is
-/// no value in the function holding that.
 /// Whether `value` is `param`, or a copy of it carried through block
 /// parameters.
 ///
@@ -406,76 +449,188 @@ fn copies(
         })
 }
 
-fn step_of(
+/// What a header parameter gains each time round, over every back edge.
+///
+/// Returned as facts rather than a value, because `i--` gains `-1` and there is
+/// no value in the function holding that -- and as a range, because a step
+/// need not be one amount. `index++; continue` on one path and the loop's own
+/// `index++` on every path is a step of one to two; `length += 1` through
+/// `length += 4` down an `else if` chain is one to four. Both still bound the
+/// loop, and a loop over a string is written exactly so: `utf8Length` was
+/// both, so its count had no bound and stayed a double, and so did every index
+/// derived from it in `utf8Write` and `utf8Decode`.
+fn loop_step(
     func: &Func,
     analysis: &Analysis,
-    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    edges: &Edges<'_>,
+    shape: &Shape,
+    slot: usize,
     param: ValueId,
-    latch_arg: Option<ValueId>,
-    depth: u32,
 ) -> Option<Facts> {
-    let latch = latch_arg?;
-    // Unchanged on this path, which is a step of zero. Only reachable through a
-    // merge below -- a latch argument that *is* the parameter is a loop that
-    // never moves, and `trip_count` rejects it for that reason.
-    if latch == param {
-        return Some(Facts::constant(0.0));
+    let mut walk = StepWalk {
+        func,
+        analysis,
+        edges,
+        param,
+        known: FxHashMap::default(),
+    };
+    let mut joined = Facts::BOTTOM;
+    for (_, args) in &shape.latches {
+        joined = joined.join(walk.offset(*args.get(slot)?)?);
     }
-    match func.values[latch.0 as usize].kind {
-        // `param + x` or `x + param`; either way the step is the other operand.
-        OpKind::Binary {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } if copies(func, predecessors, lhs, param, depth) => Some(analysis.get(rhs)),
-        OpKind::Binary {
-            op: BinOp::Add,
-            lhs,
-            rhs,
-        } if copies(func, predecessors, rhs, param, depth) => Some(analysis.get(lhs)),
-        // `param - x` steps by `-x`. `x - param` is not an induction variable:
-        // it reflects around `x` rather than advancing.
-        OpKind::Binary {
-            op: BinOp::Sub,
-            lhs,
-            rhs,
-        } if copies(func, predecessors, lhs, param, depth) => Some(facts::neg(analysis.get(rhs))),
+    (!joined.is_bottom()).then_some(joined)
+}
 
-        // A merge. `if (found) { total += 1 }` inside a loop reaches the latch
-        // through a block parameter whose incoming values are the accumulator
-        // itself on one path and `accumulator + 1` on the other -- so the step
-        // is *either* zero or one, and the join says so.
-        //
-        // Without this a conditional accumulator has no bound at all, which is
-        // most of the counters real programs write: `primeCount`, `bounces`,
-        // `movesDone`.
-        OpKind::BlockParam(slot) => {
-            if depth == 0 {
-                return None;
-            }
-            let block = func
-                .blocks
-                .iter()
-                .position(|block| block.params.contains(&latch))?;
-            let mut joined = Facts::BOTTOM;
-            for (_, args) in &predecessors[block] {
-                let incoming = args.get(slot as usize).copied();
-                joined = joined.join(step_of(
-                    func,
-                    analysis,
-                    predecessors,
-                    param,
-                    incoming,
-                    depth - 1,
-                )?);
-            }
-            (!joined.is_bottom()).then_some(joined)
+/// How far each value is from one header parameter, on every path to it.
+///
+/// Walked backwards from what a back edge carries, through additions,
+/// subtractions and merges, to the parameter. It replaced a walk that followed
+/// one addition and three merges: one more `else if` arm was past it, so the
+/// most common loop real code writes had no step at all.
+///
+/// Memoized, so a chain of n merges is n steps rather than 2^n paths. A value
+/// that reaches itself without passing the parameter -- an inner loop's
+/// counter, another header parameter -- is marked unknown while it is being
+/// asked, so the cycle answers "not a step" instead of looping.
+struct StepWalk<'a> {
+    func: &'a Func,
+    analysis: &'a Analysis,
+    edges: &'a Edges<'a>,
+    param: ValueId,
+    known: FxHashMap<ValueId, Option<Facts>>,
+}
+
+impl StepWalk<'_> {
+    fn offset(&mut self, value: ValueId) -> Option<Facts> {
+        // Unchanged on this path, which is a step of zero. A latch carrying the
+        // parameter itself is a loop that never moves, and `trip_count`
+        // rejects it for that reason.
+        if value == self.param {
+            return Some(Facts::constant(0.0));
         }
-        _ => None,
+        if let Some(known) = self.known.get(&value) {
+            return *known;
+        }
+        self.known.insert(value, None);
+        let found = self.derive(value);
+        self.known.insert(value, found);
+        found
+    }
+
+    fn derive(&mut self, value: ValueId) -> Option<Facts> {
+        match self.func.values[value.0 as usize].kind {
+            // `v + x` or `x + v`, `v` being so far from the parameter: the sum
+            // is that far plus `x`.
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } => match self.offset(lhs) {
+                Some(step) => Some(facts::add(step, self.analysis.get(rhs))),
+                None => self
+                    .offset(rhs)
+                    .map(|step| facts::add(self.analysis.get(lhs), step)),
+            },
+            // `v - x` is `v`'s distance less `x`. `x - v` is not a step: it
+            // reflects around `x` rather than advancing.
+            OpKind::Binary {
+                op: BinOp::Sub,
+                lhs,
+                rhs,
+            } => self
+                .offset(lhs)
+                .map(|step| facts::sub(step, self.analysis.get(rhs))),
+
+            // A merge. `if (found) { total += 1 }` inside a loop reaches the
+            // latch through a block parameter whose incoming values are the
+            // accumulator itself on one path and `accumulator + 1` on the
+            // other -- so the step is *either* zero or one, and the join says
+            // so. Every incoming value has to be a step, or the merge is not
+            // one.
+            //
+            // Without this a conditional accumulator has no bound at all, which
+            // is most of the counters real programs write: `primeCount`,
+            // `bounces`, `movesDone`.
+            OpKind::BlockParam(slot) => {
+                let block = *self.edges.owners.get(&value)?;
+                let incoming = &self.edges.predecessors[block];
+                let mut joined = Facts::BOTTOM;
+                for (_, args) in incoming {
+                    joined = joined.join(self.offset(*args.get(slot as usize)?)?);
+                }
+                (!joined.is_bottom()).then_some(joined)
+            }
+            _ => None,
+        }
     }
 }
 
-/// How many times the loop can run.
+/// The header's test, if it is the loop's own: `counter <op> limit` on a
+/// header parameter, staying in the loop when it holds and leaving when it
+/// does not.
+///
+/// Both halves of the last part are needed for anything below to be true.
+/// Every iteration passes through the header, so a test whose true edge stays
+/// in the loop and whose false edge leaves it holds of every value that goes
+/// round. A test whose false edge also comes back holds of none of them.
+///
+/// "In the loop" is the natural loop -- what reaches a back edge without
+/// passing the header -- and not "can get back to the header". An inner loop's
+/// exit gets back to its header through the outer loop, by the inner loop's
+/// entry edge, and every value that arrives that way is a new start rather
+/// than one that went round.
+fn exit_test(
+    func: &Func,
+    edges: &Edges<'_>,
+    header: BlockId,
+    shape: &Shape,
+) -> Option<(BinOp, ValueId, ValueId, usize)> {
+    let Terminator::Branch {
+        cond,
+        then_target,
+        else_target,
+        ..
+    } = func.blocks[header.0 as usize].terminator
+    else {
+        return None;
+    };
+    let OpKind::Binary {
+        op: comparison,
+        lhs: counter,
+        rhs: limit,
+    } = func.values[cond.0 as usize].kind
+    else {
+        return None;
+    };
+    if !matches!(comparison, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge) {
+        return None;
+    }
+    let members = natural_loop(edges, header, shape);
+    if !members.contains(&then_target) || members.contains(&else_target) {
+        return None;
+    }
+    let params = &func.blocks[header.0 as usize].params;
+    let slot = params.iter().position(|param| *param == counter)?;
+    Some((comparison, counter, limit, slot))
+}
+
+/// The header and every block that reaches one of its back edges without
+/// passing through it.
+fn natural_loop(edges: &Edges<'_>, header: BlockId, shape: &Shape) -> FxHashSet<BlockId> {
+    let mut members = FxHashSet::from_iter([header]);
+    let mut stack: Vec<BlockId> = shape.latches.iter().map(|(latch, _)| *latch).collect();
+    while let Some(block) = stack.pop() {
+        if members.insert(block) {
+            stack.extend(
+                edges.predecessors[block.0 as usize]
+                    .iter()
+                    .map(|(from, _)| *from),
+            );
+        }
+    }
+    members
+}
+
 /// What the header's own guard says about the counter.
 ///
 /// `i < limit` means `i` never exceeds `limit`'s largest value -- and the value
@@ -489,48 +644,34 @@ fn step_of(
 fn counter_bound(
     func: &Func,
     analysis: &Analysis,
+    edges: &Edges<'_>,
     header: BlockId,
     shape: &Shape,
 ) -> Option<(ValueId, Facts)> {
-    let Terminator::Branch { cond, .. } = func.blocks[header.0 as usize].terminator else {
-        return None;
-    };
-    let OpKind::Binary {
-        op: comparison,
-        lhs: counter,
-        rhs: limit,
-    } = func.values[cond.0 as usize].kind
-    else {
-        return None;
-    };
-    let ascending = match comparison {
-        BinOp::Lt | BinOp::Le => true,
-        BinOp::Gt | BinOp::Ge => false,
-        _ => return None,
-    };
-    let params = &func.blocks[header.0 as usize].params;
-    let slot = params.iter().position(|param| *param == counter)?;
+    let (comparison, counter, limit, slot) = exit_test(func, edges, header, shape)?;
+    let ascending = matches!(comparison, BinOp::Lt | BinOp::Le);
     let start = analysis.get(*shape.entry_args.get(slot)?);
     let bound = analysis.get(limit);
 
-    // The step has to be a fixed amount moving toward the bound, or the counter
-    // is not one and the guard says nothing about how far it goes.
-    let step = step_of(
-        func,
-        analysis,
-        &predecessors(func),
-        counter,
-        shape.latch_args.get(slot).copied(),
-        MERGE_DEPTH,
-    )?;
-    if !step.is_singleton() || (ascending && step.lo <= 0.0) || (!ascending && step.lo >= 0.0) {
+    // The step has to move one way only, toward the bound or not at all, or the
+    // counter is not one and the guard says nothing about how far it goes.
+    // Standing still on some paths is allowed: `utf8Decode` reprocesses a
+    // rejected byte without advancing, and the index is still below `end`
+    // whenever it goes round.
+    let step = loop_step(func, analysis, edges, shape, slot, counter)?;
+    if !step.lo.is_finite() || !step.hi.is_finite() {
+        return None;
+    }
+    if (ascending && step.lo < 0.0) || (!ascending && step.hi > 0.0) {
         return None;
     }
 
+    // Where it started, too: a loop whose guard fails at once keeps a start
+    // beyond the bound, and a cap that left it out would be no value at all.
     let (lo, hi) = if ascending {
-        (start.lo, bound.hi + step.lo)
+        (start.lo, start.hi.max(bound.hi + step.hi))
     } else {
-        (bound.lo + step.lo, start.hi)
+        (start.lo.min(bound.lo + step.lo), start.hi)
     };
     if !lo.is_finite() || !hi.is_finite() {
         return None;
@@ -538,51 +679,24 @@ fn counter_bound(
     Some((counter, Facts::new(lo, hi, false, true, true)))
 }
 
+/// How many times the loop can run.
 fn trip_count(
     func: &Func,
     analysis: &Analysis,
-    predecessors: &[Vec<(BlockId, Vec<ValueId>)>],
+    edges: &Edges<'_>,
     header: BlockId,
     shape: &Shape,
 ) -> Option<f64> {
-    let Terminator::Branch { cond, .. } = func.blocks[header.0 as usize].terminator else {
-        return None;
-    };
-    let OpKind::Binary {
-        op: comparison,
-        lhs: counter,
-        rhs: limit,
-    } = func.values[cond.0 as usize].kind
-    else {
-        return None;
-    };
-    let ascending = match comparison {
-        BinOp::Lt | BinOp::Le => true,
-        BinOp::Gt | BinOp::Ge => false,
-        _ => return None,
-    };
-
-    let params = &func.blocks[header.0 as usize].params;
-    let slot = params.iter().position(|param| *param == counter)?;
-    let step = step_of(
-        func,
-        analysis,
-        predecessors,
-        counter,
-        shape.latch_args.get(slot).copied(),
-        MERGE_DEPTH,
-    )?;
-    // A step that is not a fixed amount moving toward the bound gives no trip
-    // count: the counter might stand still, or move away and never arrive. A
-    // bound is never NaN — the domain guarantees it — so the plain comparisons
-    // are exhaustive.
-    if !step.is_singleton() {
-        return None;
-    }
-    if ascending && step.lo <= 0.0 {
-        return None;
-    }
-    if !ascending && step.lo >= 0.0 {
+    let (comparison, counter, limit, slot) = exit_test(func, edges, header, shape)?;
+    let ascending = matches!(comparison, BinOp::Lt | BinOp::Le);
+    let step = loop_step(func, analysis, edges, shape, slot, counter)?;
+    // A step that does not always move toward the bound gives no trip count:
+    // the counter might stand still, or move away and never arrive. One that
+    // always moves, by varying amounts, arrives no later than its smallest
+    // step would take it. A bound is never NaN -- the domain guarantees it --
+    // so the plain comparisons are exhaustive.
+    let least = if ascending { step.lo } else { -step.hi };
+    if least <= 0.0 {
         return None;
     }
 
@@ -604,9 +718,280 @@ fn trip_count(
         }
         start.hi - bound.lo + if inclusive { 1.0 } else { 0.0 }
     };
-    let trips = (span / step.lo.abs()).ceil();
+    let trips = (span / least).ceil();
     if !(trips.is_finite() && trips <= MAX_TRIPS) {
         return None;
     }
     Some(trips.max(0.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hir::{Block, HirType, Op, Param};
+    use nts_diagnostics::{Location, SourceId, Span};
+    use nts_semantic_schema::Origin;
+
+    fn origin() -> Origin {
+        Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        })
+    }
+
+    /// A function written as its HIR: each block lists the values it defines,
+    /// numbered in the order they are given.
+    struct Build {
+        values: Vec<Op>,
+        blocks: Vec<Block>,
+        open: Vec<ValueId>,
+    }
+
+    impl Build {
+        fn new() -> Self {
+            Self {
+                values: Vec::new(),
+                blocks: Vec::new(),
+                open: Vec::new(),
+            }
+        }
+
+        fn value(&mut self, kind: OpKind) -> ValueId {
+            let id = ValueId(u32::try_from(self.values.len()).unwrap_or(u32::MAX));
+            self.values.push(Op {
+                kind,
+                ty: HirType::Float { bits: 64 },
+                origin: origin(),
+            });
+            id
+        }
+
+        fn op(&mut self, kind: OpKind) -> ValueId {
+            let id = self.value(kind);
+            self.open.push(id);
+            id
+        }
+
+        fn number(&mut self, n: f64) -> ValueId {
+            self.op(OpKind::ConstFloat(n))
+        }
+
+        fn binary(&mut self, op: BinOp, lhs: ValueId, rhs: ValueId) -> ValueId {
+            self.op(OpKind::Binary { op, lhs, rhs })
+        }
+
+        /// Block parameters are defined by the block, not listed in its ops.
+        fn params(&mut self, count: u32) -> Vec<ValueId> {
+            (0..count)
+                .map(|slot| self.value(OpKind::BlockParam(slot)))
+                .collect()
+        }
+
+        fn end(&mut self, params: Vec<ValueId>, terminator: Terminator) {
+            self.blocks.push(Block {
+                params,
+                ops: std::mem::take(&mut self.open),
+                terminator,
+            });
+        }
+
+        fn jump(&mut self, params: Vec<ValueId>, target: u32, args: Vec<ValueId>) {
+            self.end(
+                params,
+                Terminator::Jump {
+                    target: BlockId(target),
+                    args,
+                },
+            );
+        }
+
+        fn branch(&mut self, params: Vec<ValueId>, cond: ValueId, then: u32, otherwise: u32) {
+            self.end(
+                params,
+                Terminator::Branch {
+                    cond,
+                    then_target: BlockId(then),
+                    then_args: Vec::new(),
+                    else_target: BlockId(otherwise),
+                    else_args: Vec::new(),
+                },
+            );
+        }
+
+        fn finish(self, known: &[Facts]) -> Func {
+            Func {
+                name: "f".to_owned(),
+                params: known
+                    .iter()
+                    .map(|known| Param {
+                        name: "n".to_owned(),
+                        ty: HirType::Float { bits: 64 },
+                        origin: origin(),
+                        known: *known,
+                        written: None,
+                        shape: crate::hir::ParamShape::Ordinary,
+                    })
+                    .collect(),
+                return_type: HirType::Float { bits: 64 },
+                values: self.values,
+                blocks: self.blocks,
+                origin: origin(),
+                exported: true,
+                initializes_receiver: false,
+                async_result: None,
+                frame: None,
+                abstract_declaration: false,
+                obligations: Vec::new(),
+                written_return: None,
+                result_absent: crate::hir::Absent::Impossible,
+                written_return_elements: Vec::new(),
+            }
+        }
+    }
+
+    fn caps_of(func: &Func) -> FxHashMap<ValueId, Facts> {
+        accumulator_caps(func, &super::super::flow::analyze(func))
+    }
+
+    /// `for (i = start; i < 10; i++)` where `start` is anywhere in `[0, 100]`.
+    /// Started at 100 the loop never runs and `i` is 100, so a cap of "the
+    /// guard plus one step" -- which is what the counter's bound was -- says
+    /// 11 about a value that is 100.
+    #[test]
+    fn a_counter_that_starts_past_its_bound_keeps_its_start() {
+        let mut f = Build::new();
+        let start = f.op(OpKind::Param(0));
+        f.jump(Vec::new(), 1, vec![start]);
+        let header = f.params(1);
+        let i = header[0];
+        let ten = f.number(10.0);
+        let test = f.binary(BinOp::Lt, i, ten);
+        f.branch(header, test, 2, 3);
+        let one = f.number(1.0);
+        let next = f.binary(BinOp::Add, i, one);
+        f.jump(Vec::new(), 1, vec![next]);
+        f.end(Vec::new(), Terminator::Return(Some(i)));
+        let func = f.finish(&[Facts::new(0.0, 100.0, true, false, false)]);
+
+        let cap = caps_of(&func)[&i];
+        assert!(cap.hi >= 100.0, "the counter can be its start: {cap:?}");
+    }
+
+    /// The same loop with its test the other way round: it goes round while
+    /// `i < 10` is *false*, so the guard bounds nothing that goes round.
+    #[test]
+    fn a_test_whose_true_edge_leaves_the_loop_bounds_nothing() {
+        let mut f = Build::new();
+        let start = f.op(OpKind::Param(0));
+        f.jump(Vec::new(), 1, vec![start]);
+        let header = f.params(1);
+        let i = header[0];
+        let ten = f.number(10.0);
+        let test = f.binary(BinOp::Lt, i, ten);
+        f.branch(header, test, 3, 2);
+        let one = f.number(1.0);
+        let next = f.binary(BinOp::Add, i, one);
+        f.jump(Vec::new(), 1, vec![next]);
+        f.end(Vec::new(), Terminator::Return(Some(i)));
+        let func = f.finish(&[Facts::new(50.0, 60.0, true, false, false)]);
+
+        assert_eq!(caps_of(&func).get(&i), None);
+    }
+
+    /// `i` steps by one on one path and two on the other, and `total` by one
+    /// each time round: still at most 100 trips, so `total <= 100`.
+    #[test]
+    fn a_step_of_one_or_two_still_counts_the_trips() {
+        let mut f = Build::new();
+        let zero = f.number(0.0);
+        f.jump(Vec::new(), 1, vec![zero, zero]);
+        let header = f.params(2);
+        let (i, total) = (header[0], header[1]);
+        let hundred = f.number(100.0);
+        let test = f.binary(BinOp::Lt, i, hundred);
+        f.branch(header, test, 2, 5);
+        let fifty = f.number(50.0);
+        let low = f.binary(BinOp::Lt, i, fifty);
+        f.branch(Vec::new(), low, 3, 4);
+        let one = f.number(1.0);
+        let by_one = f.binary(BinOp::Add, i, one);
+        f.jump(Vec::new(), 6, vec![by_one]);
+        let two = f.number(2.0);
+        let by_two = f.binary(BinOp::Add, i, two);
+        f.jump(Vec::new(), 6, vec![by_two]);
+        f.end(Vec::new(), Terminator::Return(Some(total)));
+        let joined = f.params(1);
+        let step = f.number(1.0);
+        let counted = f.binary(BinOp::Add, total, step);
+        f.jump(joined.clone(), 1, vec![joined[0], counted]);
+        let func = f.finish(&[]);
+
+        let caps = caps_of(&func);
+        assert_eq!((caps[&i].lo, caps[&i].hi), (0.0, 102.0));
+        assert_eq!((caps[&total].lo, caps[&total].hi), (0.0, 100.0));
+    }
+
+    /// A `continue` straight back to the header is a second back edge, and
+    /// the loop still has a trip count: `total` moves by zero or one.
+    #[test]
+    fn a_continue_to_the_header_is_one_more_back_edge() {
+        let mut f = Build::new();
+        let zero = f.number(0.0);
+        f.jump(Vec::new(), 1, vec![zero, zero]);
+        let header = f.params(2);
+        let (i, total) = (header[0], header[1]);
+        let hundred = f.number(100.0);
+        let test = f.binary(BinOp::Lt, i, hundred);
+        f.branch(header, test, 2, 4);
+        let fifty = f.number(50.0);
+        let low = f.binary(BinOp::Lt, i, fifty);
+        f.branch(Vec::new(), low, 3, 5);
+        let one = f.number(1.0);
+        let skipped = f.binary(BinOp::Add, i, one);
+        f.jump(Vec::new(), 1, vec![skipped, total]);
+        f.end(Vec::new(), Terminator::Return(Some(total)));
+        let another = f.number(1.0);
+        let advanced = f.binary(BinOp::Add, i, another);
+        let counted = f.binary(BinOp::Add, total, another);
+        f.jump(Vec::new(), 1, vec![advanced, counted]);
+        let func = f.finish(&[]);
+
+        let caps = caps_of(&func);
+        assert_eq!((caps[&total].lo, caps[&total].hi), (0.0, 100.0));
+    }
+
+    /// An inner loop is entered from inside the outer one, so its header can
+    /// reach its own entry edge -- which is not a back edge, because the header
+    /// does not dominate where it comes from.
+    #[test]
+    fn an_inner_loop_has_a_trip_count() {
+        let mut f = Build::new();
+        let zero = f.number(0.0);
+        f.jump(Vec::new(), 1, vec![zero]);
+        let outer = f.params(1);
+        let i = outer[0];
+        let ten = f.number(10.0);
+        let more = f.binary(BinOp::Lt, i, ten);
+        f.branch(outer, more, 2, 6);
+        let start = f.number(0.0);
+        f.jump(Vec::new(), 3, vec![start, start]);
+        let inner = f.params(2);
+        let (j, total) = (inner[0], inner[1]);
+        let limit = f.number(10.0);
+        let again = f.binary(BinOp::Lt, j, limit);
+        f.branch(inner, again, 4, 5);
+        let one = f.number(1.0);
+        let next_j = f.binary(BinOp::Add, j, one);
+        let three = f.number(3.0);
+        let counted = f.binary(BinOp::Add, total, three);
+        f.jump(Vec::new(), 3, vec![next_j, counted]);
+        let step = f.number(1.0);
+        let next_i = f.binary(BinOp::Add, i, step);
+        f.jump(Vec::new(), 1, vec![next_i]);
+        f.end(Vec::new(), Terminator::Return(Some(i)));
+        let func = f.finish(&[]);
+
+        let caps = caps_of(&func);
+        assert_eq!((caps[&total].lo, caps[&total].hi), (0.0, 30.0));
+    }
 }

@@ -118,14 +118,7 @@ pub fn specialize(
     let count = func.values.len();
     let mut classes = Classes::new(count);
 
-    // Edges: a block parameter and every argument passed to it are one location.
-    for block in &func.blocks {
-        for (target, args) in edges(block) {
-            for (param, arg) in func.blocks[target].params.iter().zip(args) {
-                classes.union(param.0, arg.0);
-            }
-        }
-    }
+    join_edges(func, &mut classes);
 
     // A comparison joins its two operands to each other, but not to its result,
     // which is a bool whatever they are. Without this, `i < 1000` leaves the
@@ -288,6 +281,29 @@ pub fn specialize(
 
     report.conversions = insert_conversions(func, analysis, expected);
     report
+}
+
+/// Edges: a block parameter and every argument passed to it are one location.
+///
+/// Except a function parameter, for the reason a comparison in [`specialize`]
+/// does not join one either: its representation is the signature, so joining it
+/// pins the class to the signature's width and can only drag the block
+/// parameter down. `let at = offset` before a loop that adds to `at` is
+/// that shape: `offset` narrowed to an `i32`, the count needed 64 bits, the
+/// class disagreed with its pinned member and stayed a double -- `utf8Write`'s
+/// output position, every byte. Left apart, the block parameter takes the
+/// width its own facts allow, which include the argument's, and the edge
+/// converts: once, on the way into the loop.
+fn join_edges(func: &Func, classes: &mut Classes) {
+    for block in &func.blocks {
+        for (target, args) in edges(block) {
+            for (param, arg) in func.blocks[target].params.iter().zip(args) {
+                if !is_parameter(func, *arg) {
+                    classes.union(param.0, arg.0);
+                }
+            }
+        }
+    }
 }
 
 /// Whether a value is one of the function's own parameters.
