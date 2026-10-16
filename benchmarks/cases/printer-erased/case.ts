@@ -3,8 +3,8 @@
 // element erased; timing String(new Printer()) would allow a direct call.
 // The timed input returns normally. Other positive inputs throw inside the
 // loop, so even proving its trip count positive cannot remove the poll.
-// expect-ir: all: count call.extern(nts_value_to_string) in work == 1
-// expect-ir: all: count call.extern(nts_raising) in work == 1
+// expect-ir: all: count call.extern(nts_value_to_string) in work#whole == 1
+// expect-ir: all: count call.extern(nts_raising) in work#whole == 1
 
 class LeftPrinter {
   n: number;
@@ -17,7 +17,10 @@ class LeftPrinter {
 
 class RightPrinter {
   n: number;
-  constructor(n: number) { this.n = n; }
+  // Distinct layouts select distinct descriptor printers. Sharing LeftPrinter's
+  // layout would exercise the existing named refusal instead of a callback.
+  right: boolean;
+  constructor(n: number) { this.n = n; this.right = true; }
   toString(): string {
     if (this.n === 17) throw 23;
     return "right";
