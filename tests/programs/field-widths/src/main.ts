@@ -16,7 +16,10 @@
 // not: the answers change, and they change quietly.
 
 class Counter {
-  // Every store is a small whole number, and one of them reads the field.
+  // One store reads the field and adds to it, on every call, and nothing here
+  // counts the calls: `total` has no bound, and keeps its double. It was
+  // narrowed once, from where the interprocedural fixpoint's round cap happened
+  // to stop it climbing -- a bound true of 32 rounds and of nothing after.
   total: number;
   step: number;
 
@@ -36,6 +39,40 @@ export function selfReferential(n: number): number {
     counter.advance();
   }
   return counter.total;
+}
+
+class Capped {
+  // The same field, guarded: every store is a small whole number because the
+  // guard bounds what it adds to. This is the self-reference that narrows. Its
+  // own names, because two classes of one shape share one layout, and then one
+  // width: `Counter`'s.
+  sum: number;
+  by: number;
+
+  constructor(by: number) {
+    this.sum = 0;
+    this.by = by;
+  }
+
+  // Read once: a guard narrows the value it tested, and a second `this.sum`
+  // is another read, which it does not.
+  advance(): void {
+    const sum = this.sum;
+    if (sum < 1000) {
+      this.sum = sum + this.by;
+    }
+  }
+}
+
+export function cappedSelfReference(n: number): number {
+  // A step the analysis can bound whatever `n` is: `n > 0 && n < 100 ? n | 0 :
+  // 3`, as `Counter` has, comes out of `| 0` as any `int32`, negative ones
+  // too, and a sum of those is bounded on neither side.
+  const capped = new Capped((n & 7) + 1);
+  for (let i = 0; i < 8; i++) {
+    capped.advance();
+  }
+  return capped.sum;
 }
 
 // A field whose own value feeds a *fraction*. If the fixpoint concluded "whole"

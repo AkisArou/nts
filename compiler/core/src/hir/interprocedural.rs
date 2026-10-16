@@ -44,14 +44,42 @@
 
 use rustc_hash::FxHashMap;
 
-use super::facts::Facts;
+use super::facts::{self, Facts};
 use super::flow::{self, Analysis, Context};
-use super::{Callee, Func, OpKind, Program, Terminator, ValueId};
+use super::{Callee, Func, HirType, OpKind, Program, Terminator, TypeId, ValueId};
 
 /// A bound on the call-graph iteration, in case a lattice mistake keeps some
 /// parameter growing. Convergence is normally a handful of rounds; reaching
-/// this means a bug, and looping forever would hide it.
+/// this means a bug, and looping forever would hide it. What the iteration
+/// holds then is not a fixpoint -- a bound still climbing from the bottom is
+/// true of the rounds so far and of nothing after -- so it is not handed on:
+/// [`settle`] answers as though nothing crossed between functions.
 const ROUND_CAP: u32 = 32;
+
+/// Rounds a whole-program fact may change before it is widened.
+///
+/// [`flow`] widens a loop header after three visits, because a counter's bound
+/// grows by one per round and a million-trip loop cannot take a million rounds.
+/// The same holds one level up, and nothing did it there: a fact that feeds
+/// itself across a call or a field -- a counter field written with its own
+/// value plus a step, a position handed to a callee that returns it one
+/// further -- grew by one step per round and never settled. The iteration ran
+/// into [`ROUND_CAP`] and handed on what it had then: a field bounded by 32
+/// steps, laid out as an `i32`, that wrapped
+/// (`tests/programs/a-value-fed-back-across-calls-past-int32`), and every one
+/// of `runtime/node/fs`'s six whole-program analyses paid all 32 rounds. 56 of
+/// the 570 programs and 8 of the 63 benchmarks never settled.
+///
+/// Three, as for a loop header, and measured rather than borrowed: with three,
+/// every program and benchmark whose fixpoint settled without widening emits
+/// the same C as it did, and every one that did not now settles. A fact can
+/// take more changes than that to settle -- five in `user-iterable`, nineteen
+/// for a counter that climbs to its guard -- and widening such a fact early
+/// jumps it to the next of [`facts::widen`]'s thresholds, which are where a
+/// representation changes. A count of eight let a fact that changes once per
+/// three-function cycle spend 24 rounds before widening, and one program then
+/// reached the cap anyway.
+const WIDEN_AFTER: u32 = 3;
 
 /// How many times loop bounds may feed back into parameter facts.
 ///
@@ -178,57 +206,49 @@ fn settle(
             growable,
         },
     };
-    let mut analyses = analyze_all(program, &crossing, written, caps);
+    let mut changes = Changes::default();
 
     for _ in 0..ROUND_CAP {
-        analyses = analyze_all(program, &crossing, written, caps);
+        let analyses = analyze_all(program, &crossing, written, caps);
 
-        // Rebuilt from nothing each round rather than accumulated, so that this
-        // is a Kleene iteration over the whole system and not a monotone drift
-        // that can never take anything back.
-        let mut params: Vec<Vec<Facts>> = seed(program, outward);
-
-        for (caller, func) in program.funcs.iter().enumerate() {
-            // By block, because what an argument is worth is what is known
-            // *where the call happens* rather than where the value was defined.
-            // A loop counter is `[0, 8]` at its definition -- the exit value is
-            // one of the things it can be -- and `[0, 7]` inside the body,
-            // which is the only place the call is. Joining the definition's
-            // fact hands the callee a bound one past the end, and an index one
-            // past the end is exactly the one a bounds check cannot remove.
-            for (at, block) in func.blocks.iter().enumerate() {
-                let at = super::BlockId(u32::try_from(at).unwrap_or(0));
-                for value in &block.ops {
-                    let OpKind::Call { callee, args, .. } = &func.values[value.0 as usize].kind
-                    else {
-                        continue;
-                    };
-                    for callee in targets_of(callee, &by_name, in_slot) {
-                        if outward.contains(program.funcs[callee].name.as_str()) {
-                            continue;
-                        }
-                        for (slot, arg) in args.iter().enumerate() {
-                            if let Some(slot) = params[callee].get_mut(slot) {
-                                *slot = slot.join(analyses[caller].get_at(at, *arg));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let returns = return_facts(program, &analyses);
+        let params = widened_slots(
+            &mut changes.params,
+            &crossing.params,
+            arguments(program, &analyses, &by_name, in_slot, outward),
+        );
+        let returns = widened(
+            &mut changes.returns,
+            &crossing.whole.returns,
+            return_facts(program, &analyses),
+        );
+        // From the widened returns, so that it settles when they do.
         let slot_returns = slot_return_facts(program, in_slot, &returns);
         // In the same fixpoint as parameters and returns, because they feed
         // each other: a field is written with a value a call produced, and read
         // to make an argument for the next one.
-        let fields = super::fields::analyze(program, &analyses, &exposed.fields);
-        let elements = super::elements::analyze(program, &analyses, &exposed.elements);
-        let globals = super::globals::analyze(program, &analyses);
+        let fields = widened(
+            &mut changes.fields,
+            &crossing.whole.field_facts,
+            super::fields::analyze(program, &analyses, &exposed.fields),
+        );
+        let elements = widened(
+            &mut changes.elements,
+            &crossing.whole.element_facts,
+            super::elements::analyze(program, &analyses, &exposed.elements),
+        );
+        let globals = widened(
+            &mut changes.globals,
+            &crossing.whole.global_facts,
+            super::globals::analyze(program, &analyses),
+        );
         let param_lengths = if growable {
             no_lengths(program)
         } else {
-            super::fields::parameter_lengths(program, &analyses, outward)
+            widened_slots(
+                &mut changes.lengths,
+                &crossing.param_lengths,
+                super::fields::parameter_lengths(program, &analyses, outward),
+            )
         };
         let whole = flow::Whole {
             returns,
@@ -242,7 +262,7 @@ fn settle(
             && param_lengths == crossing.param_lengths
             && whole == crossing.whole
         {
-            break;
+            return analyses;
         }
         crossing = Crossing {
             params,
@@ -250,7 +270,140 @@ fn settle(
             whole,
         };
     }
-    analyses
+    analyze_all(
+        program,
+        &Crossing::nothing(program, growable),
+        written,
+        caps,
+    )
+}
+
+impl Crossing {
+    /// What crosses between functions when nothing is known to: every
+    /// parameter what its declaration admits, and every return, field, element
+    /// and global absent, which reads as TOP at the use. Sound without a
+    /// fixpoint, which is why it is the answer when the fixpoint fails.
+    fn nothing(program: &Program, growable: bool) -> Self {
+        Self {
+            params: program.funcs.iter().map(declared_params).collect(),
+            param_lengths: no_lengths(program),
+            whole: flow::Whole {
+                returns: FxHashMap::default(),
+                slot_returns: FxHashMap::default(),
+                field_facts: FxHashMap::default(),
+                element_facts: FxHashMap::default(),
+                global_facts: FxHashMap::default(),
+                growable,
+            },
+        }
+    }
+}
+
+/// How many rounds each whole-program fact has changed in. See [`WIDEN_AFTER`].
+#[derive(Default)]
+struct Changes {
+    /// By function and parameter slot.
+    params: FxHashMap<(usize, usize), u32>,
+    /// By function and parameter slot.
+    lengths: FxHashMap<(usize, usize), u32>,
+    returns: FxHashMap<String, u32>,
+    fields: FxHashMap<(TypeId, u32), u32>,
+    elements: FxHashMap<HirType, u32>,
+    globals: FxHashMap<u32, u32>,
+}
+
+/// One fact's next round: what this round computed while the fact is still
+/// settling, and once it has changed more than [`WIDEN_AFTER`] times, the
+/// widened join of this round and the last. That can only grow, and grows by
+/// jumps to the thresholds [`facts::widen`] knows, so it stops. `None` is an
+/// absent entry, TOP at the use, and a widened fact that reaches it stays.
+fn widen_one(changes: &mut u32, previous: Option<Facts>, next: Option<Facts>) -> Option<Facts> {
+    if previous == next {
+        return next;
+    }
+    *changes += 1;
+    if *changes <= WIDEN_AFTER {
+        return next;
+    }
+    Some(facts::widen(previous?, previous?.join(next?)))
+}
+
+/// [`widen_one`] over a map of facts, an absent entry being TOP.
+fn widened<K: Clone + Eq + std::hash::Hash>(
+    changes: &mut FxHashMap<K, u32>,
+    previous: &FxHashMap<K, Facts>,
+    next: FxHashMap<K, Facts>,
+) -> FxHashMap<K, Facts> {
+    for gone in previous.keys().filter(|key| !next.contains_key(*key)) {
+        *changes.entry(gone.clone()).or_default() += 1;
+    }
+    next.into_iter()
+        .filter_map(|(key, facts)| {
+            let count = changes.entry(key.clone()).or_default();
+            widen_one(count, previous.get(&key).copied(), Some(facts)).map(|facts| (key, facts))
+        })
+        .collect()
+}
+
+/// [`widen_one`] over facts by function and parameter slot.
+fn widened_slots(
+    changes: &mut FxHashMap<(usize, usize), u32>,
+    previous: &[Vec<Facts>],
+    mut next: Vec<Vec<Facts>>,
+) -> Vec<Vec<Facts>> {
+    for (func, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
+        for (slot, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
+            let count = changes.entry((func, slot)).or_default();
+            *next = widen_one(count, Some(*previous), Some(*next)).unwrap_or(Facts::TOP);
+        }
+    }
+    next
+}
+
+/// What every caller hands each parameter this round: the join over every call
+/// that can reach it, from what the caller knew at the call.
+///
+/// Rebuilt from nothing each round rather than accumulated, so that this is a
+/// Kleene iteration over the whole system and not a monotone drift that can
+/// never take anything back. What keeps it from climbing forever is
+/// [`widened_slots`], not this.
+fn arguments(
+    program: &Program,
+    analyses: &[Analysis],
+    by_name: &FxHashMap<&str, usize>,
+    in_slot: &FxHashMap<u32, Vec<usize>>,
+    outward: &rustc_hash::FxHashSet<&str>,
+) -> Vec<Vec<Facts>> {
+    let mut params: Vec<Vec<Facts>> = seed(program, outward);
+
+    for (caller, func) in program.funcs.iter().enumerate() {
+        // By block, because what an argument is worth is what is known
+        // *where the call happens* rather than where the value was defined.
+        // A loop counter is `[0, 8]` at its definition -- the exit value is
+        // one of the things it can be -- and `[0, 7]` inside the body,
+        // which is the only place the call is. Joining the definition's
+        // fact hands the callee a bound one past the end, and an index one
+        // past the end is exactly the one a bounds check cannot remove.
+        for (at, block) in func.blocks.iter().enumerate() {
+            let at = super::BlockId(u32::try_from(at).unwrap_or(0));
+            for value in &block.ops {
+                let OpKind::Call { callee, args, .. } = &func.values[value.0 as usize].kind else {
+                    continue;
+                };
+                for callee in targets_of(callee, by_name, in_slot) {
+                    if outward.contains(program.funcs[callee].name.as_str()) {
+                        continue;
+                    }
+                    for (slot, arg) in args.iter().enumerate() {
+                        if let Some(slot) = params[callee].get_mut(slot) {
+                            *slot = slot.join(analyses[caller].get_at(at, *arg));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    params
 }
 
 /// Where the parameter fixpoint starts.
@@ -386,4 +539,92 @@ fn return_facts(program: &Program, analyses: &[Analysis]) -> FxHashMap<String, F
         returns.insert(func.name.clone(), result);
     }
     returns
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+
+    fn upto(hi: f64) -> Facts {
+        Facts::new(0.0, hi, true, false, false)
+    }
+
+    /// Rounds of `next = step(previous)` through [`widen_one`] until nothing
+    /// changes, as [`settle`] runs them: the fact it stops at, and how many
+    /// rounds that took.
+    fn run(step: impl Fn(Facts) -> Facts) -> (Facts, u32) {
+        let (mut changes, mut fact) = (0, upto(0.0));
+        for round in 1..=ROUND_CAP {
+            let next = widen_one(&mut changes, Some(fact), Some(step(fact))).unwrap();
+            if next == fact {
+                return (fact, round);
+            }
+            fact = next;
+        }
+        panic!("still changing after {ROUND_CAP} rounds: {fact:?}");
+    }
+
+    #[test]
+    fn a_fact_that_feeds_itself_a_step_is_widened_and_stops() {
+        // A counter field written with its own value plus one: without
+        // widening, one step per round and the round cap.
+        let (fact, rounds) = run(|fact| upto(fact.hi + 1.0));
+        assert_eq!(fact, upto(f64::INFINITY), "nothing bounds it");
+        assert!(rounds < 12, "{rounds} rounds");
+    }
+
+    #[test]
+    fn a_fact_that_settles_is_what_the_round_computed() {
+        let settles = |fact: Facts| upto((fact.hi + 2.0).min(5.0));
+        assert_eq!(
+            run(settles).0,
+            upto(5.0),
+            "no threshold jump before it settles"
+        );
+    }
+
+    #[test]
+    fn a_fact_still_settling_may_narrow() {
+        let mut changes = 0;
+        let back = widen_one(&mut changes, Some(upto(10.0)), Some(upto(4.0)));
+        assert_eq!(
+            back,
+            Some(upto(4.0)),
+            "taken back while under WIDEN_AFTER changes"
+        );
+    }
+
+    #[test]
+    fn a_widened_fact_only_grows() {
+        let mut changes = WIDEN_AFTER;
+        let held = widen_one(&mut changes, Some(upto(10.0)), Some(upto(4.0)));
+        assert_eq!(held, Some(upto(10.0)), "the join keeps what it had");
+        let grown = widen_one(&mut changes, Some(upto(10.0)), Some(upto(11.0)));
+        assert_eq!(
+            grown,
+            Some(upto(2_147_483_647.0)),
+            "and grows by a threshold jump"
+        );
+    }
+
+    #[test]
+    fn an_absent_entry_is_top_and_a_widened_one_stays_there() {
+        let previous: FxHashMap<u32, Facts> =
+            [(1, upto(3.0)), (2, upto(3.0))].into_iter().collect();
+        let mut changes: FxHashMap<u32, u32> =
+            [(1, WIDEN_AFTER), (2, WIDEN_AFTER)].into_iter().collect();
+        // Entry 1 went to TOP this round; entry 2 grew.
+        let next = widened(
+            &mut changes,
+            &previous,
+            [(2, upto(4.0))].into_iter().collect(),
+        );
+        assert_eq!(next.get(&1), None);
+        assert_eq!(next.get(&2), Some(&upto(2_147_483_647.0)));
+        // And once widened, a TOP entry does not come back narrower.
+        let again = widened(&mut changes, &next, [(1, upto(3.0))].into_iter().collect());
+        assert_eq!(again.get(&1), None);
+    }
 }

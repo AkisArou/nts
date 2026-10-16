@@ -43,26 +43,33 @@ fn width(prepared: &hir::Prepared, class: &str, field: &str) -> HirType {
         .clone()
 }
 
-/// A field whose own value is one of its stores narrows.
+/// A field whose own value is one of its stores narrows, when the stores are
+/// bounded.
 ///
-/// `this.total = this.total + this.step` is the shape, and it was the shape the
-/// fixpoint could not answer: `total` read TOP because nothing had published a
-/// fact for it yet, so the sum was TOP, so `total` published TOP.
+/// `this.sum = sum + this.by` under `sum < 1000`, `sum` read from the field, is the shape,
+/// and it was the shape the fixpoint could not answer: `total` read TOP because
+/// nothing had published a fact for it yet, so the sum was TOP, so `total`
+/// published TOP.
+///
+/// This asserted `Counter.total` narrows, which has no guard: it adds to itself
+/// on every call, nothing counts the calls, and it narrowed only because the
+/// fixpoint stopped at its round cap with a bound true of 32 rounds. That field
+/// is now in the list below, and this one has the guard that makes it true.
 #[test]
 fn a_self_referential_field_narrows() {
     let Some(prepared) = prepared("field-widths") else {
         return;
     };
-    let total = width(&prepared, "Counter", "total");
+    let sum = width(&prepared, "Capped", "sum");
     assert!(
-        matches!(total, HirType::Int { .. }),
-        "`Counter.total` reads itself and still narrows: {total:?}",
+        matches!(sum, HirType::Int { .. }),
+        "`Capped.sum` reads itself and still narrows: {sum:?}",
     );
     // And the field it reads *from* narrows too, which is the easy half and is
     // here so a regression in one is not hidden by the other.
     assert!(
-        matches!(width(&prepared, "Counter", "step"), HirType::Int { .. }),
-        "`Counter.step` narrows",
+        matches!(width(&prepared, "Capped", "by"), HirType::Int { .. }),
+        "`Capped.by` narrows",
     );
 }
 
@@ -87,6 +94,11 @@ fn a_field_that_can_hold_a_fraction_keeps_its_double() {
             "doubles itself past what an int32 holds",
         ),
         ("Derived", "slot", "is divided through a shared prefix"),
+        (
+            "Counter",
+            "total",
+            "adds to itself on every call, and nothing counts the calls",
+        ),
     ] {
         let ty = width(&prepared, class, field);
         assert!(
