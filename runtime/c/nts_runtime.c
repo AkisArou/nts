@@ -804,6 +804,30 @@ nts_visit_managed(NtsValue *slot, void (*visit)(NtsHeader *)) {
   }
 }
 
+/* A foreign release can enter program code. Its calls and catches belong to
+ * that entry, not to the throw whose cleanup may have started this release.
+ * Keep the outer payload's existing ownership here until normal return.
+ *
+ * This is also a native callback boundary: an escaping throw must not jump
+ * past a release's C frames to a waiting outer landing. Count that frame
+ * directly, rather than calling nts_callback_leave: a release does not end a
+ * host-loop turn and must not introduce a microtask checkpoint. */
+static void nts_call_foreign_release(void (*release)(void *), void *object) {
+  NtsEnvironment *environment = nts_env;
+  int raising = environment->raising;
+  NtsValue raised = environment->raised;
+  environment->raising = 0;
+  environment->raised = nts_value_of_undefined();
+  environment->in_callback++;
+  release(object);
+  if (environment->raising) {
+    nts_uncaught(nts_raise_take(), NULL);
+  }
+  environment->in_callback--;
+  environment->raised = raised;
+  environment->raising = raising;
+}
+
 /* Give up the foreign objects an object's fields hold. Each slot is cleared
  * before its release runs, so a release that reaches back into this runtime
  * finds nothing to give up twice. */
@@ -824,7 +848,7 @@ static void nts_release_foreign(NtsHeader *object) {
       void *held = items[at];
       if (held) {
         items[at] = 0;
-        ops->release(held);
+        nts_call_foreign_release(ops->release, held);
       }
     }
     return;
@@ -835,7 +859,7 @@ static void nts_release_foreign(NtsHeader *object) {
     void *held = *field;
     if (held) {
       *field = 0;
-      slot->ops->release(held);
+      nts_call_foreign_release(slot->ops->release, held);
     }
   }
 }
@@ -1339,7 +1363,8 @@ void nts_value_release(NtsValue value) {
   /* Only where references are counted: without it nothing counted a handle
    * in, so nothing may count one out. */
   else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
-    nts_handle_counting(tag)->release(value.as.native);
+    nts_call_foreign_release(nts_handle_counting(tag)->release,
+                             value.as.native);
   }
 #endif
 }
@@ -3711,24 +3736,29 @@ NtsArray *nts_array_fill_bool(NtsArray *a, bool value) {
 
 static inline NtsArray *nts_array_fill_counted(NtsArray *a, void *value,
                                                void *(*retain)(void *),
-                                               void (*release)(void *)) {
+                                               void (*release)(void *),
+                                               bool foreign) {
   void **items = NTS_ITEMS(a, void *);
   for (uint32_t at = 0; at < a->header.length; at++) {
     /* Retain before release, so filling an array with something it already
      * holds cannot free the value between the two. */
     retain(value);
-    release(items[at]);
+    if (foreign) {
+      nts_call_foreign_release(release, items[at]);
+    } else {
+      release(items[at]);
+    }
     items[at] = value;
   }
   return nts_array_same(a);
 }
 NtsArray *nts_array_fill_ref(NtsArray *a, void *value) {
   return nts_array_fill_counted(a, value, nts_count_managed,
-                                nts_uncount_managed);
+                                nts_uncount_managed, false);
 }
 NtsArray *nts_array_fill_foreign(NtsArray *a, void *value) {
   const NtsFamilyOps *ops = nts_array_family(a);
-  return nts_array_fill_counted(a, value, ops->retain, ops->release);
+  return nts_array_fill_counted(a, value, ops->retain, ops->release, true);
 }
 
 /* The coercions, as linkable symbols.
@@ -4512,18 +4542,23 @@ void nts_array_set_length(NtsArray *a, double n) {
 
 /* The reference case, which is the one the comment above is about. */
 static inline void nts_array_set_length_counted(NtsArray *a, double n,
-                                                void (*release)(void *)) {
+                                                void (*release)(void *),
+                                                bool foreign) {
   uint32_t length = a->header.length;
   nts_array_set_length_at(a, n, sizeof(void *));
   for (uint32_t at = a->header.length; at < length; at++) {
-    release(NTS_ITEMS(a, void *)[at]);
+    if (foreign) {
+      nts_call_foreign_release(release, NTS_ITEMS(a, void *)[at]);
+    } else {
+      release(NTS_ITEMS(a, void *)[at]);
+    }
   }
 }
 void nts_array_set_length_ref(NtsArray *a, double n) {
-  nts_array_set_length_counted(a, n, nts_uncount_managed);
+  nts_array_set_length_counted(a, n, nts_uncount_managed, false);
 }
 void nts_array_set_length_foreign(NtsArray *a, double n) {
-  nts_array_set_length_counted(a, n, nts_array_family(a)->release);
+  nts_array_set_length_counted(a, n, nts_array_family(a)->release, true);
 }
 
 /* And the tagged case, where only some of the dropped slots hold a reference
