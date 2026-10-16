@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler a236c37af9401a01, commit 64fe6c9fc5ec5d49468c66cbc6a87ea179b0a6ac, backend jvm, harness d6442dbc09f91ad0; machine at start: 19.1 GB available, swap 6.3/31.5 GB, load 11.5/17.1 (1m/5m), 16 cores; 4 worker(s)
+# compiler d713b44ff74a90fa, commit 9b233569e8c54d24672568148179a94d3d911674, backend jvm, harness d6442dbc09f91ad0; machine at start: 23.8 GB available, swap 5.4/31.5 GB, load 4.4/5.6 (1m/5m), 16 cores; 4 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-array.js	pass	
@@ -361,7 +361,7 @@ test/built-ins/Number/isSafeInteger/not-safe-integer.js	pass
 test/built-ins/Number/isSafeInteger/safe-integers.js	pass	
 test/built-ins/Number/prototype/toFixed/exactness.js	pass	
 test/built-ins/Number/prototype/toFixed/range.js	pass	
-test/built-ins/Number/prototype/toFixed/toFixed-tonumber-throws-typeerror-bigint.js	fail	nts: uncaught Test262Error: Number.prototype.toFixed must throw a TypeError if _fractionDigits_ is Bigint
+test/built-ins/Number/prototype/toFixed/toFixed-tonumber-throws-typeerror-bigint.js	pass	
 test/built-ins/Number/prototype/toString/a-z.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-default-radix.js	pass	
 test/built-ins/Number/prototype/toString/numeric-literal-tostring-radix-1.js	pass	
@@ -532,7 +532,7 @@ test/built-ins/String/fromCharCode/S9.7_A1.js	pass
 test/built-ins/String/fromCharCode/S9.7_A2.1.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A2.2.js	pass	
 test/built-ins/String/fromCharCode/S9.7_A3.2_T1.js	pass	
-test/built-ins/String/fromCharCode/touint16-tonumber-throws-bigint.js	fail	nts: uncaught Test262Error: ToNumber throws when argument is BigInt, and String.fromCharCode must propagate it.
+test/built-ins/String/fromCharCode/touint16-tonumber-throws-bigint.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A1_T4.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T1.js	pass	
 test/built-ins/String/prototype/charAt/S15.5.4.4_A4_T2.js	pass	
@@ -717,7 +717,6 @@ test/built-ins/global/S10.2.3_A1.1_T1.js	pass
 test/built-ins/global/S10.2.3_A1.2_T1.js	pass	
 test/built-ins/isFinite/return-false-on-nan-or-infinities.js	pass	
 test/built-ins/isFinite/return-true-for-valid-finite-numbers.js	pass	
-test/built-ins/isNaN/return-abrupt-from-tonumber-number.js	fail	nts: uncaught Test262Error: valueOf
 test/built-ins/isNaN/return-false-not-nan-numbers.js	pass	
 test/built-ins/parseFloat/15.1.2.3-2-1.js	pass	
 test/built-ins/parseFloat/S15.1.2.3_A1_T3.js	pass	
