@@ -7317,6 +7317,7 @@ fn specialize_numbers_of(
     (specialized, conversions, checks_removed)
 }
 
+#[must_use]
 pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) -> Prepared {
     RawProgram::lower(snapshot, options.entry_files, options.foreign)
         .into_unverified(&PreparationOptions::from(options))
