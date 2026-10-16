@@ -206,11 +206,11 @@ builds at one program-wide width.
 - An erased string is the JS string itself, internalized with
   `any.convert_extern`; erasing one allocates nothing, and the box type is
   gone from the type plan.
-- A JS string is the one erased value outside `eq`, so the tag helper's first
-  test is `ref.test (ref null eq)`. A null erased value is unreachable by
-  construction (an erased slot starts as the undefined singleton), so no test
-  reaches it. The nullable test is defensive: a would-be null still reaches
-  the cast that traps, rather than reading as a string.
+- The tag helper asks the string representation positively: for host strings,
+  `extern.convert_any` followed by `wasm:js-string.test`. It does not classify
+  every reference outside `eq` as a string. A null erased value is unreachable
+  by construction (an erased slot starts as the undefined singleton); a
+  would-be null still fails the predicate and reaches the cast that traps.
 - **Speed is unchanged** on `benchmarks/wasm/erased` (exploratory, load 5):
   eraseStrings 1.42 ns both ways, eraseNumbers 2.32 both. Every erased kernel
   is 2.7–7.5x behind node. V8 inlines all of the loop's helper calls (traced

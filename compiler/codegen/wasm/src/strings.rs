@@ -30,6 +30,7 @@ pub(crate) fn is_string(ty: &HirType) -> bool {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Helper {
+    Test,
     Length,
     Unit,
     Equal,
@@ -54,6 +55,7 @@ pub(crate) enum Helper {
 impl Helper {
     pub(crate) const fn name(self) -> &'static str {
         match self {
+            Self::Test => "test",
             Self::Length => "length",
             Self::Unit => "charCodeAt",
             Self::Equal => "equals",
@@ -73,7 +75,8 @@ impl Helper {
     }
     pub(crate) const fn builtin(self) -> bool {
         match self {
-            Self::Length
+            Self::Test
+            | Self::Length
             | Self::Unit
             | Self::Equal
             | Self::Compare
@@ -92,7 +95,7 @@ impl Helper {
     }
     pub(crate) fn signature(self) -> (Vec<Physical>, Physical) {
         match self {
-            Self::Length => (vec![STRING], I32),
+            Self::Test | Self::Length => (vec![STRING], I32),
             Self::Unit => (vec![STRING, I32], I32),
             Self::Equal | Self::Compare | Self::StartsWith | Self::EndsWith => {
                 (vec![STRING, STRING], I32)
@@ -109,7 +112,8 @@ impl Helper {
     /// A module-local adapter body; builtins have none.
     fn body(self, m: &mut Builder<'_>) -> Result<Function, Failure> {
         match self {
-            Self::Length
+            Self::Test
+            | Self::Length
             | Self::Unit
             | Self::Equal
             | Self::Compare

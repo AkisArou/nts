@@ -2,8 +2,8 @@
 //!
 //! An erased value is an anyref: an i31 or a boxed number, a boolean box, an
 //! absence singleton, a compiled object, or a JS string itself, internalized
-//! with `any.convert_extern`. Erasure internalizes nothing but strings, so an
-//! anyref that is neither an i31 nor a struct is a string.
+//! with `any.convert_extern`. The string representation supplies its positive
+//! predicate; the tag helper does not infer strings from other kinds' absence.
 
 use crate::{
     body::Body,
@@ -159,7 +159,10 @@ impl Helper {
                 },
                 I::End,
             ]),
-            Self::Tag => physical_tag(&mut f, types, m.types.root),
+            Self::Tag => {
+                let test = crate::strings::callee(m, crate::strings::Helper::Test)?;
+                physical_tag(&mut f, types, m.types.root, test);
+            }
             Self::BoxBoolean
             | Self::Boolean
             | Self::Truthy
@@ -174,15 +177,18 @@ impl Helper {
     }
 }
 
-fn physical_tag(f: &mut Function, types: ErasedTypes, root: Option<crate::gc::RootTypes>) {
-    // A JS string is the one erased value outside `eq` (no i31, no struct),
-    // so it is told apart by one test, first. The test admits null, so a null
-    // reference, which no erased value is, still reaches the cast below and
-    // traps rather than reading as a string.
+fn physical_tag(
+    f: &mut Function,
+    types: ErasedTypes,
+    root: Option<crate::gc::RootTypes>,
+    string_test: Func,
+) {
+    // Ask the selected string representation, rather than treating every
+    // reference outside `eq` as a string. A null reference still fails the
+    // predicate and reaches the trapping cast below, as it did before.
+    f.instructions(&[I::LocalGet(0), I::ExternConvertAny]);
+    f.call(string_test);
     f.instructions(&[
-        I::LocalGet(0),
-        I::RefTestNullable(RefType::EQREF.heap_type),
-        I::I32Eqz,
         I::If(BlockType::Result(ValType::I32)),
         I::I32Const(STRING),
         I::Else,

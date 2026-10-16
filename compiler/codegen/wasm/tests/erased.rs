@@ -145,7 +145,7 @@ fn erased_primitives_and_defined_immutable_singletons_execute_exactly() {
     });
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert_eq!(emitted.manifest.features, ["gc"]);
-    assert!(emitted.manifest.builtins.is_empty());
+    assert_eq!(emitted.manifest.builtins, ["js-string"]);
     assert!(
         emitted
             .manifest
