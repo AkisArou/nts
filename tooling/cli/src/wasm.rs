@@ -23,7 +23,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
     let input = super::EmissionInput::open(&tsconfig, emission, &mut report)?;
     let (prepared, metadata) =
         input.prepare(emission, nts_codegen_common::Backend::Wasm, &mut report)?;
-    emit_prepared(prepared, &metadata.sources, &out, host, &mut report)
+    emit_prepared(&prepared, &metadata.sources, &out, host, &mut report)
 }
 
 pub(super) fn selected_host(args: &[String]) -> Result<nts_codegen_wasm::Host> {
@@ -35,7 +35,7 @@ pub(super) fn selected_host(args: &[String]) -> Result<nts_codegen_wasm::Host> {
 }
 
 pub(super) fn emit_prepared(
-    prepared: hir::Prepared,
+    prepared: &hir::Prepared,
     sources: &[nts_diagnostics::SourceFile],
     out: &camino::Utf8Path,
     host: nts_codegen_wasm::Host,
@@ -79,7 +79,7 @@ pub(super) fn emit_prepared(
     let origins = serde_json::to_vec_pretty(
         &serde_json::json!({ "sources": sources, "instructions": emitted.origins }),
     )?;
-    std::fs::create_dir_all(&out)?;
+    std::fs::create_dir_all(out)?;
     std::fs::write(out.join("program.wasm"), &emitted.bytes)?;
     std::fs::write(out.join(nts_codegen_wasm::PROGRAM_FILE), glue.program)?;
     std::fs::write(out.join(nts_codegen_wasm::INSTANCE_FILE), glue.instance)?;

@@ -130,7 +130,7 @@ fn emit(
         )
         .map(drop),
         Backend::Jvm => emit_jvm_prepared(
-            prepared,
+            &prepared,
             &metadata.sources,
             Some(out),
             settings.text,
@@ -139,7 +139,7 @@ fn emit(
         )
         .map(drop),
         Backend::Wasm => wasm::emit_prepared(
-            prepared,
+            &prepared,
             &metadata.sources,
             out,
             settings.host.context("missing Wasm host")?,
@@ -216,7 +216,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         print_streams(backend.name(), &report);
         backends.insert(backend.name().to_owned(), serde_json::json!({
             "directory": backend.name(), "status": status,
-            "exit_code": if result.is_ok() { 0 } else { 1 },
+            "exit_code": i32::from(result.is_err()),
             "stdout": format!("{}{}", if has_shared { shared.stdout.as_str() } else { "" }, report.stdout),
             "stderr": format!("{}{}", if has_shared { shared.stderr.as_str() } else { "" }, report.stderr),
         }));

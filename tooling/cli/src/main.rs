@@ -94,10 +94,6 @@ fn project_to(rest: &[String], report: &mut EmissionReport) -> Result<Utf8PathBu
 /// A project with no `package.json` has no dependencies to acquire and is left
 /// exactly as it was found -- which is every example in this repository but
 /// one, so the common case costs a `stat`.
-fn acquire(tsconfig: &Utf8Path) -> Result<Utf8PathBuf> {
-    acquire_to(tsconfig, &mut EmissionReport::live())
-}
-
 fn acquire_to(tsconfig: &Utf8Path, report: &mut EmissionReport) -> Result<Utf8PathBuf> {
     let dir = tsconfig
         .parent()
@@ -8761,15 +8757,16 @@ fn emit_llvm(
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     let (prepared, metadata) =
         input.prepare(emission, nts_codegen_common::Backend::Llvm, &mut report)?;
-    emit_llvm_prepared(prepared, &metadata.sources, platform, &mut report)
+    emit_llvm_prepared(&prepared, &metadata.sources, platform, &mut report);
+    Ok(())
 }
 
 fn emit_llvm_prepared(
-    prepared: hir::Prepared,
+    prepared: &hir::Prepared,
     sources: &[nts_diagnostics::SourceFile],
     platform: nts_codegen_llvm::Platform,
     report: &mut EmissionReport,
-) -> Result<()> {
+) {
     let mut locations = SourceLocations::new(sources);
     for diagnostic in &prepared.diagnostics {
         report.err(format_args!("{}", locations.diagnostic_line(diagnostic)));
@@ -8782,7 +8779,6 @@ fn emit_llvm_prepared(
         ));
     }
     report.text(format_args!("{}", emitted.text));
-    Ok(())
 }
 
 /// `nts emit-jvm <tsconfig> [--out <dir>] [--text]` — the same program, as
@@ -8811,7 +8807,7 @@ fn emit_jvm(
     let (prepared, metadata) =
         input.prepare(emission, nts_codegen_common::Backend::Jvm, &mut report)?;
     emit_jvm_prepared(
-        prepared,
+        &prepared,
         &metadata.sources,
         out,
         text,
@@ -8821,7 +8817,7 @@ fn emit_jvm(
 }
 
 fn emit_jvm_prepared(
-    prepared: hir::Prepared,
+    prepared: &hir::Prepared,
     sources: &[nts_diagnostics::SourceFile],
     out: Option<&Utf8Path>,
     text: bool,

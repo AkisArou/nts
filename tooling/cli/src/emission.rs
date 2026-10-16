@@ -24,14 +24,14 @@ pub(super) struct Report {
 }
 
 impl Report {
-    pub fn live() -> Self {
+    pub(super) fn live() -> Self {
         Self {
             live: true,
             ..Self::default()
         }
     }
 
-    pub fn out(&mut self, args: Arguments<'_>) {
+    pub(super) fn out(&mut self, args: Arguments<'_>) {
         if self.live {
             println!("{args}");
         } else {
@@ -39,7 +39,7 @@ impl Report {
         }
     }
 
-    pub fn err(&mut self, args: Arguments<'_>) {
+    pub(super) fn err(&mut self, args: Arguments<'_>) {
         if self.live {
             eprintln!("{args}");
         } else {
@@ -47,7 +47,7 @@ impl Report {
         }
     }
 
-    pub fn text(&mut self, args: Arguments<'_>) {
+    pub(super) fn text(&mut self, args: Arguments<'_>) {
         if self.live {
             print!("{args}");
         } else {
@@ -102,7 +102,7 @@ pub(super) struct Metadata {
 }
 
 impl Metadata {
-    pub fn options(
+    pub(super) fn options(
         &self,
         emission: Emission<'_>,
         backend: Backend,
@@ -142,7 +142,11 @@ pub(super) struct Input {
 }
 
 impl Input {
-    pub fn open(tsconfig: &Utf8Path, emission: Emission<'_>, report: &mut Report) -> Result<Self> {
+    pub(super) fn open(
+        tsconfig: &Utf8Path,
+        emission: Emission<'_>,
+        report: &mut Report,
+    ) -> Result<Self> {
         let mut source = frontend_for(tsconfig, frontend_binary())?;
         let snapshot = nts_frontend_ts::cache::snapshot(&mut source, tsconfig, "nts-build")?;
         drop(source);
@@ -165,7 +169,7 @@ impl Input {
         })
     }
 
-    pub fn prepare(
+    pub(super) fn prepare(
         self,
         emission: Emission<'_>,
         backend: Backend,
