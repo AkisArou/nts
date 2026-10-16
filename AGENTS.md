@@ -116,8 +116,10 @@ then a guard once fixed), `tests/memory/`.
   compiling what they can. Read stderr.
 - `nts hir` shows raw lowering; `nts hir --prepared --backend <b>` is what a
   backend sees.
-- Running with a different `NTS_TSGO` poisons the snapshot cache: set
-  `NTS_NO_SNAPSHOT_CACHE=1`.
+- The snapshot cache is keyed by content: the frontend's own source, tsgo's
+  identity and every file an answer read. Another `NTS_TSGO` or a rebuilt
+  frontend is a new question, so neither needs `NTS_NO_SNAPSHOT_CACHE=1` any
+  more; that variable stays for ruling the cache out of a defect.
 
 ## The machine
 
