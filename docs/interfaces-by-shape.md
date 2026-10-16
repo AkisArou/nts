@@ -467,5 +467,16 @@ on every layout by construction.
    change everywhere (Go) or a slower call (lookup) for no gain nts needs.
 2. **Fields through interfaces as accessor slots** (recommended), against a test
    chain per access.
+
+   **Refined 2026-10-16: a test for a small set.** Where at most two classes
+   move the field (`hir::small_dispatch::MAX_TESTED`), the access tests for
+   each, calls its row directly, and calls the slot's default for every other
+   holder: the classes whose fields begin with the face's (the prefix
+   receivers) and the face's own layout read positionally whatever their row
+   says. That is the table's own behaviour read off its rows, and a direct
+   call can be inlined where the table's indirect one cannot. Past two the
+   table stays: one indexed load at any size. `benchmarks/cases/face-fields`
+   on C, 33.8 us through the table, 9.2 us with the test (E-core, exploratory,
+   identical checksum); the four-backend rows are in the record.
 3. **The guard first** (recommended): it closes a wrong answer today, before the
    larger steps.
