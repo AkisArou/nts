@@ -71,8 +71,13 @@ fn report(out: &Path) -> serde_json::Value {
 #[test]
 fn combined_emission_is_the_same_files_and_bytes_as_each_command() {
     let fixture = Fixture::new(
-        "export function twice(n: number): number { return (n * 2) | 0; }\nconsole.log(twice(21));\n",
+        "import { doubled } from './helper';\nexport function twice(n: number): number { return doubled(n); }\nconsole.log(twice(21));\n",
     );
+    std::fs::write(
+        fixture.0.join("helper.ts"),
+        "export function doubled(n: number): number { return (n * 2) | 0; }\n",
+    )
+    .unwrap();
     for flags in [vec![], vec!["--main"], vec!["--entry", "twice"]] {
         let out = fixture.0.join(format!("combined-{}", flags.join("-")));
         let mut combined_flags = vec!["--backends", "c,llvm,jvm,wasm"];

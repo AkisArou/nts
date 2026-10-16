@@ -15,7 +15,7 @@ use super::{
 
 /// Live commands write directly; a combined command keeps each backend's exact
 /// streams for the runner, without changing process-global file descriptors.
-#[derive(Default, Clone, serde::Serialize)]
+#[derive(Debug, Default, Clone, serde::Serialize)]
 pub(super) struct Report {
     pub stdout: String,
     pub stderr: String,
@@ -94,6 +94,7 @@ pub(super) fn refused(
 
 /// Only source metadata and root selection survive raw lowering. Neither a
 /// checker handle nor a snapshot is handed to the prepared emitters.
+#[derive(Debug)]
 pub(super) struct Metadata {
     pub sources: Vec<SourceFile>,
     entry: Option<Vec<String>>,
@@ -134,6 +135,7 @@ impl Metadata {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct Input {
     pub raw: hir::RawProgram,
     pub metadata: Metadata,

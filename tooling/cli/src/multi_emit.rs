@@ -11,6 +11,13 @@ use super::{
     provider_for, wasm,
 };
 
+struct BackendEmission<'a> {
+    backend: Backend,
+    emission: Emission<'a>,
+    host: Option<nts_codegen_wasm::Host>,
+    text: bool,
+}
+
 struct Request {
     out: Utf8PathBuf,
     backends: Vec<Backend>,
@@ -62,7 +69,7 @@ fn settings<'a>(
     backend: Backend,
     args: &[String],
     mut emission: Emission<'a>,
-) -> Result<(Emission<'a>, Option<nts_codegen_wasm::Host>)> {
+) -> Result<BackendEmission<'a>> {
     // Incompatible provider and host requests belong to this backend, not to
     // the shared input: native emissions still run under a mixed --rc request.
     provider_for(backend)?;
@@ -78,7 +85,12 @@ fn settings<'a>(
             .map_or(host_os(), |pair| pair[1].as_str());
         emission.llvm = Some(llvm_platform(os, host_arch()));
     }
-    Ok((emission, host))
+    Ok(BackendEmission {
+        backend,
+        emission,
+        host,
+        text: args.iter().any(|arg| arg == "--text"),
+    })
 }
 
 fn prepare(
@@ -104,22 +116,25 @@ fn prepare(
 fn emit(
     prepared: hir::Prepared,
     metadata: &Metadata,
-    backend: Backend,
+    settings: &BackendEmission<'_>,
     out: &Utf8Path,
-    emission: Emission<'_>,
-    host: Option<nts_codegen_wasm::Host>,
     report: &mut Report,
 ) -> Result<()> {
-    match backend {
-        Backend::C | Backend::Llvm => {
-            emit_c_prepared(prepared, &metadata.sources, Some(out), emission, report).map(drop)
-        }
+    match settings.backend {
+        Backend::C | Backend::Llvm => emit_c_prepared(
+            prepared,
+            &metadata.sources,
+            Some(out),
+            settings.emission,
+            report,
+        )
+        .map(drop),
         Backend::Jvm => emit_jvm_prepared(
             prepared,
             &metadata.sources,
             Some(out),
-            false,
-            emission,
+            settings.text,
+            settings.emission,
             report,
         )
         .map(drop),
@@ -127,7 +142,7 @@ fn emit(
             prepared,
             &metadata.sources,
             out,
-            host.context("missing Wasm host")?,
+            settings.host.context("missing Wasm host")?,
             report,
         ),
     }
@@ -171,7 +186,7 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
         let out = request.out.join(backend.name());
         let blocked = shared_error.is_some() && setup.is_ok();
         let has_shared = setup.is_ok();
-        let result = setup.and_then(|(emission, host)| {
+        let result = setup.and_then(|settings| {
             let metadata = metadata
                 .as_ref()
                 .context("shared frontend/lowering failed")?;
@@ -179,19 +194,11 @@ pub(super) fn command(args: &[String], emission: Emission<'_>) -> Result<()> {
                 &mut raw,
                 metadata,
                 backend,
-                emission,
+                settings.emission,
                 last_viable == Some(index),
                 &mut report,
             )?;
-            emit(
-                prepared,
-                metadata,
-                backend,
-                &out,
-                emission,
-                host,
-                &mut report,
-            )
+            emit(prepared, metadata, &settings, &out, &mut report)
         });
         let status = if blocked {
             "blocked"
