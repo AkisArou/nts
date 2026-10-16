@@ -314,6 +314,15 @@ fn a_foreign_release_preserves_an_unrelated_pending_raise() {
 }
 
 #[test]
+fn array_printers_forward_a_pending_throw_before_consuming_the_result() {
+    let report = run_suite(
+        "printer_raises",
+        &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
+    );
+    assert!(checks(&report) >= 161, "{report}");
+}
+
+#[test]
 fn an_erased_bigint_keeps_value_semantics_and_owned_storage() {
     // Both providers: the boxes are the runtime's under either, and only
     // reference counting gives them back, which the suite checks under it.
