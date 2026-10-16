@@ -6090,8 +6090,7 @@ fn walk_one_declaration(
     if class.is_some_and(|class| probe.never_binds_this(class)) {
         throws.insert(symbol);
     }
-    let own: rustc_hash::FxHashSet<NodeId> =
-        parameters_of(probe, declaration).into_iter().collect();
+    let own = parameters_of(probe, declaration).into_iter().collect();
     let mut pending: Vec<NodeId> = children_in_the_body_of(probe, declaration);
     while let Some(at) = pending.pop() {
         let kind = probe.kind_of(at);
@@ -6104,13 +6103,7 @@ fn walk_one_declaration(
         {
             throws.insert(symbol);
         }
-        reached.extend(
-            probe
-                .printers
-                .at(at)
-                .iter()
-                .map(|target| Reached::Printer(probe.printers.targets[*target].symbol)),
-        );
+        reached.extend(probe.printers.potential_calls(at));
         // **An accessor access is a call to its body**, which this walk did
         // not see either -- the same omission as `calls_in_the_body_of`, in
         // the other of the two walks that answer "what can raise here". One
@@ -48517,7 +48510,7 @@ impl<'a> FuncBuilder<'a> {
     /// A descriptor callback returns NULL with the original payload pending.
     /// This language boundary takes it exactly once and uses the ordinary
     /// throw path, including finally and an uncaught ordinary caller. Runtime
-    /// forwarders never take it; emit_the_raise_test's no-handler return is
+    /// forwarders never take it; `emit_the_raise_test`'s no-handler return is
     /// insufficient here because this function need not be a raising copy.
     fn printer_text(&mut self, from: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
         let mut represented = value;

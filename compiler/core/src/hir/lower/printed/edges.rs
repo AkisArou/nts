@@ -7,7 +7,7 @@ use std::{cell::RefCell, collections::BTreeSet, rc::Rc, sync::Arc};
 use nts_semantic_schema::{NodeId, SemanticSnapshot, TypeId, TypeKind};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::super::{FuncBuilder, Hierarchy, HirType, ManagedType, syntax};
+use super::super::{FuncBuilder, Hierarchy, HirType, ManagedType, Reached, syntax};
 
 #[derive(Default)]
 pub(in crate::hir::lower) struct Plan {
@@ -25,6 +25,12 @@ pub(in crate::hir::lower) struct Target {
     pub name: String,
 }
 
+pub(in crate::hir::lower) enum ClassTarget<'a> {
+    Default,
+    Unavailable,
+    Method(&'a Target),
+}
+
 impl Target {
     pub(in crate::hir::lower) fn entry_name(&self, raises: bool) -> String {
         if raises {
@@ -37,7 +43,7 @@ impl Target {
 
 impl Plan {
     /// Possible raising entries, shared across conversions with the same source
-    /// candidates. This is not availability: only Program::printed settles
+    /// candidates. This is not availability: only `Program::printed` settles
     /// which of these functions actually exists and is a descriptor callback.
     pub(in crate::hir::lower) fn raising_entries(
         &self,
@@ -147,10 +153,21 @@ impl Plan {
         plan
     }
 
-    pub(in crate::hir::lower) fn class_target(&self, ty: TypeId) -> Option<Option<&Target>> {
-        self.by_class
-            .get(&ty)
-            .map(|at| at.map(|at| &self.targets[at]))
+    pub(in crate::hir::lower) fn class_target(&self, ty: TypeId) -> ClassTarget<'_> {
+        match self.by_class.get(&ty) {
+            None => ClassTarget::Default,
+            Some(None) => ClassTarget::Unavailable,
+            Some(Some(at)) => ClassTarget::Method(&self.targets[*at]),
+        }
+    }
+
+    pub(in crate::hir::lower) fn potential_calls(
+        &self,
+        node: NodeId,
+    ) -> impl Iterator<Item = Reached> {
+        self.at(node)
+            .iter()
+            .map(|at| Reached::Printer(self.targets[*at].symbol))
     }
 
     pub(in crate::hir::lower) fn at(&self, node: NodeId) -> &[usize] {
@@ -276,7 +293,7 @@ impl Plan {
 }
 
 /// Only the existing language conversion points, not generic coercion,
-/// inspection, property-key primitive formatting or future ToPrimitive work.
+/// inspection, property-key primitive formatting or future `ToPrimitive` work.
 fn conversion_inputs(probe: &FuncBuilder<'_>, node: NodeId) -> Vec<NodeId> {
     match probe.kind_of(node) {
         Some(syntax::CALL_EXPRESSION | syntax::NEW_EXPRESSION) => {

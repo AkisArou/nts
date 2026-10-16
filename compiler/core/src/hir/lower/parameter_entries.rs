@@ -552,27 +552,7 @@ pub(super) fn split(
         } else {
             None
         };
-        for site in &mut arrivals.uniform_sites {
-            if site.function == split.name {
-                site.function
-                    .clone_from(if (site.answered.0 as usize) < split.cut.values {
-                        &entry.name
-                    } else {
-                        &body.name
-                    });
-            }
-        }
-        for check in &mut arrivals.printer_checks {
-            if check.function == split.name {
-                check
-                    .function
-                    .clone_from(if (check.flag.0 as usize) < split.cut.values {
-                        &entry.name
-                    } else {
-                        &body.name
-                    });
-            }
-        }
+        split_sites(arrivals, &split, &entry, &body);
         if let Err(why) = compact(&mut body, arrivals).and_then(|()| compact(&mut entry, arrivals))
         {
             diagnostics.push(refuse_split(program, index, why));
@@ -614,6 +594,31 @@ pub(super) fn split(
         }
     }
     diagnostics
+}
+
+/// Route recorded sites to their half before compacting its value identities.
+fn split_sites(arrivals: &mut Arrivals, split: &Split, entry: &Func, body: &Func) {
+    let containing = |id: ValueId| {
+        if (id.0 as usize) < split.cut.values {
+            &entry.name
+        } else {
+            &body.name
+        }
+    };
+    for site in arrivals
+        .uniform_sites
+        .iter_mut()
+        .filter(|site| site.function == split.name)
+    {
+        site.function.clone_from(containing(site.answered));
+    }
+    for check in arrivals
+        .printer_checks
+        .iter_mut()
+        .filter(|check| check.function == split.name)
+    {
+        check.function.clone_from(containing(check.flag));
+    }
 }
 
 fn refuse_split(program: &mut Program, index: usize, why: &str) -> Diagnostic {

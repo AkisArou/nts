@@ -42,7 +42,7 @@ mod edges;
 pub(super) use edges::Plan;
 
 /// A potential poll, kept only while its descriptor can call one of these
-/// raising entries. Names and ValueIds follow the same entry/body split as
+/// raising entries. Names and `ValueIds` follow the same entry/body split as
 /// lowering's other recorded sites, before any optimization renumbers values.
 #[derive(Debug, Clone)]
 pub(super) struct Check {
@@ -190,8 +190,10 @@ fn printing(
 /// answers a string, and refused otherwise. `None` where the chain declares
 /// none.
 fn own_to_string(naming: &Naming, program: &Program, ty: TypeId) -> Option<Printed> {
-    let Some(target) = naming.printers.class_target(ty)? else {
-        return Some(Printed::Refused);
+    let target = match naming.printers.class_target(ty) {
+        edges::ClassTarget::Default => return None,
+        edges::ClassTarget::Unavailable => return Some(Printed::Refused),
+        edges::ClassTarget::Method(target) => target,
     };
     let name = target.entry_name(naming.throwing.contains(&target.symbol));
     let callable = program.funcs.iter().any(|func| {
