@@ -7,6 +7,81 @@ use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 #[test]
+fn lexical_writes_share_readiness_and_proven_writes_carry_no_ready_field() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/a-lexical-assignment-before-initialization/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("the unchecked write matrix snapshots");
+    let prepared = hir::prepare(&snapshot).expect("the write matrix verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let program = &prepared.program;
+    let writer = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "capturedLetReady")
+        .expect("the proven-late writer remains exported");
+    let cells: Vec<_> = writer
+        .values
+        .iter()
+        .filter_map(|value| {
+            if !matches!(value.kind, OpKind::ObjectNew { .. }) {
+                return None;
+            }
+            let HirType::Managed(ManagedType::Object(ty)) = value.ty else {
+                return None;
+            };
+            program
+                .layout(ty)
+                .filter(|layout| layout.name.starts_with("Cell"))
+        })
+        .collect();
+    assert!(
+        !cells.is_empty(),
+        "the writer still shares its captured binding"
+    );
+    assert!(
+        cells.iter().all(|layout| layout.fields.len() == 1),
+        "a proven-late captured writer needs its value field only"
+    );
+    for name in [
+        "ordinaryLocal",
+        "provenLateLet",
+        "plainVar",
+        "initializedLet",
+    ] {
+        let function = program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .expect("the no-cost control remains exported");
+        assert!(
+            function
+                .blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .all(|op| !matches!(function.values[op.0 as usize].kind, OpKind::FieldGet { .. })),
+            "{name} must not load a readiness flag"
+        );
+    }
+    assert!(
+        program
+            .funcs
+            .iter()
+            .flat_map(|func| &func.values)
+            .all(|value| !matches!(value.kind, OpKind::CellReady { .. })),
+        "lexical writes throw ordinary ReferenceError rather than a backend stop"
+    );
+}
+
+#[test]
 fn module_initialization_preserves_subjects_and_leaves_safe_readers_unguarded() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
         return;
