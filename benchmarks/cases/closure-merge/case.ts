@@ -62,3 +62,12 @@ export function work(seed: number): number {
  * optimiser hoist the whole call out of the timed region and report zero.
  */
 export const seed = 5;
+
+// The representation this row measures (`nts expect-ir`): the merged
+// closures are called through their signature's typed entry, so nothing on
+// the path is erased, and both bodies answer an integer.
+// expect-ir: all: no erase in work
+// expect-ir: all: no unerase in drive
+// expect-ir: all: count call.closure in drive == 1
+// expect-ir: all: Closure0#call returns i32
+// expect-ir: all: Closure1#call returns i32

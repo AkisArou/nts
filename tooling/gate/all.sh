@@ -2034,6 +2034,18 @@ outcomes() {
   return $status
 }
 
+# The `// expect-ir:` facts the fixtures and benchmarks state about how they are
+# represented: no erasure on a typed path, an accumulator that is an integer, a
+# direct call (tooling/conformance/expect-ir.ts). A representation regression
+# fails here, by name, in the landing that makes it, instead of weeks later as
+# noise in a benchmark row.
+expect_ir() {
+  out=$(node tooling/conformance/expect-ir.ts 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '!/^  holds /'
+  return $status
+}
+
 # Is what the backend receives the program the source says? Seven rules over
 # `hir --prepared`, `hir`, `layouts` and `refusals` of tests/programs/ and every
 # conformance blocker, each one a defect that shipped silently on 2026-09-27:
@@ -2479,6 +2491,7 @@ step "test262-cases" test262_cases
 step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "outcomes" outcomes
+step "expect-ir" expect_ir
 step "integrity" integrity
 step "definitions" definitions
 step "compile-time" compile_time

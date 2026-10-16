@@ -115,6 +115,7 @@ export const ASKS = {
   "jvm-verifies": ["valid", "does the runtime's and the outcomes' JVM output load, verify and link -- the jvm step runs examples only"],
   rc: ["answers", "the same on C with reference counting, where a lifetime error shows"],
   outcomes: ["answers", "does each pinned defect still do exactly what it did"],
+  "expect-ir": ["answers", "does every `// expect-ir:` representation fact in the corpora still hold, on each backend it names"],
   integrity: ["valid", "is every refusal, cut and location honest, over examples, blockers and outcomes"],
   "integrity-runtime": ["valid", "the same over the runtime"],
   definitions: ["whether", "did the runtime's reach go down, per module"],
@@ -216,7 +217,7 @@ export const RULES = [
     // written for a lowering that got slower: a lowering change reaches every
     // program the gate compiles, so addons, profile, assembles, memory,
     // bench-agree, corpus and dex read its output as much as examples does.
-    steps: ["examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
+    steps: ["expect-ir", "examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -277,7 +278,7 @@ export const RULES = [
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    steps: ["snapshot-cache", "types", "examples", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
+    steps: ["snapshot-cache", "types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases"],
     arms: [
       { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
       { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
@@ -403,7 +404,7 @@ export const RULES = [
   {
     name: "the CLI",
     when: (p) => /^tooling\/cli\//.test(p),
-    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "wasm", "rc"],
+    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "wasm", "rc", "expect-ir"],
     arms: [],
   },
   {
@@ -685,12 +686,12 @@ export function dependents(dir) {
 // `member` decides membership by the path alone, so a deleted or renamed
 // program still owes its corpus: the tree no longer has it to list.
 const CORPORA = [
-  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
+  { name: "the examples", member: /^tests\/(programs\/[^/]+|gjs|workspace)\//, dirs: () => [...kids("tests/programs"), "tests/gjs", "tests/workspace"], steps: ["examples", "expect-ir", "llvm", "llvm-rc", "jvm", "wasm", "rc", "integrity", "example-refusals", "dex", "snapshot-cache"] },
   { name: "the interop projects", member: /^tests\/interop\/[^/]+\//, dirs: () => kids("tests/interop"), steps: ["interop"] },
   { name: "the blockers", member: /^tests\/refusals\/[^/]+\//, dirs: () => kids("tests/refusals"), steps: ["blockers", "integrity"] },
   { name: "the outcomes", member: /^tests\/outcomes\/[^/]+\//, dirs: () => kids("tests/outcomes"), steps: ["outcomes", "integrity", "jvm-verifies"] },
   { name: "the runtime modules", member: /^runtime\/(node\/[^/]+|web-platform)\//, dirs: () => [...kids("runtime/node"), "runtime/web-platform"], steps: ["definitions", "integrity-runtime", "compile-time", "assembles", "c-compiles", "addons", "profile", "snapshot-cache", "types", "jvm-verifies", "divergence"] },
-  { name: "the bench cases", member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex"] },
+  { name: "the bench cases", member: /^benchmarks\/cases\/[^/]+\//, dirs: () => kids("benchmarks/cases"), steps: ["benches", "bench-agree", "dex", "expect-ir"] },
   { name: "the memory cases", member: /^tests\/memory\/[^/]+\//, dirs: () => kids("tests/memory"), steps: ["memory"] },
 ];
 function kids(dir) {

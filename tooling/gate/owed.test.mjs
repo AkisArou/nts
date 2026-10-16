@@ -29,6 +29,22 @@ function owes(path, want, { not = [] } = {}) {
   return got;
 }
 
+test("a representation fact is checked wherever the program it describes can change", () => {
+  // What `expect-ir` reads: core's preparation, the frontend's snapshot, the
+  // CLI that checks it, and the sources that state the facts.
+  for (const path of [
+    "compiler/core/src/hir/loops.rs",
+    "compiler/frontend-ts/src/cache.rs",
+    "tooling/cli/src/expect_ir.rs",
+    "benchmarks/cases/optional-chain/case.ts",
+    "tests/programs/a-class-expression/src/main.ts",
+  ]) {
+    superset(stepsFor(path), ["expect-ir"], path);
+  }
+  // A backend emits from the prepared program; it cannot move a fact.
+  assert.ok(!stepsFor("compiler/codegen/wasm/src/lib.rs").includes("expect-ir"));
+});
+
 test("a path no rule names owes the full gate", () => {
   assert.deepEqual([...full()].sort(), [...allSteps()].sort());
   assert.equal(stepsFor("Cargo.lock").length, allSteps().length);

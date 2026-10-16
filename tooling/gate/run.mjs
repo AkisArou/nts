@@ -117,6 +117,7 @@ const STEPS = [
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
   { name: "test262-rest-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
+  { name: "expect-ir", slots: 1, mem: 2, nts: true, fe: true, doc: "representation facts in the corpora hold" },
   { name: "integrity", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "listings self-consistent over examples, blockers, outcomes" },
   // Reads integrity-runtime's `hir --prepared` listings when both are in the
   // run (NTS_DEFINITIONS_FROM), rather than lowering the corpus again.

@@ -49,3 +49,7 @@ export function run(rounds: number): number {
  * hoist the whole call out of the timed region and report an impressive zero.
  */
 export const seed = 100000;
+
+// The representation this row measures (`nts expect-ir`): the optional call
+// reaches the closure directly, not through a dispatch table.
+// expect-ir: all: no call.virtual in run
