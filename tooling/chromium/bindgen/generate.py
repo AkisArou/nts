@@ -669,6 +669,19 @@ class Generator:
         # argument (getAsString's) above all -- stay skipped below.
         if unwrapped.is_callback_function:
             definition = unwrapped.type_definition_object
+            # The string twin (DataTransferItem.getAsString): the text
+            # crosses as UTF-8 borrowed for the call, which the compiler's
+            # closure bridge builds the program's string from
+            # (nts_dom::StringCallbackOf). A null callback is the null
+            # triple Blink's own null check turns away.
+            if definition is not None and definition.identifier == "FunctionStringCallback":
+                return Param(
+                    name,
+                    f"void (*{name})(const char*, void*), void* {name}_closure, "
+                    f"void (*{name}_destroy)(void*)",
+                    f"{name}: Closure<(data: string) => void>",
+                    f"nts_dom::StringCallbackOf(context, {name}, {name}_closure, {name}_destroy)",
+                    True)
             if definition is not None and definition.identifier == "BlobCallback":
                 return Param(
                     name,

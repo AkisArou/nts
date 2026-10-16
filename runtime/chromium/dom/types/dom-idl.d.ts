@@ -28862,6 +28862,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_DataTransferItem_getAsFile
      */
     getAsFile(this: DataTransferItem): File | null;
+    /**
+     * @ntsSymbol nts_dom_DataTransferItem_getAsString
+     */
+    getAsString(this: DataTransferItem, callback: Closure<(data: string) => void>): void;
   }
   export type DataTransferItemMethods = DataTransferItemOwnMethods;
   export type DataTransferItem = HostClass<"NtsDomDataTransferItem", null, "nts_dom_retain", "nts_dom_release"> & DataTransferItemMethods;

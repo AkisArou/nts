@@ -81,16 +81,16 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-14, 294 interfaces, 7056 functions):
+  2026-10-14, 294 interfaces, 7057 functions):
   - lib.dom.d.ts declares 3625 members on the bound interfaces.
-  - 3154 are bound, the CSS properties among them. Blink serves those
+  - 3155 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are
     generated from lib.dom's own list (`css_properties` in generate.py).
-  - 234 are in Blink's IDL but skipped, and `report.json` says why. The
+  - 233 are in Blink's IDL but skipped, and `report.json` says why. The
     largest groups: 64 result types (`any`, frozen arrays, promises,
     sequences, `object`), 62 naming an interface not bound, 59 defined in
     Blink's modules component on an interface the allowlist does not take
-    from there, 16 touch-event members Blink enables per platform, and 14
+    from there, 16 touch-event members Blink enables per platform, and 13
     parameter types.
   - The rest are not attributes or operations of that interface in Blink's
     IDL: 176 constants, 24 iterable members, 4 stringifiers and 33 others

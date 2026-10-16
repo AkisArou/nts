@@ -6152,6 +6152,7 @@ void nts_dom_DataTransfer_setDragImage(NtsDomDataTransfer* self, NtsDomElement* 
 const NtsStringView* nts_dom_DataTransferItem_get_kind(NtsDomDataTransferItem* self);
 const NtsStringView* nts_dom_DataTransferItem_get_type(NtsDomDataTransferItem* self);
 NtsDomFile* nts_dom_DataTransferItem_getAsFile(NtsDomDataTransferItem* self);
+void nts_dom_DataTransferItem_getAsString(NtsDomDataTransferItem* self, void (*callback)(const char*, void*), void* callback_closure, void (*callback_destroy)(void*));
 double nts_dom_DataTransferItemList_get_length(NtsDomDataTransferItemList* self);
 NtsDomDataTransferItem* nts_dom_DataTransferItemList_add_2(NtsDomDataTransferItemList* self, const NtsBorrowedString* data, const NtsBorrowedString* type, NtsDomException** error);
 NtsDomDataTransferItem* nts_dom_DataTransferItemList_add_1(NtsDomDataTransferItemList* self, NtsDomFile* file);

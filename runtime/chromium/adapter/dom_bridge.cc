@@ -230,6 +230,36 @@ private:
   NtsDomDestroy destroy_;
 };
 
+// The string twin: a compiled closure DataTransferItem.getAsString's
+// FunctionStringCallback will run once with the item's text, posted as a
+// task by Blink. Same holding and give-back as a blob call.
+class NtsStringCall final : public blink::GarbageCollected<NtsStringCall> {
+public:
+  NtsStringCall(NtsDomContext *context, nts_dom::NtsDomStringCallback callback,
+                void *closure, NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  void Run(const char *text);
+  void Trace(blink::Visitor *) const {}
+
+  void *closure() const { return closure_; }
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = std::exchange(closure_, nullptr);
+    return std::exchange(destroy_, nullptr);
+  }
+
+private:
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
+  nts_dom::NtsDomStringCallback callback_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
+  NtsDomDestroy destroy_;
+};
+
 class NtsFrame final : public blink::FrameCallback {
 public:
   NtsFrame(NtsDomContext *context, NtsDomFrameCallback callback, void *closure,
@@ -717,6 +747,7 @@ public:
     visitor->Trace(held);
     visitor->Trace(promises);
     visitor->Trace(blobs);
+    visitor->Trace(strings);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -763,6 +794,8 @@ public:
   blink::HeapHashSet<blink::Member<NtsPendingPromise>> promises;
   // Blob callbacks not yet called back.
   blink::HeapHashSet<blink::Member<NtsBlobCall>> blobs;
+  // String callbacks not yet called back.
+  blink::HeapHashSet<blink::Member<NtsStringCall>> strings;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -927,6 +960,7 @@ using nts_dom::HeldListeners;
 using nts_dom::ListenerSet;
 using nts_dom::NativeJob;
 using nts_dom::NtsBlobCall;
+using nts_dom::NtsStringCall;
 using nts_dom::NtsFrame;
 using nts_dom::NtsListener;
 using nts_dom::HeldObjects;
@@ -1099,6 +1133,34 @@ void NtsFrame::Invoke(double time) {
 
 // A blob call's run: the closure with the blob (or null), through the host
 // like every one-shot, then destroyed -- RunFrame's shape with a handle.
+// A string call's run: the closure with the text, through the host like
+// every one-shot, then destroyed.
+void NtsStringCall::Run(const char *text) {
+  NtsDomContext *context = context_;
+  const nts_dom::NtsDomStringCallback callback = callback_;
+  void *closure = nullptr;
+  const NtsDomDestroy destroy = Take(closure);
+  if (!context || context->closed || !context->invoke)
+    return;
+  context->listeners->strings.erase(this);
+  nts_dom::ProgramScope scope(context);
+  struct Call {
+    nts_dom::NtsDomStringCallback callback;
+    RAW_PTR_EXCLUSION const char *text; // see PlainPointers
+    RAW_PTR_EXCLUSION void *closure;    // see PlainPointers
+    NtsDomDestroy destroy;
+  } call{callback, text, closure, destroy};
+  context->invoke(
+      context->invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(call->text, call->closure);
+        if (call->destroy)
+          call->destroy(call->closure);
+      },
+      &call);
+}
+
 void NtsBlobCall::Run(blink::Blob *blob) {
   NtsDomContext *context = context_;
   const nts_dom::NtsDomBlobCallback callback = callback_;
@@ -1139,6 +1201,17 @@ void RunBlobCallback(const v8::FunctionCallbackInfo<v8::Value> &info) {
                                              info[0].As<v8::Object>())
           : nullptr;
   call->Run(blob);
+}
+// The same for a FunctionStringCallback: the text as UTF-8, borrowed for
+// the call; the compiler's closure bridge builds the program's string.
+void RunStringCallback(const v8::FunctionCallbackInfo<v8::Value> &info) {
+  auto *call = static_cast<NtsStringCall *>(
+      info.Data().As<v8::External>()->Value(
+          v8::kExternalPointerTypeTagDefault));
+  v8::String::Utf8Value text(
+      info.GetIsolate(),
+      info.Length() > 0 ? info[0] : v8::Local<v8::Value>());
+  call->Run(*text ? *text : "");
 }
 } // namespace
 } // namespace nts_dom
@@ -1557,6 +1630,13 @@ void NtsDomContext::Close() {
     if (auto destroy = call->Take(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<NtsStringCall>> strings(listeners->strings);
+  listeners->strings.clear();
+  for (auto &call : strings) {
+    void *closure = nullptr;
+    if (auto destroy = call->Take(closure))
+      GiveBack(destroy, closure);
+  }
   blink::HeapVector<blink::Member<nts_dom::NtsMicrotask>> microtasks(listeners->microtasks);
   listeners->microtasks.clear();
   for (auto &task : microtasks) {
@@ -1708,6 +1788,23 @@ blink::V8BlobCallback *BlobCallbackOf(NtsDomContext &context,
           .ToLocalChecked();
   return blink::V8BlobCallback::Create(function);
 }
+blink::V8FunctionStringCallback *
+StringCallbackOf(NtsDomContext &context, NtsDomStringCallback callback,
+                 void *closure, NtsDomDestroy destroy) {
+  // A null callback (the IDL's FunctionStringCallback?) is Blink's null.
+  if (!callback)
+    return nullptr;
+  CHECK(context.invoke);
+  auto *call = blink::MakeGarbageCollected<NtsStringCall>(
+      &context, callback, closure, destroy);
+  context.listeners->strings.insert(call);
+  auto function =
+      v8::Function::New(context.MainWorld()->GetContext(), &RunStringCallback,
+                        v8::External::New(context.v8_isolate.get(), call,
+                                          v8::kExternalPointerTypeTagDefault))
+          .ToLocalChecked();
+  return blink::V8FunctionStringCallback::Create(function);
+}
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLBoolean> promise) {
@@ -1811,6 +1908,8 @@ void nts_blink_dom_each_held_closure(NtsDomContext *context,
   for (const auto &held : listeners.held)
     each(held->closure());
   for (const auto &call : listeners.blobs)
+    each(call->closure());
+  for (const auto &call : listeners.strings)
     each(call->closure());
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }

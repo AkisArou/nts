@@ -42148,6 +42148,14 @@ NtsDomFile* nts_dom_DataTransferItem_getAsFile(NtsDomDataTransferItem* self) {
   return HandleOf<NtsDomFile>(receiver->getAsFile());
 }
 
+void nts_dom_DataTransferItem_getAsString(NtsDomDataTransferItem* self, void (*callback)(const char*, void*), void* callback_closure, void (*callback_destroy)(void*)) {
+  NtsDomContext& context = nts_dom::Current();
+  auto* receiver = ObjectOf<blink::DataTransferItem>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  receiver->getAsString(script_state, nts_dom::StringCallbackOf(context, callback, callback_closure, callback_destroy));
+}
+
 double nts_dom_DataTransferItemList_get_length(NtsDomDataTransferItemList* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DataTransferItemList>(self);

@@ -898,7 +898,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist", "blobbed"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist", "blobbed", "asString"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -945,5 +945,11 @@ export function startLibDomPromises(): void {
       document.querySelector("#native-lib-dom")?.setAttribute(
         "data-blobbed", blob === null ? "null" : blob.type + " " + blob.size);
     }, "image/png");
+    // The string twin: getAsString's FunctionStringCallback, run from the
+    // task Blink posts with the item's text.
+    const carried = new DataTransfer();
+    carried.items.add("hello ✓", "text/plain")?.getAsString((data: string): void => {
+      document.querySelector("#native-lib-dom")?.setAttribute("data-asString", data);
+    });
   }, 0);
 }

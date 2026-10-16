@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_function_string_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -688,6 +689,14 @@ using NtsDomBlobCallback = void (*)(NtsDomBlob *, void *);
 blink::V8BlobCallback *BlobCallbackOf(NtsDomContext &context,
                                       NtsDomBlobCallback callback,
                                       void *closure, NtsDomDestroy destroy);
+// The same for DataTransferItem.getAsString's FunctionStringCallback: the
+// string crosses as the UTF-8 the compiler's closure bridge builds the
+// program's string from, borrowed for the call (a closure parameter is
+// caller-owned; a callee that keeps it retains it itself).
+using NtsDomStringCallback = void (*)(const char *, void *);
+blink::V8FunctionStringCallback *
+StringCallbackOf(NtsDomContext &context, NtsDomStringCallback callback,
+                 void *closure, NtsDomDestroy destroy);
 // The same, fulfilled with a boolean.
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,

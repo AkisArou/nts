@@ -1,5 +1,5 @@
 {
-  "bound": 7056,
+  "bound": 7057,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -3035,11 +3035,6 @@
       "interface": "DataTransferItem",
       "member": "getAsFileSystemHandle/0",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "DataTransferItem",
-      "member": "getAsString/1",
-      "why": "parameter type FunctionStringCallback?"
     },
     {
       "interface": "DataTransferItem",

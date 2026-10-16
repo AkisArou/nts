@@ -1,8 +1,8 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3154,
-    "skipped": 234,
+    "bound": 3155,
+    "skipped": 233,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
@@ -12,7 +12,7 @@
     "result type": 64,
     "defined in": 59,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
-    "parameter type": 14,
+    "parameter type": 13,
     "interface SVGPoint": 11,
     "interface SVGRect": 9,
     "interface SVGMatrix": 7,
@@ -2973,11 +2973,11 @@
     "DataTransferItem": {
       "bound": [
         "getAsFile",
+        "getAsString",
         "kind",
         "type"
       ],
       "skipped": {
-        "getAsString": "parameter type FunctionStringCallback?",
         "webkitGetAsEntry": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
       "absent": {}
