@@ -27,6 +27,7 @@
 # Deliberate: these exist to hold constructs that refuse, and the count is the
 # point rather than a debt.
 generic-classes-unsupported 1 the constructs the name promises
+a-refused-printer-keeps-unrelated-conversions 1 Picker#pick returns T and deliberately refuses, keeping Unavailable#toString unavailable while all four unrelated conversion and control exports compile
 generator-unsupported 3 the constructs the name promises
 dates-unsupported 6 the constructs the name promises
 async-unsupported 3 the constructs the name promises
