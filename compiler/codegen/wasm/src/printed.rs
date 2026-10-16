@@ -157,6 +157,9 @@ fn body(m: &mut Builder<'_>) -> Result<Function, Failure> {
                     };
                     f.instruction(&I::RefCastNonNull(heap_type));
                 }
+                // Core selects the ordinary or raising printer. A raising
+                // printer's null result is a placeholder: forward it without
+                // consuming it, and let the caller's HIR take the payload.
                 f.call(*function);
                 crate::transfer::transfer(
                     f,
@@ -334,6 +337,17 @@ fn array_text_body(m: &mut Builder<'_>, wrapper: u32) -> Result<Function, Failur
         I::LocalGet(1),
     ]);
     f.call(text);
+    if m.raises {
+        let flag = crate::raising::state(m, crate::raising::Slot::Flag)?;
+        f.global_get(flag);
+        f.instruction(&I::If(BlockType::Empty));
+        // Both the partial prefix and the null result are still on the
+        // operand stack. Return discards them and the local references;
+        // only our own join frame needs explicit cleanup. Never concatenate
+        // the placeholder or call another printer with a raise pending.
+        leave_join(m, &mut f)?;
+        f.instructions(&[I::RefNull(HeapType::EXTERN), I::Return, I::End]);
+    }
     f.call(concat);
     f.instructions(&[
         I::LocalSet(joined),
@@ -451,11 +465,15 @@ fn enter_join(m: &mut Builder<'_>, f: &mut Function, array: u32, at: u32) -> Res
     Ok(())
 }
 
-/// On leaving an array's join: popped.
+/// On leaving an array's join: pop and release this frame's GC root. The
+/// cycle shortcut in `enter_join` returns before pushing, so never comes here.
 fn leave_join(m: &mut Builder<'_>, f: &mut Function) -> Result<(), Failure> {
-    let (_, depth, _) = joining(m)?;
+    let (stack, depth, ty) = joining(m)?;
     f.global_get(depth);
     f.instructions(&[I::I32Const(1), I::I32Sub]);
     f.global_set(depth);
+    f.global_get(stack);
+    f.global_get(depth);
+    f.instructions(&[I::RefNull(RefType::EQREF.heap_type), I::ArraySet(ty)]);
     Ok(())
 }
