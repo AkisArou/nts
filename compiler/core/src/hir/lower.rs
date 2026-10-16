@@ -59466,6 +59466,10 @@ impl<'a> FuncBuilder<'a> {
                 Ok(value)
             }
             Branch::Present(value) => self.narrowed(id, value),
+            Branch::Unerased(value, ty) => {
+                let origin = self.origin(id);
+                Ok(self.push(OpKind::Unerase { value }, ty, origin))
+            }
             Branch::ObjcGetter(receiver, object, property) => {
                 self.send_objc_getter(id, object, &property, Some(receiver))
             }
@@ -82796,6 +82800,9 @@ enum Native {
 enum Branch {
     Expression(NodeId),
     Value(ValueId),
+    /// A supplied parameter payload, read only in the arm whose undefined
+    /// test established that its default is not needed.
+    Unerased(ValueId, HirType),
     /// A parameter's default, in the arm where the argument a call passed for
     /// it is `undefined`: see [`FuncBuilder::lower_parameter_default`], whose
     /// arguments these are -- the call, the default, the callee, the arguments

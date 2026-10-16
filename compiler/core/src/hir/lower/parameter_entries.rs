@@ -15,20 +15,20 @@ use super::{
     HirType, LoweringSnapshot, Op, OpKind, Param, ParamShape, Program, Terminator, ValueId,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Cut {
     block: BlockId,
     values: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct Split {
     pub(super) name: String,
     pub(super) cut: Cut,
     pub(super) public_types: BTreeMap<u32, PublicInput>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct PublicInput {
     pub(super) parameter: Param,
     pub(super) absent: super::Absent,
