@@ -821,6 +821,7 @@ mod tests {
         let external = |name: &str| OpKind::Call {
             callee: hir::Callee::External(name.to_owned()),
             args: Vec::new(),
+            frame: None,
         };
         let poll = external("nts_raising");
         assert!(named("call.extern(nts_raising)", &poll));
