@@ -684,28 +684,42 @@ const _: () = assert!(
 /// how integer intent is written in JavaScript. It is a proof, not a hint.
 #[must_use]
 pub fn to_int32(a: Facts) -> Facts {
-    // Already an int32: the coercion is the identity, and saying so keeps the
-    // range the caller worked for instead of widening back to the full int32.
-    if a.has_numeric() && !a.maybe_nan && a.whole && a.lo >= I32_MIN && a.hi <= I32_MAX {
-        return Facts::new(a.lo, a.hi, true, false, false);
-    }
-    // Only NaN reaches here, and `ToInt32(NaN)` is `0`.
+    // Only NaN, and `ToInt32(NaN)` is `0`.
     if !a.has_numeric() {
         return Facts::constant(0.0);
     }
-    Facts::new(I32_MIN, I32_MAX, true, false, false)
+    truncated_within(a, I32_MIN, I32_MAX)
+        .unwrap_or_else(|| Facts::new(I32_MIN, I32_MAX, true, false, false))
 }
 
-/// JavaScript's `ToUint32`.
+/// JavaScript's `ToUint32`: as [`to_int32`], modulo 2^32 into `[0, 2^32)`.
 #[must_use]
 pub fn to_uint32(a: Facts) -> Facts {
-    if a.has_numeric() && !a.maybe_nan && a.whole && a.lo >= 0.0 && a.hi <= U32_MAX {
-        return Facts::new(a.lo, a.hi, true, false, false);
-    }
     if !a.has_numeric() {
         return Facts::constant(0.0);
     }
-    Facts::new(0.0, U32_MAX, true, false, false)
+    truncated_within(a, 0.0, U32_MAX)
+        .unwrap_or_else(|| Facts::new(0.0, U32_MAX, true, false, false))
+}
+
+/// What a 32-bit coercion makes of `a` when every finite member truncates
+/// into `[lo, hi]`, the coercion's own range: there the wrap modulo 2^32 moves
+/// nothing, so the coercion is truncation toward zero, and the bound the
+/// caller proved survives it. `n | 0` under `0 <= n && n < 1000` is in
+/// `[0, 999]`, not anywhere in int32. A NaN member becomes `0`, and so does
+/// `-0`. An infinite bound truncates to itself and is never inside, which is
+/// right: an infinity becomes `0` and its neighbours wrap.
+fn truncated_within(a: Facts, lo: f64, hi: f64) -> Option<Facts> {
+    let (low, high) = (a.lo.trunc(), a.hi.trunc());
+    if low < lo || high > hi {
+        return None;
+    }
+    let range = Facts::new(low, high, true, false, false);
+    Some(if a.maybe_nan {
+        range.join(Facts::constant(0.0))
+    } else {
+        range
+    })
 }
 
 /// The exact value of a set that holds exactly one whole number.
@@ -726,6 +740,12 @@ fn exact(v: Facts) -> Option<i32> {
 pub fn bitwise(op: super::BinOp, a: Facts, b: Facts) -> Facts {
     use super::BinOp;
 
+    // The operator's own coercion. Lowering coerces the operands first, so this
+    // is the identity on what it emits; it is here so that the bounds below are
+    // read off int32s whatever reaches them. `>>>` reads its left operand as a
+    // uint32, which is the same bits.
+    let (a, b) = (to_int32(a), to_int32(b));
+
     if let (Some(x), Some(y)) = (exact(a), exact(b)) {
         // JavaScript masks a shift count to five bits, so `1 << 32` is `1`, not
         // zero and not undefined behaviour.
@@ -744,32 +764,86 @@ pub fn bitwise(op: super::BinOp, a: Facts, b: Facts) -> Facts {
         return Facts::constant(folded);
     }
 
-    // Masking with a known non-negative int32 cannot set a bit outside the mask,
-    // so the result is in `[0, mask]` regardless of the other operand. This is a
-    // materially tighter range than the generic int32 one, and it is the
-    // ordinary spelling of a bounded index: `hash & 1023`.
-    if matches!(op, BinOp::BitAnd)
-        && let Some(mask) = exact(a).or_else(|| exact(b))
-        && mask >= 0
-    {
-        return Facts::new(0.0, f64::from(mask), true, false, false);
+    #[allow(clippy::cast_sign_loss)]
+    let count = exact(b).map(|count| (count as u32) & 31);
+    let zero = |v: Facts| exact(v) == Some(0);
+    let int32 = Facts::new(I32_MIN, I32_MAX, true, false, false);
+    match op {
+        // The operations that leave their operand as it was: `x | 0` and
+        // `x ^ 0`, the spelling of integer intent, and a shift by a multiple of
+        // 32, which the count's mask makes a shift by none. `x >>> 0` is the
+        // same int32 read as a uint32.
+        BinOp::BitOr | BinOp::BitXor if zero(b) => a,
+        BinOp::BitOr | BinOp::BitXor if zero(a) => b,
+        BinOp::Shl | BinOp::Shr if count == Some(0) => a,
+        BinOp::UShr if count == Some(0) => to_uint32(a),
+        // A non-negative operand has a clear sign bit and no bit above its
+        // own, so neither has the result: `hash & 1023` is in `[0, 1023]`,
+        // and so is `i & n` with `0 <= n <= 1023`.
+        BinOp::BitAnd if a.lo >= 0.0 || b.lo >= 0.0 => {
+            let hi = match (a.lo >= 0.0, b.lo >= 0.0) {
+                (true, true) => a.hi.min(b.hi),
+                (true, false) => a.hi,
+                _ => b.hi,
+            };
+            Facts::new(0.0, hi, true, false, false)
+        }
+        // Two non-negatives set no bit above the wider's highest, and `|`
+        // clears none of either's.
+        BinOp::BitOr | BinOp::BitXor if a.lo >= 0.0 && b.lo >= 0.0 => {
+            let lo = if matches!(op, BinOp::BitOr) {
+                a.lo.max(b.lo)
+            } else {
+                0.0
+            };
+            Facts::new(
+                lo,
+                below_next_power_of_two(a.hi.max(b.hi)),
+                true,
+                false,
+                false,
+            )
+        }
+        // An arithmetic shift right is a floor division by `2^n`, which keeps
+        // order: `(lo + hi) >> 1` stays between them.
+        BinOp::Shr if let Some(count) = count => {
+            let scale = f64::from(1u32 << count);
+            Facts::new(
+                (a.lo / scale).floor(),
+                (a.hi / scale).floor(),
+                true,
+                false,
+                false,
+            )
+        }
+        // A shift left is a multiplication by `2^n` until a bit reaches the
+        // sign, and wraps after; `i << 2` of a small index is four times it.
+        BinOp::Shl if let Some(count) = count => {
+            let scale = f64::from(1u32 << count);
+            let (lo, hi) = (a.lo * scale, a.hi * scale);
+            if lo >= I32_MIN && hi <= I32_MAX {
+                Facts::new(lo, hi, true, false, false)
+            } else {
+                int32
+            }
+        }
+        // A logical right shift by a known non-zero amount bounds the result
+        // from above: shifting a uint32 right by `n` leaves at most `32 - n`
+        // bits.
+        BinOp::UShr if let Some(count) = count => {
+            Facts::new(0.0, f64::from(u32::MAX >> count), true, false, false)
+        }
+        BinOp::UShr => Facts::new(0.0, U32_MAX, true, false, false),
+        _ => int32,
     }
+}
 
-    // A logical right shift by a known non-zero amount bounds the result from
-    // above: shifting a uint32 right by `n` leaves at most `32 - n` bits.
-    if matches!(op, BinOp::UShr)
-        && let Some(count) = exact(b)
-        && (count & 31) > 0
-    {
-        #[allow(clippy::cast_sign_loss)]
-        let bits = 32 - ((count as u32) & 31);
-        return Facts::new(0.0, f64::from(u32::MAX >> (32 - bits)), true, false, false);
-    }
-
-    if matches!(op, BinOp::UShr) {
-        return Facts::new(0.0, U32_MAX, true, false, false);
-    }
-    Facts::new(I32_MIN, I32_MAX, true, false, false)
+/// `2^n - 1` for the least `n` with `value < 2^n`: the largest number with no
+/// bit above `value`'s highest. `value` is a non-negative int32.
+fn below_next_power_of_two(value: f64) -> f64 {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bits = 32 - (value as u32).leading_zeros();
+    f64::from(bits).exp2() - 1.0
 }
 
 /// `Math.floor`, `Math.ceil`, `Math.trunc`, `Math.round`.
@@ -1229,6 +1303,222 @@ mod tests {
         let known = Facts::new(1.0, 5.0, true, false, false);
         assert_eq!(known.join(Facts::BOTTOM), known);
         assert_eq!(Facts::BOTTOM.join(known), known);
+    }
+
+    /// `ToInt32` and `ToUint32` (ES 7.1.6, 7.1.7), concretely.
+    fn coerced(x: f64, signed: bool) -> f64 {
+        if !x.is_finite() {
+            return 0.0;
+        }
+        let wrapped = x.trunc().rem_euclid(4_294_967_296.0);
+        // `+ 0.0` because the truncation of `(-1, 0)` is `-0`, and both
+        // coercions answer `+0` there.
+        (if signed && wrapped > I32_MAX {
+            wrapped - 4_294_967_296.0
+        } else {
+            wrapped
+        }) + 0.0
+    }
+
+    /// The 32-bit coercions contain the real answer for every member of every
+    /// interval the pool and the coercions' own edges can bound: in range they
+    /// keep the operand's bound, and across an edge they must still hold the
+    /// wrapped values.
+    #[test]
+    fn the_32_bit_coercions_contain_the_real_answer() {
+        let edges = [
+            I32_MIN - 1.0,
+            I32_MIN - 0.5,
+            I32_MIN,
+            I32_MAX,
+            I32_MAX + 0.5,
+            I32_MAX + 1.0,
+            U32_MAX,
+            U32_MAX + 0.5,
+            U32_MAX + 1.0,
+            999.9,
+        ];
+        let points: Vec<f64> = POOL
+            .iter()
+            .copied()
+            .chain(edges)
+            .filter(|x| !x.is_nan())
+            .collect();
+        for (coercion, signed) in [(to_int32 as fn(Facts) -> Facts, true), (to_uint32, false)] {
+            for &lo in &points {
+                for &hi in &points {
+                    if lo > hi {
+                        continue;
+                    }
+                    for maybe_nan in [false, true] {
+                        let operand = Facts::new(lo, hi, false, maybe_nan, true);
+                        let result = coercion(operand);
+                        for &x in points.iter().filter(|&&x| operand.contains(x)) {
+                            assert!(
+                                result.contains(coerced(x, signed)),
+                                "{x} in {operand:?} -> {} not in {result:?}",
+                                coerced(x, signed)
+                            );
+                        }
+                        if maybe_nan {
+                            assert!(result.contains(0.0), "NaN -> 0 not in {result:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every bitwise operator contains the real answer for every pair of
+    /// members of every pair of int32 intervals the pool bounds -- around the
+    /// sign, the powers of two the bounds round to, and the shift counts that
+    /// mask to zero.
+    #[test]
+    fn the_bitwise_operators_contain_the_real_answer() {
+        use crate::hir::BinOp;
+        let pool: &[i32] = &[
+            i32::MIN,
+            -1_000_000_000,
+            -1025,
+            -1024,
+            -7,
+            -2,
+            -1,
+            0,
+            1,
+            2,
+            3,
+            7,
+            8,
+            31,
+            32,
+            33,
+            1023,
+            1024,
+            65535,
+            1_000_000_000,
+            i32::MAX,
+        ];
+        #[allow(clippy::cast_sign_loss)]
+        let concrete = |op: BinOp, x: i32, y: i32| -> f64 {
+            let count = (y as u32) & 31;
+            match op {
+                BinOp::BitAnd => f64::from(x & y),
+                BinOp::BitOr => f64::from(x | y),
+                BinOp::BitXor => f64::from(x ^ y),
+                BinOp::Shl => f64::from(x.wrapping_shl(count)),
+                BinOp::Shr => f64::from(x.wrapping_shr(count)),
+                _ => f64::from((x as u32) >> count),
+            }
+        };
+        let intervals: Vec<(i32, i32)> = pool
+            .iter()
+            .flat_map(|&lo| {
+                pool.iter()
+                    .filter(move |&&hi| lo <= hi)
+                    .map(move |&hi| (lo, hi))
+            })
+            .collect();
+        for op in [
+            BinOp::BitAnd,
+            BinOp::BitOr,
+            BinOp::BitXor,
+            BinOp::Shl,
+            BinOp::Shr,
+            BinOp::UShr,
+        ] {
+            for &(alo, ahi) in &intervals {
+                let a = Facts::new(f64::from(alo), f64::from(ahi), true, false, false);
+                for &(blo, bhi) in &intervals {
+                    let b = Facts::new(f64::from(blo), f64::from(bhi), true, false, false);
+                    let result = bitwise(op, a, b);
+                    for &x in pool.iter().filter(|&&x| alo <= x && x <= ahi) {
+                        for &y in pool.iter().filter(|&&y| blo <= y && y <= bhi) {
+                            assert!(
+                                result.contains(concrete(op, x, y)),
+                                "{op:?} {x} {y} = {} not in {result:?} from {a:?} {b:?}",
+                                concrete(op, x, y)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// What the bitwise bounds buy, on the spellings they are for.
+    #[test]
+    fn the_bitwise_spellings_of_integer_intent_keep_their_bounds() {
+        use crate::hir::BinOp;
+        let index = Facts::new(0.0, 999.0, true, false, false);
+        let zero = Facts::constant(0.0);
+        assert_eq!(bitwise(BinOp::BitOr, index, zero), index, "x | 0");
+        assert_eq!(bitwise(BinOp::BitXor, zero, index), index, "0 ^ x");
+        assert_eq!(
+            bitwise(BinOp::Shr, index, Facts::constant(32.0)),
+            index,
+            "x >> 32"
+        );
+        assert_eq!(bitwise(BinOp::UShr, index, zero), index, "x >>> 0");
+        let middle = Facts::new(0.0, 1998.0, true, false, false);
+        assert_eq!(
+            bitwise(BinOp::Shr, middle, Facts::constant(1.0)),
+            index,
+            "(lo + hi) >> 1"
+        );
+        assert_eq!(
+            bitwise(BinOp::Shl, index, Facts::constant(2.0)),
+            Facts::new(0.0, 3996.0, true, false, false),
+            "i << 2"
+        );
+        assert_eq!(
+            bitwise(BinOp::BitAnd, Facts::TOP, index),
+            index,
+            "a non-negative operand bounds an AND"
+        );
+        assert_eq!(
+            bitwise(
+                BinOp::BitOr,
+                index,
+                Facts::new(0.0, 7.0, true, false, false)
+            ),
+            Facts::new(0.0, 1023.0, true, false, false),
+            "two non-negatives stay below the next power of two"
+        );
+        // And where the bound must give up: `-1 >>> 0` is `2^32 - 1`.
+        let signed = Facts::new(-1.0, 1.0, true, false, false);
+        assert_eq!(
+            bitwise(BinOp::UShr, signed, zero),
+            Facts::new(0.0, U32_MAX, true, false, false)
+        );
+    }
+
+    /// The precision the in-range rule is for, and where it must give up.
+    #[test]
+    fn a_coercion_in_range_keeps_the_operands_bound() {
+        let under_a_guard = Facts::new(0.0, 999.9, false, false, true);
+        assert_eq!(
+            to_int32(under_a_guard),
+            Facts::new(0.0, 999.0, true, false, false)
+        );
+        assert_eq!(
+            to_uint32(under_a_guard),
+            Facts::new(0.0, 999.0, true, false, false)
+        );
+        let with_nan = Facts::new(3.5, 7.0, false, true, false);
+        assert_eq!(to_int32(with_nan), Facts::new(0.0, 7.0, true, false, false));
+        // Past the edge the wrap is real: `2^31 | 0` is `-2^31`.
+        let past = Facts::new(0.0, I32_MAX + 1.0, true, false, false);
+        assert_eq!(
+            to_int32(past),
+            Facts::new(I32_MIN, I32_MAX, true, false, false)
+        );
+        // And `-1 >>> 0` is `2^32 - 1`.
+        let negative = Facts::new(-1.0, 1.0, true, false, false);
+        assert_eq!(
+            to_uint32(negative),
+            Facts::new(0.0, U32_MAX, true, false, false)
+        );
     }
 }
 
