@@ -181,3 +181,43 @@ fn a_backend_decline_is_reported_under_its_own_name() {
     assert_eq!(results["backends"]["c"]["exit_code"], 0);
     assert!(out.join("c/program.c").is_file());
 }
+
+#[test]
+fn sharing_avoids_three_actual_raw_lowerings() {
+    let fixture = Fixture::new("export function answer(): number { return 42; }\n");
+    let trace = fixture.0.join("lowerings");
+    let invoke = |command: &str, out: &Path, flags: &[&str]| {
+        let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args([command, "--no-acquire", "--out"])
+            .arg(out)
+            .args(flags)
+            .arg(fixture.0.join("tsconfig.json"))
+            .env("NTS_TRACE_LOWERING", &trace)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    };
+    invoke(
+        "emit",
+        &fixture.0.join("one"),
+        &["--backends", "c,llvm,jvm,wasm"],
+    );
+    assert_eq!(
+        std::fs::read_to_string(&trace).unwrap().lines().count(),
+        1,
+        "count the actual lower_with boundary, not a claimed statistic"
+    );
+    std::fs::remove_file(&trace).unwrap();
+    for backend in ["c", "llvm", "jvm", "wasm"] {
+        invoke(&format!("emit-{backend}"), &fixture.0.join(backend), &[]);
+    }
+    assert_eq!(
+        std::fs::read_to_string(trace).unwrap().lines().count(),
+        4,
+        "the unshared control must really lower once per backend"
+    );
+}
