@@ -197,10 +197,7 @@ impl FuncBuilder<'_> {
         Ok(())
     }
 
-    /// Parameter expressions give the body its own `var` bindings. Even where
-    /// the checker merges their symbols, the closure made above this point
-    /// keeps the parameter cell and a body `var x` gets a new initialized cell.
-    fn separate_body_variables(&mut self, callable: NodeId) -> Result<(), Diagnostic> {
+    fn bound_parameter_names(&self, callable: NodeId) -> BTreeMap<String, (u32, ValueId, NodeId)> {
         let mut parameters = BTreeMap::new();
         for parameter in super::parameters_of(self, callable) {
             let Some(name) = self.children(parameter).into_iter().find(|child| {
@@ -232,6 +229,14 @@ impl FuncBuilder<'_> {
                 }
             }
         }
+        parameters
+    }
+
+    /// Parameter expressions give the body its own `var` bindings. Even where
+    /// the checker merges their symbols, the closure made above this point
+    /// keeps the parameter cell and a body `var x` gets a new initialized cell.
+    fn separate_body_variables(&mut self, callable: NodeId) -> Result<(), Diagnostic> {
+        let parameters = self.bound_parameter_names(callable);
         let Some(body) = self
             .children(callable)
             .into_iter()
@@ -515,17 +520,7 @@ pub(super) fn split(
         };
         let entry = program.funcs[index].clone();
         if let Err(why) = check_cut(&entry, &split.cut, arrivals) {
-            let message = format!(
-                "the parameter environment of `{}`, whose {why}, is not supported by this lowering yet",
-                entry.name
-            );
-            diagnostics.push(Diagnostic::error(
-                "NTS1001",
-                message.clone(),
-                entry.origin.location,
-            ));
-            program.uncompiled.push((entry.name.clone(), message));
-            program.funcs.remove(index);
+            diagnostics.push(refuse_split(program, index, why));
             arrivals
                 .uniform_sites
                 .retain(|site| site.function != entry.name);
@@ -566,18 +561,7 @@ pub(super) fn split(
         }
         if let Err(why) = compact(&mut body, arrivals).and_then(|()| compact(&mut entry, arrivals))
         {
-            let original = &program.funcs[index];
-            let message = format!(
-                "the parameter environment of `{}`, whose {why}, is not supported by this lowering yet",
-                original.name
-            );
-            diagnostics.push(Diagnostic::error(
-                "NTS1001",
-                message.clone(),
-                original.origin.location,
-            ));
-            program.uncompiled.push((original.name.clone(), message));
-            program.funcs.remove(index);
+            diagnostics.push(refuse_split(program, index, why));
             arrivals.uniform_sites.retain(|site| {
                 site.function != split.name
                     && site.function != entry.name
@@ -611,6 +595,17 @@ pub(super) fn split(
         }
     }
     diagnostics
+}
+
+fn refuse_split(program: &mut Program, index: usize, why: &str) -> Diagnostic {
+    let entry = program.funcs.remove(index);
+    let message = format!(
+        "the parameter environment of `{}`, whose {why}, is not supported by this lowering yet",
+        entry.name
+    );
+    let diagnostic = Diagnostic::error("NTS1001", message.clone(), entry.origin.location);
+    program.uncompiled.push((entry.name, message));
+    diagnostic
 }
 
 /// Hoisted definitions can live in block zero even when they were discovered
@@ -788,12 +783,11 @@ pub(super) fn affected(
                 continue;
             };
             for declaration in &symbol.declarations {
-                if let Some(node) = parameter_declaration(&probe, *declaration) {
-                    if let Some(owner) = probe.syntactic_parent(node)
-                        && made_in_parameters(&probe, closure.node, owner)
-                    {
-                        found.insert(owner);
-                    }
+                if let Some(node) = parameter_declaration(&probe, *declaration)
+                    && let Some(owner) = probe.syntactic_parent(node)
+                    && made_in_parameters(&probe, closure.node, owner)
+                {
+                    found.insert(owner);
                 }
             }
         }
