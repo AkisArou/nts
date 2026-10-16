@@ -1,5 +1,5 @@
 {
-  "bound": 7051,
+  "bound": 7054,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2778,11 +2778,6 @@
     },
     {
       "interface": "Navigator",
-      "member": "get storage",
-      "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
-    },
-    {
-      "interface": "Navigator",
       "member": "get gpu",
       "why": "defined in Blink's modules component, on an interface the allowlist does not take from there"
     },
@@ -3690,6 +3685,16 @@
       "interface": "AnimationTimeline",
       "member": "getCurrentTime/1",
       "why": "[RuntimeEnabled=ScrollTimelineCurrentTime] experimental"
+    },
+    {
+      "interface": "StorageManager",
+      "member": "estimate/0",
+      "why": "result type Promise<StorageEstimate>"
+    },
+    {
+      "interface": "StorageManager",
+      "member": "getDirectory/0",
+      "why": "result type Promise<FileSystemDirectoryHandle>"
     },
     {
       "interface": "Response",

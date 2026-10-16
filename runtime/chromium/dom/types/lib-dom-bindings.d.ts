@@ -2127,6 +2127,11 @@ interface Storage {}
  * @ntsIs nts_dom_is 591
  */
 interface StorageEvent {}
+/**
+ * @ntsBoundBy "nts:dom" StorageManager
+ * @ntsIs nts_dom_is 592
+ */
+interface StorageManager {}
 /** @ntsBoundBy "nts:dom" HTMLCollection */
 interface HTMLCollectionOf<T extends Element> {}
 /** @ntsBoundBy "nts:dom" NodeList */

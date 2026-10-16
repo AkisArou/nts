@@ -173,6 +173,15 @@ static void promise_fulfil_buffer(void *state, NtsPromise *promise,
   nts_release((NtsHeader *)view);
   nts_release((NtsHeader *)promise);
 }
+static void promise_fulfil_bool(void *state, NtsPromise *promise,
+                                uint8_t value) {
+  request_checkpoint_end(state);
+  /* A boolean promise settles through the number slot, as the compiler
+     fulfils its own (nts_promise_fulfill_number, read back with
+     nts_promise_number). */
+  nts_promise_fulfill_number(promise, value != 0 ? 1.0 : 0.0);
+  nts_release((NtsHeader *)promise);
+}
 static void promise_reject(void *state, NtsPromise *promise, const char *name,
                            const char *message) {
   request_checkpoint_end(state);
@@ -186,7 +195,7 @@ static void promise_drop(void *state, NtsPromise *promise) {
 static const NtsDomPromiseOps promise_ops = {
     promise_make,          promise_fulfil,        promise_fulfil_string,
     promise_fulfil_handle, promise_fulfil_bytes,  promise_fulfil_buffer,
-    promise_reject,        promise_drop};
+    promise_fulfil_bool,   promise_reject,        promise_drop};
 
 /* DOM handles as the runtime counts a host class's erased values (a promise
    settled with one, an `unknown` holding one): nts_dom_retain roots the

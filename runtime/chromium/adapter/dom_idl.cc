@@ -722,6 +722,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_event.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_storage_event_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_storage_manager.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_canvasfilter_string.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_cssimagevalue_htmlcanvaselement_htmlimageelement_htmlvideoelement_imagebitmap_offscreencanvas_svgimageelement_videoframe.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_union_path2d_string.h"
@@ -1041,6 +1042,9 @@
 #include "third_party/blink/renderer/modules/clipboard/clipboard.h"
 #include "third_party/blink/renderer/modules/crypto/crypto.h"
 #include "third_party/blink/renderer/modules/crypto/global_crypto.h"
+#include "third_party/blink/renderer/modules/file_system_access/storage_manager_file_system_access.h"
+#include "third_party/blink/renderer/modules/quota/navigator_storage_quota.h"
+#include "third_party/blink/renderer/modules/quota/storage_manager.h"
 #include "third_party/blink/renderer/modules/storage/dom_window_storage.h"
 #include "third_party/blink/renderer/modules/storage/storage_area.h"
 #include "third_party/blink/renderer/modules/storage/storage_event.h"
@@ -6425,7 +6429,7 @@ blink::StorageEventInit* NtsDomToStorageEventInit(NtsDomContext& context, const 
 // Blink's own (`html_names::kClassAttr`). The symbols are C's either way.
 // What `instanceof` checks against, by NtsDomInterface id: each interface's
 // wrapper type, which knows its parent's.
-constexpr std::array<const blink::WrapperTypeInfo*, 592> kInterfaces = {
+constexpr std::array<const blink::WrapperTypeInfo*, 593> kInterfaces = {
     blink::V8AbortController::GetWrapperTypeInfo(),
     blink::V8AbortSignal::GetWrapperTypeInfo(),
     blink::V8AbstractRange::GetWrapperTypeInfo(),
@@ -7018,6 +7022,7 @@ constexpr std::array<const blink::WrapperTypeInfo*, 592> kInterfaces = {
     blink::V8Path2D::GetWrapperTypeInfo(),
     blink::V8Storage::GetWrapperTypeInfo(),
     blink::V8StorageEvent::GetWrapperTypeInfo(),
+    blink::V8StorageManager::GetWrapperTypeInfo(),
 };
 
 // In Blink's namespace, as the bindings are: bind_gen's expressions name
@@ -40845,6 +40850,12 @@ bool nts_dom_Navigator_get_webdriver(NtsDomNavigator* self) {
   return static_cast<bool>(receiver->webdriver());
 }
 
+NtsDomStorageManager* nts_dom_Navigator_get_storage(NtsDomNavigator* self) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Navigator>(self);
+  return HandleOf<NtsDomStorageManager>(NavigatorStorageQuota::storage(*receiver));
+}
+
 NtsDomHTMLTableCaptionElement* nts_dom_as_HTMLTableCaptionElement(NtsDomNode* node) {
   nts_dom::AssertEntered();
   return HandleOf<NtsDomHTMLTableCaptionElement>(nts_dom_is(node, NTS_DOM_HTMLTableCaptionElement) ? WrappableOf(node) : nullptr);
@@ -45384,6 +45395,24 @@ void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* 
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::StorageArea>(self);
   receiver->removeItem(NtsText(context, name), exception_state);
+}
+
+struct NtsPromise* nts_dom_StorageManager_persist(NtsDomStorageManager* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::StorageManager>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->persist(script_state, exception_state));
+}
+
+struct NtsPromise* nts_dom_StorageManager_persisted(NtsDomStorageManager* self) {
+  NtsDomContext& context = nts_dom::Current();
+  nts_dom::Rejections exception_state;
+  auto* receiver = ObjectOf<blink::StorageManager>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return nts_dom::Answer(context, context.MainWorld(), exception_state, receiver->persisted(script_state, exception_state));
 }
 
 NtsDomResponse* nts_dom_new_Response_0(NtsDomException** error) {

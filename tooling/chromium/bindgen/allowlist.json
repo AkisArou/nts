@@ -149,6 +149,7 @@
     "DocumentTimeline",
     "CaretPosition",
     "Storage",
+    "StorageManager",
     "Response",
     "Request",
     "Headers",
@@ -314,6 +315,8 @@
     "Window.crypto",
     "Clipboard",
     "Navigator.clipboard",
+    "StorageManager",
+    "Navigator.storage",
     "StorageEvent"
   ],
   "mixins": {

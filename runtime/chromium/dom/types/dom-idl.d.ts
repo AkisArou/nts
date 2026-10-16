@@ -27581,6 +27581,14 @@ declare module "nts:dom" {
      * @ntsGet _get_webdriver
      */
     readonly webdriver: boolean;
+    /**
+     * @ntsSymbol nts_dom_Navigator_get_storage
+     */
+    _get_storage(this: Navigator): StorageManager;
+    /**
+     * @ntsGet _get_storage
+     */
+    readonly storage: StorageManager;
   }
   export type NavigatorMethods = NavigatorOwnMethods;
   export type Navigator = HostClass<"NtsDomNavigator", null, "nts_dom_retain", "nts_dom_release"> & NavigatorMethods;
@@ -32035,6 +32043,18 @@ declare module "nts:dom" {
   }
   export type StorageMethods = StorageOwnMethods;
   export type Storage = HostClass<"NtsDomStorage", null, "nts_dom_retain", "nts_dom_release"> & StorageMethods;
+  export interface StorageManagerOwnMethods {
+    /**
+     * @ntsSymbol nts_dom_StorageManager_persist
+     */
+    persist(this: StorageManager): Promise<boolean>;
+    /**
+     * @ntsSymbol nts_dom_StorageManager_persisted
+     */
+    persisted(this: StorageManager): Promise<boolean>;
+  }
+  export type StorageManagerMethods = StorageManagerOwnMethods;
+  export type StorageManager = HostClass<"NtsDomStorageManager", null, "nts_dom_retain", "nts_dom_release"> & StorageManagerMethods;
   export interface ResponseOwnMethods {
     /**
      * @ntsSymbol nts_dom_Response_get_type

@@ -310,11 +310,11 @@ public:
     RAW_PTR_EXCLUSION base::span<const uint8_t> span; // see PlainPointers
     bool buffer;
   };
-  // `name` null: fulfilled -- with `text`, `handle` or `bytes` when one is
-  // not null.
+  // `name` null: fulfilled -- with `text`, `handle`, `bytes` or `boolean`
+  // when one is not null.
   void Settle(const char *name, const char *message,
               const NtsStringView *text = nullptr, void *handle = nullptr,
-              const Bytes *bytes = nullptr);
+              const Bytes *bytes = nullptr, const bool *boolean = nullptr);
   // The promise, unsettled, for the document's end; null after either.
   NtsPromise *Take() {
     context_ = nullptr;
@@ -332,6 +332,23 @@ class NtsPromiseFulfilled final
 public:
   explicit NtsPromiseFulfilled(NtsPendingPromise *pending) : pending_(pending) {}
   void React(blink::ScriptState *) { pending_->Settle(nullptr, nullptr); }
+  void Trace(blink::Visitor *visitor) const override {
+    visitor->Trace(pending_);
+    ThenCallable::Trace(visitor);
+  }
+
+private:
+  blink::Member<NtsPendingPromise> pending_;
+};
+// Fulfilled with a boolean (navigator.storage.persisted()).
+class NtsPromiseFulfilledBool final
+    : public blink::ThenCallable<blink::IDLBoolean, NtsPromiseFulfilledBool> {
+public:
+  explicit NtsPromiseFulfilledBool(NtsPendingPromise *pending)
+      : pending_(pending) {}
+  void React(blink::ScriptState *, bool value) {
+    pending_->Settle(nullptr, nullptr, nullptr, nullptr, nullptr, &value);
+  }
   void Trace(blink::Visitor *visitor) const override {
     visitor->Trace(pending_);
     ThenCallable::Trace(visitor);
@@ -800,7 +817,7 @@ private:
 // document has ended (Close dropped it).
 void NtsPendingPromise::Settle(const char *name, const char *message,
                                const NtsStringView *text, void *handle,
-                               const Bytes *bytes) {
+                               const Bytes *bytes, const bool *boolean) {
   NtsDomContext *context = context_;
   NtsPromise *promise = Take();
   if (!context || !promise || context->closed)
@@ -816,8 +833,9 @@ void NtsPendingPromise::Settle(const char *name, const char *message,
     RAW_PTR_EXCLUSION const NtsStringView *text;   // see PlainPointers
     RAW_PTR_EXCLUSION void *handle;                // see PlainPointers
     RAW_PTR_EXCLUSION const Bytes *bytes;          // see PlainPointers
+    RAW_PTR_EXCLUSION const bool *boolean;         // see PlainPointers
   } call{context->promise_ops.get(), context->promise_state.get(), promise,
-         name, message, text, handle, bytes};
+         name, message, text, handle, bytes, boolean};
   context->invoke(
       context->invoke_host.get(),
       [](void *state) {
@@ -834,6 +852,9 @@ void NtsPendingPromise::Settle(const char *name, const char *message,
                                : call->ops->fulfil_bytes)(
               call->state, call->promise, call->bytes->span.data(),
               call->bytes->span.size());
+        else if (call->boolean)
+          call->ops->fulfil_bool(call->state, call->promise,
+                                 *call->boolean ? 1 : 0);
         else
           call->ops->fulfil(call->state, call->promise);
       },
@@ -1583,6 +1604,12 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLUndefined> promise) {
   return Subscribe<blink::IDLUndefined, NtsPromiseFulfilled>(
+      context, script_state, rejections, promise);
+}
+NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
+                   const Rejections &rejections,
+                   blink::ScriptPromise<blink::IDLBoolean> promise) {
+  return Subscribe<blink::IDLBoolean, NtsPromiseFulfilledBool>(
       context, script_state, rejections, promise);
 }
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,

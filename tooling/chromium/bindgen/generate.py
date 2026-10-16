@@ -954,6 +954,10 @@ class Generator:
             settled = unwrapped.result_type.unwrap(typedef=True)
             if settled.is_undefined:
                 return Result("struct NtsPromise*", "Promise<void>", "promise")
+            # `Promise<boolean>` (`navigator.storage.persisted()`): settled
+            # with the boolean (the host's fulfil_bool).
+            if settled.keyword_typename == "boolean":
+                return Result("struct NtsPromise*", "Promise<boolean>", "promise_bool")
             # `Promise<USVString>` (`blob.text()`): settled with the program's string.
             if settled.keyword_typename in STRINGS:
                 return Result("struct NtsPromise*", "Promise<string>", "promise_string")

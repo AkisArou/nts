@@ -163,6 +163,7 @@ typedef struct NtsDomAnimationTimeline NtsDomAnimationTimeline;
 typedef struct NtsDomDocumentTimeline NtsDomDocumentTimeline;
 typedef struct NtsDomCaretPosition NtsDomCaretPosition;
 typedef struct NtsDomStorage NtsDomStorage;
+typedef struct NtsDomStorageManager NtsDomStorageManager;
 typedef struct NtsDomResponse NtsDomResponse;
 typedef struct NtsDomRequest NtsDomRequest;
 typedef struct NtsDomHeaders NtsDomHeaders;
@@ -1413,6 +1414,7 @@ enum NtsDomInterface {
   NTS_DOM_Path2D = 589,
   NTS_DOM_Storage = 590,
   NTS_DOM_StorageEvent = 591,
+  NTS_DOM_StorageManager = 592,
 };
 /* `object instanceof <interface>`, as V8's binding answers it: whether the
  * object's wrapper type is the interface's or derives from it. NULL is no. */
@@ -5950,6 +5952,7 @@ const NtsStringView* nts_dom_Navigator_get_language(NtsDomNavigator* self);
 NtsDomDOMStringSequence* nts_dom_Navigator_get_languages(NtsDomNavigator* self);
 bool nts_dom_Navigator_get_onLine(NtsDomNavigator* self);
 bool nts_dom_Navigator_get_webdriver(NtsDomNavigator* self);
+NtsDomStorageManager* nts_dom_Navigator_get_storage(NtsDomNavigator* self);
 NtsDomHTMLTableCaptionElement* nts_dom_as_HTMLTableCaptionElement(NtsDomNode* node);
 const NtsStringView* nts_dom_HTMLTableCaptionElement_get_align(NtsDomHTMLTableCaptionElement* self);
 void nts_dom_HTMLTableCaptionElement_set_align(NtsDomHTMLTableCaptionElement* self, const NtsBorrowedString* value);
@@ -6632,6 +6635,8 @@ void nts_dom_Storage_setItem(NtsDomStorage* self, const NtsBorrowedString* key, 
 const NtsStringView* nts_dom_Storage_named_get(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
 void nts_dom_Storage_named_set(NtsDomStorage* self, const NtsBorrowedString* name, const NtsBorrowedString* value, NtsDomException** error);
 void nts_dom_Storage_named_delete(NtsDomStorage* self, const NtsBorrowedString* name, NtsDomException** error);
+struct NtsPromise* nts_dom_StorageManager_persist(NtsDomStorageManager* self);
+struct NtsPromise* nts_dom_StorageManager_persisted(NtsDomStorageManager* self);
 NtsDomResponse* nts_dom_new_Response_0(NtsDomException** error);
 const char* nts_dom_Response_get_type(NtsDomResponse* self);
 const NtsStringView* nts_dom_Response_get_url(NtsDomResponse* self);

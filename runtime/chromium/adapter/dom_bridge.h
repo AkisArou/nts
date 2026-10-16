@@ -46,6 +46,8 @@ typedef struct NtsDomPromiseOps {
                        size_t length);
   void (*fulfil_buffer)(void* state, NtsPromise* promise,
                         const uint8_t* bytes, size_t length);
+  // Fulfilled with a boolean (`navigator.storage.persisted()`).
+  void (*fulfil_bool)(void* state, NtsPromise* promise, uint8_t value);
   void (*reject)(void* state, NtsPromise* promise, const char* name,
                  const char* message);
   void (*drop)(void* state, NtsPromise* promise);

@@ -28,6 +28,17 @@ async function settle(label: string, run: () => Promise<void>): Promise<void> {
   document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
 }
 
+// The same for a promise fulfilled with a boolean: the value is the outcome.
+async function settleBool(label: string, run: () => Promise<boolean>): Promise<void> {
+  let outcome = "";
+  try {
+    outcome = "fulfilled " + (await run());
+  } catch (error) {
+    outcome = "rejected " + (error as Error).name;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
 // The same for a promise fulfilled with text: the text is the outcome.
 async function settleText(label: string, run: () => Promise<string>): Promise<void> {
   let outcome = "";
@@ -887,7 +898,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -915,5 +926,10 @@ export function startLibDomPromises(): void {
     settle("fetchWide", async (): Promise<void> => {
       await fetch("data:text/plain,x", { method: "✓" });
     });
+    // A Promise<boolean>: whether this origin's storage is persisted, and
+    // asking for it to be -- whatever Blink answers in this profile, the
+    // boolean crosses as page script's does.
+    settleBool("persisted", (): Promise<boolean> => navigator.storage.persisted());
+    settleBool("persist", (): Promise<boolean> => navigator.storage.persist());
   }, 0);
 }

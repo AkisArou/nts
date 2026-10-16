@@ -1,16 +1,16 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3150,
-    "skipped": 234,
+    "bound": 3153,
+    "skipped": 235,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
     "absent: other": 33
   },
   "skippedBy": {
-    "result type": 62,
-    "defined in": 60,
+    "result type": 64,
+    "defined in": 59,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
     "parameter type": 15,
     "interface SVGPoint": 11,
@@ -2674,6 +2674,7 @@
         "platform",
         "product",
         "productSub",
+        "storage",
         "userActivation",
         "userAgent",
         "vendor",
@@ -2705,7 +2706,6 @@
         "serviceWorker": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "setAppBadge": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "share": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "storage": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "vibrate": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "wakeLock": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
@@ -3586,6 +3586,17 @@
         "setItem"
       ],
       "skipped": {},
+      "absent": {}
+    },
+    "StorageManager": {
+      "bound": [
+        "persist",
+        "persisted"
+      ],
+      "skipped": {
+        "estimate": "result type Promise<StorageEstimate>",
+        "getDirectory": "result type Promise<FileSystemDirectoryHandle>"
+      },
       "absent": {}
     },
     "Response": {
