@@ -1119,6 +1119,10 @@ const held = found.filter((v) => known.has(key(v)));
 const seen = new Set(found.map(key));
 // An entry for a project this run did not scan is not expired, only unasked.
 const expired = [...known.keys()].filter((k) => projects.includes(k.split("\t")[0]) && !seen.has(k));
+// Nor is one for a project that is not there at all -- it is gone, and no run
+// would ever ask: a fixture renamed, promoted to tests/programs, or deleted
+// while its entry stayed. Four did, silently, until this said so.
+const gone = [...known.keys()].filter((k) => !existsSync(join(ROOT, k.split("\t")[0])));
 
 console.log(`  compiler ${NTS}`);
 console.log(`  ${measured} of ${projects.length} project(s) measured, ${functions} function(s), in ${Math.round((Date.now() - started) / 1000)} s`);
@@ -1168,6 +1172,7 @@ if (tally.size > 0) {
   }
 }
 for (const k of expired) console.log(`  ^ no longer occurs, remove it from tooling/conformance/integrity.known: ${k.replaceAll("\t", " | ")}`);
+for (const k of gone) console.log(`  ^ names no project, move or remove it in tooling/conformance/integrity.known: ${k.replaceAll("\t", " | ")}`);
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED       ${u}`);
 for (const s of skipped.sort()) console.log(`  skipped            ${s}`);
 const ok = fresh.length === 0 && unmeasured.length === 0 && measured > 0;
