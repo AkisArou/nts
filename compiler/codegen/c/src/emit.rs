@@ -449,6 +449,7 @@ pub fn main_for(shape: MainShape) -> String {
          {declare}\
          {pool_declare}\
          int main(void) {{\n\
+         \x20   nts_process_start();\n\
          {push}\
          \x20   nts_uv_host_install(uv_default_loop());\n\
          {attach}\

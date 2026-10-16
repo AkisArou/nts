@@ -3,6 +3,7 @@
 // The generated program is C, so its symbols are C.
 extern "C" {
     void *nts_array_new(const void *descriptor, double length);
+    void nts_process_start(void);
     double scale(void *xs, double seed);
 }
 
@@ -22,6 +23,9 @@ static const struct {
 // measurement becomes one of the allocator. That is what this case had at
 // first, and it is why vectorizing its loop changed the number not at all.
 double bench_run(void) {
+    // Once, first: the allocator policy a standalone program's `main` sets.
+    static const bool started = (nts_process_start(), true);
+    (void)started;
     volatile double seed = 1.0000001;
     static void *xs = nts_array_new(&descriptor, 4096);
     // `elements` is a pointer just past the header and the capacity word.

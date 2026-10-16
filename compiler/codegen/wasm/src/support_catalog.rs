@@ -757,6 +757,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_presence_init_fn", Support::Intrinsic),
     ("nts_presence_set", Support::Intrinsic),
     ("nts_presence_set_fn", Support::Intrinsic),
+    (
+        "nts_process_start",
+        Support::Decline("native memory/provider contract"),
+    ),
     ("nts_promise_adopt", Support::WasmHelper),
     ("nts_promise_all", Support::WasmHelper),
     ("nts_promise_claim", Support::Intrinsic),

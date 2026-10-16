@@ -111,10 +111,11 @@ then a guard once fixed), `tests/memory/`.
 - A change to the semantic schema (a field added, removed or retyped in
   `compiler/semantic-schema/src/schema.rs`) bumps `SCHEMA_VERSION` in the same
   commit, to the next number even if another lane bumped it today.
-- A new C runtime helper owes a row in four tables in four crates, each checked
-  by a test in *its* crate: follow the checklist at the top of the helper block
-  in `runtime/c/nts_runtime.h`. A forgotten row reds a lane that never calls
-  the helper.
+- A new C runtime helper owes a row in four tables in four crates, and every
+  function the header declares one more in the Wasm catalog, each checked by a
+  test in *its* crate: follow the checklist at the top of the helper block in
+  `runtime/c/nts_runtime.h`. A forgotten row reds a lane that never calls the
+  helper.
 - A new `OpKind` reaches every `_ =>` match over ops; audit them before the
   first probe.
 - Refusals live in two lists: lowering's `program.uncompiled` and each backend's

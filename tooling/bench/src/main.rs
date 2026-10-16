@@ -2477,6 +2477,7 @@ fn native_driver(
         "    double {callee}({});",
         vec!["double"; arguments.len()].join(", ")
     );
+    let _ = writeln!(text, "    void nts_process_start(void);");
     if initializes {
         let _ = writeln!(text, "    void module__init(void);");
     }
@@ -2492,10 +2493,14 @@ fn native_driver(
     // all null, so five distinct keys collapsed to one and every lookup hit it.
     //
     // Once, not per call: this is module evaluation, and it is not the workload.
-    if initializes {
-        let _ = writeln!(text, "    static int ready = 0;");
-        let _ = writeln!(text, "    if (!ready) {{ ready = 1; module__init(); }}");
-    }
+    // So is the process's allocator policy, which a standalone program's `main`
+    // sets before anything else and a row has to measure the same way.
+    let _ = writeln!(text, "    static int ready = 0;");
+    let init = if initializes { " module__init();" } else { "" };
+    let _ = writeln!(
+        text,
+        "    if (!ready) {{ ready = 1; nts_process_start();{init} }}"
+    );
     let mut passed = Vec::new();
     for (at, value) in arguments.iter().enumerate() {
         let _ = writeln!(text, "    volatile double in{at} = {value};");

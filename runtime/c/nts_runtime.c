@@ -9454,6 +9454,38 @@ static void nts_process_ticks_and_rejections(void) {
   nts_finish_checkpoint(previous);
 }
 
+/* What glibc keeps at the top of its heap when memory is given back.
+ *
+ * Its default is 128 KB: past that, the free top of the heap goes back to the
+ * system, and the next allocation faults the same pages in again. A program
+ * that builds and drops a large string each time round paid that every time
+ * round -- `json-stringify-typed` took 98,763 page faults a run, and 582 with
+ * this kept. Sixteen megabytes is the order of a young generation, which is
+ * what node and the JVM keep for the same reason; memory nobody touches again
+ * is address space, not residence.
+ *
+ * The block size glibc stops serving from that heap is set with it, and has
+ * to be: setting either one freezes glibc's own adjustment of the other, which
+ * otherwise raises the size after a large block is freed so that the next one
+ * comes from the heap. Frozen at its 128 KB default, every large block would
+ * be a fresh mapping and fault again. 32 MB is the ceiling that adjustment
+ * would have reached on a 64-bit build anyway.
+ *
+ * glibc only: the other allocators nts runs on do not give the top of the
+ * heap back eagerly, so there is nothing there to keep. */
+#if defined(__GLIBC__)
+#include <malloc.h>
+#define NTS_HEAP_TOP_KEPT (16 * 1024 * 1024)
+#define NTS_HEAP_BLOCK_LIMIT (32 * 1024 * 1024)
+#endif
+
+void nts_process_start(void) {
+#if defined(__GLIBC__)
+  mallopt(M_MMAP_THRESHOLD, NTS_HEAP_BLOCK_LIMIT);
+  mallopt(M_TOP_PAD, NTS_HEAP_TOP_KEPT);
+#endif
+}
+
 void nts_enter(void) { nts_env->depth++; }
 
 void nts_leave(void) {

@@ -107,6 +107,14 @@
  *      its own comment argues that it is the instrument that should speak in
  *      its crate rather than in somebody's gate step.
  *
+ * And one more for **every** function this header declares, a helper or not:
+ *
+ *   5. `compiler/codegen/wasm/src/support_catalog.rs` -- a decision, in sorted
+ *      position, and the name in `tooling/wasm/header-helpers.json`, which
+ *      `python3 tooling/wasm/helper-inventory.py --write-header-manifest`
+ *      rewrites from clang. `nts_process_start`, which only an executable's
+ *      `main` calls, owed this and none of the four above.
+ *
  * Written here because this is where the writer is. The tests are the readers
  * and each of them already says what it wants; what none of them could say is
  * how many others there are. */
@@ -3833,6 +3841,15 @@ void nts_enqueue_tick(NtsTask task);
  * only the outermost return is a checkpoint. */
 void nts_enter(void);
 void nts_leave(void);
+
+/* Settings that belong to whoever owns the process: the allocator's policy.
+ *
+ * A standalone program's `main` calls this before anything else, and the bench
+ * driver does the same so a row measures what `nts build` produces. A library
+ * build never does: an addon or an embedded runtime lives in node's or
+ * Chromium's process, and retuning that process's allocator from inside it
+ * would be one library changing the behaviour of every other. */
+void nts_process_start(void);
 
 /* Run a complete checkpoint now -- ticks, then microtasks, to a fixpoint --
  * from *inside* a task.

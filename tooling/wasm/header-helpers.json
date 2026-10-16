@@ -277,6 +277,7 @@
     "nts_presence_has_value",
     "nts_presence_init_fn",
     "nts_presence_set_fn",
+    "nts_process_start",
     "nts_promise_adopt",
     "nts_promise_all",
     "nts_promise_claim",
