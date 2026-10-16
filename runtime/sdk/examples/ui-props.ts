@@ -11,15 +11,43 @@
 // Linux, and div/span/input/button through React DOM on web.
 import type {
   ButtonProps, CameraViewProps, DateFieldProps, DialogProps, ListProps,
-  SelectProps, Style, TabsProps, TextFieldProps, ViewProps,
+  PressableProps, PressState, SelectProps, Style, TabsProps, TextFieldProps, ViewProps,
 } from "@nts/sdk/ui";
 
 const containerStyle: Style = {
-  flexDirection: "column", gap: 12, padding: 16,
-  backgroundColor: "#ffffff", borderRadius: 8, width: "100%",
+  flexDirection: "column", rowGap: 12, columnGap: 8, padding: 16,
+  paddingStart: 20, marginHorizontal: "auto",
+  alignContent: "stretch", flexGrow: 1, flexShrink: 0, flexBasis: "auto",
+  position: "relative", boxSizing: "border-box",
+  backgroundColor: "#ffffff",
+  backgroundImage: "linear-gradient(#ffffff, #f4f4f5)",
+  backgroundSize: "cover", backgroundPosition: "center",
+  backgroundRepeat: "no-repeat",
+  borderRadius: 8, width: "100%", maxWidth: 720,
 };
 
 export const screen: ViewProps = { style: containerStyle, testID: "settings" };
+
+export const dashboardGrid: Style = {
+  display: "grid",
+  gridTemplateColumns: [240, "1fr", { min: 180, max: "2fr" }],
+  gridTemplateRows: ["auto", "1fr"],
+  gridAutoColumns: "minmax(120, 1fr)",
+  gridAutoRows: [88],
+  justifyItems: "stretch",
+  justifySelf: "start",
+  alignItems: "start",
+  alignSelf: "end",
+  width: "max-content",
+  minHeight: "fit-content",
+};
+
+export const dashboardMainCell: Style = {
+  gridColumnStart: 2,
+  gridColumnEnd: "span 2",
+  gridRowStart: "auto",
+  gridRowEnd: -1,
+};
 
 export const nameField = (value: string, set: (v: string) => void): TextFieldProps => ({
   value, onValueChange: set, placeholder: "Ada", inputType: "text",
@@ -58,7 +86,41 @@ export const entries: ListProps<{ id: string; title: string }> = {
   data: [{ id: "1", title: "First" }],
   keyOf: (e) => e.id,
   renderItem: ({ item }) => item.title,
+  refreshing: false,
+  onRefresh: () => undefined,
 };
+
+export const groupedEntries: ListProps<{ id: string; title: string }> = {
+  sections: [
+    {
+      id: "today",
+      title: "Today",
+      data: [{ id: "1", title: "First" }],
+    },
+    {
+      id: "earlier",
+      title: "Earlier",
+      data: [{ id: "2", title: "Second" }],
+    },
+  ],
+  keyOf: (e) => e.id,
+  renderItem: ({ item, section }) => `${section?.title}: ${item.title}`,
+  stickySectionHeaders: true,
+  refreshing: false,
+  onRefresh: () => undefined,
+};
+
+export const entryPressable = (open: () => void): PressableProps => ({
+  onPress: open,
+  onLongPress: () => undefined,
+  hitSlop: 8,
+  "aria-label": "Open entry",
+  style: ({ pressed }) => ({
+    padding: 12,
+    backgroundColor: pressed ? "#e8e8e8" : "#ffffff",
+  }),
+  children: ({ focused }: PressState) => (focused ? "Open entry (focused)" : "Open entry"),
+});
 
 export const birthday: DateFieldProps = {
   value: undefined, onValueChange: () => undefined, mode: "date",

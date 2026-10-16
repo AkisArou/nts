@@ -20,7 +20,8 @@ subset in ui.d.ts, with semantic theme tokens from `appearance`.
 | `View` | Box / Grid (by layout) | UIView + UIStackView | NSView + NSStackView | StackPanel / Grid | LinearLayout / FrameLayout | `div` |
 | `Text` | Label (+ Inscription for ellipsized) | UILabel | NSTextField (label) | TextBlock | TextView | `span`/`p` (by variant) |
 | `ScrollView` | ScrolledWindow | UIScrollView | NSScrollView | ScrollViewer | ScrollView / NestedScrollView | `div` (overflow) |
-| `List` (data-driven) | ListView + GListModel | UICollectionView | NSTableView / NSCollectionView | ListView | RecyclerView | virtualized `div` list |
+| `List` (data-driven; sections + pull-to-refresh) | ListView + GListModel | UICollectionView | NSTableView / NSCollectionView | ListView | RecyclerView | virtualized `div` list |
+| `Pressable` | widget with click/key controllers (or flat Button where semantically appropriate) | control/gesture surface with button accessibility | tracking-area/button-backed view | pointer/key events on a framework element | clickable View | `button` or element with button role |
 | `Image` | Picture / Image | UIImageView | NSImageView | Image | ImageView | `img` |
 | `Icon` (asset-based) | Image (icon name via themed icons where matching) | UIImageView (SF Symbol where matching) | NSImageView | Image / FontIcon where matching | ImageView (vector drawable) | `img`/inline SVG |
 | `Button` | Button (+ suggested-action/destructive classes) | UIButton | NSButton | Button | MaterialButton | `button` |
@@ -42,6 +43,39 @@ subset in ui.d.ts, with semantic theme tokens from `appearance`.
 | `CameraView` (MediaStream) | Picture/Video sink from stream frames (provider) | AVCaptureVideoPreviewLayer host view | same as iOS | MediaPlayerElement / capture preview | PreviewView (CameraX) | `video` |
 | `VideoView` (media player) | Video / MediaControls | AVPlayerViewController layer | AVPlayerView | MediaPlayerElement | PlayerView (Media3) | `video` |
 
+## Event model: W3C EventTarget underneath
+
+React Native 0.88 moving dispatch onto the W3C EventTarget model
+confirms the contract we want here, and changes nothing about the
+declarative surface: app code keeps using semantic props
+(`onPress`, `onValueChange`) with typed values, exactly as React
+Native kept its prop names and payloads.
+
+What it pins down for hosts (the missing piece our types now state):
+
+- Every element ref is a `NativeElement`, a genuine `EventTarget`.
+  Hosts dispatch interactive events through capture, target, and
+  bubble phases over the element tree; there is no second,
+  framework-private event registry to reason about.
+- `Pressable`'s callbacks receive a normalized `PressEvent` (a real,
+  bubbling, cancelable `Event` with an `activation` source), so
+  `stopPropagation()` between nested pressables and
+  `preventDefault()` have standard meanings, without exposing raw
+  platform payloads.
+- If the same activation has both a declarative prop and an
+  imperative ref listener, the declarative prop runs first — the
+  same ordering React Native chose.
+- Imperative listeners on refs are an escape hatch for integration,
+  not the way portable code is written. Declarative capture-phase
+  props (an `onPressCapture`) are deferred until a host round proves
+  the need; imperative capture listeners already can express it.
+- Direct, non-bubbling host notifications (layout, focus on some
+  hosts) stay target-only, as on the web.
+
+Layout styling has its own cross-check against the layout engine:
+docs/ui/yoga-style.md. Deferred interaction behavior (list swipe
+actions today) is recorded in docs/ui/deferred.md.
+
 ## Reading the matrix honestly
 
 - A cell names the **real control the host implementation must use**.
@@ -59,7 +93,7 @@ subset in ui.d.ts, with semantic theme tokens from `appearance`.
 
 ## What a portable-only app will still miss
 
-The v1 kit has 24 declarations because it intentionally targets the
+The v1 kit has 25 declarations because it intentionally targets the
 semantic core, not a one-to-one replacement for any native catalog.
 Widget counts are not coverage: one portable `List` claims several
 native classes, while dozens of native classes are variants or
@@ -70,9 +104,10 @@ feel these absences quickly:
    stacks, sidebars and split views, drawers, bottom navigation and
    navigation rails. `Tabs` alone is not an application shell.
 2. **Advanced collections.** Tables/data grids with columns and
-   sorting, trees/outlines, icon grids, carousels/pagers, pull to
-   refresh, swipe actions, reorder/edit modes, and sophisticated
-   selection models. `List` covers the common one-dimensional case.
+   sorting, trees/outlines, icon grids, carousels/pagers, swipe
+   actions, reorder/edit modes, and sophisticated selection models.
+   `List` covers flat and sectioned one-dimensional collections,
+   sticky headers, separators, end-reached loading, and pull-to-refresh.
 3. **Transient surfaces.** Popovers, tooltips, toasts/snackbars and
    banners, action sheets, teaching tips. v1 has `Dialog` and `Menu`.
 4. **Form and settings semantics.** Grouped forms and labeled rows,
