@@ -45491,11 +45491,16 @@ impl<'a> FuncBuilder<'a> {
 
         let merge = self.new_block();
         let mut merged: Vec<(u32, ValueId, ValueId)> = Vec::new();
+        let mut live = entry;
         if body_open && handler_open {
-            for (symbol, entering) in &entry {
+            for (symbol, entering) in &mut live {
                 let from_body = body_bindings.get(symbol).copied().unwrap_or(*entering);
                 let from_handler = handler_bindings.get(symbol).copied().unwrap_or(*entering);
-                if from_body != from_handler {
+                if from_body == from_handler {
+                    // Both exits may agree on a value written after entry.
+                    // It needs no phi, but must still replace the entry value.
+                    *entering = from_body;
+                } else {
                     merged.push((*symbol, from_body, from_handler));
                 }
             }
@@ -45533,7 +45538,6 @@ impl<'a> FuncBuilder<'a> {
             (true, false) => body_bindings,
             (false, true) => handler_bindings,
             _ => {
-                let mut live = entry;
                 for (symbol, param) in params {
                     live.insert(symbol, param);
                 }
