@@ -46,3 +46,5 @@ export function outerOnly(x: number, read = () => outside): number {
 
 export function* simpleGenerated(x: number): Generator<number> { yield x; }
 export function* patternGenerated([x = 3]: number[]): Generator<number> { yield x; }
+
+export function erasedDefault(x: any, y: any = (() => x)()): any { x = 2; return y; }

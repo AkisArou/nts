@@ -69,3 +69,7 @@ function tooEarly(read = () => x, x: number = read()): number { return x; }
 function afterReady(read = () => x, x: number = 3): number { return read(); }
 export function earlyCatch(n: number): string { try { return String(tooEarly()); } catch (error) { return (error as Error).name + ": " + (error as Error).message + (n | 0); } }
 export function readyControl(n: number): number { return afterReady() + (n | 0); }
+
+function erasedDefault(x: any, y: any = (() => x)()): any { x = 2; return y; }
+export function erasedOmitted(n: number): string { return String(erasedDefault(n | 0)); }
+export function erasedSupplied(n: number): string { return String(erasedDefault(n | 0, 9)); }

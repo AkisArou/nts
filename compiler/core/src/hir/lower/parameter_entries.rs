@@ -159,6 +159,11 @@ impl FuncBuilder<'_> {
             return self.coerce(raw, ty, initializer);
         };
         let before = self.expecting.replace(ty.clone());
+        let provided = if *ty == HirType::Erased {
+            Branch::Value(raw)
+        } else {
+            Branch::Unerased(raw, ty.clone())
+        };
         // The existing conditional merger carries assignments made by a
         // default to later parameters and the body on just the taken arm.
         let value = self.lower_branching_value_at(
@@ -166,7 +171,7 @@ impl FuncBuilder<'_> {
             ty.clone(),
             undefined,
             Branch::Expression(initializer),
-            Branch::Unerased(raw, ty.clone()),
+            provided,
         );
         self.expecting = before;
         value
@@ -705,6 +710,7 @@ mod tests {
             [
                 "captured",
                 "destructured",
+                "erasedDefault",
                 "generated",
                 "readOnly",
                 "scalarDefault",
@@ -776,6 +782,24 @@ mod tests {
                     .any(|func| func.name.starts_with(&format!("{name}@")))
             );
         }
+        let erased = program
+            .funcs
+            .iter()
+            .find(|func| func.name == "erasedDefault")
+            .expect("already-erased public ABI");
+        assert_eq!(erased.params[1].ty, HirType::Erased);
+        assert!(
+            !program
+                .funcs
+                .iter()
+                .any(|func| func.name == "erasedDefault@parameters")
+        );
+        assert!(
+            program
+                .funcs
+                .iter()
+                .any(|func| func.name == "erasedDefault@bindings")
+        );
         let scalar = program
             .funcs
             .iter()
