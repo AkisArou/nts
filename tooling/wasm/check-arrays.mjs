@@ -13,6 +13,7 @@ const numbers = [NaN, Infinity, -Infinity, -0, 0, 1, -1, 0.5, 2 ** 30, Number.MI
 for (let n = -20; n <= 20; n++) numbers.push(n);
 for (const n of numbers) {
   for (const at of [0, 1]) { same(wasm.f64(n, at), n, 'f64'); same(wasm.f32(Math.fround(n), at), Math.fround(n), 'f32'); }
+  for (const at of [-0, 0, 1]) same(wasm.floatIndex(n, at), n, 'f32 index');
   same(wasm.append(0, n), n, 'append'); same(wasm.append(-0, n), n, 'append -0'); same(wasm.nested(n), n, 'nested');
 }
 for (let n = -128; n <= 127; n++) same(wasm.i8(n, 1), n, 'packed signed8');
@@ -26,6 +27,7 @@ for (const at of bad) {
   for (const name of ['i8', 'u16', 'i32', 'u32', 'f32', 'f64']) declines(name, 1, at);
   declines('string', 'a', at); declines('boolean', true, at);
   declines('append', at, 13);
+  declines('floatIndex', 1, at);
 }
 for (const n of [-1, -0.5, 0.5, NaN, Infinity, -Infinity, 2 ** 32, Number.MAX_VALUE]) declines('length', n);
 for (const n of [-1, 2 ** 32, Number.MAX_SAFE_INTEGER]) declines('length64', n);

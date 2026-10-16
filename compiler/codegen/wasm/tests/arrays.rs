@@ -558,11 +558,31 @@ fn arrays_match_js_and_input_contracts() {
         funcs.push(roundtrip(name, ty, F64, true));
     }
     funcs.push(roundtrip("integerIndex", F64, I32, false));
+    funcs.push(roundtrip(
+        "floatIndex",
+        F64,
+        HirType::Float { bits: 32 },
+        false,
+    ));
     funcs.push(roundtrip("longIndex", F64, i64, true));
     funcs.push(roundtrip("unsignedLongIndex", F64, u64, true));
     let p = program(funcs);
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     nts_codegen_wasm::validate(&emitted.bytes).unwrap();
+    assert!(
+        wasmparser::Parser::new(0)
+            .parse_all(&emitted.bytes)
+            .filter_map(|p| match p.unwrap() {
+                wasmparser::Payload::CodeSectionEntry(body) => Some(body),
+                _ => None,
+            })
+            .any(|body| body
+                .get_operators_reader()
+                .unwrap()
+                .into_iter()
+                .any(|op| matches!(op.unwrap(), wasmparser::Operator::I32TruncF32S))),
+        "f32 indices must spend the same whole/range proof as f64"
+    );
     let report = common::run("arrays", &emitted, "tooling/wasm/check-arrays.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 1000);
     assert!(report["named_declines"].as_u64().unwrap() > 50);

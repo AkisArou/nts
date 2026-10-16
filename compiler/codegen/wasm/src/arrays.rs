@@ -78,6 +78,22 @@ pub(crate) fn index(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure>
     b.load(value)?;
     numeric::convert(b, &b.ty(value).clone(), &U32)
 }
+/// Convert only after `valid_index` has guarded this GC-array access (and,
+/// when appending, after the capacity check and growth). Its whole,
+/// nonnegative index is below the engine's GC-array limit, under 2^30, so a
+/// signed trapping conversion is exact, including -0. Floating storage alone
+/// proves none of this. Keep `index`'s total conversion for other callers,
+/// especially linear-memory views whose offsets can exceed signed i32.
+fn checked_gc_index(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+    let instruction = match b.ty(value) {
+        HirType::Float { bits: 32 } => I::I32TruncF32S,
+        HirType::Float { bits: 64 } => I::I32TruncF64S,
+        _ => return index(b, value),
+    };
+    b.load(value)?;
+    b.instruction(&instruction);
+    Ok(())
+}
 pub(crate) fn whole_nonnegative(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     match b.ty(value) {
         HirType::Int {
@@ -410,7 +426,7 @@ pub(crate) fn get(
         )?;
     }
     backing(b, array, shape.wrapper)?;
-    index(b, at)?;
+    checked_gc_index(b, at)?;
     b.instruction(&get_instruction(shape)?);
     objects::adapt(b, &shape.element, &b.ty(result).clone())?;
     if absent {
@@ -470,7 +486,7 @@ fn store(
     value: ValueId,
 ) -> Result<(), Failure> {
     backing(b, array, shape.wrapper)?;
-    index(b, at)?;
+    checked_gc_index(b, at)?;
     b.load(value)?;
     objects::adapt(b, &b.ty(value).clone(), &shape.element)?;
     b.instruction(&I::ArraySet(shape.backing));

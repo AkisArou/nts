@@ -278,6 +278,15 @@ five slices, including their 313 known failures.
 
 ### Arrays (1e)
 
+- **Guarded floating indices** use a signed trapping conversion only after
+  the existing whole/nonnegative/range guard succeeds. GC-array lengths are
+  capped below 2^30; the append arm also checks capacity before growing.
+  Thus f32/f64 indices, including -0, convert exactly without a general
+  numeric conversion. Floating storage itself supplies no proof. Numeric
+  conversions and byte-backed view offsets keep their total conversion.
+  `checked-gc-index` pins reads, both store arms, IEEE values, named refusals,
+  and controls that explicitly convert first or access exposed buffer bytes;
+  the emitter test also requires the cheaper instructions to remain present.
 - **`nts_array_element`**, the erased read that answers `undefined` past the
   end, under `noUncheckedIndexedAccess` and in JS destructuring:
   - The C runtime asks the descriptor what the slots hold. Where the call

@@ -324,6 +324,10 @@ pub(crate) const fn admitted(i: &I<'_>) -> bool {
             | I::I32Extend16S
             | I::I32TruncSatF32S
             | I::I32TruncSatF32U
+            // Only after arrays::valid_index guards a GC-array access: these
+            // have no symbol operands, but may trap without that proof.
+            | I::I32TruncF32S
+            | I::I32TruncF64S
             | I::I32TruncSatF64S
             | I::I32TruncSatF64U
             | I::I64TruncSatF32S

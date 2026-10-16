@@ -620,6 +620,58 @@ fn numeric_box_webs_fold_after_inlining_without_changing_values() {
     assert_eq!(output["exports"], 8, "{output}");
 }
 
+/// Guarded GC indices spend the guard's proof; a number conversion or a
+/// byte-backed view has no such proof and keeps its total conversion.
+#[test]
+fn checked_gc_indices_use_the_guard_without_changing_ieee_or_refusals() {
+    let fixture = common::repository().join("tests/wasm/checked-gc-index");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let imported = imported_functions(&emitted.bytes);
+    let mut signed = std::collections::BTreeSet::new();
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+            let name = &names[imported + defined];
+            let mut reader = body.get_operators_reader().unwrap();
+            let mut parameter_index = false;
+            while !reader.eof() {
+                let instruction = reader.read().unwrap();
+                if parameter_index && matches!(instruction, wasmparser::Operator::I32TruncF64S) {
+                    signed.insert(name.clone());
+                }
+                // Ignore the constant indices of literal initialization:
+                // require the actual exported floating index, parameter 0.
+                parameter_index = matches!(
+                    instruction,
+                    wasmparser::Operator::LocalGet { local_index: 0 }
+                );
+            }
+            defined += 1;
+        }
+    }
+    for name in ["readAt", "writeAt", "writeLength"] {
+        assert!(
+            signed.contains(name),
+            "{name} lost its checked GC conversion: {signed:?}"
+        );
+    }
+    for name in ["integerBits", "convertedAt", "byteBacked"] {
+        assert!(
+            !signed.contains(name),
+            "{name} has no checked GC floating index proof"
+        );
+    }
+    let output = common::run(
+        "checked-gc-index",
+        &emitted,
+        "tooling/wasm/check-checked-gc-index.ts",
+        &[&fixture.join("src/main.ts")],
+    );
+    assert_eq!(output["cases"], 253, "{output}");
+    assert_eq!(output["refused"], 679, "{output}");
+}
+
 /// A `string | null` export answers node's `null`, a `string | undefined`
 /// one `undefined`, by the declaration's absence.
 #[test]
