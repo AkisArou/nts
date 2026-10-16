@@ -52986,30 +52986,13 @@ impl<'a> FuncBuilder<'a> {
         } else {
             None
         };
-        let message = match arguments.get(usize::from(aggregate)) {
-            Some(argument) => {
-                let value = self.lower_expression(*argument)?;
-                self.error_message(*argument, value)?
-            }
-            // `new Error()` has an empty message, not an absent one, and
-            // `new AggregateError(errors)` is the same for the same reason.
-            None => self.push(
-                OpKind::ConstString(String::new()),
-                text.clone(),
-                origin.clone(),
-            ),
+        let raw_message = match arguments.get(usize::from(aggregate)) {
+            Some(argument) => Some((*argument, self.lower_expression(*argument)?)),
+            None => None,
         };
-        let name = self.push(
-            OpKind::ConstString(provided.to_owned()),
-            text,
-            origin.clone(),
-        );
-        for (field, value) in [("message", message), ("name", name)] {
-            let Some(field) = layout.index_of(field) else {
-                continue;
-            };
-            self.field_set(receiver, field, value, &origin);
-        }
+        // Evaluate all argument expressions before Error's ToString(message).
+        // The plain options literal is evaluated here, but its cause is installed
+        // only after message conversion succeeds, just as InstallErrorCause is.
         // **The cause, when the options object carries one.**
         //
         // Read out of the literal rather than lowered as an object: `{ cause }` is
@@ -53029,7 +53012,7 @@ impl<'a> FuncBuilder<'a> {
         // every write -- so nothing here asks for it. And no store happens when the
         // options object is absent, which is why `"cause" in new Error("x")` is
         // false.
-        if let Some(options) = options {
+        let cause = if let Some(options) = options {
             let Some(initializers) = self.option_initializers(options) else {
                 return Err(self.unsupported(
                     id,
@@ -53047,11 +53030,35 @@ impl<'a> FuncBuilder<'a> {
                     self.lower_expression(value)?;
                 }
             }
-            if let Some(cause) = cause
-                && let Some(field) = layout.index_of(super::builtin::CAUSE_FIELD)
-            {
-                self.field_set(receiver, field, cause, &origin);
-            }
+            cause
+        } else {
+            None
+        };
+        let message = match raw_message {
+            Some((argument, value)) => self.error_message(argument, value)?,
+            // `new Error()` has an empty message, not an absent one, and
+            // `new AggregateError(errors)` is the same for the same reason.
+            None => self.push(
+                OpKind::ConstString(String::new()),
+                text.clone(),
+                origin.clone(),
+            ),
+        };
+        let name = self.push(
+            OpKind::ConstString(provided.to_owned()),
+            text,
+            origin.clone(),
+        );
+        for (field, value) in [("message", message), ("name", name)] {
+            let Some(field) = layout.index_of(field) else {
+                continue;
+            };
+            self.field_set(receiver, field, value, &origin);
+        }
+        if let Some(cause) = cause
+            && let Some(field) = layout.index_of(super::builtin::CAUSE_FIELD)
+        {
+            self.field_set(receiver, field, cause, &origin);
         }
 
         // The errors it aggregates, which is why it is a separate class at all.
