@@ -29057,6 +29057,14 @@ impl<'a> FuncBuilder<'a> {
 
     /// A potentially early access tests its binding, including a folded constant.
     fn check_initialized(&mut self, id: NodeId, symbol: u32) -> Result<(), Diagnostic> {
+        if self
+            .module
+            .initialization
+            .uninitialized_local(id, symbol)
+            .is_some()
+        {
+            return self.check_uninitialized_local(id, symbol);
+        }
         if self.module.initialization.guards_capture(id, symbol)
             && let Some(cell) = self.class_cells.get(&symbol).copied()
         {
@@ -33072,15 +33080,7 @@ impl<'a> FuncBuilder<'a> {
                 .clone()
                 .unwrap_or_else(|| "a name".to_owned());
             if self.module.initialization.lexical_cell(symbol) {
-                let ready = self.push(
-                    OpKind::FieldGet {
-                        object: cell,
-                        field: 1,
-                    },
-                    HirType::Bool,
-                    origin.clone(),
-                );
-                self.check_binding_ready(at, symbol, ready)?;
+                self.check_lexical_cell_ready(at, symbol, cell)?;
             } else if self.module.initialization.var_cell(symbol) {
                 self.check_var_ready(at, symbol, cell);
             } else {
@@ -47787,6 +47787,17 @@ impl<'a> FuncBuilder<'a> {
         target: NodeId,
         symbol: nts_semantic_schema::SymbolId,
     ) -> Result<Place, Diagnostic> {
+        if let Some(declaration) = self
+            .module
+            .initialization
+            .uninitialized_local(target, symbol.0)
+        {
+            return Ok(Place::UninitializedBinding {
+                at: target,
+                symbol: symbol.0,
+                declaration,
+            });
+        }
         // No alias resolution here, unlike the read: assigning to an imported
         // binding is a type error, so an alias symbol cannot be the target of
         // an assignment in a program that got this far.
@@ -47833,6 +47844,7 @@ impl<'a> FuncBuilder<'a> {
         // it, because the assignment is what does the narrowing.
         let ty = self.type_of(target);
         Ok(Place::Binding {
+            at: target,
             symbol: symbol.0,
             ty,
         })
@@ -47959,6 +47971,14 @@ impl<'a> FuncBuilder<'a> {
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
+            Place::UninitializedBinding {
+                at,
+                symbol,
+                declaration,
+            } => {
+                self.check_initialized(at, symbol)?;
+                self.unwritten(at, declaration)?
+            }
             Place::Checked {
                 ref place,
                 ref guard,
@@ -48835,7 +48855,7 @@ impl<'a> FuncBuilder<'a> {
             }
             // A table has no slot until a key is written, so there is no
             // declared width to coerce toward -- `write_place` erases instead.
-            Place::Entry { .. } => None,
+            Place::Entry { .. } | Place::UninitializedBinding { .. } => None,
             Place::Global(global) => self.module.types.get(global as usize).cloned(),
             // A binding is an SSA value rather than a slot, and it still has a
             // declared type that every assignment has to keep: `let held:
@@ -49074,15 +49094,32 @@ impl<'a> FuncBuilder<'a> {
 
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
     fn write_place(&mut self, id: NodeId, place: &Place, value: ValueId) -> Result<(), Diagnostic> {
+        if let Place::UninitializedBinding { at, symbol, .. } = *place {
+            return self.check_initialized(at, symbol);
+        }
         if let Place::Checked { guard, key, .. } = place {
             access::require(self, id, guard, key, true)?;
         }
         if let Place::Global(global) = *place {
             self.check_initialized_place(id, global)?;
         }
+        if let Place::Binding { at, symbol, .. } = *place {
+            self.check_initialized(at, symbol)?;
+            if let Some(cell) = self
+                .cell_of(symbol)
+                .and(self.bindings.get(&symbol).copied())
+            {
+                self.check_lexical_cell_ready(at, symbol, cell)?;
+            }
+        }
         let origin = self.origin(id);
         let value = self.coerce_to_slot(id, place, value)?;
         match *place {
+            Place::UninitializedBinding { .. } => {
+                return Err(
+                    self.unsupported(id, "an uninitialized lexical reference reached storage")
+                );
+            }
             Place::Checked { ref place, .. } => {
                 return self.write_place(id, place, value);
             }
@@ -79768,6 +79805,12 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
+        if let Some(symbol) = self.node(id).symbol
+            && let Some(declaration) = self.module.initialization.uninitialized_local(id, symbol.0)
+        {
+            self.check_initialized(id, symbol.0)?;
+            return self.unwritten(id, declaration);
+        }
         // `Infinity`, `NaN` and `undefined` are global bindings that no scope in
         // the program declares, and each is a constant. Resolving them by name
         // is safe for a reason worth stating: all three are non-writable,
@@ -82443,6 +82486,13 @@ enum Omitted {
 /// lowering the target twice would call it twice.
 #[derive(Debug, Clone)]
 enum Place {
+    /// A source-proven premature lexical reference. Evaluating the reference
+    /// is harmless; GetValue/PutValue throws before any load/coercion/store.
+    UninitializedBinding {
+        at: NodeId,
+        symbol: u32,
+        declaration: NodeId,
+    },
     /// A nullable receiver, checked at the read or store, after its operands.
     Checked {
         place: Box<Place>,
@@ -82563,6 +82613,7 @@ enum Place {
     /// and the symbol table does not have it: a local's `SymbolRecord.ty` is
     /// `None`.
     Binding {
+        at: NodeId,
         symbol: u32,
         ty: Option<HirType>,
     },

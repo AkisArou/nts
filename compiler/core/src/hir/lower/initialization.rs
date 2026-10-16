@@ -32,6 +32,44 @@ struct Binding {
 }
 
 impl FuncBuilder<'_> {
+    /// Reads and writes consult the same lexical cell's initialization state.
+    /// A var write instead establishes assignment readiness and never uses it.
+    pub(super) fn check_lexical_cell_ready(
+        &mut self,
+        at: NodeId,
+        symbol: u32,
+        cell: ValueId,
+    ) -> Result<(), Diagnostic> {
+        if self.in_closure
+            && self.module.initialization.lexical_cell(symbol)
+            && self
+                .cell_of(symbol)
+                .is_some_and(|index| self.is_guarded(index))
+        {
+            let origin = self.origin(at);
+            let ready = self.push(
+                OpKind::FieldGet {
+                    object: cell,
+                    field: 1,
+                },
+                HirType::Bool,
+                origin,
+            );
+            self.check_binding_ready(at, symbol, ready)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn check_uninitialized_local(
+        &mut self,
+        at: NodeId,
+        symbol: u32,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(at);
+        let ready = self.push(OpKind::ConstBool(false), HirType::Bool, origin);
+        self.check_binding_ready(at, symbol, ready)
+    }
+
     /// Only a bare captured var read is answered locally. A call returning
     /// that value still needs undefined-capable result transport and stays a
     /// named stop until its representation is widened together with its ABI.
@@ -136,9 +174,69 @@ pub(super) struct Analysis {
     ready_cells: FxHashSet<u32>,
     captured_guards: FxHashSet<(NodeId, u32)>,
     class_readiness: FxHashSet<u32>,
+    /// Direct accesses which execute before their own lexical initialization.
+    /// Shared by read lowering, assignment places and source throwing effects.
+    uninitialized_locals: FxHashMap<(NodeId, u32), NodeId>,
 }
 
 impl Analysis {
+    pub(super) fn uninitialized_local(&self, at: NodeId, symbol: u32) -> Option<NodeId> {
+        self.uninitialized_locals.get(&(at, symbol)).copied()
+    }
+
+    fn direct_lexical_accesses(&mut self, probe: &FuncBuilder) {
+        for (index, node) in probe.snapshot.nodes.iter().enumerate() {
+            let Ok(index) = u32::try_from(index) else {
+                continue;
+            };
+            let at = NodeId(index);
+            if !reads_a_name(probe, at) || !runtime_reference(probe, at) {
+                continue;
+            }
+            let Some(symbol) = node.symbol else { continue };
+            let Some(record) = probe.snapshot.symbols.get(symbol.0 as usize) else {
+                continue;
+            };
+            let [declaration] = record.declarations.as_slice() else {
+                continue;
+            };
+            if !matches!(
+                probe.kind_of(*declaration),
+                Some(
+                    syntax::VARIABLE_DECLARATION
+                        | syntax::BINDING_ELEMENT
+                        | syntax::CLASS_DECLARATION
+                )
+            ) || !(probe.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
+                || matches!(
+                    probe.variable_kind(*declaration),
+                    Some(VariableKind::Let | VariableKind::Const)
+                ))
+                || execution_owner(probe, at) != execution_owner(probe, *declaration)
+            {
+                continue;
+            }
+            let name = if probe.kind_of(*declaration) == Some(syntax::BINDING_ELEMENT) {
+                super::binding_element_parts(probe, *declaration).map(|(_, binding, _)| binding)
+            } else {
+                probe.children(*declaration).into_iter().next()
+            };
+            if name == Some(at) || inner_class_binding(probe, at, *declaration) {
+                continue;
+            }
+            let accessed = node.origin.location;
+            let declared = probe.node(*declaration).origin.location;
+            // In the declaring execution, an access before the declaration's
+            // initialization finishes cannot have a ready binding. Deferred
+            // bodies instead use the captured cell's runtime readiness.
+            if accessed.file == declared.file && accessed.span.start < declared.span.end {
+                self.uninitialized_locals
+                    .insert((at, symbol.0), *declaration);
+                self.preserve_effect(probe, at);
+            }
+        }
+    }
+
     pub(super) fn guards(&self, at: NodeId, symbol: u32) -> bool {
         self.guarded.contains(&(at, symbol))
     }
@@ -304,6 +402,23 @@ fn syntax_parent(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
 fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
     std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent)
         .find(|at| names_a_body(probe.kind_of(*at)))
+}
+
+fn inner_class_binding(probe: &FuncBuilder, at: NodeId, declaration: NodeId) -> bool {
+    // The inner class name is ready while static elements run, but not in
+    // heritage. Module and direct-local accesses ask this same question.
+    if !probe.kind_of(declaration).is_some_and(declares_a_class) {
+        return false;
+    }
+    for ancestor in std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent) {
+        if probe.kind_of(ancestor) == Some(syntax::HERITAGE_CLAUSE) {
+            return false;
+        }
+        if ancestor == declaration {
+            return true;
+        }
+    }
+    false
 }
 
 pub(super) fn reentered_scope(probe: &FuncBuilder, declaration: NodeId) -> bool {
@@ -713,27 +828,7 @@ impl Summaries<'_, '_> {
     }
 
     fn inner_class_binding(&self, at: NodeId, declaration: NodeId) -> bool {
-        // The class's inner name is initialized before static elements run;
-        // its outer binding is initialized after they finish. Heritage still
-        // runs in the inner name's dead zone.
-        if !self
-            .probe
-            .kind_of(declaration)
-            .is_some_and(declares_a_class)
-        {
-            return false;
-        }
-        for ancestor in
-            std::iter::successors(self.probe.node(at).parent, |at| self.probe.node(*at).parent)
-        {
-            if self.probe.kind_of(ancestor) == Some(syntax::HERITAGE_CLAUSE) {
-                return false;
-            }
-            if ancestor == declaration {
-                return true;
-            }
-        }
-        false
+        inner_class_binding(self.probe, at, declaration)
     }
 
     fn class_definition(&self, at: NodeId, into: &mut Vec<Event>) {
@@ -1068,6 +1163,7 @@ pub(super) fn analyze(
         ..Analysis::default()
     };
     analysis.captured_cells(probe, closures, readers);
+    analysis.direct_lexical_accesses(probe);
     let bindings = analysis.bindings.clone();
     let mut summaries = Summaries {
         probe,
