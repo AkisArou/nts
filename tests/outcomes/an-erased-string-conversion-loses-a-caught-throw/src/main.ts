@@ -2,7 +2,7 @@
 //
 // A class toString called through erased String() throws the same RangeError
 // as the explicit-throw control. Node catches both in the caller. On the
-// genuine main63e6cc0d7731 pin, the descriptor calls the ordinary toString
+// clean main9761b99dd7d3 pin, the descriptor calls the ordinary toString
 // entry and its RangeError escapes: 16 of 58 cases disagree, all converted.
 // This is a guard for the catchability a property-key or numeric conversion
 // must preserve when it invokes a program method.
