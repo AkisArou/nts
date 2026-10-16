@@ -1,5 +1,5 @@
 {
-  "bound": 7044,
+  "bound": 7051,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -3548,21 +3548,6 @@
     },
     {
       "interface": "ImageData",
-      "member": "constructor/4",
-      "why": "parameter type Float32Array"
-    },
-    {
-      "interface": "ImageData",
-      "member": "constructor/3",
-      "why": "parameter type Float32Array"
-    },
-    {
-      "interface": "ImageData",
-      "member": "constructor/2",
-      "why": "parameter type Float32Array"
-    },
-    {
-      "interface": "ImageData",
       "member": "get data",
       "why": "result type ImageDataArray"
     },
@@ -4265,26 +4250,6 @@
       "interface": "DOMMatrixReadOnly",
       "member": "toJSON/0",
       "why": "result type object"
-    },
-    {
-      "interface": "DOMMatrixReadOnly",
-      "member": "fromFloat32Array/1",
-      "why": "parameter type Float32Array"
-    },
-    {
-      "interface": "DOMMatrixReadOnly",
-      "member": "fromFloat64Array/1",
-      "why": "parameter type Float64Array"
-    },
-    {
-      "interface": "DOMMatrix",
-      "member": "fromFloat32Array/1",
-      "why": "parameter type Float32Array"
-    },
-    {
-      "interface": "DOMMatrix",
-      "member": "fromFloat64Array/1",
-      "why": "parameter type Float64Array"
     },
     {
       "interface": "SVGElement",

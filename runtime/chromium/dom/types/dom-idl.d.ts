@@ -2,7 +2,7 @@
 // Do not edit; regenerate.
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {
-  import type { ByValue, CBool, CHandles, Closure, Counted, Fields, Given, HostClass, Interface, Opaque, Ptr, StringView, Struct } from "c:types";
+  import type { ByValue, CBool, CElements, CHandles, Closure, Counted, Fields, Given, HostClass, Interface, Opaque, Ptr, StringView, Struct } from "c:types";
   import type { AsNumber, BigInt64, BigUint64, c_size_t, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 } from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;
@@ -31545,6 +31545,27 @@ declare module "nts:dom" {
    * @ntsNoEscape error
    */
   export function newImageData(sw: Float64, sh: Float64, settings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+  /**
+   * @ntsSymbol nts_dom_new_ImageData_4
+   * @ntsNoEscape data
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newImageData(data: Counted<CElements<Float32Array, "const float">, c_size_t>, sw: Float64, sh: Float64, settings: ByValue<ImageDataSettings> | Fields<ImageDataSettings>, error?: Ptr<DOMException | null>): ImageData;
+  /**
+   * @ntsSymbol nts_dom_new_ImageData_3x
+   * @ntsNoEscape data
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newImageData(data: Counted<CElements<Float32Array, "const float">, c_size_t>, sw: Float64, sh: Float64, error?: Ptr<DOMException | null>): ImageData;
+  /**
+   * @ntsSymbol nts_dom_new_ImageData_2x
+   * @ntsNoEscape data
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function newImageData(data: Counted<CElements<Float32Array, "const float">, c_size_t>, sw: Float64, error?: Ptr<DOMException | null>): ImageData;
   export interface HTMLHeadElementOwnMethods {
   }
   export type HTMLHeadElementMethods = HTMLHeadElementOwnMethods & HTMLElementMethods;
@@ -35859,6 +35880,20 @@ declare module "nts:dom" {
   export type DOMMatrixReadOnlyMethods = DOMMatrixReadOnlyOwnMethods;
   export type DOMMatrixReadOnly = HostClass<"NtsDomDOMMatrixReadOnly", null, "nts_dom_retain", "nts_dom_release"> & DOMMatrixReadOnlyMethods;
   /**
+   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromFloat32Array
+   * @ntsNoEscape array32
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrixReadOnly_fromFloat32Array(array32: Counted<CElements<Float32Array, "const float">, c_size_t>, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromFloat64Array
+   * @ntsNoEscape array64
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrixReadOnly_fromFloat64Array(array64: Counted<CElements<Float64Array, "const double">, c_size_t>, error?: Ptr<DOMException | null>): DOMMatrixReadOnly;
+  /**
    * @ntsSymbol nts_dom_DOMMatrixReadOnly_fromMatrix_1
    * @ntsThrows error nts_dom_exception_take_message
    * @ntsNoEscape error
@@ -36354,6 +36389,20 @@ declare module "nts:dom" {
   export type DOMMatrix = HostClass<"NtsDomDOMMatrix", DOMMatrixReadOnly> & DOMMatrixMethods;
   /** @ntsSymbol nts_dom_as_DOMMatrix */
   export function asDOMMatrix(object: DOMMatrixReadOnly): DOMMatrix | null;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrix_fromFloat32Array
+   * @ntsNoEscape array32
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrix_fromFloat32Array(array32: Counted<CElements<Float32Array, "const float">, c_size_t>, error?: Ptr<DOMException | null>): DOMMatrix;
+  /**
+   * @ntsSymbol nts_dom_DOMMatrix_fromFloat64Array
+   * @ntsNoEscape array64
+   * @ntsThrows error nts_dom_exception_take_message
+   * @ntsNoEscape error
+   */
+  export function DOMMatrix_fromFloat64Array(array64: Counted<CElements<Float64Array, "const double">, c_size_t>, error?: Ptr<DOMException | null>): DOMMatrix;
   /**
    * @ntsSymbol nts_dom_DOMMatrix_fromMatrix_1
    * @ntsThrows error nts_dom_exception_take_message

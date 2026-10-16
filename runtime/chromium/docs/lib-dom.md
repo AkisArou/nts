@@ -81,7 +81,7 @@ Each fact below was measured on the compiler at 6c08170ef.
   variable (`v0 = document;`); `@ntsGet` on a global variable is ignored.
 - **Coverage, measured by every generation** (`report-libdom.json`, which
   generate.py writes through `libdom.py` and `--check` holds current;
-  2026-10-14, 293 interfaces, 7044 functions):
+  2026-10-14, 293 interfaces, 7051 functions):
   - lib.dom.d.ts declares 3621 members on the bound interfaces.
   - 3150 are bound, the CSS properties among them. Blink serves those
     through a named-property interceptor rather than its IDL, so they are

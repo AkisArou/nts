@@ -136,6 +136,17 @@ blink::HeapVector<blink::Member<T>> ObjectsOf(Handle *const *handles,
   }
   return objects;
 }
+// A typed array, from the elements the program lends for the call (c:types
+// `Counted<CElements<T>>`): a fresh Blink view over a copy of them, as V8's
+// conversion adopts the program's array -- Blink may keep the view (an
+// ImageData keeps its pixels), so the copy is Blink's own.
+template <class View>
+blink::NotShared<View> TypedArrayOf(const typename View::ValueType *items,
+                                    size_t count) {
+  CHECK(items || count == 0);
+  return blink::NotShared<View>(
+      View::Create(UNSAFE_BUFFERS(base::span(items, count))));
+}
 template <class Handle> Handle *HandleOf(blink::ScriptWrappable *object) {
   return reinterpret_cast<Handle *>(object);
 }

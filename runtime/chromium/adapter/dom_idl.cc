@@ -44826,6 +44826,42 @@ NtsDomImageData* nts_dom_new_ImageData_3(double sw, double sh, NtsDomImageDataSe
   return HandleOf<NtsDomImageData>(ImageData::Create(sw_converted, sh_converted, settings_converted, exception_state));
 }
 
+NtsDomImageData* nts_dom_new_ImageData_4(const float* data, size_t data_count, double sw, double sh, NtsDomImageDataSettings settings, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto data_view = nts_dom::TypedArrayOf<blink::DOMFloat32Array>(data, data_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto sw_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sw), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto sh_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sh), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  auto* settings_converted = NtsDomToImageDataSettings(context, settings, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomImageData>(ImageData::Create(data_view, sw_converted, sh_converted, settings_converted, exception_state));
+}
+
+NtsDomImageData* nts_dom_new_ImageData_3x(const float* data, size_t data_count, double sw, double sh, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto data_view = nts_dom::TypedArrayOf<blink::DOMFloat32Array>(data, data_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto sw_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sw), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto sh_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sh), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomImageData>(ImageData::Create(data_view, sw_converted, sh_converted, blink::ImageDataSettings::Create(context.v8_isolate.get()), exception_state));
+}
+
+NtsDomImageData* nts_dom_new_ImageData_2x(const float* data, size_t data_count, double sw, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto data_view = nts_dom::TypedArrayOf<blink::DOMFloat32Array>(data, data_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  const auto sw_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), sw), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomImageData>(ImageData::Create(data_view, sw_converted, exception_state));
+}
+
 double nts_dom_ImageData_get_width(NtsDomImageData* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::ImageData>(self);
@@ -49878,6 +49914,22 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* 
   return HandleOf<NtsDomDOMMatrix>(receiver->translate(0, 0, 0));
 }
 
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromFloat32Array(const float* array32, size_t array32_count, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto array32_view = nts_dom::TypedArrayOf<blink::DOMFloat32Array>(array32, array32_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromFloat32Array(array32_view, exception_state));
+}
+
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromFloat64Array(const double* array64, size_t array64_count, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto array64_view = nts_dom::TypedArrayOf<blink::DOMFloat64Array>(array64, array64_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrixReadOnly>(DOMMatrixReadOnly::fromFloat64Array(array64_view, exception_state));
+}
+
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -50441,6 +50493,22 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self) {
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::DOMMatrix>(self);
   return HandleOf<NtsDomDOMMatrix>(receiver->translateSelf(0, 0, 0));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromFloat32Array(const float* array32, size_t array32_count, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto array32_view = nts_dom::TypedArrayOf<blink::DOMFloat32Array>(array32, array32_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromFloat32Array(array32_view, exception_state));
+}
+
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromFloat64Array(const double* array64, size_t array64_count, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto array64_view = nts_dom::TypedArrayOf<blink::DOMFloat64Array>(array64, array64_count);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomDOMMatrix>(DOMMatrix::fromFloat64Array(array64_view, exception_state));
 }
 
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error) {

@@ -809,6 +809,29 @@ export function libDomTranscript(): string {
     log("numberLists", thresholds + "|" + dash);
   }
 
+  // Typed arrays lent by their elements: matrices made from the program's
+  // own Float64Array and Float32Array, copied at the call (the source
+  // changed afterwards does not reach the matrix), the 32-bit elements
+  // widened exactly; a length that is neither 6 nor 16 refuses.
+  {
+    const elements = new Float64Array([2, 0, 0, 2, 10, 20]);
+    const scaled = DOMMatrix.fromFloat64Array(elements);
+    elements[4] = 99;
+    const narrow = DOMMatrixReadOnly.fromFloat32Array(new Float32Array([0.1, 0, 0, 1, 3, 4]));
+    const full = DOMMatrix.fromFloat32Array(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 2]));
+    let refused = "ok";
+    try {
+      DOMMatrix.fromFloat64Array(new Float64Array([1, 2, 3]));
+    } catch (error) {
+      const message = (error as Error).message;
+      const at = message.lastIndexOf("': ");
+      const text = at < 0 ? message : message.slice(at + 3);
+      refused = (error as Error).name === "Error" ? text : (error as Error).name + ": " + text;
+    }
+    log("typedArrays", scaled.a + "," + scaled.e + "," + scaled.is2D + "|" + narrow.a + "," + narrow.e + "|" +
+      full.m41 + "," + full.m44 + "," + full.is2D + "|" + refused);
+  }
+
   root.remove();
   return lines.join("\n");
 }

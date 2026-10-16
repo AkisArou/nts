@@ -118,6 +118,20 @@ BYTE_STRING = "ByteString"
 # string type its IDL names (no interface is called DOMString).
 TEXT_SEQUENCE = "DOMString"
 NUMBER_SEQUENCE = "Double"
+# A typed-array parameter the program lends by its elements
+# (`Counted<CElements<T>>`): IDL name -> (C element type, Blink view class).
+# The kinds c:types lent elements admit; a Uint8Array crosses as bytes and a
+# Uint8ClampedArray or Float16Array has no lent form (and no program array
+# of the clamped kind to lend), so members wanting those stay skipped.
+TYPED_ARRAYS = {
+    "Int8Array": ("int8_t", "DOMInt8Array"),
+    "Int16Array": ("int16_t", "DOMInt16Array"),
+    "Uint16Array": ("uint16_t", "DOMUint16Array"),
+    "Int32Array": ("int32_t", "DOMInt32Array"),
+    "Uint32Array": ("uint32_t", "DOMUint32Array"),
+    "Float32Array": ("float", "DOMFloat32Array"),
+    "Float64Array": ("double", "DOMFloat64Array"),
+}
 
 # Words a parameter cannot be named in TypeScript or C++, and the one the
 # error slot takes.
@@ -636,6 +650,18 @@ class Generator:
                                        f"{blink_class_name(interface)}>({name}, {name}_count);"))
                 param.lent = True
                 return param
+        # A typed array is its elements lent for the call, made into a fresh
+        # Blink view over a copy of them (nts_dom::TypedArrayOf), as V8's
+        # conversion adopts the program's array.
+        if (unwrapped.is_typed_array_type and unwrapped.keyword_typename in TYPED_ARRAYS
+                and not unwrapped.does_include_nullable_type):
+            element, view = TYPED_ARRAYS[unwrapped.keyword_typename]
+            param = Param(name, f"const {element}* {name}, size_t {name}_count",
+                          f'{name}: Counted<CElements<{unwrapped.keyword_typename}, "const {element}">, c_size_t>',
+                          f"{name}_view", False,
+                          prelude=f"auto {name}_view = nts_dom::TypedArrayOf<blink::{view}>({name}, {name}_count);")
+            param.lent = True
+            return param
         if unwrapped.is_union:
             members = members_of(unwrapped)
             strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]
@@ -2177,7 +2203,7 @@ bool nts_dom_is(const void* object, uint32_t interface_id) {{
         declarations = f"""// {banner.replace(chr(10), chr(10) + '// ')}
 /** @ntsHeader "dom_idl.h" */
 declare module "nts:dom" {{
-  import type {{ ByValue, CBool, CHandles, Closure, Counted, Fields, Given, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
+  import type {{ ByValue, CBool, CElements, CHandles, Closure, Counted, Fields, Given, HostClass, Interface, Opaque, Ptr, StringView, Struct }} from "c:types";
   import type {{ AsNumber, BigInt64, BigUint64, c_size_t, Float32, Float64, Int8, Int16, Int32, Uint8, Uint16, Uint32 }} from "@nts/scalars";
   /** A DOM exception a member reported, thrown as an `Error` "Name: message". */
   export type DOMException = Opaque<"NtsDomException">;

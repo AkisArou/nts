@@ -6553,6 +6553,9 @@ double nts_dom_FileList_get_length(NtsDomFileList* self);
 NtsDomFile* nts_dom_FileList_item(NtsDomFileList* self, double index);
 NtsDomImageData* nts_dom_new_ImageData_2(double sw, double sh, NtsDomException** error);
 NtsDomImageData* nts_dom_new_ImageData_3(double sw, double sh, NtsDomImageDataSettings settings, NtsDomException** error);
+NtsDomImageData* nts_dom_new_ImageData_4(const float* data, size_t data_count, double sw, double sh, NtsDomImageDataSettings settings, NtsDomException** error);
+NtsDomImageData* nts_dom_new_ImageData_3x(const float* data, size_t data_count, double sw, double sh, NtsDomException** error);
+NtsDomImageData* nts_dom_new_ImageData_2x(const float* data, size_t data_count, double sw, NtsDomException** error);
 double nts_dom_ImageData_get_width(NtsDomImageData* self);
 double nts_dom_ImageData_get_height(NtsDomImageData* self);
 const char* nts_dom_ImageData_get_colorSpace(NtsDomImageData* self);
@@ -7280,6 +7283,8 @@ NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_3(NtsDomDOMMatrixReadOnly* 
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_2(NtsDomDOMMatrixReadOnly* self, double tx, double ty);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_1(NtsDomDOMMatrixReadOnly* self, double tx);
 NtsDomDOMMatrix* nts_dom_DOMMatrixReadOnly_translate_0(NtsDomDOMMatrixReadOnly* self);
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromFloat32Array(const float* array32, size_t array32_count, NtsDomException** error);
+NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromFloat64Array(const double* array64, size_t array64_count, NtsDomException** error);
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_1_DOMMatrixReadOnly(NtsDomDOMMatrixReadOnly* other, NtsDomException** error);
 NtsDomDOMMatrixReadOnly* nts_dom_DOMMatrixReadOnly_fromMatrix_0(NtsDomException** error);
@@ -7371,6 +7376,8 @@ NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_3(NtsDomDOMMatrix* self, double
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_2(NtsDomDOMMatrix* self, double tx, double ty);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_1(NtsDomDOMMatrix* self, double tx);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_translateSelf_0(NtsDomDOMMatrix* self);
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromFloat32Array(const float* array32, size_t array32_count, NtsDomException** error);
+NtsDomDOMMatrix* nts_dom_DOMMatrix_fromFloat64Array(const double* array64, size_t array64_count, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1(NtsDomDOMMatrixInit other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_1_DOMMatrixReadOnly(NtsDomDOMMatrixReadOnly* other, NtsDomException** error);
 NtsDomDOMMatrix* nts_dom_DOMMatrix_fromMatrix_0(NtsDomException** error);
