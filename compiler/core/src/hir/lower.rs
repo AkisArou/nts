@@ -49945,6 +49945,22 @@ impl<'a> FuncBuilder<'a> {
                 .any(|child| self.assigns(child))
     }
 
+    /// Lower one control-flow arm from the current bindings, then restore them.
+    /// Its tail and resulting bindings belong only to that arm; the caller
+    /// decides which of them can reach a merge, including when a finally ran
+    /// on an abrupt exit. Restore even on a lowering error.
+    fn lower_arm(
+        &mut self,
+        lower: impl FnOnce(&mut Self) -> Result<(), Diagnostic>,
+    ) -> Result<(BlockId, bool, rustc_hash::FxHashMap<u32, ValueId>), Diagnostic> {
+        let entry = self.bindings.clone();
+        let lowered = lower(self);
+        let tail = self.current;
+        let open = !self.is_terminated();
+        let bindings = std::mem::replace(&mut self.bindings, entry);
+        lowered.map(|()| (tail, open, bindings))
+    }
+
     fn lower_if(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         let children = self.children(id);
         let (condition, then_branch, else_branch) = match children.as_slice() {
@@ -49968,22 +49984,16 @@ impl<'a> FuncBuilder<'a> {
         let entry = self.bindings.clone();
 
         self.switch_to(then_block);
-        self.lower_narrowed_arm(condition, then_branch, true)?;
         // The block the arm *ended* in, which nested control flow moves away from
         // the block it started in. Terminating `then_block` instead would leave
         // the real tail without a terminator.
-        let then_tail = self.current;
-        let then_open = !self.is_terminated();
-        let then_bindings = std::mem::replace(&mut self.bindings, entry.clone());
+        let (then_tail, then_open, then_bindings) =
+            self.lower_arm(|this| this.lower_narrowed_arm(condition, then_branch, true))?;
 
         let (else_tail, else_open, else_bindings) = match else_branch {
             Some(else_branch) => {
                 self.switch_to(else_block);
-                self.lower_narrowed_arm(condition, else_branch, false)?;
-                let tail = self.current;
-                let open = !self.is_terminated();
-                let bindings = std::mem::replace(&mut self.bindings, entry.clone());
-                (tail, open, bindings)
+                self.lower_arm(|this| this.lower_narrowed_arm(condition, else_branch, false))?
             }
             // The false edge is the merge, which is open by construction and
             // changes nothing.
