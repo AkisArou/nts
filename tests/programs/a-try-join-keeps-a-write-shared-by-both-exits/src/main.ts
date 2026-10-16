@@ -1,4 +1,3 @@
-// run: check
 // The normal and caught exits agree on value=1, which must survive the join.
 // The control only moves the same store before entry to the try.
 export function subject(n: number): number {
