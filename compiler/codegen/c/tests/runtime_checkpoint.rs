@@ -310,7 +310,7 @@ fn a_foreign_release_preserves_an_unrelated_pending_raise() {
         "pending_release",
         &["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"],
     );
-    assert!(checks(&report) >= 12, "{report}");
+    assert!(checks(&report) >= 56, "{report}");
 }
 
 #[test]
