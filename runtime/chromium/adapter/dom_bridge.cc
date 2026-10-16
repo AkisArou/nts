@@ -15,6 +15,7 @@
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
+#include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/add_event_listener_options_resolved.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer.h"
@@ -198,6 +199,37 @@ private:
 // callback, in the queue page script's requestAnimationFrame uses, so the two
 // run in the order they asked. It runs once and gives the closure back; a
 // cancelled one, or one the document's end leaves, gives it back unrun.
+// A compiled closure canvas.toBlob's BlobCallback will run once with the
+// blob, through a V8 function trampoline (BlobCallbackOf). Held like a
+// frame callback: runs once and gives the closure back; one the document's
+// end leaves gives it back unrun.
+class NtsBlobCall final : public blink::GarbageCollected<NtsBlobCall> {
+public:
+  NtsBlobCall(NtsDomContext *context, nts_dom::NtsDomBlobCallback callback,
+              void *closure, NtsDomDestroy destroy)
+      : context_(context), callback_(callback), closure_(closure),
+        destroy_(destroy) {}
+
+  void Run(blink::Blob *blob);
+  void Trace(blink::Visitor *) const {}
+
+  void *closure() const { return closure_; }
+  NtsDomDestroy Take(void *&closure) {
+    if (!callback_)
+      return nullptr;
+    callback_ = nullptr;
+    context_ = nullptr;
+    closure = std::exchange(closure_, nullptr);
+    return std::exchange(destroy_, nullptr);
+  }
+
+private:
+  RAW_PTR_EXCLUSION NtsDomContext *context_; // see PlainPointers
+  nts_dom::NtsDomBlobCallback callback_;
+  RAW_PTR_EXCLUSION void *closure_; // see PlainPointers
+  NtsDomDestroy destroy_;
+};
+
 class NtsFrame final : public blink::FrameCallback {
 public:
   NtsFrame(NtsDomContext *context, NtsDomFrameCallback callback, void *closure,
@@ -684,6 +716,7 @@ public:
     visitor->Trace(timers);
     visitor->Trace(held);
     visitor->Trace(promises);
+    visitor->Trace(blobs);
   }
   // The listener added for (type, closure, capture) on `target`, or null.
   NtsListener *Find(blink::EventTarget *target, const blink::AtomicString &type,
@@ -728,6 +761,8 @@ public:
   blink::HeapHashSet<blink::Member<NtsHeldClosure>> held;
   // Promises the program was answered that Blink has not settled yet.
   blink::HeapHashSet<blink::Member<NtsPendingPromise>> promises;
+  // Blob callbacks not yet called back.
+  blink::HeapHashSet<blink::Member<NtsBlobCall>> blobs;
 };
 
 // Listener handles the program keeps off the stack, as Roots for objects.
@@ -891,6 +926,7 @@ using nts_dom::Entry;
 using nts_dom::HeldListeners;
 using nts_dom::ListenerSet;
 using nts_dom::NativeJob;
+using nts_dom::NtsBlobCall;
 using nts_dom::NtsFrame;
 using nts_dom::NtsListener;
 using nts_dom::HeldObjects;
@@ -1060,6 +1096,51 @@ void NtsFrame::Invoke(double time) {
   context->listeners->frames.erase(this);
   context->RunFrame(callback, time, closure, destroy);
 }
+
+// A blob call's run: the closure with the blob (or null), through the host
+// like every one-shot, then destroyed -- RunFrame's shape with a handle.
+void NtsBlobCall::Run(blink::Blob *blob) {
+  NtsDomContext *context = context_;
+  const nts_dom::NtsDomBlobCallback callback = callback_;
+  void *closure = nullptr;
+  const NtsDomDestroy destroy = Take(closure);
+  if (!context || context->closed || !context->invoke)
+    return;
+  context->listeners->blobs.erase(this);
+  nts_dom::ProgramScope scope(context);
+  struct Call {
+    nts_dom::NtsDomBlobCallback callback;
+    RAW_PTR_EXCLUSION NtsDomBlob *blob; // see PlainPointers
+    RAW_PTR_EXCLUSION void *closure; // see PlainPointers
+    NtsDomDestroy destroy;
+  } call{callback,
+         blob ? nts_dom::HandleOf<NtsDomBlob>(blob) : nullptr,
+         closure, destroy};
+  context->invoke(
+      context->invoke_host.get(),
+      [](void *state) {
+        auto *call = static_cast<Call *>(state);
+        call->callback(call->blob, call->closure);
+        if (call->destroy)
+          call->destroy(call->closure);
+      },
+      &call);
+}
+namespace {
+// The native side of the V8 function a BlobCallback runs: hand the blob
+// (Blink's, unwrapped from the caller's argument, or none) to the held call.
+void RunBlobCallback(const v8::FunctionCallbackInfo<v8::Value> &info) {
+  auto *call = static_cast<NtsBlobCall *>(
+      info.Data().As<v8::External>()->Value(
+          v8::kExternalPointerTypeTagDefault));
+  blink::Blob *blob =
+      info.Length() > 0 && info[0]->IsObject()
+          ? blink::V8Blob::ToWrappableUnsafe(info.GetIsolate(),
+                                             info[0].As<v8::Object>())
+          : nullptr;
+  call->Run(blob);
+}
+} // namespace
 } // namespace nts_dom
 
 NtsDomContext::NtsDomContext(blink::Document *document)
@@ -1469,6 +1550,13 @@ void NtsDomContext::Close() {
     if (auto destroy = frame->Take(closure))
       GiveBack(destroy, closure);
   }
+  blink::HeapVector<blink::Member<NtsBlobCall>> blobs(listeners->blobs);
+  listeners->blobs.clear();
+  for (auto &call : blobs) {
+    void *closure = nullptr;
+    if (auto destroy = call->Take(closure))
+      GiveBack(destroy, closure);
+  }
   blink::HeapVector<blink::Member<nts_dom::NtsMicrotask>> microtasks(listeners->microtasks);
   listeners->microtasks.clear();
   for (auto &task : microtasks) {
@@ -1606,6 +1694,20 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
   return Subscribe<blink::IDLUndefined, NtsPromiseFulfilled>(
       context, script_state, rejections, promise);
 }
+blink::V8BlobCallback *BlobCallbackOf(NtsDomContext &context,
+                                      NtsDomBlobCallback callback,
+                                      void *closure, NtsDomDestroy destroy) {
+  CHECK(context.invoke);
+  auto *call = blink::MakeGarbageCollected<NtsBlobCall>(&context, callback,
+                                                        closure, destroy);
+  context.listeners->blobs.insert(call);
+  auto function =
+      v8::Function::New(context.MainWorld()->GetContext(), &RunBlobCallback,
+                        v8::External::New(context.v8_isolate.get(), call,
+                                          v8::kExternalPointerTypeTagDefault))
+          .ToLocalChecked();
+  return blink::V8BlobCallback::Create(function);
+}
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLBoolean> promise) {
@@ -1708,6 +1810,8 @@ void nts_blink_dom_each_held_closure(NtsDomContext *context,
     each(timer.value->closure());
   for (const auto &held : listeners.held)
     each(held->closure());
+  for (const auto &call : listeners.blobs)
+    each(call->closure());
 }
 size_t nts_blink_dom_roots(void) { return HeldObjects().counts.size(); }
 // Logs each root left, as "Interface xcount": what a handle the program

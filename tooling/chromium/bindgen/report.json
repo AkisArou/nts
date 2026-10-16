@@ -1,5 +1,5 @@
 {
-  "bound": 7054,
+  "bound": 7056,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -1364,17 +1364,7 @@
     {
       "interface": "HTMLCanvasElement",
       "member": "toBlob/3",
-      "why": "parameter type BlobCallback"
-    },
-    {
-      "interface": "HTMLCanvasElement",
-      "member": "toBlob/2",
-      "why": "parameter type BlobCallback"
-    },
-    {
-      "interface": "HTMLCanvasElement",
-      "member": "toBlob/1",
-      "why": "parameter type BlobCallback"
+      "why": "parameter type optional any"
     },
     {
       "interface": "HTMLCanvasElement",

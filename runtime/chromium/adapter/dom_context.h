@@ -26,6 +26,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "third_party/blink/renderer/bindings/core/v8/frozen_array.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_blob.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_blob_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -678,6 +680,14 @@ private:
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,
                    blink::ScriptPromise<blink::IDLUndefined> promise);
+// A compiled closure as the BlobCallback canvas.toBlob asks for: a V8
+// function whose native trampoline runs the closure with the blob (or
+// null) once, under the context's entry, and gives the closure back. The
+// context holds the closure until it fires or the document ends.
+using NtsDomBlobCallback = void (*)(NtsDomBlob *, void *);
+blink::V8BlobCallback *BlobCallbackOf(NtsDomContext &context,
+                                      NtsDomBlobCallback callback,
+                                      void *closure, NtsDomDestroy destroy);
 // The same, fulfilled with a boolean.
 NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
                    const Rejections &rejections,

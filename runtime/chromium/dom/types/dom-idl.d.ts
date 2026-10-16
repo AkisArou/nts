@@ -20649,6 +20649,18 @@ declare module "nts:dom" {
      */
     height: Float64;
     /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_toBlob_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toBlob(this: HTMLCanvasElement, callback: Closure<(blob: Blob | null) => void>, type: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSymbol nts_dom_HTMLCanvasElement_toBlob_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    toBlob(this: HTMLCanvasElement, callback: Closure<(blob: Blob | null) => void>, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_HTMLCanvasElement_toDataURL_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error

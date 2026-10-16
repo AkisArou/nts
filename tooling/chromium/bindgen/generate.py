@@ -662,6 +662,21 @@ class Generator:
                           prelude=f"auto {name}_view = nts_dom::TypedArrayOf<blink::{view}>({name}, {name}_count);")
             param.lent = True
             return param
+        # A callback function with one handle argument (canvas.toBlob's
+        # BlobCallback): the compiled closure's triple, run through a V8
+        # function trampoline the adapter holds until it fires once
+        # (nts_dom::BlobCallbackOf). Other callback shapes -- a string
+        # argument (getAsString's) above all -- stay skipped below.
+        if unwrapped.is_callback_function:
+            definition = unwrapped.type_definition_object
+            if definition is not None and definition.identifier == "BlobCallback":
+                return Param(
+                    name,
+                    f"void (*{name})(NtsDomBlob*, void*), void* {name}_closure, "
+                    f"void (*{name}_destroy)(void*)",
+                    f"{name}: Closure<(blob: Blob | null) => void>",
+                    f"nts_dom::BlobCallbackOf(context, {name}, {name}_closure, {name}_destroy)",
+                    True)
         if unwrapped.is_union:
             members = members_of(unwrapped)
             strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]

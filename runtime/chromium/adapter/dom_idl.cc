@@ -31757,6 +31757,20 @@ void nts_dom_HTMLCanvasElement_set_height(NtsDomHTMLCanvasElement* self, double 
   receiver->setHeight(value_converted, exception_state);
 }
 
+void nts_dom_HTMLCanvasElement_toBlob_2(NtsDomHTMLCanvasElement* self, void (*callback)(NtsDomBlob*, void*), void* callback_closure, void (*callback_destroy)(void*), const NtsBorrowedString* type, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLCanvasElement>(self);
+  receiver->toBlob(nts_dom::BlobCallbackOf(context, callback, callback_closure, callback_destroy), NtsText(context, type), exception_state);
+}
+
+void nts_dom_HTMLCanvasElement_toBlob_1(NtsDomHTMLCanvasElement* self, void (*callback)(NtsDomBlob*, void*), void* callback_closure, void (*callback_destroy)(void*), NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::HTMLCanvasElement>(self);
+  receiver->toBlob(nts_dom::BlobCallbackOf(context, callback, callback_closure, callback_destroy), blink::AtomicString("image/png"), exception_state);
+}
+
 const NtsStringView* nts_dom_HTMLCanvasElement_toDataURL_1(NtsDomHTMLCanvasElement* self, const NtsBorrowedString* type, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);

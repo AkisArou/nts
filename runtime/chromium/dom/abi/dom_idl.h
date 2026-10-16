@@ -4723,6 +4723,8 @@ double nts_dom_HTMLCanvasElement_get_width(NtsDomHTMLCanvasElement* self);
 void nts_dom_HTMLCanvasElement_set_width(NtsDomHTMLCanvasElement* self, double value, NtsDomException** error);
 double nts_dom_HTMLCanvasElement_get_height(NtsDomHTMLCanvasElement* self);
 void nts_dom_HTMLCanvasElement_set_height(NtsDomHTMLCanvasElement* self, double value, NtsDomException** error);
+void nts_dom_HTMLCanvasElement_toBlob_2(NtsDomHTMLCanvasElement* self, void (*callback)(NtsDomBlob*, void*), void* callback_closure, void (*callback_destroy)(void*), const NtsBorrowedString* type, NtsDomException** error);
+void nts_dom_HTMLCanvasElement_toBlob_1(NtsDomHTMLCanvasElement* self, void (*callback)(NtsDomBlob*, void*), void* callback_closure, void (*callback_destroy)(void*), NtsDomException** error);
 const NtsStringView* nts_dom_HTMLCanvasElement_toDataURL_1(NtsDomHTMLCanvasElement* self, const NtsBorrowedString* type, NtsDomException** error);
 const NtsStringView* nts_dom_HTMLCanvasElement_toDataURL_0(NtsDomHTMLCanvasElement* self, NtsDomException** error);
 NtsDomHTMLTableElement* nts_dom_as_HTMLTableElement(NtsDomNode* node);

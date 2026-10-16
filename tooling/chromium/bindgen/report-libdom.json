@@ -1,8 +1,8 @@
 {
   "libDom": "third_party/typescript-go/internal/bundled/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3153,
-    "skipped": 235,
+    "bound": 3154,
+    "skipped": 234,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
@@ -12,7 +12,7 @@
     "result type": 64,
     "defined in": 59,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
-    "parameter type": 15,
+    "parameter type": 14,
     "interface SVGPoint": 11,
     "interface SVGRect": 9,
     "interface SVGMatrix": 7,
@@ -1748,13 +1748,13 @@
     "HTMLCanvasElement": {
       "bound": [
         "height",
+        "toBlob",
         "toDataURL",
         "width"
       ],
       "skipped": {
         "captureStream": "defined in Blink's modules component, on an interface the allowlist does not take from there",
         "getContext": "defined in Blink's modules component, on an interface the allowlist does not take from there",
-        "toBlob": "parameter type BlobCallback",
         "transferControlToOffscreen": "defined in Blink's modules component, on an interface the allowlist does not take from there"
       },
       "absent": {}

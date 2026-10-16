@@ -898,7 +898,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist", "blobbed"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -931,5 +931,19 @@ export function startLibDomPromises(): void {
     // boolean crosses as page script's does.
     settleBool("persisted", (): Promise<boolean> => navigator.storage.persisted());
     settleBool("persist", (): Promise<boolean> => navigator.storage.persist());
+    // A callback-function argument: canvas.toBlob's BlobCallback, run once
+    // with the encoded blob when Blink's async creator finishes.
+    const painted = document.createElement("canvas");
+    painted.width = 2;
+    painted.height = 2;
+    const painter = painted.getContext("2d");
+    if (painter !== null) {
+      painter.fillStyle = "rgb(255, 0, 0)";
+      painter.fillRect(0, 0, 2, 2);
+    }
+    painted.toBlob((blob: Blob | null): void => {
+      document.querySelector("#native-lib-dom")?.setAttribute(
+        "data-blobbed", blob === null ? "null" : blob.type + " " + blob.size);
+    }, "image/png");
   }, 0);
 }
