@@ -1,0 +1,125 @@
+{
+  "name": "@nts/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standards-first portable application SDK for nts \u2014 interface only, no implementation yet.",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts"
+    },
+    "./core": {
+      "types": "./src/shared/core.d.ts"
+    },
+    "./app": {
+      "types": "./src/shared/app.d.ts"
+    },
+    "./permissions": {
+      "types": "./src/shared/permissions.d.ts"
+    },
+    "./camera": {
+      "types": "./src/shared/camera.d.ts"
+    },
+    "./photos": {
+      "types": "./src/shared/photos.d.ts"
+    },
+    "./documents": {
+      "types": "./src/shared/documents.d.ts"
+    },
+    "./storage": {
+      "types": "./src/shared/storage.d.ts"
+    },
+    "./security": {
+      "types": "./src/shared/security.d.ts"
+    },
+    "./location": {
+      "types": "./src/shared/location.d.ts"
+    },
+    "./tasks": {
+      "types": "./src/shared/tasks.d.ts"
+    },
+    "./ui": {
+      "types": "./src/shared/ui.d.ts"
+    },
+    "./notifications": {
+      "types": "./src/shared/notifications.d.ts"
+    },
+    "./contacts": {
+      "types": "./src/shared/contacts.d.ts"
+    },
+    "./calendar": {
+      "types": "./src/shared/calendar.d.ts"
+    },
+    "./auth": {
+      "types": "./src/shared/auth.d.ts"
+    },
+    "./locale": {
+      "types": "./src/shared/locale.d.ts"
+    },
+    "./browser": {
+      "types": "./src/shared/browser.d.ts"
+    },
+    "./images": {
+      "types": "./src/shared/images.d.ts"
+    },
+    "./media": {
+      "types": "./src/shared/media.d.ts"
+    },
+    "./compose": {
+      "types": "./src/shared/compose.d.ts"
+    },
+    "./printing": {
+      "types": "./src/shared/printing.d.ts"
+    },
+    "./network": {
+      "types": "./src/shared/network.d.ts"
+    },
+    "./store": {
+      "types": "./src/shared/store.d.ts"
+    },
+    "./screen-protection": {
+      "types": "./src/shared/screen-protection.d.ts"
+    },
+    "./brightness": {
+      "types": "./src/shared/brightness.d.ts"
+    },
+    "./device": {
+      "types": "./src/mobile/device.d.ts"
+    },
+    "./clipboard": {
+      "types": "./src/shared/clipboard.d.ts"
+    },
+    "./share": {
+      "types": "./src/shared/share.d.ts"
+    },
+    "./linking": {
+      "types": "./src/shared/linking.d.ts"
+    },
+    "./windows": {
+      "types": "./src/desktop/windows.d.ts"
+    },
+    "./shell": {
+      "types": "./src/desktop/shell.d.ts"
+    },
+    "./appearance": {
+      "types": "./src/shared/appearance.d.ts"
+    },
+    "./displays": {
+      "types": "./src/desktop/displays.d.ts"
+    },
+    "./power": {
+      "types": "./src/shared/power.d.ts"
+    },
+    "./capture": {
+      "types": "./src/desktop/capture.d.ts"
+    },
+    "./lib.native-dom": {
+      "types": "./lib.native-dom.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p examples/tsconfig.json"
+  }
+}

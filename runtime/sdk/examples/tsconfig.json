@@ -1,0 +1,21 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@nts/sdk": [
+        "../src/index.d.ts"
+      ],
+      "@nts/sdk/*": [
+        "../src/shared/*.d.ts",
+        "../src/mobile/*.d.ts",
+        "../src/desktop/*.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "../lib.native-dom.d.ts",
+    "../src/**/*.d.ts"
+  ]
+}
