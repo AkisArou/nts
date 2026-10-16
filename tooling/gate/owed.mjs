@@ -449,10 +449,11 @@ export const RULES = [
     arms: [],
   },
   {
-    // The JVM runtime: the jar every emitted class links against. Until this
-    // rule a change here owed only the lane's wide trio above -- not even the
-    // program step that runs the jar -- so a runtime-only commit's NtsValue
-    // change was proved by its own regression test alone.
+    // The JVM runtime: the jar every emitted class links against. Its direct
+    // rule was the lane's wide trio above; jvm and jvm-verifies reached it only
+    // indirectly, through the JVM backend's embedded jar and crate graph. This
+    // states that obligation where the runtime is, and adds the JVM's test262
+    // rows, which nothing owed before.
     name: "the JVM runtime",
     when: (p) => /^runtime\/jvm\//.test(p),
     steps: ["jvm", "jvm-verifies", "test262-jvm"],
