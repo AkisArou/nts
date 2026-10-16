@@ -20,6 +20,13 @@ import { Random } from "../../common/awfy-som.ts";
 
 // Ported from `benchmarks/JavaScript/bounce.js`.
 
+// The representation this row measures (`nts expect-ir`): the coordinates are
+// integers, as the C++ and Java references declare them. Each is stored
+// unclamped and clamped before anything can read it, so what a read finds is
+// inside the box (record 0357, and
+// tests/programs/a-field-clamped-before-anything-can-see-it).
+// expect-ir: all: field Ball.x is integer
+// expect-ir: all: field Ball.y is integer
 class Ball {
   x: number;
   y: number;

@@ -114,9 +114,20 @@ pub struct Analysis {
     growable: bool,
     /// How long the array each parameter points at can be, per slot.
     param_lengths: Vec<Facts>,
+    /// What each field this function touches held where another function, or
+    /// another read through a different reference, could see it.
+    observed: Observed,
 }
 
 impl Analysis {
+    /// What each field held where something else could see it. A value stored
+    /// and overwritten through the same reference before then is not here --
+    /// which is the difference between a field's contents and its stores.
+    #[must_use]
+    pub fn observed(&self) -> &Observed {
+        &self.observed
+    }
+
     /// Whether any array in the program can change length.
     #[must_use]
     pub fn growable(&self) -> bool {
@@ -231,6 +242,23 @@ impl Analysis {
 
 /// Values whose facts an edge refined, relative to their own definitions.
 type Refinements = FxHashMap<ValueId, Facts>;
+
+/// What a field holds now, on one path through a function: what it is worth,
+/// and the value that last stored or read it, so that a guard on that value
+/// narrows the field too. No value when paths that disagree on it merged.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Held {
+    by: Option<ValueId>,
+    facts: Facts,
+}
+
+/// The fields a path knows the current value of, by object and field.
+type Fields = FxHashMap<(ValueId, u32), Held>;
+
+/// What each field held wherever something other than the path could see it,
+/// by the object's type and the field. One function's part of a field's fact:
+/// see [`super::fields::analyze`].
+pub type Observed = FxHashMap<(super::HirType, u32), Facts>;
 
 /// Pairs `(a, b)` for which `a < b` is known.
 type Relations = Vec<(ValueId, ValueId)>;
@@ -446,6 +474,10 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
     let mut previous: Vec<Option<Refinements>> = vec![None; func.blocks.len()];
     let mut visits = vec![0_u32; func.blocks.len()];
     let headers = loop_headers(func);
+    // The fields each block is entered knowing, and what was observed of them.
+    let mut fields: Vec<Option<Fields>> = vec![None; func.blocks.len()];
+    fields[0] = Some(Fields::default());
+    let mut observed = Observed::default();
 
     for _ in 0..ROUND_CAP {
         let mut changed = false;
@@ -504,6 +536,7 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
                 &refinements,
                 &mut values,
                 &mut entry,
+                (&mut fields, &mut observed, &headers),
             );
         }
         if !changed {
@@ -517,6 +550,7 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
         refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
         growable: context.whole.growable,
         param_lengths: context.param_lengths.to_vec(),
+        observed,
     }
 }
 
@@ -1057,19 +1091,30 @@ fn field_facts(context: &Context, object: &super::HirType, field: u32) -> Facts 
     let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
         return Facts::TOP;
     };
-    let written = context
-        .written
-        .fields
-        .get(&(*ty, field))
-        .copied()
-        .unwrap_or(Facts::TOP);
     context
         .whole
         .field_facts
         .get(&(*ty, field))
         .copied()
         .unwrap_or(Facts::TOP)
-        .narrow(written)
+        .narrow(written_field(context, object, field))
+}
+
+/// What the program's own types say a field of an object of this type holds:
+/// a written `c_int` field is in `int`'s range on every target, whatever a
+/// store's value was proven to be. Every read is narrowed by it, a read this
+/// path already knows the value of included -- that one lost it once, and a
+/// `c_int` property handed to C stopped being provably an `int`.
+fn written_field(context: &Context, object: &super::HirType, field: u32) -> Facts {
+    let super::HirType::Managed(super::ManagedType::Object(ty)) = object else {
+        return Facts::TOP;
+    };
+    context
+        .written
+        .fields
+        .get(&(*ty, field))
+        .copied()
+        .unwrap_or(Facts::TOP)
 }
 
 /// What one operation says about its result.
@@ -1338,9 +1383,15 @@ fn transfer_block(
     refinements: &Refinements,
     values: &mut [Facts],
     entry: &mut [Option<Refinements>],
+    (fields, observed, headers): (
+        &mut [Option<Fields>],
+        &mut Observed,
+        &rustc_hash::FxHashSet<BlockId>,
+    ),
 ) -> bool {
     let record = &func.blocks[block.0 as usize];
     let mut changed = false;
+    let mut held = fields[block.0 as usize].clone().unwrap_or_default();
 
     // A block parameter's fact is whatever its predecessors passed, which the
     // edges recorded here.
@@ -1352,9 +1403,24 @@ fn transfer_block(
 
     for &value in &record.ops {
         let op = &func.values[value.0 as usize];
-        let computed = match local_tuple_read(tuples, &op.kind, refinements, values) {
-            Some(stored) => stored,
-            None => transfer_op(func, context, op, refinements, values),
+        // A field this path stored or read is what it stored or read, not
+        // everything the field can hold.
+        let known = match &op.kind {
+            OpKind::FieldGet { object, field } => held.get(&(*object, *field)).map(|now| {
+                now.facts.narrow(written_field(
+                    context,
+                    &func.values[object.0 as usize].ty,
+                    *field,
+                ))
+            }),
+            _ => None,
+        };
+        let computed = match known {
+            Some(facts) => facts,
+            None => match local_tuple_read(tuples, &op.kind, refinements, values) {
+                Some(stored) => stored,
+                None => transfer_op(func, context, op, refinements, values),
+            },
         };
         // Monotone: a value's fact only grows as more paths reach it, so joining
         // rather than assigning keeps the iteration from oscillating.
@@ -1364,12 +1430,16 @@ fn transfer_block(
             *slot = joined;
             changed = true;
         }
+        track(func, value, &mut held, observed, refinements, values);
     }
 
     match &record.terminator {
-        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {}
+        Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
+            observe_all(func, &held, observed);
+        }
         Terminator::Jump { target, args } => {
             changed |= send(func, *target, args, refinements, values, entry);
+            changed |= send_fields(func, *target, held, fields, observed, headers);
         }
         Terminator::Branch {
             cond,
@@ -1384,6 +1454,194 @@ fn transfer_block(
             let on_else = refine_edge(func, refinements, values, *cond, false);
             changed |= send(func, *then_target, then_args, &on_then, values, entry);
             changed |= send(func, *else_target, else_args, &on_else, values, entry);
+            let then_held = narrowed_by(&held, &on_then);
+            let else_held = narrowed_by(&held, &on_else);
+            changed |= send_fields(func, *then_target, then_held, fields, observed, headers);
+            changed |= send_fields(func, *else_target, else_held, fields, observed, headers);
+        }
+    }
+    changed
+}
+
+/// What one operation does to the fields a path knows.
+///
+/// A store makes its value the field's; a read makes the field what it read.
+/// Either first observes the same field of every *other* reference the path
+/// knows it for, because the two may be one object -- and a store takes those
+/// out, since it may have overwritten them. Anything that can run other code
+/// observes everything known and forgets it: what the other code wrote, this
+/// path cannot see.
+fn track(
+    func: &Func,
+    value: ValueId,
+    held: &mut Fields,
+    observed: &mut Observed,
+    refinements: &Refinements,
+    values: &[Facts],
+) {
+    match &func.values[value.0 as usize].kind {
+        OpKind::FieldSet {
+            object,
+            field,
+            value: stored,
+        } => {
+            observe_others(func, held, observed, *object, *field, true);
+            held.insert(
+                (*object, *field),
+                Held {
+                    by: Some(*stored),
+                    facts: lookup(refinements, values, *stored),
+                },
+            );
+        }
+        OpKind::FieldGet { object, field } => {
+            observe_others(func, held, observed, *object, *field, false);
+            held.insert(
+                (*object, *field),
+                Held {
+                    by: Some(value),
+                    facts: values[value.0 as usize],
+                },
+            );
+        }
+        kind if runs_elsewhere(kind) => {
+            observe_all(func, held, observed);
+            held.clear();
+        }
+        _ => {}
+    }
+}
+
+/// Whether an operation can run code this path does not see, or reach a field
+/// by a route this analysis does not track.
+///
+/// Listed by what cannot, so that an operation added later is an observation
+/// until someone says otherwise -- the cost of a wrong answer here is a field
+/// narrowed below what it holds.
+fn runs_elsewhere(kind: &OpKind) -> bool {
+    !matches!(
+        kind,
+        OpKind::Param(_)
+            | OpKind::BlockParam(_)
+            | OpKind::ConstInt(_)
+            | OpKind::ConstFloat(_)
+            | OpKind::ConstBool(_)
+            | OpKind::ConstString(_)
+            | OpKind::ConstNull
+            | OpKind::ConstUndefined
+            | OpKind::Erase { .. }
+            | OpKind::TagOf { .. }
+            | OpKind::Unerase { .. }
+            | OpKind::Binary { .. }
+            | OpKind::Unary { .. }
+            | OpKind::Convert(_)
+            | OpKind::ArrayNew { .. }
+            | OpKind::Length(_)
+            | OpKind::ArrayGet { .. }
+            | OpKind::ArraySet { .. }
+            | OpKind::StringUnitAt { .. }
+            | OpKind::GlobalGet(_)
+            | OpKind::GlobalSet { .. }
+            | OpKind::ObjectNew { .. }
+            | OpKind::InstanceOf { .. }
+    )
+}
+
+/// The same field, known through a reference other than `object`: observed,
+/// and with `forget`, no longer known.
+fn observe_others(
+    func: &Func,
+    held: &mut Fields,
+    observed: &mut Observed,
+    object: ValueId,
+    field: u32,
+    forget: bool,
+) {
+    held.retain(|&(other, at), now| {
+        if at != field || other == object {
+            return true;
+        }
+        observe(func, observed, other, at, now.facts);
+        !forget
+    });
+}
+
+fn observe_all(func: &Func, held: &Fields, observed: &mut Observed) {
+    for (&(object, field), now) in held {
+        observe(func, observed, object, field, now.facts);
+    }
+}
+
+fn observe(func: &Func, observed: &mut Observed, object: ValueId, field: u32, facts: Facts) {
+    let key = (func.values[object.0 as usize].ty.clone(), field);
+    let entry = observed.entry(key).or_insert(Facts::BOTTOM);
+    *entry = entry.join(facts);
+}
+
+/// The fields an edge carries, narrowed by what taking it proved about the
+/// value each was last stored or read as.
+fn narrowed_by(held: &Fields, edge: &Refinements) -> Fields {
+    held.iter()
+        .map(|(key, now)| {
+            let facts = match now.by.and_then(|by| edge.get(&by)) {
+                Some(proved) => now.facts.narrow(*proved),
+                None => now.facts,
+            };
+            (*key, Held { by: now.by, facts })
+        })
+        .collect()
+}
+
+/// Hand an edge's known fields to its target, reporting whether the target's
+/// entry state moved.
+///
+/// A field the paths into a block do not all know becomes unknown there, and
+/// what the paths that knew it held is observed: it is in the field now, and
+/// nothing later on this path will say so. A loop's header knows nothing --
+/// everything arriving is observed -- so a field written every iteration
+/// cannot climb here unwidened: its growth is the whole-program fixpoint's to
+/// widen.
+fn send_fields(
+    func: &Func,
+    target: BlockId,
+    incoming: Fields,
+    fields: &mut [Option<Fields>],
+    observed: &mut Observed,
+    headers: &rustc_hash::FxHashSet<BlockId>,
+) -> bool {
+    let slot = &mut fields[target.0 as usize];
+    if headers.contains(&target) {
+        observe_all(func, &incoming, observed);
+        if slot.is_none() {
+            *slot = Some(Fields::default());
+            return true;
+        }
+        return false;
+    }
+    let Some(existing) = slot else {
+        *slot = Some(incoming);
+        return true;
+    };
+    let mut changed = false;
+    existing.retain(|&(object, field), now| {
+        let Some(other) = incoming.get(&(object, field)) else {
+            observe(func, observed, object, field, now.facts);
+            changed = true;
+            return false;
+        };
+        let merged = Held {
+            by: if now.by == other.by { now.by } else { None },
+            facts: now.facts.join(other.facts),
+        };
+        if merged != *now {
+            *now = merged;
+            changed = true;
+        }
+        true
+    });
+    for (&(object, field), other) in &incoming {
+        if !existing.contains_key(&(object, field)) {
+            observe(func, observed, object, field, other.facts);
         }
     }
     changed

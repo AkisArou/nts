@@ -105,19 +105,22 @@ pub(super) fn analyze(
     let layouts = LayoutIndex::build(program);
     // By layout while collecting, because a store names one type and the
     // aliasing question is about layouts. Expanded to types at the end.
+    //
+    // **What each function observed, not what it stored.** A field's fact is
+    // what a read can find in it, and a read finds what was there where
+    // control could leave the code that wrote it: a call, a return, a read
+    // through another reference (`flow::Analysis::observed`). A value stored
+    // and overwritten through the same reference before any of those is in no
+    // read's answer. `Ball` stores `this.x + this.xVel` and clamps it to the
+    // box before anything can look, so its coordinates hold `[0, 500]` -- and
+    // the join of its stores, which reads itself, has no bound at all once the
+    // whole-program fixpoint widens it. What the storage must be able to hold
+    // is a different question, and [`representations`] still asks every store.
     let mut stored: FxHashMap<(usize, u32), Facts> = FxHashMap::default();
 
-    for (index, func) in program.funcs.iter().enumerate() {
-        for op in &func.values {
-            let OpKind::FieldSet {
-                object,
-                field,
-                value,
-            } = &op.kind
-            else {
-                continue;
-            };
-            let Some(layout) = layouts.of(&func.values[object.0 as usize].ty) else {
+    for analysis in analyses {
+        for ((ty, field), facts) in analysis.observed() {
+            let Some(layout) = layouts.of(ty) else {
                 continue;
             };
             // A managed field holds a pointer, and the numeric domain has
@@ -126,7 +129,7 @@ pub(super) fn analyze(
                 continue;
             }
             let entry: &mut Facts = stored.entry((layout, *field)).or_insert(Facts::BOTTOM);
-            *entry = entry.join(analyses[index].get(*value));
+            *entry = entry.join(*facts);
         }
     }
 
