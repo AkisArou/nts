@@ -432,8 +432,12 @@ pub(crate) fn parse(text: &str) -> Result<(Vec<Backend>, Fact), String> {
     let words: Vec<&str> = fact.split_whitespace().collect();
     let op = |word: &str| -> Result<String, String> {
         if vocabulary().contains(&word)
-            || external_name(word)
-                .is_some_and(|name| hir::runtime::declared_names().any(|known| known == name))
+            || external_name(word).is_some_and(|name| {
+                // The core table carries scalar conversions (including static
+                // inline helpers); LLVM's table also has the non-scalar ABI.
+                hir::runtime::parameters(name).is_some()
+                    || nts_codegen_llvm::signatures::signature(name).is_some()
+            })
         {
             Ok(word.to_owned())
         } else {
