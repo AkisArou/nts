@@ -221,3 +221,87 @@ fn sharing_avoids_three_actual_raw_lowerings() {
         "the unshared control must really lower once per backend"
     );
 }
+
+#[test]
+fn a_frontend_error_blocks_every_backend_with_the_original_diagnostic() {
+    let fixture = Fixture::new("export const wrong: string = 1;\n");
+    let out = fixture.0.join("type-error");
+    let combined = fixture.run("emit", &out, &["--backends", "c,llvm,jvm,wasm"]);
+    assert!(!combined.status.success());
+    let results = report(&out);
+    for backend in ["c", "llvm", "jvm", "wasm"] {
+        let own = fixture.0.join(format!("error-{backend}"));
+        let separate = fixture.run(&format!("emit-{backend}"), &own, &[]);
+        assert!(!separate.status.success());
+        assert_eq!(results["backends"][backend]["status"], "blocked");
+        assert_eq!(
+            results["backends"][backend]["stderr"],
+            String::from_utf8(separate.stderr).unwrap()
+        );
+        assert!(inventory(&out.join(backend)).is_empty());
+    }
+}
+
+#[test]
+fn malformed_requests_fail_before_frontend_acquisition() {
+    let fixture = Fixture::new("export const answer = 42;\n");
+    let out = fixture.0.join("bad-request");
+    for (flags, complaint) in [
+        (vec![], "requires --backends"),
+        (vec!["--backends", ""], "nonempty value"),
+        (vec!["--backends", "c,c"], "requested more than once"),
+        (vec!["--backends", "c,llvmm"], "unknown backend"),
+        (vec!["--backends", "c,"], "unknown backend"),
+        (
+            vec!["--backends", "c", "--backends=wasm"],
+            "given more than once",
+        ),
+    ] {
+        let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(["emit", "--no-acquire", "--out"])
+            .arg(&out)
+            .args(flags)
+            .arg(&fixture.0)
+            .env("NTS_TSGO", "/nonexistent/multi-emit-must-not-spawn")
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        let text = String::from_utf8(result.stderr).unwrap();
+        assert!(text.contains(complaint), "{text}");
+        assert!(
+            !text.contains("multi-emit-must-not-spawn"),
+            "parsing cannot open the checker: {text}"
+        );
+        assert!(!out.exists());
+    }
+}
+
+#[test]
+fn browser_glue_and_backend_order_keep_the_same_bytes() {
+    let fixture = Fixture::new("export function answer(): number { return 42; }\n");
+    let out = fixture.0.join("browser");
+    let combined = fixture.run("emit", &out, &["--backends=wasm,c", "--host=browser"]);
+    assert!(
+        combined.status.success(),
+        "{}",
+        String::from_utf8_lossy(&combined.stderr)
+    );
+    let own = fixture.0.join("separate-browser");
+    let separate = fixture.run("emit-wasm", &own, &["--host=browser"]);
+    assert!(separate.status.success());
+    assert!(!inventory(&own).is_empty());
+    assert_eq!(inventory(&out.join("wasm")), inventory(&own));
+    let forward = fixture.0.join("forward");
+    let result = fixture.run(
+        "emit",
+        &forward,
+        &["--backends", "c,wasm", "--host", "browser"],
+    );
+    assert!(result.status.success());
+    for backend in ["wasm", "c"] {
+        assert_eq!(
+            inventory(&out.join(backend)),
+            inventory(&forward.join(backend))
+        );
+    }
+}
