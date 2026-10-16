@@ -1,0 +1,9 @@
+{
+  "run": "build",
+  "category": "refused",
+  "nts": "NTS1001 a function returning the type parameter `T`",
+  "ran": "SIGABRT; nts: refused: String() of `NeedsRaising`, whose type says nothing about how it prints",
+  "node": "exit 1; nts: uncaught Observed: control=x;unavailable printer=x;",
+  "measured_with": "52dcd382e734ba5d",
+  "source": "measured"
+}
