@@ -1616,7 +1616,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # agree here on the day it landed.
   #
   # 322 -> 323, the same example.
-  backend_examples 393 "through the JVM backend" exact 10 ); }
+  # 393 -> 552, 2026-10-16: the official JVM step on the exact clean
+  # rebased fb49b733d7c5 corpus/pin measured 552 of 552, ten partials.
+  # Evidence: ~/.cache/nts-handover/compiler-helper/numeric-args-rebased-jvm.log.
+  backend_examples 552 "through the JVM backend" exact 10 ); }
 # The programs through the WebAssembly backend, by the same `nts check` as
 # every other backend: the module the WasmGC backend emits, run by node through
 # its generated glue, against node running the source -- one pool, one order,
@@ -1624,12 +1627,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # every function is still compiled, so a body Wasm declines fails its program
 # as a C decline does (`tests/wasm/check-compiles-every-body`).
 #
-# **546 of 546, exact**, measured on the clean fc3d6f4ead78 corpus and pin.
+# **552 of 552, exact**, measured by the official Wasm step on the clean
+# rebased fb49b733d7c5 corpus and pin (2026-10-16). Evidence:
+# ~/.cache/nts-handover/compiler-helper/numeric-args-rebased-wasm.log.
 # Ten programs compare only part of their cases: a case Wasm refuses by name
 # where node answers. The partial ceiling tracks those remaining parity gaps;
 # the program floor tracks the measured corpus, including prior main changes.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 546 "through the Wasm backend" exact 10 ); }
+  backend_examples 552 "through the Wasm backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
@@ -1982,7 +1987,15 @@ test262_cases() {
 # so all ten accumulated since `9968f2c9bd045c64` and none is the commit that
 # raised the floor. The two `Object/{entries,values}/getter-removing-future-key`
 # rows that change left the record, as a case that refuses does.
-TEST262_BUILTINS_PASS_FLOOR=776
+# 776 -> 823, 2026-10-16: the clean 8cd02e1137db full builtins run
+# measured 823 passes. Two runs returned the same 23,329 verdict/detail rows;
+# the repeated 1,034-case old/new population on base 64fe6c9fc5ec attributes
+# thirteen gains to this range and thirty-four to earlier main changes.
+# Evidence: numeric-args-constant-full-{c,d} and -attribution.json under
+# ~/.cache/nts-handover/compiler-helper/. The official builtins step on the
+# clean rebased fb49b733d7c5 pin confirms 823 passes and 185 accepted negatives
+# (numeric-args-rebased-test262-builtins-cases.log there). Ceiling unchanged.
+TEST262_BUILTINS_PASS_FLOOR=823
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins results/test262/c/builtins.tsv \
