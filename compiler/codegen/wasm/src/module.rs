@@ -534,6 +534,11 @@ impl<'p> Builder<'p> {
             .ok_or_else(|| Failure::Invariant(format!("unresolved direct callee `{name}`")))
     }
 
+    /// An already requested function, identified by its semantic key.
+    pub(crate) fn requested_func(&self, key: &FuncKey) -> Option<Func> {
+        self.func_keys.get(key).copied()
+    }
+
     fn set_body(&mut self, id: Func, function: ir::Function) {
         self.funcs[id.0 as usize].kind = FuncKind::Defined(Some(function));
     }
@@ -725,6 +730,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     crate::outline::program(&mut m);
     crate::inline::program(&mut m);
     crate::roundtrip::program(&mut m);
+    crate::box_web::program(&mut m);
     crate::tail::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;

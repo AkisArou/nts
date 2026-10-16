@@ -108,7 +108,7 @@ pub(crate) fn run_with_node_flags(
     output
 }
 
-/// The module's function names, from its name section.
+/// The module's function names by function index; unnamed slots stay empty.
 pub(crate) fn function_names(bytes: &[u8]) -> Vec<String> {
     let mut names = vec![];
     for payload in wasmparser::Parser::new(0).parse_all(bytes) {
@@ -118,7 +118,10 @@ pub(crate) fn function_names(bytes: &[u8]) -> Vec<String> {
             for name in reader {
                 if let wasmparser::Name::Function(map) = name.unwrap() {
                     for naming in map {
-                        names.push(naming.unwrap().name.to_owned());
+                        let naming = naming.unwrap();
+                        let index = naming.index as usize;
+                        names.resize_with(names.len().max(index + 1), String::new);
+                        naming.name.clone_into(&mut names[index]);
                     }
                 }
             }

@@ -15,6 +15,7 @@ mod arrays;
 mod bigints;
 mod body;
 mod boundary;
+mod box_web;
 mod buffer_methods;
 mod buffers;
 mod callable_plan;

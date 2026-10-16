@@ -574,6 +574,52 @@ fn calls_from(bytes: &[u8], at: usize) -> Vec<usize> {
     panic!("no function body {at}");
 }
 
+/// Numeric erasure becomes f64 after inlining; escaping and mixed webs keep
+/// their references. Execution includes both i31 representations in one web.
+#[test]
+fn numeric_box_webs_fold_after_inlining_without_changing_values() {
+    let fixture = common::repository().join("tests/wasm/box-web");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let imported = imported_functions(&emitted.bytes);
+    let index = |name: &str| {
+        names
+            .iter()
+            .position(|it| it == name)
+            .unwrap_or_else(|| panic!("no function `{name}` in {names:?}"))
+    };
+    let numeric_helpers: Vec<_> = ["value.boxNumber", "value.number", "value.tag"]
+        .into_iter()
+        .map(index)
+        .collect();
+    for name in ["numeric", "edge"] {
+        let calls = calls_from(&emitted.bytes, index(name) - imported);
+        for helper in &numeric_helpers {
+            assert!(
+                !calls.contains(helper),
+                "{name} still calls {}",
+                names[*helper]
+            );
+        }
+    }
+    for name in ["escaping", "mixed"] {
+        let calls = calls_from(&emitted.bytes, index(name) - imported);
+        assert!(
+            calls.iter().any(|callee| numeric_helpers.contains(callee)),
+            "{name} must retain its escaping or mixed reference path"
+        );
+    }
+    let output = common::run_with_node_flags(
+        "box-web",
+        &emitted,
+        "tooling/wasm/check-box-web.ts",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 192, "{output}");
+    assert_eq!(output["exports"], 8, "{output}");
+}
+
 /// A `string | null` export answers node's `null`, a `string | undefined`
 /// one `undefined`, by the declaration's absence.
 #[test]

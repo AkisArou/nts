@@ -217,6 +217,38 @@ builds at one program-wide width.
   with `--trace-wasm-inlining`) but does not fold box → tag → unbox, which C
   gets from clang. That is R7's work.
 
+### Numeric box webs (2026-10-16)
+
+After inlining and the roundtrip pass, `box_web.rs` carries a nonescaping
+numeric reference web in fresh `f64` locals. It resolves helpers by semantic
+key, and folds both the i31 and heap-box representations to their original
+number. Copies connect a whole component: every local must have one static
+write from a numeric box or another member, and every consumer must be a
+numeric projection, tag, complete i31-or-box numeric test, copy or drop.
+An escape, mixed producer, individual representation test or unknown consumer
+rejects the component. A forward must-analysis additionally proves that every
+reachable read follows a write; an anyref's default null cannot become a
+number's default zero. Replacements retain instruction positions and origins.
+
+`tests/wasm/box-web` checks the emitted calls as well as 192 executions against
+the original TypeScript. Consecutive iterations put values inside and outside
+the i31 range through the same web. The cases include signed zero, NaN,
+infinities, fractions and extreme finite values. Escaping erased-array stores
+and mixed number/string paths retain their boxes. Unit controls cover
+uninitialized reads, branch/loop/catch initialization and nonnumeric consumers.
+A contract test lowers numeric erasure, tagging and projection through the real
+body emitter, then requires its numeric-union test to match and its web to fold.
+An emitter spelling change therefore fails a test instead of silently losing
+the optimization.
+
+Before implementation, a hand-folded `erasure-unknown` artifact from clean
+`131ac1c52fdb` validated and agreed with node. Two alternating timing passes
+on P-core 4 (200 warmups, 301 samples, load 40–43) measured folded medians
+167.8–168.1 µs against baseline 573.4–883.0 µs and node 163.9–166.2 µs.
+Baseline drift prevents quoting one speedup, but its fastest p10 still exceeded
+the folded artifact's slowest p90 by 3×. The folded median was 1.01–1.03× node.
+This is the artifact experiment; the compiler's all-row comparison is separate.
+
 ### Arrays (1e)
 
 - **`nts_array_element`**, the erased read that answers `undefined` past the
