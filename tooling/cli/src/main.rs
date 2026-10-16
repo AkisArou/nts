@@ -10,6 +10,7 @@ mod bind;
 mod bind_gir;
 mod bind_objc;
 mod bind_winmd;
+mod expect_ir;
 mod gir_surface;
 mod jar_resources;
 mod objc_bindings;
@@ -621,6 +622,7 @@ INSPECTING
   types        every type the frontend resolved, as the schema records it
   hir          the lowered program; --prepared [--backend c|llvm|jvm|wasm] shows backend preparation
   stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
+  expect-ir    check the sources' `// expect-ir:` facts against the program each named backend receives
   facts        the facts lowering derived; --prepared for the prepared program
   refusals     every construct this program was refused for, with its reason
   layouts      the object layouts the program produces
@@ -826,6 +828,12 @@ fn main() -> Result<()> {
         Some("stats") => {
             let rest: Vec<String> = args.collect();
             dump_stats(&project(&rest)?)
+        }
+        // The `// expect-ir:` facts in the project's sources, each checked
+        // against the program every backend it names receives.
+        Some("expect-ir") => {
+            let rest: Vec<String> = args.collect();
+            check_expectations(&project(&rest)?)
         }
         // `--obligations`: every store into a slot of a written scalar kind
         // -- a native argument, a native store, a written parameter -- and
@@ -2588,7 +2596,12 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
                 .map_err(anyhow::Error::msg)?,
             None => nts_codegen_common::Backend::C,
         };
-    let provider = match backend {
+    Ok((backend, provider_for(backend)?))
+}
+
+/// The memory provider a backend prepares with, under the command's flags.
+fn provider_for(backend: nts_codegen_common::Backend) -> Result<hir::Provider> {
+    Ok(match backend {
         nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => selected_provider(),
         nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => {
             nts_codegen_common::provider::host_gc(
@@ -2597,8 +2610,7 @@ fn hir_preparation() -> Result<(nts_codegen_common::Backend, hir::Provider)> {
             )
             .map_err(anyhow::Error::msg)?
         }
-    };
-    Ok((backend, provider))
+    })
 }
 
 /// The program a backend receives, as `hir --prepared` and `stats` show it:
@@ -2609,7 +2621,16 @@ fn prepare_for_listing(
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
-    let (backend, provider) = hir_preparation()?;
+    prepare_as(hir_preparation()?, tsconfig, snapshot)
+}
+
+/// [`prepare_for_listing`] for a backend the caller names, which is how
+/// `expect-ir` prepares one snapshot for each backend its facts hold on.
+fn prepare_as(
+    (backend, provider): (nts_codegen_common::Backend, hir::Provider),
+    tsconfig: &Utf8Path,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Result<(String, hir::Prepared, Option<String>)> {
     let header = format!(
         "preparation: backend={} provider={provider:?}",
         backend.name()
@@ -2676,6 +2697,85 @@ fn prepare_for_listing(
         .map(|unprepared| unprepared.render(&snapshot.sources));
     let prepared = hir::prepare_unverified(snapshot, &options);
     Ok((header, prepared, invalid))
+}
+
+/// `nts expect-ir`: every fact the project's own sources state, on every
+/// backend it names, against one snapshot (`expect_ir` has the form).
+fn check_expectations(tsconfig: &Utf8Path) -> Result<()> {
+    let snapshot = typechecked_snapshot(tsconfig)?;
+    // The project's own files: a library's or a dependency's comments state
+    // nothing about this program.
+    let mut expectations = Vec::new();
+    for source in &snapshot.sources {
+        let path = &source.display_path;
+        if !source.uri.starts_with("nts-workspace:")
+            || path
+                .components()
+                .any(|part| part.as_str() == "node_modules")
+        {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        expectations.extend(expect_ir::collect(path, &text)?);
+    }
+    if expectations.is_empty() {
+        bail!("no `// expect-ir:` facts in {tsconfig}'s sources: a check of nothing is not a pass");
+    }
+    // One preparation per backend, shared by every fact that names it.
+    let mut programs = Vec::new();
+    for backend in expect_ir::backends_named(&expectations) {
+        let (_, prepared, invalid) =
+            prepare_as((backend, provider_for(backend)?), tsconfig, &snapshot)?;
+        if let Some(invalid) = invalid {
+            bail!(
+                "the program {} receives does not verify:\n{invalid}",
+                backend.name()
+            );
+        }
+        programs.push((backend, prepared));
+    }
+    // One line for a fact that holds everywhere it is claimed, and one per
+    // backend where it does not, so a page of passes stays a page.
+    let (mut passed, mut failed) = (0_usize, 0_usize);
+    for expectation in &expectations {
+        let place = format!("{}:{}", expectation.file, expectation.line);
+        let mut wrong = Vec::new();
+        for (backend, prepared) in &programs {
+            if !expectation.backends.contains(backend) {
+                continue;
+            }
+            match expect_ir::check(&prepared.program, &expectation.fact) {
+                expect_ir::Verdict::Pass => {}
+                expect_ir::Verdict::Fail(why) => wrong.push(("FAIL", *backend, why)),
+                expect_ir::Verdict::Unresolved(why) => wrong.push(("UNRESOLVED", *backend, why)),
+            }
+        }
+        if wrong.is_empty() {
+            passed += 1;
+            let backends: Vec<&str> = expectation.backends.iter().map(|b| b.name()).collect();
+            println!(
+                "PASS        {place} {}: {}",
+                backends.join(" "),
+                expectation.text
+            );
+            continue;
+        }
+        failed += 1;
+        for (verdict, backend, why) in wrong {
+            println!(
+                "{verdict:<11} {place} {}: {}\n            {why}",
+                backend.name(),
+                expectation.text
+            );
+        }
+    }
+    println!("expect-ir: {passed} fact(s) hold, {failed} do not");
+    if failed > 0 {
+        bail!("{failed} expect-ir fact(s) do not hold");
+    }
+    Ok(())
 }
 
 /// The project's snapshot, with its warnings printed, refused if it does not
@@ -3365,20 +3465,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             suspension(index, op)
         }
         OpKind::Unary { op: un, operand } => {
-            let operator = match un {
-                nts_core::hir::UnOp::Neg => "neg",
-                nts_core::hir::UnOp::Not => "not",
-                nts_core::hir::UnOp::ToInt32 => "toint32",
-                nts_core::hir::UnOp::ToUint32 => "touint32",
-                nts_core::hir::UnOp::Floor => "floor",
-                nts_core::hir::UnOp::Ceil => "ceil",
-                nts_core::hir::UnOp::Trunc => "trunc",
-                nts_core::hir::UnOp::Sqrt => "sqrt",
-                nts_core::hir::UnOp::Round => "round",
-                nts_core::hir::UnOp::Abs => "abs",
-                nts_core::hir::UnOp::Truthy => "truthy",
-            };
-            format!("%{index} = {operator} %{} : {ty}", operand.0)
+            format!("%{index} = {} %{} : {ty}", render_un(*un), operand.0)
         }
         OpKind::Call {
             callee,
@@ -3429,6 +3516,23 @@ fn render_terminator(terminator: &nts_core::hir::Terminator) -> String {
         // to prove dead, and reading a dump is where you would first
         // notice one where it does not belong.
         Terminator::FellThrough => "fell through".to_owned(),
+    }
+}
+
+/// The word a unary operation prints as, which `expect-ir` names it by.
+const fn render_un(op: nts_core::hir::UnOp) -> &'static str {
+    match op {
+        nts_core::hir::UnOp::Neg => "neg",
+        nts_core::hir::UnOp::Not => "not",
+        nts_core::hir::UnOp::ToInt32 => "toint32",
+        nts_core::hir::UnOp::ToUint32 => "touint32",
+        nts_core::hir::UnOp::Floor => "floor",
+        nts_core::hir::UnOp::Ceil => "ceil",
+        nts_core::hir::UnOp::Trunc => "trunc",
+        nts_core::hir::UnOp::Sqrt => "sqrt",
+        nts_core::hir::UnOp::Round => "round",
+        nts_core::hir::UnOp::Abs => "abs",
+        nts_core::hir::UnOp::Truthy => "truthy",
     }
 }
 
