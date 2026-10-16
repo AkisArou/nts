@@ -278,8 +278,9 @@ five slices, including their 313 known failures.
 
 ### Arrays (1e)
 
-- **Guarded floating indices** use a signed trapping conversion only after
-  the existing whole/nonnegative/range guard succeeds. GC-array lengths are
+- **Direct array loads and stores with floating indices** use a signed
+  trapping conversion only after the existing whole/nonnegative/range guard
+  succeeds. GC-array lengths are
   capped below 2^30; the append arm also checks capacity before growing.
   Thus f32/f64 indices, including -0, convert exactly without a general
   numeric conversion. Floating storage itself supplies no proof. Numeric
@@ -287,6 +288,73 @@ five slices, including their 313 known failures.
   `checked-gc-index` pins reads, both store arms, IEEE values, named refusals,
   and controls that explicitly convert first or access exposed buffer bytes;
   the emitter test also requires the cheaper instructions to remain present.
+
+The compiled all-row comparison uses clean full release builds at `9b233569e`
+and `678109bbb`, P-cores 0–15, nice 19 and the measurement lock. Two alternating
+pairs use five fresh processes per cell, each with bounded warmup and the
+best of five timed batches. Towers changes only twelve post-guard conversion
+instructions; its guards and call graph are identical in the emitted text.
+
+| Pair | Before Wasm (µs) | Before / node | After Wasm (µs) | After / node | Normalized A/B |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 49.95 | 1.429 | 36.55 | 1.123 | 0.786 |
+| 2 | 46.07 | 1.363 | 38.46 | 1.172 | 0.860 |
+
+All 63 rows, raw times, ratios, load ranges and verdicts are in
+[the full comparison](../benchmarks/wasm/checked-gc-index-20261016.tsv).
+Runtime identity includes the imported common harness bytes and normalizes
+only the generated harness’s per-arm absolute import paths. Identical
+module/glue and equivalent relocated harness mean timing movement is noise.
+Every measured checksum agrees with node; elementwise remains a named
+harness gap. No memory pause occurred.
+
+The other fifteen changed rows show small or mixed movement. All sixteen
+module diffs contain only unsigned saturating to signed trapping conversions.
+Towers still costs 1.12–1.17 times node after the improvement.
+
+The full comparison moved json-build-append by +1.2% and +5.1% relative to
+node. Its changed instructions execute only during module initialization
+and an unused Unicode escape branch for the benchmark input. A focused
+control reuses the saved modules and the same common harness, on P-core 4
+under the measurement lock, nice 19, five fresh processes per cell. It
+brackets each before/after pair with node and reverses the second pair:
+
+| Pair | Before Wasm (µs) | After Wasm (µs) | Wasm A/B | Node brackets (µs) |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 19.42 | 20.02 | 1.031 | 14.81 / 14.97 |
+| 2 | 19.48 | 19.96 | 1.025 | 14.78 / 15.43 |
+
+The control ran from 2026-10-16T10:36:35.273Z to 2026-10-16T10:37:03.644Z; one-minute
+load ranged from 3.78 to 4.19, with no memory pause and identical checksums.
+
+The focused A/B retained a 2.5–3.1% difference. A subsequent A/A control
+compares two copies of the baseline with byte-identical module and glue,
+using the same protocol and reversing the second pair:
+
+| Pair | A Wasm (µs) | Copy Wasm (µs) | Copy / A | Node brackets (µs) |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 21.49 | 21.07 | 0.981 | 16.06 / 15.77 |
+| 2 | 20.47 | 20.66 | 1.009 | 15.72 / 15.46 |
+
+The A/A control ran from 2026-10-16T10:38:56.143Z to 2026-10-16T10:39:25.434Z; one-minute
+load ranged from 10.52 to 11.42, with no memory pause and identical checksums.
+Its timing movement is -1.94%/+0.93%, straddling zero. The A/B is
++3.08%/+2.46%, the same direction twice and just beyond the A/A range. This
+small difference may be a real layout effect of unexercised code; it remains
+inconclusive at this instrument's resolution and is retained in the complete
+comparison. Revisit it if it recurs in a later full sitting.
+
+Validation: strict workspace/all-target clippy, rustfmt, all four backend
+suites (610 tests), and 557/557 comparable Wasm programs passed. The fixture
+checks 253 Node agreements and 679 named refusals, with raw f32 index coverage
+alongside it. Disabling the conversion fails the dynamic-index instruction
+assertion; removing integrality fails the real IEEE fixture. The restored
+committed source passes. The previous clean compiler preserves the answers
+but lacks the cheaper instruction. All five recorded Wasm slices were audited:
+three builtin record deltas already occur identically on clean main from
+`b54b3ad15`. The full builtin refresh landed separately as `119bf4ca1`;
+all 846 refreshed rows reconcile unchanged against the optimized compiler.
+
 - **`nts_array_element`**, the erased read that answers `undefined` past the
   end, under `noUncheckedIndexedAccess` and in JS destructuring:
   - The C runtime asks the descriptor what the slots hold. Where the call
