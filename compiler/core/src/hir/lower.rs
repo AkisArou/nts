@@ -2703,19 +2703,24 @@ fn children_in_the_body_of(probe: &FuncBuilder, declaration: NodeId) -> Vec<Node
     for member in probe.children(declaration) {
         if probe.kind_of(member) == Some(syntax::CONSTRUCTOR) {
             children.extend(probe.children(probe.implementation_of(member)));
-        } else if probe.kind_of(member) == Some(syntax::PROPERTY_DECLARATION)
-            && !is_static_member(probe.snapshot, member)
-        {
-            let fields = probe.children(member);
-            if let Some(name) = fields.first().copied()
-                && let Some(initializer) =
-                    declaration_initializer(&fields, name, |at| probe.kind_of(at))
-            {
-                children.push(initializer);
-            }
+        } else if let Some(initializer) = instance_initializer(probe, member) {
+            children.push(initializer);
         }
     }
     children
+}
+
+/// The part of a field which runs during construction. Its computed name and
+/// a static field's initializer instead run while the class is defined.
+fn instance_initializer(probe: &FuncBuilder, member: NodeId) -> Option<NodeId> {
+    if probe.kind_of(member) != Some(syntax::PROPERTY_DECLARATION)
+        || is_static_member(probe.snapshot, member)
+    {
+        return None;
+    }
+    let fields = probe.children(member);
+    let name = fields.first().copied()?;
+    declaration_initializer(&fields, name, |at| probe.kind_of(at))
 }
 
 /// The `(interface, member)` a call dispatches through, where its receiver is typed at a

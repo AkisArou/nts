@@ -19,8 +19,8 @@ use super::{
     Branch, ClosureInfo, FuncBuilder, HirType, ManagedType, NodeId, PrimitiveBuiltin,
     SemanticSnapshot, binds_its_own_this, children_in_the_body_of, children_that_run,
     declaration_initializer, declared_base_class, declares_a_class, evaluation_order,
-    implemented_member, is_static_member, names_a_body, raising_callees_of, reads_a_name,
-    the_constructor_declared_by, the_function_of,
+    implemented_member, instance_initializer, is_static_member, names_a_body, raising_callees_of,
+    reads_a_name, the_constructor_declared_by, the_function_of,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -400,8 +400,17 @@ fn syntax_parent(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
 }
 
 fn execution_owner(probe: &FuncBuilder, at: NodeId) -> Option<NodeId> {
-    std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent)
-        .find(|at| names_a_body(probe.kind_of(*at)))
+    let mut child = at;
+    for parent in std::iter::successors(probe.node(at).parent, |at| probe.node(*at).parent) {
+        if names_a_body(probe.kind_of(parent))
+            || probe.kind_of(parent) == Some(syntax::CONSTRUCTOR)
+            || instance_initializer(probe, parent) == Some(child)
+        {
+            return Some(parent);
+        }
+        child = parent;
+    }
+    None
 }
 
 fn inner_class_binding(probe: &FuncBuilder, at: NodeId, declaration: NodeId) -> bool {
