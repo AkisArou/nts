@@ -145,7 +145,15 @@ fn erased_primitives_and_defined_immutable_singletons_execute_exactly() {
     });
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
     assert_eq!(emitted.manifest.features, ["gc"]);
-    assert_eq!(emitted.manifest.builtins, ["js-string"]);
+    assert_eq!(
+        emitted
+            .manifest
+            .builtins
+            .iter()
+            .map(|import| (import.module.as_str(), import.name.as_str()))
+            .collect::<Vec<_>>(),
+        [("wasm:js-string", "test")]
+    );
     assert!(
         emitted
             .manifest
