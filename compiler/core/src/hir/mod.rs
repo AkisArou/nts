@@ -833,8 +833,9 @@ pub struct Param {
     ///
     /// Nothing is emitted for it: a parameter is a parameter in every backend
     /// whatever its shape, and the work a rest or a default implies happens at
-    /// the *call* -- `lower_arguments` gathers the array and evaluates the
-    /// default, which is where JavaScript does. So this is a note on the
+    /// the call -- `lower_arguments` gathers the array and usually evaluates
+    /// the default. A default that captures a parameter binding instead runs
+    /// in the callable's parameter entry, which owns that binding. This is a note on the
     /// declaration and costs one discriminant on a struct that already carries
     /// a `String`, an `Origin` and a `Facts`.
     pub shape: ParamShape,
@@ -864,10 +865,10 @@ pub struct Param {
 /// [`Self::Optional`] and [`Self::Defaulted`] are *not* the same case, and the
 /// difference is observable. An omitted optional parameter is `undefined`
 /// inside the callee, which a caller can pass; an omitted defaulted one is
-/// never observable at all, because the *caller* evaluates the initializer --
-/// `lower_arguments` does it at every call site, which is where JavaScript
-/// evaluates it. So a boundary that is not a compiled call site can supply the
-/// first and cannot supply the second.
+/// replaced by its initializer. Usually `lower_arguments` evaluates that at
+/// the compiled call site; a capturing default instead belongs to the
+/// callable's parameter entry. The fixed public ABI still requires defaulted
+/// arguments: an external boundary cannot evaluate an initializer itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ParamShape {
     /// A declared parameter, present at every call.
@@ -880,8 +881,8 @@ pub enum ParamShape {
     /// rather than a zero -- so a caller supplying `0` is wrong rather than
     /// imprecise.
     Optional,
-    /// `x: T = expr`. The initializer is evaluated by each caller that omits
-    /// the argument, so the callee's parameter is ordinary and always present.
+    /// `x: T = expr`. A compiled call supplies the initializer, or undefined
+    /// where the callable owns its parameter environment and evaluates it.
     Defaulted,
 }
 

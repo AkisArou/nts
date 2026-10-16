@@ -72,11 +72,16 @@ impl FuncBuilder<'_> {
         arrivals
             .opaque_arrivals
             .append(&mut self.arrivals.opaque_arrivals);
+        arrivals
+            .parameter_entries
+            .append(&mut self.arrivals.parameter_entries);
     }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Arrivals {
+    /// Parameter prefixes to hand to one body after all source bodies exist.
+    parameter_entries: Vec<parameter_entries::Split>,
     /// Every closure admitted into a signature slot. See [`Arrival`].
     ///
     /// `coerce_arm`'s object-to-object arm is the only place this is visible: two
@@ -4132,6 +4137,8 @@ enum Head {
 /// head lowered as local state from a top-level module declaration.
 #[derive(Clone, Copy)]
 enum PatternScope {
+    /// A parameter environment whose closures must share these bindings.
+    Parameters,
     Local,
     Module,
 }
@@ -4802,6 +4809,12 @@ fn captures_of(
         let below = record.declarations.iter().all(|declaration| {
             let declared = probe.node(*declaration).origin.location;
             declared.file == arrow.file && declared.span.start > arrow.span.start
+        }) || record.declarations.iter().any(|declaration| {
+            // A parameter is initialized only after its initializer returns.
+            // A closure made by that initializer captures the still-unready
+            // binding, just as one written before a later declaration does.
+            probe.kind_of(*declaration) == Some(syntax::PARAMETER)
+                && probe.ancestor(id, syntax::PARAMETER) == Some(*declaration)
         });
         let readiness_only = (below || probe.kind_of(id) == Some(syntax::FUNCTION_DECLARATION))
             && initialization::runtime_reference(probe, *read)
@@ -5177,6 +5190,7 @@ const A_GENERIC_DECLARATION_READING_THIS: &str =
 /// Why this method cannot be used as a value, if it cannot.
 #[derive(Default, Clone)]
 struct Naming {
+    parameter_entries: std::rc::Rc<rustc_hash::FxHashSet<NodeId>>,
     initialization: std::rc::Rc<initialization::Analysis>,
     /// Which declarations a [raising copy](FuncBuilder::raises) is emitted for.
     /// See [`raising_copies`].
@@ -7988,7 +8002,7 @@ fn naming(
     probe.hierarchy = hierarchy.clone();
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
-    probe.closures = closures.to_vec().into();
+    probe.closures = SharedClosures::new(snapshot, closures.to_vec());
     probe.module.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     let class_tokens = class_token_indices(snapshot);
@@ -7997,6 +8011,7 @@ fn naming(
 
     let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
+        parameter_entries: probe.closures.parameter_entries(),
         initialization: probe.module.initialization.clone(),
         qualified,
         ambiguous,
@@ -12909,7 +12924,7 @@ impl Shared {
         Self {
             module: module.clone(),
             hierarchy: hierarchy.clone(),
-            closures: closures.into(),
+            closures: SharedClosures::with_entries(closures, naming.parameter_entries.clone()),
             naming,
             generics,
             structural,
@@ -15199,8 +15214,12 @@ fn lower_wanted_closures(
                     shared,
                     closures,
                     index,
-                    &lowered.program.funcs,
                     copy_for(true),
+                    ClosureOutput {
+                        kernels: &lowered.program.funcs,
+                        wanted,
+                        arrivals: &mut lowered.arrivals,
+                    },
                 );
                 layout_collector.collect(&mut lowered.program, layouts);
                 // **Pushed before the ordinary body, as they always were.** The
@@ -15288,6 +15307,12 @@ fn closure_aliases(
     )
 }
 
+struct ClosureOutput<'a> {
+    kernels: &'a [Func],
+    wanted: &'a mut std::collections::BTreeSet<usize>,
+    arrivals: &'a mut Arrivals,
+}
+
 /// The raising variant of one closure, and the entry that names it -- or the entry
 /// that aborts by name where there cannot be one.
 ///
@@ -15322,9 +15347,14 @@ fn raising_closure(
     shared: &Shared,
     closures: &[ClosureInfo],
     index: usize,
-    kernels: &[Func],
     copy: Copy,
+    output: ClosureOutput<'_>,
 ) -> (Vec<Func>, Vec<Layout>) {
+    let ClosureOutput {
+        kernels,
+        wanted,
+        arrivals,
+    } = output;
     // The ordinary closure was just appended; all its source kernels precede it.
     let func = kernels
         .last()
@@ -15376,7 +15406,18 @@ fn raising_closure(
         // allocated a type with no layout -- the LLVM backend declined it and the
         // C backend reported it (`tests/programs/an-element-assertion-in-a-raising-closure`).
         Ok(mut raising) => {
+            for split in &mut second.arrivals.parameter_entries {
+                if split.name == raising.name {
+                    split.name.clone_from(&raising_body);
+                }
+            }
+            for site in &mut second.arrivals.uniform_sites {
+                if site.function == raising.name {
+                    site.function.clone_from(&raising_body);
+                }
+            }
             raising.name = raising_body;
+            second.harvest(wanted, arrivals);
             let result_absent =
                 closure_result_absent(snapshot, closures[index].node, &raising.return_type);
             let mut produced = erased_call(
@@ -15783,6 +15824,12 @@ pub fn lower_with(
     finish_dispatch_tables(snapshot, &hierarchy, &mut lowered.program);
 
     publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
+    let parameter_entries = std::mem::take(&mut lowered.arrivals.parameter_entries);
+    parameter_entries::split(
+        &mut lowered.program,
+        &mut lowered.arrivals,
+        parameter_entries,
+    );
 
     collect_declared_facts(&mut lowered.program, snapshot);
     super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
@@ -20880,6 +20927,9 @@ struct FuncBuilder<'a> {
     chain_present: rustc_hash::FxHashMap<NodeId, ValueId>,
     /// A receiver whose assertion presence check belongs to the access.
     access_receiver: Option<access::Pending>,
+    parameter_entry: Option<NodeId>,
+    parameter_types: std::collections::BTreeMap<u32, parameter_entries::PublicInput>,
+    parameter_cut: Option<parameter_entries::Cut>,
     /// The object each member read was made on, by the read's node
     /// ([`Self::member_of`]): the `this` a call of what it read passes, which
     /// `o.f?.()` needs after lowering `o.f` as a value.
@@ -21182,6 +21232,9 @@ impl<'a> FuncBuilder<'a> {
             labels_lowered: rustc_hash::FxHashMap::default(),
             chain_present: rustc_hash::FxHashMap::default(),
             access_receiver: None,
+            parameter_entry: None,
+            parameter_types: std::collections::BTreeMap::new(),
+            parameter_cut: None,
             read_from: rustc_hash::FxHashMap::default(),
             super_send: None,
             forced_slot: None,
@@ -27745,17 +27798,7 @@ impl<'a> FuncBuilder<'a> {
         // What a null element slot of the array means, read off the array's
         // own type while it is still in hand -- the erased read that comes
         // later sees `any[]`. See `OpKind::Erase`.
-        let slots = match &have {
-            HirType::Managed(ManagedType::Array(element))
-                if matches!(**element, HirType::Managed(_))
-                    && self
-                        .read_type(source)
-                        .is_some_and(|ty| self.null_only_element(ty)) =>
-            {
-                Absent::Null
-            }
-            _ => Absent::Impossible,
-        };
+        let slots = self.erased_slots_at(source, &have);
         Ok(self.push(
             OpKind::Erase {
                 value,
@@ -27765,6 +27808,20 @@ impl<'a> FuncBuilder<'a> {
             HirType::Erased,
             origin,
         ))
+    }
+
+    fn erased_slots_at(&self, source: NodeId, have: &HirType) -> Absent {
+        match have {
+            HirType::Managed(ManagedType::Array(element))
+                if matches!(**element, HirType::Managed(_))
+                    && self
+                        .read_type(source)
+                        .is_some_and(|ty| self.null_only_element(ty)) =>
+            {
+                Absent::Null
+            }
+            _ => Absent::Impossible,
+        }
     }
 
     /// What a **null** pointer means for the value this node holds.
@@ -28304,6 +28361,11 @@ impl<'a> FuncBuilder<'a> {
         // Chromium lane's lib-dom-bare-global-with-a-dictionary).
         if let Some(slot) = self.native_slot(call, at) {
             return Some(slot);
+        }
+        if self.parameter_entry_for_call(call).is_some()
+            && self.declared_default(call, at).is_some()
+        {
+            return Some(HirType::Erased);
         }
         if let Some(bound) = self
             .structural_calls
@@ -29860,6 +29922,10 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_function(&mut self, id: NodeId) -> Result<Func, Diagnostic> {
         let children = self.children(id);
+        if self.plain_parameter_entry(id) {
+            self.parameter_entry = Some(id);
+            self.prepare_parameter_cells(id);
+        }
 
         let name = self
             .emitted_function_name(id)
@@ -29929,6 +29995,11 @@ impl<'a> FuncBuilder<'a> {
             });
             self.push(OpKind::Param(0), HirType::Erased, origin)
         });
+        if self.parameter_entry.is_some()
+            && let Some(this_argument) = this_argument
+        {
+            self.this = Some(self.receive_this(id, this_argument)?);
+        }
         for child in &children {
             if self.kind_of(*child) != Some(syntax::PARAMETER) {
                 continue;
@@ -29936,13 +30007,16 @@ impl<'a> FuncBuilder<'a> {
             params.extend(self.lower_param(*child, u32::try_from(params.len()).unwrap_or(0))?);
         }
 
+        self.start_bound_body(id)?;
         // An `async` function allocates its promise before the body runs, so
         // that every `return` has one to settle -- and so that the allocation
         // happens once rather than on each path out.
         let asynchronous = self.begin_async(id, &return_type)?;
         // **The body's `this` is the call's**, proven at the declared type, as a
         // closure's is ([`Self::receive_this`]).
-        if let Some(this_argument) = this_argument {
+        if self.parameter_entry.is_none()
+            && let Some(this_argument) = this_argument
+        {
             self.this = Some(self.receive_this(id, this_argument)?);
         }
         self.lower_block(body)?;
@@ -30298,6 +30372,83 @@ impl<'a> FuncBuilder<'a> {
         Ok((generated, return_type))
     }
 
+    fn closure_inputs(
+        &mut self,
+        index: usize,
+        info: &ClosureInfo,
+        receiver: ValueId,
+        this_argument: Option<ValueId>,
+        origin: &Origin,
+    ) -> Result<parameter_entries::ClosureInputs, Diagnostic> {
+        let id = info.node;
+        let receiver_ty = self.values[receiver.0 as usize].ty.clone();
+        let parameters_of = if info.source.wraps() {
+            self.implementation_of(id)
+        } else {
+            id
+        };
+        let parameter_entry = self.plain_parameter_entry(parameters_of);
+        let authored_entry = parameter_entry && matches!(info.source, ClosureSource::Authored);
+        let early_return = if authored_entry {
+            let result = self.reserved_return_type(id)?;
+            self.returns = result.1.clone();
+            self.return_elements = self.written_tuple_return(id);
+            Some(result)
+        } else {
+            None
+        };
+        if parameter_entry {
+            self.parameter_entry = Some(parameters_of);
+        }
+        // An initializer may read an enclosing capture. Bind it before the
+        // affected parameter list, rather than after that list has run.
+        let early_fields = if authored_entry {
+            Some(self.bind_captures(receiver, info, origin)?)
+        } else {
+            None
+        };
+        if authored_entry {
+            self.prepare_parameter_cells(id);
+        }
+        if authored_entry && let Some(this_argument) = this_argument {
+            self.this = Some(self.receive_this(id, this_argument)?);
+        }
+        let (params, forwarded) = self.closure_parameters(
+            parameters_of,
+            receiver_ty,
+            origin,
+            if matches!(info.source, ClosureSource::Authored) {
+                ParameterNames::Bound
+            } else {
+                ParameterNames::Forwarded
+            },
+            info.reads_this,
+        )?;
+
+        // The captures, read back and bound to the names the body writes. A
+        // field read rather than a copy into a local: the value is already
+        // there, and `FieldGet` is what every other object read is.
+        // **Field 0 is the receiver, and it comes before the captures.**
+        // `ClosureSource::Method` guarantees `info.captures` is empty -- a method body
+        // reaches its receiver through `this`, not through the enclosing scope
+        // -- so the two never have to agree about an offset.
+        let fields = if let Some(fields) = early_fields {
+            fields
+        } else if info.source.binds_receiver() {
+            vec![self.bind_receiver(id, receiver, origin)?]
+        } else {
+            self.bind_captures(receiver, info, origin)?
+        };
+        self.layouts.push(self.closure_layout(index, fields));
+
+        Ok(parameter_entries::ClosureInputs {
+            params,
+            forwarded,
+            early_return,
+            authored_entry,
+        })
+    }
+
     fn lower_closure(&mut self, index: usize, info: &ClosureInfo) -> Result<Func, Diagnostic> {
         if let Some(reason) = info.refusal {
             return Err(self.unsupported(info.node, reason));
@@ -30320,36 +30471,12 @@ impl<'a> FuncBuilder<'a> {
         // proof about every value arriving through the uniform callable slot.
         // Keep the wrapper's identity and layout at `id`, while deriving the
         // forwarded values and their facts from the body it actually calls.
-        let parameters_of = if info.source.wraps() {
-            self.implementation_of(id)
-        } else {
-            id
-        };
-        let (params, forwarded) = self.closure_parameters(
-            parameters_of,
-            receiver_ty,
-            &origin,
-            if matches!(info.source, ClosureSource::Authored) {
-                ParameterNames::Bound
-            } else {
-                ParameterNames::Forwarded
-            },
-            info.reads_this,
-        )?;
-
-        // The captures, read back and bound to the names the body writes. A
-        // field read rather than a copy into a local: the value is already
-        // there, and `FieldGet` is what every other object read is.
-        // **Field 0 is the receiver, and it comes before the captures.**
-        // `ClosureSource::Method` guarantees `info.captures` is empty -- a method body
-        // reaches its receiver through `this`, not through the enclosing scope
-        // -- so the two never have to agree about an offset.
-        let fields = if info.source.binds_receiver() {
-            vec![self.bind_receiver(id, receiver, &origin)?]
-        } else {
-            self.bind_captures(receiver, info, &origin)?
-        };
-        self.layouts.push(self.closure_layout(index, fields));
+        let parameter_entries::ClosureInputs {
+            params,
+            forwarded,
+            early_return,
+            authored_entry,
+        } = self.closure_inputs(index, info, receiver, this_argument, &origin)?;
 
         // **Every parameter's layout, not only the return's.** A closure
         // restates the wrapped declaration's parameter list, and a type that
@@ -30410,7 +30537,9 @@ impl<'a> FuncBuilder<'a> {
         // arms I measured that change with contained a method handed out as a
         // value**, which is why the recorded test262 set is the population for a
         // lowering change and `runtime/` is the narrow corpus.
-        let (generated, return_type) = if matches!(info.source, ClosureSource::Authored) {
+        let (generated, return_type) = if let Some(result) = early_return {
+            result
+        } else if matches!(info.source, ClosureSource::Authored) {
             self.reserved_return_type(id)?
         } else {
             (None, self.return_type_of(id)?)
@@ -30453,8 +30582,9 @@ impl<'a> FuncBuilder<'a> {
             return self.lower_wrapper_body(index, info, carried, params, return_type);
         }
 
+        self.start_bound_body(id)?;
         // **The body's `this` is the call's**, proven at the declared type.
-        if let Some(this_argument) = this_argument {
+        if !authored_entry && let Some(this_argument) = this_argument {
             self.this = Some(self.receive_this(id, this_argument)?);
         }
 
@@ -32919,6 +33049,15 @@ impl<'a> FuncBuilder<'a> {
             site.function.clone_from(&name);
             self.arrivals.uniform_sites.push(site);
         }
+        if let Some(cut) = self.parameter_cut.take() {
+            self.arrivals
+                .parameter_entries
+                .push(parameter_entries::Split {
+                    name: name.clone(),
+                    cut,
+                    public_types: std::mem::take(&mut self.parameter_types),
+                });
+        }
 
         Func {
             name,
@@ -33277,6 +33416,9 @@ impl<'a> FuncBuilder<'a> {
         let Some((default, callee)) = self.declared_default(call, before.len()) else {
             return Ok(value);
         };
+        if self.parameter_entry_for_call(call).is_some() {
+            return Ok(value);
+        }
         // The literal cannot take the supplied-value arm. Defer its default
         // until every argument has run, then evaluate it directly at the slot's
         // representation, including a concrete numeric parameter.
@@ -33397,6 +33539,10 @@ impl<'a> FuncBuilder<'a> {
         args: &[ValueId],
         receiver: Option<ValueId>,
     ) -> Result<ValueId, Diagnostic> {
+        if self.parameter_entry_for_call(call).is_some() {
+            let origin = self.origin(node);
+            return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
+        }
         self.a_default_the_instance_cannot_answer(node, callee)?;
         // The parameters before this one, bound to what the call
         // already computed for them.
@@ -34944,7 +35090,21 @@ impl<'a> FuncBuilder<'a> {
             .map_or(Facts::TOP, |declared| {
                 known_values(self.snapshot, *declared, 0)
             });
-        let value = self.push(OpKind::Param(index), ty.clone(), origin.clone());
+        let raw_default = self.parameter_entry.is_some() && self.default_of(id).is_some();
+        let initializer = self
+            .default_of(id)
+            .filter(|_| raw_default && binds == ParameterNames::Bound);
+        let input_type = if raw_default {
+            HirType::Erased
+        } else {
+            ty.clone()
+        };
+        let value = self.push(OpKind::Param(index), input_type.clone(), origin.clone());
+        let value = if let Some(initializer) = initializer {
+            self.bind_parameter_default(value, initializer, &ty)?
+        } else {
+            value
+        };
         // Bound by symbol, so every later mention of this name resolves to the
         // same value rather than to a fresh load. A pattern has no symbol of
         // its own -- its *elements* do, and each is a read of the parameter.
@@ -34960,9 +35120,16 @@ impl<'a> FuncBuilder<'a> {
             // whole and the real function destructures it, which is the only
             // place that should.
             if binds == ParameterNames::Bound {
-                self.bind_pattern(name_node, value, PatternScope::Local)?;
+                let scope = if self.parameter_entry.is_some() {
+                    PatternScope::Parameters
+                } else {
+                    PatternScope::Local
+                };
+                self.bind_pattern(name_node, value, scope)?;
             }
-        } else if let Some(symbol) = self.node(name_node).symbol {
+        } else if let Some(symbol) = self.node(name_node).symbol
+            && (binds == ParameterNames::Bound || self.parameter_entry.is_none())
+        {
             // A parameter is a name like any other, and `callback =
             // asRequest(callback)` before a closure reads it is common enough
             // in the profile that missing this emitted C that did not compile.
@@ -34993,14 +35160,31 @@ impl<'a> FuncBuilder<'a> {
             ParamShape::Ordinary
         };
 
-        Ok(vec![Param {
+        let parameter = Param {
             name,
-            ty,
+            ty: ty.clone(),
             origin,
             shape,
             known,
             written: self.written_kind(name_node),
-        }])
+        };
+        if input_type != ty {
+            self.parameter_types.insert(
+                index,
+                parameter_entries::PublicInput {
+                    parameter: parameter.clone(),
+                    absent: self.absence_at_excluding(name_node, &ty, false),
+                    slots: self.erased_slots_at(name_node, &ty),
+                },
+            );
+            return Ok(vec![Param {
+                ty: input_type,
+                known: Facts::TOP,
+                written: None,
+                ..parameter
+            }]);
+        }
+        Ok(vec![parameter])
     }
 
     /// Whether `declaration` -- a variable, a parameter, a property, a
@@ -62110,6 +62294,11 @@ impl<'a> FuncBuilder<'a> {
             self.write_place(at, &Place::Global(global), value)?;
             self.mark_initialized(at, symbol);
         } else {
+            let value = if matches!(scope, PatternScope::Parameters) {
+                self.open_cell(symbol, value, at)
+            } else {
+                value
+            };
             self.bindings.insert(symbol, value);
         }
         Ok(())
@@ -83373,6 +83562,7 @@ mod layout_collection;
 mod literal_methods;
 mod native_memory;
 mod numeric_arguments;
+mod parameter_entries;
 mod printed;
 mod property_keys;
 mod typed_signatures;
