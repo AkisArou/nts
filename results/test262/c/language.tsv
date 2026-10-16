@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 216dd1d94d23e2d1, commit d3c7aaec159c6682b91cb0ef39024dc925e709af, harness d6442dbc09f91ad0; machine at start: 21.2 GB available, swap 4.5/31.5 GB, load 6.2/7.9 (1m/5m), 32 cores; 2 worker(s)
+# compiler b9c20f0c48d8529e, commit 0572af7d6863720a016516cb5a22d34bbd25a5e9, backend c, harness d6442dbc09f91ad0; machine at start: 21.2 GB available, swap 5.6/31.5 GB, load 6.7/7.8 (1m/5m), 16 cores; 2 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -3176,7 +3176,7 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/expressions/generators/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-init-fn-name-cover.js	pass	
@@ -3190,8 +3190,8 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
-test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-init-ary.js	pass	
@@ -3218,7 +3218,7 @@ test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val.js	pass
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-elision-exhausted.js	pass	
-test/language/expressions/generators/dstr/dflt-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-empty.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
@@ -3233,31 +3233,31 @@ test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-ary.js	pa
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
-test/language/expressions/generators/dstr/dflt-obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-init-undefined.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
-test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/obj-init-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
+test/language/expressions/generators/dstr/obj-init-null.js	pass	
+test/language/expressions/generators/dstr/obj-init-undefined.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-arrow.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-cover.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-fn.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-init-skipped.js	pass	
-test/language/expressions/generators/dstr/obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-ptrn-id-init-throws.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-id-trailing-comma.js	pass	
-test/language/expressions/generators/dstr/obj-ptrn-list-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-ptrn-list-err.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js	pass	
+test/language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js	pass	
+test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/named-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/named-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
@@ -7723,7 +7723,7 @@ test/language/statements/generators/dstr/ary-ptrn-elem-ary-elem-iter.js	pass
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-empty-init.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-empty-iter.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-ary-rest-init.js	pass	
-test/language/statements/generators/dstr/ary-ptrn-elem-ary-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-exhausted.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-arrow.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-id-init-fn-name-cover.js	pass	
@@ -7737,8 +7737,8 @@ test/language/statements/generators/dstr/ary-ptrn-elem-id-iter-done.js	pass
 test/language/statements/generators/dstr/ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
-test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-null.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/generators/dstr/ary-ptrn-empty.js	pass	
@@ -7768,7 +7768,7 @@ test/language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val.js	pass
 test/language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-elision-exhausted.js	pass	
-test/language/statements/generators/dstr/dflt-ary-ptrn-elision-step-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-empty.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-ary-elem.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-ary-rest.js	pass	
@@ -7783,31 +7783,31 @@ test/language/statements/generators/dstr/dflt-ary-ptrn-rest-not-final-ary.js	pas
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-not-final-id.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-not-final-obj.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-rest-obj-id.js	pass	
-test/language/statements/generators/dstr/dflt-obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/dflt-obj-init-undefined.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-arrow.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-cover.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-fn.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-fn-name-gen.js	pass	
-test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-id-trailing-comma.js	pass	
 test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/obj-init-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/obj-init-undefined.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/dflt-obj-ptrn-prop-ary-value-null.js	pass	
+test/language/statements/generators/dstr/dflt-obj-ptrn-prop-id-init-throws.js	pass	
+test/language/statements/generators/dstr/dflt-obj-ptrn-prop-obj-value-null.js	pass	
+test/language/statements/generators/dstr/obj-init-null.js	pass	
+test/language/statements/generators/dstr/obj-init-undefined.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-init-fn-name-arrow.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-init-fn-name-cover.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-init-fn-name-fn.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-init-fn-name-gen.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-init-skipped.js	pass	
-test/language/statements/generators/dstr/obj-ptrn-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/obj-ptrn-id-init-throws.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-id-trailing-comma.js	pass	
-test/language/statements/generators/dstr/obj-ptrn-list-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/obj-ptrn-list-err.js	pass	
 test/language/statements/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
-test/language/statements/generators/dstr/obj-ptrn-prop-ary-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/obj-ptrn-prop-id-init-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/generators/dstr/obj-ptrn-prop-ary-value-null.js	pass	
+test/language/statements/generators/dstr/obj-ptrn-prop-id-init-throws.js	pass	
+test/language/statements/generators/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/generators/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/param-dflt-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/generators/rest-param-strict-body.js	fail	accepted: ran and threw Test262Error
