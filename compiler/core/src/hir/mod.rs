@@ -50,6 +50,7 @@ pub mod liveness;
 pub mod loops;
 pub mod obligations;
 pub mod presence;
+mod small_dispatch;
 pub mod suspend;
 pub mod tags;
 pub mod templates;
@@ -7363,6 +7364,9 @@ fn prepare_lowered(
     // After the copies that give a call its class, so that only an access
     // through an interface whose class is lost is tested.
     interface_fields::guard(&mut program);
+    // A field dispatch only a few classes move the field for, as a test for
+    // each: after the guard, so it sees only the calls `materialize` made.
+    small_dispatch::answer_by_class(&mut program);
     written_roots::narrow(&mut program, options.roots);
     written_storage::narrow(&mut program);
 

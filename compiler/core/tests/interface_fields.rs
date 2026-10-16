@@ -25,6 +25,32 @@ fn prepared_fixture(fixture: &str) -> Option<hir::Program> {
     Some(hir::prepare(&snapshot).expect("valid HIR").program)
 }
 
+/// Whether the function `name` reads a family's field by its receiver's class
+/// at run time: through the selector's table, or, where only a few classes
+/// move the field (`hir::small_dispatch`), by testing for those and calling
+/// the getter's default for every other class. A read whose layout is proved
+/// reads the field where it is, and does neither.
+fn reads_by_class(program: &hir::Program, name: &str) -> bool {
+    let plan = &program.interface_access;
+    let defaults: Vec<&str> = plan
+        .families
+        .iter()
+        .filter_map(|family| plan.default_for(family.getter.slot))
+        .collect();
+    let function = program.funcs.iter().find(|func| func.name == name).unwrap();
+    function.values.iter().any(|op| match &op.kind {
+        OpKind::Call {
+            callee: Callee::Virtual { slot, .. },
+            ..
+        } => plan.contains_selector(*slot) && op.ty != hir::HirType::Void,
+        OpKind::Call {
+            callee: Callee::Direct(callee),
+            ..
+        } => defaults.contains(&callee.as_str()),
+        _ => false,
+    })
+}
+
 #[test]
 fn source_transfers_bound_suppliers_and_keep_unrelated_absence_out() {
     let Some(program) = prepared_fixture("accessor-source-flow") else {
@@ -322,12 +348,7 @@ fn optional_storage_reads_dispatch_through_their_family() {
     .unwrap()
     .program;
     for name in ["readLabel", "resultLabel", "textOf"] {
-        let read = program.funcs.iter().find(|f| f.name == name).unwrap();
-        let dispatches = read.values.iter().any(|op| {
-            matches!(op.kind, OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
-                if program.interface_access.contains_selector(slot))
-        });
-        assert!(dispatches, "{name}");
+        assert!(reads_by_class(&program, name), "{name}");
     }
 }
 
@@ -671,17 +692,8 @@ fn a_class_test_can_prove_the_stored_receivers_exact_layout() {
         eprintln!("SKIP interface_fields: tsgo is not built");
         return;
     };
-    let dispatches = |name: &str| {
-        let function = program.funcs.iter().find(|func| func.name == name).unwrap();
-        function.values.iter().any(|op| {
-            matches!(&op.kind,
-            OpKind::Call { callee: Callee::Virtual { slot, .. }, .. }
-                if program.interface_access.contains_selector(*slot)
-                    && op.ty != hir::HirType::Void)
-        })
-    };
-    assert!(!dispatches("guarded"));
-    assert!(dispatches("unguarded"));
+    assert!(!reads_by_class(&program, "guarded"));
+    assert!(reads_by_class(&program, "unguarded"));
 }
 
 #[test]

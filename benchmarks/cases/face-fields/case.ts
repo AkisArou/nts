@@ -58,3 +58,10 @@ export function work(seed: number): number {
  * The input the harness calls `work` with; see `upcast`.
  */
 export const seed = 5;
+
+// The representation this row measures (`nts expect-ir`): `x` and `y` are
+// read through `Point` by testing for `Swapped`, the one class that moves
+// them, and reading every other holder where `Point` holds them -- no
+// dispatch table on the path (`hir::small_dispatch`).
+// expect-ir: all: no call.virtual in work
+// expect-ir: all: no call.virtual in weigh
