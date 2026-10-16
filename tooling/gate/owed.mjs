@@ -431,6 +431,22 @@ export const RULES = [
     arms: [],
   },
   {
+    // The JVM's own wide steps, per landing for what the JVM itself is made
+    // of -- the lane's choice when the wide steps moved to the full run
+    // (2026-10-16), each for a hole nothing core covers: d8 rejects class names
+    // the verifier accepts (`__@kCount@2`); bench-agree answers the benchmarks'
+    // hostile pools, which benches only compiles (absences' u32 remainder); and
+    // the interop projects call foreign ABIs and callbacks that loading a
+    // class never runs. Matched here rather than inherited through the crate
+    // graph, which carries no `wide`. on-device stays in the full run.
+    name: "the JVM's own wide steps",
+    when: (p) => /^(compiler\/codegen\/jvm|compiler\/jvm-emitter|runtime\/jvm)\//.test(p),
+    wide: true,
+    steps: ["dex", "bench-agree", "interop"],
+    interop: () => interopBuiltWith("jvm"),
+    arms: [],
+  },
+  {
     name: "the JVM class writer",
     when: (p) => /^compiler\/jvm-emitter\//.test(p),
     steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "on-device"],

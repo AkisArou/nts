@@ -75,6 +75,16 @@ test("a path that is a wide step's subject still owes it per landing", () => {
   superset(stepsFor("runtime/node/path/index.ts"), ["integrity-runtime", "definitions"], "a runtime module");
 });
 
+test("the JVM keeps the wide steps it chose for its own paths, and the device stays in the full run", () => {
+  for (const p of ["compiler/codegen/jvm/src/lib.rs", "compiler/jvm-emitter/src/lib.rs", "runtime/jvm/NtsRuntime.java"]) {
+    const got = stepsFor(p);
+    for (const s of ["dex", "bench-agree", "interop"]) assert.ok(got.includes(s), `${p} should run ${s} per landing; runs ${got.join(" ")}`);
+    assert.ok(!got.includes("on-device"), `${p} should leave on-device to the full run`);
+  }
+  // A core change does not inherit them.
+  assert.ok(!stepsFor("compiler/core/src/hir/lower.rs").includes("dex"));
+});
+
 test("a path no rule names owes the full gate", () => {
   assert.deepEqual([...full()].sort(), [...landing()].sort());
   assert.equal(stepsFor("Cargo.lock").length, landing().length);
@@ -121,9 +131,10 @@ test("interop builds only the projects a range reaches, when it can say which", 
   const projects = (...paths) => interopOwed(owed(paths.map((path) => ({ path, added: false }))));
   const jvm = interopBuiltWith("jvm");
   assert.ok(jvm.includes("java-from-ts") && jvm.includes("android-shape") && !jvm.includes("gtk-hello"), jvm.join(" "));
-  // A compiler change leaves interop to the full run (`WIDE`), whose
-  // projects are all of them; a project's own change still builds it.
-  assert.equal(projects("compiler/codegen/jvm/src/lib.rs"), null);
+  // The JVM keeps interop per landing for its own paths, narrowed to the
+  // projects built with it; a core change leaves interop to the full run.
+  assert.deepEqual(projects("compiler/codegen/jvm/src/lib.rs"), jvm);
+  assert.deepEqual(projects("runtime/jvm/NtsRuntime.java"), jvm);
   assert.equal(projects("compiler/core/src/hir/lower.rs"), null);
   assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts"), ["gtk-hello"]);
   assert.deepEqual(projects("tests/interop/gtk-hello/src/main.ts", "tests/interop/native-fd/build.sh"), ["gtk-hello", "native-fd"]);

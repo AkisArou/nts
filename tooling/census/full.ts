@@ -20,7 +20,7 @@
 // what a neighbour breaks.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,13 +43,11 @@ if (spawnSync("git", ["merge-base", "--is-ancestor", commit, "main"], { cwd: ROO
   process.exit(2);
 }
 
-// The landing gate holds this lock while it runs; a full run beside it would
-// starve both, and red the gate's memory checks.
+// The landing lock, held for the whole run: a full run beside a gate would
+// starve both and red the gate's memory checks, and only holding the lock
+// keeps a landing from starting once the run has (a landing waits, queued).
 const landLock = join(homedir(), ".cache/nts-land.lock");
-if (existsSync(landLock) && spawnSync("flock", ["-n", landLock, "true"]).status !== 0) {
-  console.log("  NOT RUN: a landing is gating -- start the full run when the queue is quiet (`lane status`)");
-  process.exit(2);
-}
+const BUSY = 75;
 const available = () => Number(/MemAvailable:\s+(\d+)/.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) / 1048576;
 if (available() < 16) {
   console.log(`  NOT RUN: ${available().toFixed(1)} GB available, under the 16 the wide steps start at`);
@@ -64,7 +62,7 @@ console.log(`  full run of ${short} (${git(["log", "-1", "--format=%s", commit])
 console.log(`  steps: ${steps.join(" ")}`);
 console.log(`  logs: ${run}`);
 
-const gated = spawnSync("sh", [join(ROOT, "tooling/gate/pinned.sh"), commit], {
+const gated = spawnSync("flock", ["-n", "-E", String(BUSY), landLock, "sh", join(ROOT, "tooling/gate/pinned.sh"), commit], {
   cwd: ROOT,
   stdio: "inherit",
   env: {
@@ -77,6 +75,11 @@ const gated = spawnSync("sh", [join(ROOT, "tooling/gate/pinned.sh"), commit], {
   },
 });
 
+if (gated.status === BUSY) {
+  rmSync(run, { recursive: true, force: true });
+  console.log("  NOT RUN: a landing is gating -- start the full run when the queue is quiet (`lane status`)");
+  process.exit(2);
+}
 const summary = join(run, "summary.json");
 if (!existsSync(summary)) {
   console.log(`  the run wrote no summary (exit ${gated.status}); see ${run}`);
