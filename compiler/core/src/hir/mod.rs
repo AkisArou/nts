@@ -3942,12 +3942,23 @@ fn store_names_a_slot_that_exists(func: &Func, array: ValueId, index: ValueId) -
 /// [`changes_array_length`] states for its own list one function down, arrived at
 /// from the other side.
 ///
-/// **Terminators are deliberately not examined**, which is worth saying because
-/// their absence looks like the same oversight. `return xs` hands the array out
-/// and nothing in this function runs afterwards to fold; a `Jump` carrying it as
-/// a block argument gives the receiving block a *different* `ValueId`, whose
-/// definition is a block parameter rather than an `ArrayNew`, so the first test
-/// here already declines it.
+/// **A block argument hands it on too.** This said terminators were
+/// deliberately not examined: `return xs` hands the array out with nothing left
+/// here to fold, and a `Jump` carrying it gives the receiving block a different
+/// `ValueId`, whose definition is a block parameter and not an `ArrayNew`. True
+/// of the *read* through the parameter, and not of a write: in
+///
+/// ```text
+/// const zs = pick > 0 ? xs : ys;   // a block parameter, sometimes xs
+/// zs.pop();                        // a use of the parameter, not of xs
+/// return xs.length;
+/// ```
+///
+/// every use of `xs` itself kept the length, so it folded to 3 where node
+/// answers 2 (`tests/programs/a-length-is-not-folded-through-a-merge`, all four
+/// backends, since this function was written). So an array a block argument
+/// carries is handed on like any other ([`carried_by_an_edge`]); a `return`
+/// still is not, having nothing after it to be wrong about.
 #[must_use]
 pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) -> bool {
     if !matches!(func.values[array.0 as usize].kind, OpKind::ArrayNew { .. }) {
@@ -3961,9 +3972,27 @@ pub fn allocated_length_is_exact(func: &Func, array: ValueId, growable: bool) ->
         // all.
         return true;
     }
-    func.values
-        .iter()
-        .all(|op| use_keeps_the_allocated_length(func, array, &op.kind))
+    !carried_by_an_edge(func, array)
+        && func
+            .values
+            .iter()
+            .all(|op| use_keeps_the_allocated_length(func, array, &op.kind))
+}
+
+/// Whether a jump or branch passes `value` to a block parameter: an alias whose
+/// uses are not uses of `value`, and so can change what `value` refers to --
+/// shorten an array, say -- out of sight of a test that reads only `value`'s
+/// own uses. See [`allocated_length_is_exact`].
+pub(super) fn carried_by_an_edge(func: &Func, value: ValueId) -> bool {
+    func.blocks.iter().any(|block| match &block.terminator {
+        Terminator::Jump { args, .. } => args.contains(&value),
+        Terminator::Branch {
+            then_args,
+            else_args,
+            ..
+        } => then_args.contains(&value) || else_args.contains(&value),
+        _ => false,
+    })
 }
 
 /// Whether one operation's use of an array leaves its allocated length exact.

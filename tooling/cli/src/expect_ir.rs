@@ -34,7 +34,8 @@
 //!
 //! `<op>` is the word `nts hir` prints for the operation (`erase`,
 //! `call.virtual`, `toint32`, `object.new`, ...), plus `object.new.heap` and
-//! `object.new.frame` for one placement.
+//! `object.new.frame` for one placement, and `array.get.checked` and
+//! `array.set.checked` for an access that kept its bounds check.
 //! `call.extern(<helper>)` selects one declared runtime helper; an unknown
 //! helper is a parse error, so a misspelled negative fact cannot pass.
 //! `<type>` is a type as `nts hir`
@@ -280,6 +281,11 @@ fn vocabulary() -> Vec<&'static str> {
         "array.len",
         "array.get",
         "array.set",
+        // A read or store that still carries its bounds check, which `nts hir`
+        // does not print: the check is a flag on the op, and whether one
+        // survived is the representation question `bounds` answers.
+        "array.get.checked",
+        "array.set.checked",
         "retain",
         "release",
         "str.unit",
@@ -400,6 +406,8 @@ fn named(word: &str, kind: &OpKind) -> bool {
     match (word, kind) {
         ("object.new.heap", OpKind::ObjectNew { frame }) => !frame,
         ("object.new.frame", OpKind::ObjectNew { frame }) => *frame,
+        ("array.get.checked", OpKind::ArrayGet { checked, .. })
+        | ("array.set.checked", OpKind::ArraySet { checked, .. }) => *checked,
         _ => op_word(kind) == word,
     }
 }

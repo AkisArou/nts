@@ -591,6 +591,19 @@ pub fn lengths(program: &Program, analyses: &[Analysis]) -> FieldFacts {
                 }
             }
         }
+        // And every operand of an edge: a block argument is an alias whose
+        // uses this loop never sees, so `const a = c ? h.items : other;
+        // a.pop()` shrank the field's array through the parameter
+        // (`super::carried_by_an_edge`).
+        for (at, op) in func.values.iter().enumerate() {
+            let value = super::ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+            if let OpKind::FieldGet { object, field } = &op.kind
+                && super::carried_by_an_edge(func, value)
+                && let Some(layout) = layouts.of(&func.values[object.0 as usize].ty)
+            {
+                grown.insert((layout, *field));
+            }
+        }
     }
 
     let mut visible: FieldFacts = FxHashMap::default();
