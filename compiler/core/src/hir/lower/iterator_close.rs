@@ -481,6 +481,7 @@ impl FuncBuilder<'_> {
             Return::Absent => return Ok(()),
             Return::Unavailable => return Err(self.unsupported(action.at, "an IteratorClose return member whose existing callable representation is unavailable")),
             Return::Method { method, result, absent } => {
+                self.materialize(action.at, result)?;
                 let mut args = vec![action.iterator];
                 args.extend(self.iterator_return_arguments(action, contract.receiver, &method.key)?);
                 if self.is_terminated() { return Ok(()); }
