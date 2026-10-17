@@ -160,6 +160,25 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
         };
         vec![(*ty, false)]
     };
+    // Identity follows the value through assertions, but an asserted type is
+    // also alias evidence. In particular `any` cannot prove a writer disjoint.
+    let mut written = effect.receiver;
+    for _ in 0..32 {
+        if written == value {
+            break;
+        }
+        let Some(ty) = probe.snapshot.node_types.get(&written) else {
+            return true;
+        };
+        pending.push((*ty, false));
+        let Some(inner) = probe.children(written).first().copied() else {
+            return true;
+        };
+        written = inner;
+    }
+    if written != value {
+        return true;
+    }
     let mut seen = FxHashSet::default();
     while let Some((ty, exact)) = pending.pop() {
         if !seen.insert((ty, exact)) {
