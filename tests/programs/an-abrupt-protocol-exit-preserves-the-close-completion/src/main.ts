@@ -457,3 +457,22 @@ function optionalNumber(early: boolean): number {
 export function optionalNumberSubject(n: number): number { return optionalNumber(true); }
 export function optionalNumberControl(n: number): number { return optionalNumber(false); }
 // expect-ir: all: no call.extern(nts_refused) in optionalNumber
+
+class RestReturnSource {
+  count = 0;
+  closed = 0;
+  [Symbol.iterator](): RestReturnSource { return this; }
+  next(): { value: number; done: boolean } { return { value: ++this.count, done: this.count > 2 }; }
+  return(...values: number[]): { value: number; done: boolean } {
+    this.closed = values.length === 0 ? 1 : 9;
+    return { value: 0, done: true };
+  }
+}
+function restReturn(early: boolean): number {
+  const source = new RestReturnSource();
+  for (const value of source) { if (early) break; }
+  return source.closed * 10 + source.count;
+}
+export function restReturnSubject(n: number): number { return restReturn(true); }
+export function restReturnControl(n: number): number { return restReturn(false); }
+// expect-ir: all: no call.extern(nts_refused) in restReturn
