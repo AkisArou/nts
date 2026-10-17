@@ -33691,7 +33691,9 @@ impl<'a> FuncBuilder<'a> {
         let Some((default, callee)) = self.declared_default(call, before.len()) else {
             return Ok(value);
         };
-        if self.parameter_entry_for_call(call).is_some() {
+        if self.parameter_entry_for_call(call).is_some()
+            || self.argument_sources.contains_key(&call)
+        {
             return Ok(value);
         }
         // The literal cannot take the supplied-value arm. Defer its default
@@ -33819,6 +33821,12 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
         }
         self.check_caller_filled_default(node, callee)?;
+        // A function-value call runs defaults in its uniform entry. Supplying
+        // the initializer's result here would run it twice if that is undefined.
+        if self.argument_sources.contains_key(&call) {
+            let origin = self.origin(node);
+            return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
+        }
         self.a_default_the_instance_cannot_answer(node, callee)?;
         // The parameters before this one, bound to what the call
         // already computed for them.
@@ -79756,7 +79764,6 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
-        self.argument_sources.insert(id, Vec::new());
         args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         let origin = self.origin(id);
         // A `super(...)` produces nothing; `super.m()` produces whatever `m`

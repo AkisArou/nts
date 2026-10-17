@@ -277,6 +277,14 @@ impl FuncBuilder<'_> {
                 u32::try_from(position + super::super::UNIFORM_ARGUMENTS).unwrap_or(u32::MAX),
             );
             let input = &plan.inputs[position];
+            if binds_defaults
+                && let Some(initializer) = input.initializer
+                && let Some(owner) = self.uniform_owner(info)
+            {
+                // Unsupported capturing defaults must keep the same named
+                // refusal when ownership moves from the caller to this entry.
+                self.check_caller_filled_default(initializer, owner)?;
+            }
             let source = input.source;
             let at = source.unwrap_or(info.node);
             let value = self.uniform_value(raw, input, parameter, at, &body.name)?;
