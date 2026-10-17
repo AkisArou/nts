@@ -1,4 +1,5 @@
-// run: check
+// expect: NTS1001 IteratorClose of `Source#return` with required parameter `value` that cannot admit undefined
+// The zero-argument close cannot fill a required concrete slot with undefined yet.
 // The control changes only early completion to exhaustion, so return is not called.
 class Source {
   count=0; closed=0;

@@ -438,3 +438,22 @@ export function defaultThrowControl(n: number): number { return defaultCase(fals
 export function defaultOriginalSubject(n: number): number { return defaultCase(true, 1, true); }
 export function defaultOriginalControl(n: number): number { return defaultCase(false, 1, true); }
 // expect-ir: all: no call.extern(nts_refused) in defaultCase
+
+class OptionalNumberSource {
+  count = 0;
+  closed = 0;
+  [Symbol.iterator](): OptionalNumberSource { return this; }
+  next(): { value: number; done: boolean } { return { value: ++this.count, done: this.count > 2 }; }
+  return(value?: number): { value: number; done: boolean } {
+    this.closed = typeof value === "undefined" ? 1 : 9;
+    return { value: 0, done: true };
+  }
+}
+function optionalNumber(early: boolean): number {
+  const source = new OptionalNumberSource();
+  for (const value of source) { if (early) break; }
+  return source.closed * 10 + source.count;
+}
+export function optionalNumberSubject(n: number): number { return optionalNumber(true); }
+export function optionalNumberControl(n: number): number { return optionalNumber(false); }
+// expect-ir: all: no call.extern(nts_refused) in optionalNumber

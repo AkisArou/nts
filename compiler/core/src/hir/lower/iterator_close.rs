@@ -524,6 +524,40 @@ impl FuncBuilder<'_> {
                     "an IteratorClose method without an implementation declaration",
                 )
             })?;
+        // IteratorClose passes no JavaScript arguments. Defaults and optional
+        // slots use the ordinary argument owner below; a required narrow slot
+        // cannot stand in for the undefined that JavaScript passes here.
+        let parameters = self
+            .children(declaration)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER));
+        for (parameter, (ty, optional, rest)) in
+            parameters.zip(self.parameters_declared_by(declaration))
+        {
+            let name = self
+                .name_node(parameter)
+                .and_then(|name| self.node(name).text.as_deref());
+            if name == Some("this")
+                || optional
+                || rest
+                || self.admits_undefined(ty.map(|ty| self.after_substitution(ty)))
+            {
+                continue;
+            }
+            let owner = self
+                .hierarchy
+                .name
+                .get(&receiver)
+                .map(String::as_str)
+                .unwrap_or("<iterator>");
+            return Err(self.unsupported(
+                action.at,
+                &format!(
+                    "IteratorClose of `{owner}#{key}` with required parameter `{}` that cannot admit undefined",
+                    name.unwrap_or("<binding pattern>")
+                ),
+            ));
+        }
         let before = self.argument_declaration.replace((action.at, declaration));
         let handled = self.raising_calls.insert(action.at);
         let args = self.lower_arguments_on(action.at, &[], action.iterator);
