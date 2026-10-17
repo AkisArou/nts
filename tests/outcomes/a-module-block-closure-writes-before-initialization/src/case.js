@@ -33,3 +33,14 @@ export function writeControl(n) { return writtenReady; }
 export function readSubject(n) { return readEarly; }
 /** @param {number} n @returns {number} */
 export function readControl(n) { return readReady; }
+
+// A loop body creates fresh block bindings on each entry. It is outside the
+// once-entered module inventory; a ready local write needs no module flag.
+let loopResult = 0;
+for (var iteration = 0; iteration < 2; iteration++) {
+  let loopBinding = 1;
+  loopBinding = 2;
+  loopResult += loopBinding;
+}
+/** @param {number} n @returns {number} */
+export function loopControl(n) { return loopResult; }
