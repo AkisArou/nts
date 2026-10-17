@@ -1,4 +1,3 @@
-// run: check
 // IteratorClose is missing independently of lexical TDZ. Each control differs
 // only by finishing the loop instead of taking its abrupt completion.
 class ClosingIterator implements IterableIterator<number> {

@@ -1,4 +1,3 @@
-// run: check
 // Controls change only the early-exit flag. The bounded trace records the
 // ordering of acquisition, stepping, body/finally, return lookup and closing.
 class Trace {
