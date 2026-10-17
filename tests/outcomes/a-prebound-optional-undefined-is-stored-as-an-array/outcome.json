@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: StoreType { func: \"subject\", what: \"a field\", expected: Managed(String), found: Managed(Array(Erased)) }",
+  "node": null,
+  "measured_with": "2c6dd1e3359749a2",
+  "source": "measured"
+}
