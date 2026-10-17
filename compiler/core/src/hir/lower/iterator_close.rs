@@ -333,23 +333,24 @@ impl FuncBuilder<'_> {
         action: Action,
         pending: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
-        // Catch GetMethod, defaults and the call at one boundary. An original
-        // throw wins; otherwise the close's failure replaces the completion.
+        if pending.is_none() {
+            return self.iterator_return(action, true);
+        }
+        // The original throw wins over GetMethod, defaults, the call and its
+        // result. Catch that secondary completion; the outer payload stays SSA.
         let entry = self.bindings.clone();
         self.exits.push(Exit::Handler(Handler {
             block: None,
             edges: Vec::new(),
             rejections: Vec::new(),
         }));
-        let closed = self.iterator_return(action, pending.is_none());
+        let closed = self.iterator_return(action, false);
         let Some(Exit::Handler(frame)) = self.exits.pop() else {
             unreachable!("pushed above")
         };
         closed?;
-        let normal = self.current;
-        let open = !self.is_terminated();
-        let join = pending.is_some().then(|| self.new_block());
-        if open && let Some(join) = join {
+        let join = self.new_block();
+        if !self.is_terminated() {
             self.terminate(Terminator::Jump {
                 target: join,
                 args: Vec::new(),
@@ -358,20 +359,16 @@ impl FuncBuilder<'_> {
         if let Some(handler) = frame.block {
             let origin = self.origin(action.at);
             self.lower_arm(|this| {
-                let thrown = this.open_handler(handler, &frame, &entry, &origin);
+                this.open_handler(handler, &frame, &entry, &origin);
                 this.switch_to(handler);
-                if let Some(join) = join {
-                    this.terminate(Terminator::Jump {
-                        target: join,
-                        args: Vec::new(),
-                    });
-                    Ok(())
-                } else {
-                    this.throw_erased(action.at, thrown, thrown, &HirType::Erased)
-                }
+                this.terminate(Terminator::Jump {
+                    target: join,
+                    args: Vec::new(),
+                });
+                Ok(())
             })?;
         }
-        self.switch_to(join.unwrap_or(normal));
+        self.switch_to(join);
         Ok(())
     }
 
