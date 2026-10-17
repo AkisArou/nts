@@ -1,8 +1,0 @@
-{
-  "run": "check",
-  "category": "aborted",
-  "nts": "nts: refused at run time: IteratorClose of an interface iterator whose concrete type this compiler does not yet carry",
-  "node": null,
-  "measured_with": "c5fd88cbec03400c",
-  "source": "measured"
-}

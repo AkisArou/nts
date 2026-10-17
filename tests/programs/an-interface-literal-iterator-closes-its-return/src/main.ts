@@ -1,10 +1,10 @@
-// run: check
 // One interface is built both by a literal and a named class. The exhaustion
 // control changes only whether the loop finishes early. The explicit method
 // control keeps the named class live without relying on IteratorClose.
 // Clean main47 returns 1 instead of node's 11 for the subject (29/87 wrong).
 // C at 2c compared 87/87 despite the reachable Unreachable: agreement by UB;
-// JVM declined and Wasm disagreed. The successor must stop by name instead.
+// JVM declined and Wasm disagreed. The intermediate a72 pin stopped by name;
+// the literal owner now selects its own return method and agrees on all four.
 interface Source {
   count: number;
   closed: number;
