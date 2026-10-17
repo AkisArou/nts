@@ -37,6 +37,61 @@ fn prepared(name: &str) -> Option<hir::Program> {
     Some(hir::prepare_unverified(&snapshot, &hir::Options::default()).program)
 }
 
+/// A known generator result must reach the store as a typed call. An erased
+/// round trip hides its actual class and turns the JVM's named unrelated-store
+/// decline into an emitted ClassCastException at module initialization.
+#[test]
+fn known_reference_results_remain_typed_at_the_store() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/outcomes/a-generator-into-an-empty-array-pattern-on-jvm/tsconfig.json")
+        .canonicalize_utf8()
+        .expect("the recorded generator outcome is checked in");
+    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    let program = hir::prepare_unverified(&snapshot, &hir::Options::default()).program;
+    let iter = program
+        .globals
+        .iter()
+        .position(|global| global.name == "iter")
+        .expect("the fixture stores its generator in iter");
+    let init = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "module#init")
+        .expect("the fixture has module initialization");
+    let stored = init
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .find_map(|id| match init.values[id.0 as usize].kind {
+            OpKind::GlobalSet { global, value } if global as usize == iter => Some(value),
+            _ => None,
+        })
+        .expect("module initialization stores iter");
+    let OpKind::Call {
+        callee: Callee::Direct(name),
+        ..
+    } = &init.values[stored.0 as usize].kind
+    else {
+        panic!(
+            "a known result must not be laundered through erased storage before the typed store"
+        );
+    };
+    let producer = program
+        .funcs
+        .iter()
+        .find(|func| &func.name == name)
+        .expect("the known producer is compiled");
+    assert!(
+        producer.return_type == HirType::Managed(ManagedType::Object(hir::generator_frame(0))),
+        "the store must still expose the producer's actual generator result"
+    );
+}
+
 /// Whether the closure call reachable from this exported function is a dispatch
 /// or a direct call, by the name the export was given.
 fn calls_directly(program: &hir::Program, export: &str) -> bool {

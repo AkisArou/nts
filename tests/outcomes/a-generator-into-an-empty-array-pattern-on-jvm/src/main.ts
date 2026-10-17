@@ -7,6 +7,7 @@
 // declines the store (NTS4001, a `Generator0` where an `Iterable<…>` is
 // declared). C and LLVM store the pointer, and the empty pattern reads
 // nothing, so they agree with node. test262 dstr `ary-ptrn-empty` and its
-// relatives. There is no clean control: the same pattern over an array
-// literal is invalid HIR on every backend.
+// relatives. Its one-change control replaces [] with an ordinary parameter:
+// tests/programs/a-generator-value-passed-to-an-ordinary-parameter. The array
+// literal sibling is a separate recorded invalid-HIR case.
 export { probe } from "./case.js";
