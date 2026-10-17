@@ -14,7 +14,8 @@ Thirty-odd sections and rising, because every one of them is a measurement
 that changed somebody's mind and the goal says to keep those where a reader
 meets them. This is the map; the row table below it is the current state.
 
-- 2026-10-15: six losing rows, a cause for each, and the sitting still owed
+- 2026-10-15: six losing rows and a cause for each
+- 2026-10-17: store/remainder on the widened base, and four closure repeats
 - Where the rows stand
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
@@ -161,7 +162,7 @@ integral bounds guards, a per-access try/catch, a shared-handler try/catch, and
 a correct measurement of the wrong quantity -- see the sections at the end.
 
 
-## 2026-10-15: six losing rows, a cause for each, and the sitting still owed
+## 2026-10-15: six losing rows and a cause for each
 
 Six rows read badly in the 2026-10-15 sittings (01:07, 06:05, 09:53). Each
 has a cause now, three are fixed on main, and two by the commit that adds
@@ -170,7 +171,8 @@ a diagnostic -- `emit-jvm` classes timed by a driver of this lane's
 (`Time.java`/`TimeM.java`: ns/op, the median of 9 batches) on E-cores 28-31
 beside other lanes' gates, A against B in alternating rounds of one sitting.
 The P-core `nts-bench` sitting that would publish them, every backend at
-once, waited out every idle window on 2026-10-15 and is still owed.
+once, waited out every idle window on 2026-10-15 and was still owed then.
+The 2026-10-17 section records the later paired proof on the widened base.
 
 | row | read | cause | state |
 | --- | --- | --- | --- |
@@ -180,6 +182,84 @@ once, waited out every idle window on 2026-10-15 and is still owed.
 | `awfy-sieve` | 2.38x / 2.01x | `new Array(5000)` booleans held as `NtsArrayZ` (21.9 us against 11.8 for `boolean[]`) | **fixed** on main by 1eb93e938 (bounds-proven stores); 1.20x at 09:53 |
 | `pipeline` | 1.69x | the same: `NtsArrayD` with a `double` subscript in the 01:36 build | **fixed** on main the same way: `double[]`, 0.95x-1.04x the reference in separate JVMs |
 | `bytes` | 4.52x | the 01:07 build ran the row all in `f64` | not a regression: 1.09x at 06:05 |
+
+## 2026-10-17: store/remainder on the widened base, and four closure repeats
+
+This closes the pending P-core measurement of the JVM store/remainder selections
+with a paired control on **frozen `9b233569e8c5`**, rather than replaying the older
+three-build sitting. It is historical evidence, not a new baseline for main:
+later core changes, including field dispatch and JSON narrowing, are absent.
+The current row table is not rewritten from this older corpus.
+
+One lock held from 17:33:33 to 17:53:17 UTC, CPUs 0–15, nice 19. The machine was
+checked quiet outside the lock and again inside it. The sequence was shipped,
+control, shipped (ten rows each), then two shipped closure-only repeats:
+32 measured rows, none marked spoiled. The retry supervisor was parked during
+the third arm for lock coordination; the measurement processes continued.
+End-of-arm load rose from 1.12/1.47 to 5.21 and higher on the closure repeats;
+the paired base arms and recorded spreads qualify the result.
+
+Both arms use `--root ~/.cache/nts-scratch/jvm/bench-widened-9b233569e`,
+the same source tree and frontend, with full plain release builds. Control `0af3d12495af` changes only `compiler/codegen/jvm/src/ops.rs`,
+disabling the checked-store integer-overload and `remI32` selections together.
+All other compiler paths and runtime bytes are unchanged. This prices their
+joint effect; it does not isolate the price of each selection.
+
+The question is whether the selectors help the generated JVM code. Each number
+below first divides JVM time by node time in its own invocation, then divides
+that ratio by the control's ratio. Values below one favor the shipped code.
+
+| row | shipped 1 JVM/node | control JVM/node | shipped 2 JVM/node | shipped 1/control | shipped 2/control |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `event-state` | 0.0826 | 0.1177 | 0.0857 | 0.7015 | 0.7284 |
+| `awfy-queens` | 1.1598 | 1.2069 | 1.1858 | 0.9610 | 0.9825 |
+| `awfy-sieve` | 0.4294 | 0.4321 | 0.4277 | 0.9936 | 0.9897 |
+| `bytes` | 1.3707 | 1.3756 | 1.3754 | 0.9965 | 0.9999 |
+| `closure-merge` | 0.1051 | 0.1040 | 0.1055 | 1.0103 | 1.0139 |
+| `pipeline` | 0.4758 | 0.4737 | 0.4844 | 1.0044 | 1.0225 |
+| `symbol-keyed-map` | 0.6304 | 0.5917 | 0.6054 | 1.0653 | 1.0231 |
+| `face-fields` | 3.0811 | 3.0122 | 2.9920 | 1.0229 | 0.9933 |
+| `awfy-bounce` | 0.6039 | 0.6297 | 0.6135 | 0.9591 | 0.9743 |
+| `awfy-towers` | 0.8040 | 0.8030 | 0.8029 | 1.0012 | 0.9999 |
+
+`event-state` has 27–30% lower normalized minimum-sample time, with matching
+shipped arms. These are the harness's minima of five samples; JVM sample spreads
+were 1.18x/1.16x/1.22x in the three arms. They are not a six-invocation
+stability claim. The underlying comparison columns, in ns/op, are:
+
+| arm | JVM | Java | node | JVM/Java |
+| --- | ---: | ---: | ---: | ---: |
+| shipped 1 | 103.1 | 78.7 | 1248.8 | 1.3100 |
+| control | 141.9 | 79.4 | 1205.2 | 1.7860 |
+| shipped 2 | 103.6 | 78.6 | 1208.9 | 1.3186 |
+
+The selectors help this row, but its Java bar remains open on this frozen base.
+`bytes` does not show a measurable store-selection gain. The other small moves
+are not attributed to the selectors: reference drift and sample spread remain,
+and `awfy-sieve` reports up to 1.31x JVM spread in its five samples.
+
+The four shipped `closure-merge` invocations were:
+
+| invocation | JVM ns/op | Java ns/op | node ns/op | JVM/Java | JVM/node |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `01-base-all` | 2093.3 | 2132.5 | 19922.1 | 0.9816 | 0.1051 |
+| `03-base-all` | 2105.6 | 2094.5 | 19967.6 | 1.0053 | 0.1055 |
+| `04-base-closure` | 2131.7 | 2149.9 | 20546.6 | 0.9915 | 0.1037 |
+| `05-base-closure` | 2116.6 | 2113.1 | 20051.4 | 1.0017 | 0.1056 |
+
+This is the parity band around the 2026-09-09 reference ratio of 1.01, with a
+clear margin against node. Two of four ratios are slightly above 1.00, so this
+does not establish consistent clearance of the strict Java bar, nor does it
+isolate a typed-signature change against the September compiler.
+
+Raw complete tables for every backend, run JSONs, emitted JVM classes,
+conditions and compiler hashes are kept at
+`~/.cache/nts-jvm-codex/sitting-widened-after-3b57-review-20261017T162708Z/attempt-001/`:
+`01-base-all`, `02-control-all`, `03-base-all`, `04-base-closure` and
+`05-base-closure` each have `.log`, `.run.json` and `.conditions.json` files.
+`paired-summary.json` contains every ratio and its input columns;
+`measurement-files-sha256.json` seals those raw files. Source/binary provenance
+and the five-phase binary/case list are in `manifest.json`.
 
 ## Where the rows stand
 
