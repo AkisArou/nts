@@ -99,6 +99,21 @@ async function settleSheet(label: string): Promise<void> {
   document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
 }
 
+// A blob sliced with its end left to the IDL default
+// (0x7FFFFFFFFFFFFFFF): the whole blob, and the tail from an offset, by
+// size and by the tail's text.
+async function settleSlice(label: string): Promise<void> {
+  let outcome = "";
+  try {
+    const blob = await (await fetch("data:text/plain,abcdef")).blob();
+    outcome = "fulfilled " + blob.slice().size + "," + blob.slice(2).size + "," +
+      (await blob.slice(2).text());
+  } catch (error) {
+    outcome = "rejected " + (error as Error).name;
+  }
+  document.querySelector("#native-lib-dom")?.setAttribute("data-" + label, outcome);
+}
+
 export function libDomTranscript(): string {
   const lines: string[] = [];
   const log = (label: string, value: string): void => {
@@ -775,6 +790,25 @@ export function libDomTranscript(): string {
       store.types.join(",") + "|" + store.types.length);
   }
 
+  // Traversal with whatToShow left to its IDL default (0xFFFFFFFF, show
+  // all): a node iterator and a tree walker over a small tree, each made
+  // with the root alone, visiting every node including the text.
+  {
+    const tree = document.createElement("div");
+    const kid = document.createElement("span");
+    kid.appendChild(document.createTextNode("x"));
+    tree.appendChild(kid);
+    const walked: string[] = [];
+    const iterator = document.createNodeIterator(tree);
+    for (let node = iterator.nextNode(); node !== null; node = iterator.nextNode())
+      walked.push(node.nodeName);
+    const treed: string[] = [];
+    const walker = document.createTreeWalker(tree);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+      treed.push(node.nodeName);
+    log("traversal", walked.join(",") + "|" + treed.join(","));
+  }
+
   // Members C is told were given or not (c:types `Given`): a request's
   // keepalive turned off, kept from the request it is made from by `{}`, and
   // kept by `{ keepalive: undefined }` (WebIDL: not present); a matrix
@@ -898,7 +932,7 @@ export function startLibDomPromises(): void {
     // Each attribute set now, in this order, so the element's attributes are
     // in one order however the promises settle.
     const out = document.querySelector("#native-lib-dom");
-    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist", "blobbed", "asString"]) out?.setAttribute("data-" + label, "pending");
+    for (const label of ["decoded", "undecodable", "unplayable", "unfullscreen", "fullscreen", "text", "sheet", "clipboard", "fetched", "fetchWide", "microtasks", "intersectionOptions", "bytes", "persisted", "persist", "blobbed", "asString", "sliced"]) out?.setAttribute("data-" + label, "pending");
     settle("decoded", (): Promise<void> => {
       const image = document.createElement("img");
       image.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -951,5 +985,6 @@ export function startLibDomPromises(): void {
     carried.items.add("hello ✓", "text/plain")?.getAsString((data: string): void => {
       document.querySelector("#native-lib-dom")?.setAttribute("data-asString", data);
     });
+    settleSlice("sliced");
   }, 0);
 }

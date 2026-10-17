@@ -1,5 +1,5 @@
 {
-  "bound": 7057,
+  "bound": 7061,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -723,18 +723,8 @@
     },
     {
       "interface": "Document",
-      "member": "createNodeIterator/1",
-      "why": "default `0xFFFFFFFF` of argument whatToShow"
-    },
-    {
-      "interface": "Document",
       "member": "createTreeWalker/3",
       "why": "parameter type optional NodeFilter?"
-    },
-    {
-      "interface": "Document",
-      "member": "createTreeWalker/1",
-      "why": "default `0xFFFFFFFF` of argument whatToShow"
     },
     {
       "interface": "Document",
@@ -3460,16 +3450,6 @@
       "interface": "Blob",
       "member": "constructor/1",
       "why": "parameter type optional sequence<BlobPart>"
-    },
-    {
-      "interface": "Blob",
-      "member": "slice/1",
-      "why": "default `0x7FFFFFFFFFFFFFFF` of argument end"
-    },
-    {
-      "interface": "Blob",
-      "member": "slice/0",
-      "why": "default `0x7FFFFFFFFFFFFFFF` of argument end"
     },
     {
       "interface": "Blob",

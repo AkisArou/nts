@@ -5830,6 +5830,10 @@ declare module "nts:dom" {
      */
     createNodeIterator(this: Document, root: Node, whatToShow: Float64): NodeIterator;
     /**
+     * @ntsSymbol nts_dom_Document_createNodeIterator_1
+     */
+    createNodeIterator(this: Document, root: Node): NodeIterator;
+    /**
      * @ntsSymbol nts_dom_Document_createProcessingInstruction
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -5847,6 +5851,10 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Document_createTreeWalker_2
      */
     createTreeWalker(this: Document, root: Node, whatToShow: Float64): TreeWalker;
+    /**
+     * @ntsSymbol nts_dom_Document_createTreeWalker_1
+     */
+    createTreeWalker(this: Document, root: Node): TreeWalker;
     /**
      * @ntsSymbol nts_dom_Document_elementFromPoint
      * @ntsThrows error nts_dom_exception_take_message
@@ -31464,6 +31472,18 @@ declare module "nts:dom" {
      * @ntsNoEscape error
      */
     slice(this: Blob, start: Float64, end: Float64, error?: Ptr<DOMException | null>): Blob;
+    /**
+     * @ntsSymbol nts_dom_Blob_slice_1
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    slice(this: Blob, start: Float64, error?: Ptr<DOMException | null>): Blob;
+    /**
+     * @ntsSymbol nts_dom_Blob_slice_0
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    slice(this: Blob, error?: Ptr<DOMException | null>): Blob;
     /**
      * @ntsSymbol nts_dom_Blob_text
      */

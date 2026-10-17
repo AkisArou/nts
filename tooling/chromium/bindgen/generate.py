@@ -1071,7 +1071,10 @@ class Generator:
             if unwrapped.is_any:
                 return "blink::ScriptValue::CreateNull(context.v8_isolate.get())"
             return "blink::String()" if unwrapped.keyword_typename in STRINGS else "nullptr"
-        if literal is not None and re.fullmatch(r"-?[0-9.]+(e-?[0-9]+)?", literal):
+        # A number, decimal or hex (`long long end = 0x7FFFFFFFFFFFFFFF`,
+        # `unsigned long whatToShow = 0xFFFFFFFF`): the literal passes to
+        # Blink's C++ parameter as written.
+        if literal is not None and re.fullmatch(r"-?([0-9.]+(e-?[0-9]+)?|0[xX][0-9a-fA-F]+)", literal):
             # `(unrestricted double or DOMPointInit) radii = 0`: the union
             # holding that number, as V8's conversion of the default makes.
             if unwrapped.is_union:

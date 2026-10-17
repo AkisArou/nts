@@ -15318,6 +15318,12 @@ NtsDomNodeIterator* nts_dom_Document_createNodeIterator_2(NtsDomDocument* self, 
   return HandleOf<NtsDomNodeIterator>(receiver->createNodeIterator(ObjectOf<blink::Node>(root), whatToShow_converted, nullptr));
 }
 
+NtsDomNodeIterator* nts_dom_Document_createNodeIterator_1(NtsDomDocument* self, NtsDomNode* root) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomNodeIterator>(receiver->createNodeIterator(ObjectOf<blink::Node>(root), 0xFFFFFFFF, nullptr));
+}
+
 NtsDomProcessingInstruction* nts_dom_Document_createProcessingInstruction(NtsDomDocument* self, const NtsBorrowedString* target, const NtsBorrowedString* data, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -15343,6 +15349,12 @@ NtsDomTreeWalker* nts_dom_Document_createTreeWalker_2(NtsDomDocument* self, NtsD
   blink::DummyExceptionStateForTesting conversion;
   const auto whatToShow_converted = blink::NativeValueTraits<blink::IDLUnsignedLong>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), whatToShow), conversion);
   return HandleOf<NtsDomTreeWalker>(receiver->createTreeWalker(ObjectOf<blink::Node>(root), whatToShow_converted, nullptr));
+}
+
+NtsDomTreeWalker* nts_dom_Document_createTreeWalker_1(NtsDomDocument* self, NtsDomNode* root) {
+  nts_dom::AssertEntered();
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomTreeWalker>(receiver->createTreeWalker(ObjectOf<blink::Node>(root), 0xFFFFFFFF, nullptr));
 }
 
 NtsDomElement* nts_dom_Document_elementFromPoint(NtsDomDocument* self, double x, double y, NtsDomException** error) {
@@ -44789,6 +44801,22 @@ NtsDomBlob* nts_dom_Blob_slice_2(NtsDomBlob* self, double start, double end, Nts
   const auto end_converted = blink::NativeValueTraits<blink::IDLLongLongClamp>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), end), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
   return HandleOf<NtsDomBlob>(receiver->slice(start_converted, end_converted, blink::AtomicString(""), exception_state));
+}
+
+NtsDomBlob* nts_dom_Blob_slice_1(NtsDomBlob* self, double start, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Blob>(self);
+  const auto start_converted = blink::NativeValueTraits<blink::IDLLongLongClamp>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), start), exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomBlob>(receiver->slice(start_converted, 0x7FFFFFFFFFFFFFFF, blink::AtomicString(""), exception_state));
+}
+
+NtsDomBlob* nts_dom_Blob_slice_0(NtsDomBlob* self, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Blob>(self);
+  return HandleOf<NtsDomBlob>(receiver->slice(0, 0x7FFFFFFFFFFFFFFF, blink::AtomicString(""), exception_state));
 }
 
 struct NtsPromise* nts_dom_Blob_text(NtsDomBlob* self) {
