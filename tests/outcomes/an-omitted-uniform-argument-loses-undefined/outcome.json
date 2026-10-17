@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 29 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: calling `Closure0#call` through an erased signature with an argument not admitted by parameter `x`",
   "node": null,
-  "measured_with": "32eb2d8d1972c7e5",
+  "measured_with": "e94d9e45165bf5a8",
   "source": "measured"
 }
