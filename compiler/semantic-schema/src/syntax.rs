@@ -393,6 +393,19 @@ pub fn is_modifier(kind: u16) -> bool {
     )
 }
 
+/// Whether a kind is one of tsgo's `JSDoc` nodes: a documentation comment or a
+/// part of one, from `KindFirstJSDocNode` (`KindJSDocTypeExpression`) to
+/// `KindLastJSDocNode` (`KindJSDocImportTag`).
+#[must_use]
+pub fn is_jsdoc(kind: u16) -> bool {
+    /// `KindJSDocTypeExpression`, tsgo's `KindFirstJSDocNode`.
+    const FIRST_JSDOC_NODE: u16 = 308;
+    /// `KindJSDocImportTag`, tsgo's `KindLastJSDocNode`.
+    const LAST_JSDOC_NODE: u16 = 343;
+
+    (FIRST_JSDOC_NODE..=LAST_JSDOC_NODE).contains(&kind)
+}
+
 #[must_use]
 pub fn is_type_node(kind: u16) -> bool {
     /// `KindTypePredicate`, tsgo's `KindFirstTypeNode`.

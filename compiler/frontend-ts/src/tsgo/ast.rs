@@ -767,9 +767,29 @@ fn assign_modifiers(nodes: &mut [NodeRecord]) {
 /// The encoding stores parent and next-sibling instead of a child list. Because
 /// nodes are in source order, appending each node to its parent produces the
 /// child lists in source order too.
+///
+/// **A documentation comment is not a child of what it documents.** tsgo parents
+/// a `/** ... */` to the declaration after it, and encodes it after that
+/// declaration's own children, so it arrived as their last: a documented field's
+/// children were its name, its type, its initializer and the comment. Nothing
+/// here reads a comment through the tree -- native tags are read from the source
+/// text -- but everything that finds a child by its position read this one.
+/// `declaration_initializer` takes the last child that is not the name or a type,
+/// so a documented field's initializer was the comment; the field was then not
+/// its own execution, and its read of a constant declared after the class was
+/// lowered as one in the module's own code before that declaration, a
+/// `ReferenceError` at `new` where node reads the constant. The comment keeps its
+/// parent link; it is only left out of the list.
 fn rebuild_children(nodes: &mut [NodeRecord]) {
     let mut children: Vec<Vec<NodeId>> = vec![Vec::new(); nodes.len()];
     for (index, node) in nodes.iter().enumerate() {
+        if matches!(node.kind, NodeKind::Syntax(kind) if nts_semantic_schema::syntax::is_jsdoc(kind))
+            && node.parent.is_some_and(|NodeId(parent)| {
+                !matches!(nodes[parent as usize].kind, NodeKind::Syntax(kind) if nts_semantic_schema::syntax::is_jsdoc(kind))
+            })
+        {
+            continue;
+        }
         if let Some(NodeId(parent)) = node.parent {
             let child = u32::try_from(index).unwrap_or(u32::MAX);
             children[parent as usize].push(NodeId(child));
@@ -1171,6 +1191,54 @@ mod tests {
         .unwrap();
         assert_eq!(decoded.nodes[0].children, vec![NodeId(1), NodeId(2)]);
         assert!(decoded.nodes[1].children.is_empty());
+    }
+
+    #[test]
+    fn a_documentation_comment_is_not_a_child_of_what_it_documents() {
+        // A field, its name, its initializer, and the `/** ... */` above it, which
+        // tsgo encodes last and parents to the field.
+        let decoded = decode(
+            &payload(
+                &[
+                    node(
+                        u32::from(nts_semantic_schema::syntax::PROPERTY_DECLARATION),
+                        0,
+                        20,
+                        0,
+                        0,
+                    ),
+                    node(
+                        u32::from(nts_semantic_schema::syntax::IDENTIFIER),
+                        0,
+                        5,
+                        1,
+                        0,
+                    ),
+                    node(
+                        u32::from(nts_semantic_schema::syntax::IDENTIFIER),
+                        8,
+                        13,
+                        1,
+                        0,
+                    ),
+                    node(315, 0, 0, 1, 0),
+                    node(
+                        u32::from(nts_semantic_schema::syntax::IDENTIFIER),
+                        0,
+                        0,
+                        4,
+                        0,
+                    ),
+                ],
+                &[],
+            ),
+            SourceId(0),
+        )
+        .unwrap();
+        assert_eq!(decoded.nodes[0].children, vec![NodeId(1), NodeId(2)]);
+        // The comment keeps its parent, and its own parts are still its children.
+        assert_eq!(decoded.nodes[3].parent, Some(NodeId(0)));
+        assert_eq!(decoded.nodes[3].children, vec![NodeId(4)]);
     }
 
     #[test]
