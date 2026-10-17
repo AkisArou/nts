@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler dc0607837a64f7ad, commit bb364219de8d0c4e177af8783f3c568457188157, backend jvm, harness d6442dbc09f91ad0; machine at start: 23.8 GB available, swap 5.4/31.5 GB, load 5.5/9.4 (1m/5m), 16 cores; 4 worker(s)
+# compiler 2b8b40a76b691a3d, commit 4d0430950ef7f31afc1dfa0e3c8f4e5ee2ce704b, backend jvm, harness d6442dbc09f91ad0; machine at start: 21.9 GB available, swap 6.9/31.5 GB, load 7.5/13.1 (1m/5m), 16 cores; 1 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -271,7 +271,7 @@ test/language/expressions/assignment/dstr/array-rest-nested-array-undefined-own.
 test/language/expressions/assignment/dstr/array-rest-nested-array-undefined.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/assignment/dstr/array-rest-put-let.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-rest-put-let.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/expressions/assignment/dstr/obj-empty-bool.js	pass	
 test/language/expressions/assignment/dstr/obj-empty-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -3427,7 +3427,7 @@ test/language/statements/class/super/in-static-methods.js	pass
 test/language/statements/class/super/in-static-setter.js	pass	
 test/language/statements/class/syntax/class-body-has-direct-super-class-heritage.js	pass	
 test/language/statements/class/syntax/class-method-propname-constructor.js	pass	
-test/language/statements/const/block-local-closure-get-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/const/block-local-closure-get-before-initialization.js	pass	
 test/language/statements/const/dstr/ary-name-iter-val.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -3581,7 +3581,7 @@ test/language/statements/for-of/dstr/array-rest-nested-array-undefined-hole.js	p
 test/language/statements/for-of/dstr/array-rest-nested-array-undefined-own.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/for-of/dstr/array-rest-put-let.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-rest-put-let.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/statements/for-of/dstr/const-ary-name-iter-val.js	pass	
 test/language/statements/for-of/dstr/const-ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -4004,7 +4004,7 @@ test/language/statements/if/tco-if-body.js	pass
 test/language/statements/labeled/tco.js	pass	
 test/language/statements/labeled/value-await-non-module-escaped.js	pass	
 test/language/statements/labeled/value-await-non-module.js	pass	
-test/language/statements/let/block-local-closure-set-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/let/block-local-closure-set-before-initialization.js	pass	
 test/language/statements/let/dstr/ary-name-iter-val.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -4029,7 +4029,7 @@ test/language/statements/let/dstr/obj-ptrn-id-trailing-comma.js	pass
 test/language/statements/let/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-obj-value-null.js	pass	
-test/language/statements/let/global-closure-set-before-initialization.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/let/global-closure-set-before-initialization.js	pass	
 test/language/statements/let/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/let/static-init-await-binding-valid.js	pass	
 test/language/statements/let/syntax/let-closure-inside-condition.js	pass	

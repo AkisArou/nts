@@ -1,6 +1,6 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 510b0341f1aafc60, commit 791dca8fa354bc93e7bcc200e7ab30e443c5e284, harness d6442dbc09f91ad0; machine at start: 23.7 GB available, swap 8.9/20 GB, load 15.2/8.5 (1m/5m), 32 cores; 6 worker(s)
+# compiler 2b8b40a76b691a3d, commit 4d0430950ef7f31afc1dfa0e3c8f4e5ee2ce704b, backend c, harness d6442dbc09f91ad0; machine at start: 23.1 GB available, swap 6.9/31.5 GB, load 11.2/16 (1m/5m), 16 cores; 4 worker(s)
 test/staging/sm/Array/sort_native_string_nan.js	pass	
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
@@ -25,7 +25,7 @@ test/staging/sm/class/derivedConstructorTDZExplicitThis.js	pass
 test/staging/sm/class/derivedConstructorTDZOffEdge.js	pass	
 test/staging/sm/class/derivedConstructorTDZReturnTry.js	pass	
 test/staging/sm/class/newTargetProxyNative.js	pass	
-test/staging/sm/expressions/destructuring-array-lexical.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/staging/sm/expressions/destructuring-array-lexical.js	pass	
 test/staging/sm/expressions/object-literal-accessor-property-name.js	pass	
 test/staging/sm/extensions/regress-591450.js	pass	
 test/staging/sm/extensions/typedarray-subarray-of-subarray.js	pass	
