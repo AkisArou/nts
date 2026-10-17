@@ -364,3 +364,39 @@ fn captured_var_typeof_observes_assignment_without_loading_an_unwritten_value() 
         "an assignment sets readiness, and var without an initializer does not reset it"
     );
 }
+
+#[test]
+fn once_entered_module_blocks_share_readiness_without_flagging_loop_locals() {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        return;
+    };
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(
+        "../../tests/programs/a-module-block-closure-writes-before-initialization/tsconfig.json",
+    );
+    let snapshot = TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("the module block matrix snapshots");
+    let prepared = hir::prepare(&snapshot).expect("the module block matrix verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let flags: Vec<_> = prepared
+        .program
+        .globals
+        .iter()
+        .filter(|global| global.name.contains("#initialized"))
+        .collect();
+    assert_eq!(
+        flags.len(),
+        2,
+        "only the two early closure accesses need flags"
+    );
+    assert!(
+        flags
+            .iter()
+            .all(|global| !global.name.contains("loopBinding")),
+        "a repeated block must not use a once-entered module flag"
+    );
+}
