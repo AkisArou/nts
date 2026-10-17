@@ -2090,7 +2090,18 @@ fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize
         }
     };
     for func in program.native_funcs() {
-        for op in &func.values {
+        // The operations the function runs, which are the ones emitted: the
+        // value arena keeps what dead-code elimination and `scalarize` took
+        // out of the blocks, and a descriptor only a removed `object.new`
+        // named is a `static const` nothing reads -- an error under
+        // `-Werror`, the first time a pass removed the last allocation of a
+        // class (`benchmarks/cases/user-iterable`'s `Steps`).
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .map(|id| func.value(*id))
+        {
             // An `instanceof` names one descriptor per class in its closed
             // set, and that set is every class extending the one written -- so
             // a class this program declares, tests against, and never

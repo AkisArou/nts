@@ -80,6 +80,7 @@ pub mod own;
 pub mod rc;
 pub mod reachable;
 pub mod runtime;
+pub mod scalarize;
 pub mod signatures;
 pub mod simplify;
 pub mod specialize;
@@ -7401,6 +7402,14 @@ fn prepare_lowered(
     small_dispatch::answer_by_class(&mut program);
     written_roots::narrow(&mut program, options.roots);
     written_storage::narrow(&mut program);
+
+    // Before the numbers are specialized, so that a field which is only ever a
+    // local variable's worth of state is typed like one. See `scalarize`. A
+    // constructor whose every call it took apart is called by nothing after,
+    // and goes as an inlined body's callee does.
+    if scalarize::scalarize(&mut program) > 0 {
+        reachable::prune(&mut program, options.roots);
+    }
 
     let (specialized, mut conversions, mut checks_removed) = if specialize_numbers {
         specialize_numbers_of(&mut program, options.roots)

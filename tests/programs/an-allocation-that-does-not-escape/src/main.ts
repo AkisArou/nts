@@ -9,6 +9,12 @@
 // `object.new heap`. The second arm is what makes the first mean something —
 // a pass that framed *everything* would be wrong, and would pass an assertion
 // that only looked at `stays`.
+//
+// The framed objects are each handed to `sum`, which only reads them. An
+// object whose every use is one of its own fields is not placed at all any
+// more -- `hir::scalarize` makes its fields values -- so an object that is
+// only read in place would leave this fixture nothing to place; one that a
+// call reads is still an object, and still outlives nothing.
 
 class Point {
   x: number;
@@ -27,10 +33,14 @@ class Point {
 // that is overwritten keeps the escape and keeps the live set constant.
 let kept: Point = new Point(0, 0);
 
+function sum(p: Point): number {
+  return p.x + p.y;
+}
+
 /** Nothing outlives the call, so the allocation belongs in the frame. */
 export function stays(n: number): number {
   const p = new Point(n, n + 1);
-  return p.x + p.y;
+  return sum(p);
 }
 
 /** Escapes into a module-level slot, so it must stay on the heap. Returns a
@@ -58,5 +68,5 @@ export function bothInOne(n: number): number {
   const a = new Point(n, 1);
   const b = new Point(n, 2);
   kept = b;
-  return a.x + a.y + b.y;
+  return sum(a) + b.y;
 }
