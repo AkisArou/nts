@@ -40,6 +40,30 @@ impl Supplies {
         self.owners.contains_key(&owner)
     }
 
+    /// Absence at every allocation remains absence only when no supply or
+    /// tracked write can introduce the member. Prototype mutation is otherwise
+    /// refused by the ordinary reflection contract.
+    pub(super) fn known_absent(&self, probe: &FuncBuilder, owner: TypeId, key: &str) -> bool {
+        let Some(literals) = self.owners.get(&owner) else {
+            return false;
+        };
+        if [None, Some(key.to_owned()), Some("__proto__".to_owned())]
+            .iter()
+            .any(|key| self.writes.contains_key(&(owner, key.clone())))
+        {
+            return false;
+        }
+        literals.iter().all(|literal| {
+            probe.children(*literal).into_iter().all(|member| {
+                probe.kind_of(member) != Some(syntax::SPREAD_ASSIGNMENT)
+                    && probe
+                        .member_name(member)
+                        .or_else(|| probe.symbol_member_name(*literal, member, Some(owner)))
+                        .is_some_and(|name| name != key && name != "__proto__")
+            })
+        })
+    }
+
     /// The authored bodies reached by a method call on this literal owner.
     /// Its contextual interface declaration has no body to analyse.
     pub(super) fn method_declarations(

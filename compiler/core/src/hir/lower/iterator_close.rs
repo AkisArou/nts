@@ -61,6 +61,15 @@ impl Selection {
                 !probe.hierarchy.faces.contains(ty) && probe.hierarchy.descends_from(*ty, receiver)
             })
             .collect();
+        classes.extend(
+            probe
+                .hierarchy
+                .literal_methods
+                .owners()
+                .filter(|owner| probe.hierarchy.descends_from(*owner, receiver)),
+        );
+        classes.sort_unstable();
+        classes.dedup();
         let direct =
             !probe.hierarchy.faces.contains(&receiver) && classes.iter().all(|ty| *ty == receiver);
         if direct {
@@ -85,6 +94,24 @@ impl Selection {
             ordered.push((std::cmp::Reverse(depth), ty));
         }
         ordered.sort_unstable();
+        // A literal's contextual face is now a concrete allocation owner too.
+        // Keep its implementers and any more-derived literal faces before it.
+        let faces: Vec<_> = ordered
+            .iter()
+            .filter(|(_, ty)| probe.hierarchy.faces.contains(ty))
+            .map(|(_, ty)| *ty)
+            .collect();
+        ordered.retain(|(_, ty)| !probe.hierarchy.faces.contains(ty));
+        for face in faces {
+            let position = ordered
+                .iter()
+                .position(|(_, ty)| {
+                    probe.hierarchy.descends_from(face, *ty)
+                        && !probe.hierarchy.descends_from(*ty, face)
+                })
+                .unwrap_or(ordered.len());
+            ordered.insert(position, (std::cmp::Reverse(0), face));
+        }
         let contracts: Vec<_> = ordered
             .into_iter()
             .filter_map(|(_, receiver)| Contract::resolve(probe, receiver))
@@ -127,8 +154,13 @@ impl Contract {
         else {
             return None;
         };
-        let returns = if let Some(property) =
-            properties.iter().find(|property| property.name == "return")
+        let returns = if probe
+            .hierarchy
+            .literal_methods
+            .known_absent(probe, receiver, "return")
+        {
+            Return::Absent
+        } else if let Some(property) = properties.iter().find(|property| property.name == "return")
         {
             match property.kind {
                 MemberKind::Method if !probe.hierarchy.stores(receiver, "return") => {
@@ -422,8 +454,8 @@ impl FuncBuilder<'_> {
             })?;
             self.switch_to(no);
         }
-        // An interface can also hold a literal at its own identity, outside
-        // the named implementations whose return contracts we can dispatch.
+        // Every known nominal or literal owner has its own contract above.
+        // An unlisted representation still must not fall through to UB.
         let reason = self.push(
             OpKind::ConstString(
                 "IteratorClose of an interface iterator whose concrete type this compiler does not yet carry"
