@@ -1,20 +1,6 @@
-//! Which **entry** a `sort` comparator is called at, which is the fact the answers
-//! rest on and the one that can expire without an answer changing.
-//!
-//! `lower_sort_with` used to build the comparator's call itself, with the comparator's
-//! *written* arguments, while `closure_callee` had already chosen the callee. Where the
-//! receiver's static type **is** the closure class and the call is not a raising one,
-//! that choice is a `Callee::Direct` naming the written `Closure{n}#call`, and written
-//! arguments are right; a raising call goes through the uniform slot, where they are
-//! not. So an unguarded sort was correct and a guarded one called through an entry of
-//! the wrong ABI: **a sort did not order** -- 5 where node answers 1, with the JVM
-//! refusing the copy outright (NTS4001).
-//!
-//! So the differential is not enough on its own: it compares answers, and the unguarded
-//! arm gave the right one for a reason the guarded arm did not share. What is asserted
-//! here is *which callee each one gets*.
-//!
-//! Skips only when `tsgo` is not built.
+//! Comparator calls use one ABI during lowering, then recover a direct body
+//! only after argument admission is proved. A handled throw must still reach
+//! the raising entry selected by the closure's table.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -24,7 +10,7 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 const EXAMPLE: &str = "a-throwing-sort-comparator-inside-a-try";
 
-fn lowered() -> Option<hir::lower::Lowered> {
+fn programs() -> Option<(hir::lower::Lowered, hir::Prepared)> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
@@ -35,25 +21,36 @@ fn lowered() -> Option<hir::lower::Lowered> {
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot should succeed");
-    Some(hir::lower::lower(&snapshot))
+    let lowered = hir::lower::lower(&snapshot);
+    let prepared = hir::prepare(&snapshot).expect("prepared HIR verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    Some((lowered, prepared))
 }
 
-/// How a function's closure calls are made, in order: a slot it dispatches at, or the
-/// name it calls directly.
 #[derive(Debug, PartialEq, Eq)]
 enum Reached {
     Slot(u32),
     Name(String),
 }
 
-fn closure_calls_in(lowered: &hir::lower::Lowered, name: &str) -> Vec<Reached> {
-    lowered
-        .program
+fn function<'a>(program: &'a hir::Program, name: &str) -> &'a hir::Func {
+    program
         .funcs
         .iter()
-        .filter(|func| func.name == name)
-        .flat_map(|func| &func.values)
-        .filter_map(|op| match &op.kind {
+        .find(|func| func.name == name)
+        .expect("function retained")
+}
+
+fn closure_calls_in(program: &hir::Program, name: &str) -> Vec<Reached> {
+    let func = function(program, name);
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .filter_map(|id| match &func.values[id.0 as usize].kind {
             hir::OpKind::Call {
                 callee: hir::Callee::Closure { slot },
                 ..
@@ -67,54 +64,88 @@ fn closure_calls_in(lowered: &hir::lower::Lowered, name: &str) -> Vec<Reached> {
         .collect()
 }
 
-/// A guarded sort dispatches at the **raising** uniform entry; an unguarded one calls
-/// the written `Closure{n}#call` by name.
-///
-/// Both directions, because an assertion that only says "the guarded one is raising"
-/// passes on a compiler that sends *every* comparator through a slot -- which would be
-/// correct and slower, and would quietly undo the direct call `closure_callee` gives a
-/// known class. That direct call is lowering's own, not a later pass's: nothing
-/// rewrites these sites afterwards, which the JVM lane confirmed by reading the
-/// prepared HIR.
+/// Read the selected entry from the prepared descriptor, independently of its
+/// spelling. Lowering's receiver is the concrete closure in this fixture.
+fn selected_entry(raw: &hir::Program, prepared: &hir::Program, name: &str) -> String {
+    let func = function(raw, name);
+    func.values
+        .iter()
+        .find_map(|op| {
+            let hir::OpKind::Call {
+                callee: hir::Callee::Closure { slot },
+                args,
+                ..
+            } = &op.kind
+            else {
+                return None;
+            };
+            let hir::HirType::Managed(hir::ManagedType::Object(class)) =
+                func.values[args[0].0 as usize].ty
+            else {
+                return None;
+            };
+            prepared
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(&class))
+                .and_then(|layout| layout.methods.get(*slot as usize))
+                .and_then(Clone::clone)
+        })
+        .expect("the comparator has its selected entry")
+}
+
 #[test]
-fn a_guarded_comparator_dispatches_at_the_raising_entry() {
-    let Some(lowered) = lowered() else {
+fn a_guarded_comparator_keeps_its_raising_entry_and_the_control_recovers_its_body() {
+    let Some((lowered, prepared)) = programs() else {
         eprintln!("SKIP: tsgo is not built");
         return;
     };
-    let raising = lowered
-        .program
-        .raising_call_slot
-        .expect("this program has closures, so it has the raising entry");
-    let ordinary = lowered
-        .program
-        .erased_call_slot
-        .expect("and the ordinary uniform entry the raising one is built beside");
-    assert_ne!(
-        raising, ordinary,
-        "two slots, or there is nothing to assert"
-    );
-
-    // `throughAMethod` holds no sort of its own: the sort is in `Jar#smallest`, so the
-    // guarded dispatch is in that method's **raising copy** and the ordinary one in the
-    // method itself. Naming both is what says the copy is where the raising slot is
-    // chosen, rather than the choice leaking into every copy of the body.
+    let raw = &lowered.program;
+    let raising = raw.raising_call_slot.expect("raising entry");
+    let ordinary = raw.erased_call_slot.expect("ordinary entry");
+    assert_ne!(raising, ordinary);
     for guarded in [
         "directlyAroundTheSort",
         "withAQuietComparator",
         "Jar#smallest@raises",
     ] {
         assert_eq!(
-            closure_calls_in(&lowered, guarded),
+            closure_calls_in(raw, guarded),
             vec![Reached::Slot(raising)],
-            "{guarded} should dispatch its comparator once, at the raising entry"
+            "{guarded}"
+        );
+        assert_eq!(
+            closure_calls_in(&prepared.program, guarded),
+            vec![Reached::Name(selected_entry(
+                raw,
+                &prepared.program,
+                guarded
+            ))],
+            "{guarded} must call the selected raising-slot target"
         );
     }
     for unguarded in ["outsideATry", "Jar#smallest"] {
-        let calls = closure_calls_in(&lowered, unguarded);
-        assert!(
-            matches!(calls.as_slice(), [Reached::Name(_)]),
-            "{unguarded} should call the written entry by name, not through a slot: {calls:?}"
+        assert_eq!(
+            closure_calls_in(raw, unguarded),
+            vec![Reached::Slot(ordinary)],
+            "{unguarded} starts in the uniform ABI too"
         );
     }
+    let calls = closure_calls_in(&prepared.program, "outsideATry");
+    assert!(
+        matches!(calls.as_slice(), [Reached::Name(name)] if name.ends_with("#call")),
+        "the ordinary control must recover its typed body: {calls:?}"
+    );
+    let outside = function(&prepared.program, "outsideATry");
+    assert!(
+        outside
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .all(|id| !matches!(
+                outside.values[id.0 as usize].kind,
+                hir::OpKind::Erase { .. } | hir::OpKind::TagOf { .. }
+            )),
+        "the ordinary control must retain no argument erasure or admission check"
+    );
 }

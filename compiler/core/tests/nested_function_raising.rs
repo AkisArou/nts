@@ -47,10 +47,14 @@ fn captured_and_plain_nested_functions_both_reach_their_handler() {
                                 .is_some_and(|entry| entry.ends_with("@raises"))
                         })
                     } else {
-                        false
+                        matches!(
+                            &op.kind,
+                            OpKind::Call { callee: Callee::Direct(entry), .. }
+                                if entry.starts_with("Closure") && entry.ends_with("@raises")
+                        )
                     }
                 }),
-                "the captured declaration must use its raising closure entry"
+                "the captured declaration must use its raising closure entry, resolved or dispatched"
             );
         } else {
             assert!(function.values.iter().any(|op| matches!(
