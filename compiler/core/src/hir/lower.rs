@@ -50288,12 +50288,15 @@ impl<'a> FuncBuilder<'a> {
                         .into_iter()
                         .find(|at| self.kind_of(*at) == Some(syntax::IDENTIFIER))
                         .and_then(|name| self.node(name).symbol)
-                    && self.module.initialization.class_cell(symbol.0)
                 {
-                    let cell = self.open_class_cell(symbol.0, id)?;
-                    let origin = self.origin(id);
-                    let ready = self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
-                    self.field_set(cell, 0, ready, &origin);
+                    if self.module.initialization.class_cell(symbol.0) {
+                        let cell = self.open_class_cell(symbol.0, id)?;
+                        let origin = self.origin(id);
+                        let ready =
+                            self.push(OpKind::ConstBool(true), HirType::Bool, origin.clone());
+                        self.field_set(cell, 0, ready, &origin);
+                    }
+                    self.mark_initialized(id, symbol.0);
                 }
                 Ok(())
             }
@@ -61793,6 +61796,9 @@ impl<'a> FuncBuilder<'a> {
             // it, in this function and in the closure.
             let value = self.open_cell(symbol.0, value, declaration);
             self.bindings.insert(symbol.0, value);
+            // A once-entered module block uses the same readiness flag as a
+            // root declaration, even when its value is local or folded.
+            self.mark_initialized(declaration, symbol.0);
         }
         Ok(())
     }
@@ -62550,6 +62556,7 @@ impl<'a> FuncBuilder<'a> {
                 value
             };
             self.bindings.insert(symbol, value);
+            self.mark_initialized(at, symbol);
         }
         Ok(())
     }

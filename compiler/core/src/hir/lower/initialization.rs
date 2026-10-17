@@ -1131,7 +1131,15 @@ impl Summaries<'_, '_> {
 fn module_bindings(probe: &FuncBuilder) -> FxHashMap<u32, Binding> {
     let mut bindings = FxHashMap::default();
     for (module, record) in probe.snapshot.modules.iter().enumerate() {
-        for statement in probe.children(record.root) {
+        // An unconditional block at module scope runs once, like the root's
+        // own statement list. Do not descend into loops, functions or branches:
+        // a re-entered scope needs fresh binding state on each entry.
+        let mut statements = probe.children(record.root);
+        while let Some(statement) = statements.pop() {
+            if probe.kind_of(statement) == Some(syntax::BLOCK) {
+                statements.extend(probe.children(statement));
+                continue;
+            }
             if probe.kind_of(statement) == Some(syntax::VARIABLE_STATEMENT) {
                 for list in probe.children(statement) {
                     if probe.kind_of(list) != Some(syntax::VARIABLE_DECLARATION_LIST) {
