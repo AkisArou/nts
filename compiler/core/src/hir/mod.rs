@@ -4574,6 +4574,18 @@ fn direct_uniform_call(func: &mut Func, index: usize, name: String, receiver: Op
     true
 }
 
+/// Whether any live op or terminator other than `except` reads `value`.
+pub(super) fn read_elsewhere(func: &Func, value: ValueId, except: ValueId) -> bool {
+    func.blocks.iter().any(|block| {
+        block
+            .ops
+            .iter()
+            .filter(|op| **op != except)
+            .any(|op| operands_of(&func.values[op.0 as usize].kind).contains(&value))
+            || operands_of_terminator(&block.terminator).contains(&value)
+    })
+}
+
 pub(super) fn call_directly(
     func: &mut Func,
     index: usize,
@@ -4602,6 +4614,25 @@ pub(super) fn call_directly(
     } else {
         args.clone()
     };
+
+    // A sole matching read can retain the typed SSA result immediately, so
+    // numeric specialization sees the body's return facts before erasure is
+    // simplified. Prove its exclusivity with the typed-signature rewrite's
+    // same live-use query. The call still executes at its original position.
+    let typed_read = uniform
+        .then(|| {
+            func.blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .copied()
+                .find(|op| {
+                    let value = &func.values[op.0 as usize];
+                    value.ty == *returns
+                        && matches!(value.kind, OpKind::Unerase { value } if value == id(index))
+                        && !read_elsewhere(func, id(index), *op)
+                })
+        })
+        .flatten();
 
     // Keep evaluation at the original call, before every consumer of its
     // erased answer. A result may be tested here and read back in several
@@ -4635,6 +4666,23 @@ pub(super) fn call_directly(
     };
     if !uniform || *returns == HirType::Erased {
         func.values[index].kind = call;
+        return true;
+    }
+    if let Some(read) = typed_read {
+        // Keep the existing typed result identity as well as its type. An
+        // identity Convert is simplified only after numeric specialization
+        // and would hide the call's bound from block-parameter classes.
+        for block in &mut func.blocks {
+            block.ops.retain(|op| *op != read);
+        }
+        for op in &mut func.blocks[block].ops {
+            if *op == id(index) {
+                *op = read;
+            }
+        }
+        func.values[read.0 as usize].kind = call;
+        func.values[index].kind = OpKind::ConstUndefined;
+        func.values[index].ty = HirType::Erased;
         return true;
     }
     // Reproduce the selected uniform entry's result contract at this site.

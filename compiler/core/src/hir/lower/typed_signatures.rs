@@ -41,10 +41,7 @@ use super::{
     closure_index, closure_names, is_signature_name, representation, signature_key,
 };
 use crate::hir::typed_signatures::{descends, entries_from_elsewhere, layout_of};
-use crate::hir::{
-    Callee, Func, HirType, ManagedType, Op, OpKind, Program, ValueId, operands_of,
-    operands_of_terminator,
-};
+use crate::hir::{Callee, Func, HirType, ManagedType, Op, OpKind, Program, read_elsewhere};
 
 /// A signature's written ABI: its parameters' representations, then its
 /// result's.
@@ -368,16 +365,4 @@ fn rewrite(program: &mut Program, site: &UniformSite, abi: &Abi, slot: u32) -> b
     }
     func.values[site.answered.0 as usize] = typed(HirType::Void);
     true
-}
-
-/// Whether any live op or terminator other than `except` reads `value`.
-fn read_elsewhere(func: &Func, value: ValueId, except: ValueId) -> bool {
-    func.blocks.iter().any(|block| {
-        block
-            .ops
-            .iter()
-            .filter(|op| **op != except)
-            .any(|op| operands_of(&func.values[op.0 as usize].kind).contains(&value))
-            || operands_of_terminator(&block.terminator).contains(&value)
-    })
 }
