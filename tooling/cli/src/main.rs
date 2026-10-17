@@ -1544,6 +1544,12 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
     for layout in &program.layouts {
         let ids: Vec<String> = layout.types.iter().map(|ty| format!("{}", ty.0)).collect();
         println!("{} [{}]", layout.name, ids.join(" "));
+        for ty in &layout.types {
+            println!(
+                "  hir-type {}",
+                render(&HirType::Managed(ManagedType::Object(*ty)))
+            );
+        }
         if !layout.interfaces.is_empty() {
             let faces: Vec<String> = layout
                 .interfaces

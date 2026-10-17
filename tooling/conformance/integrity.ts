@@ -215,7 +215,7 @@ export function readHir(text) {
 }
 
 /**
- * Classes from `nts layouts`: `{ byName, byId }`, each class `{ name, base,
+ * Classes from `nts layouts`: `{ byName, byId, byType }`, each class `{ name, base,
  * methods }`. A block is a header `Name [ids]` and two-space lines under it.
  * Joined to HIR **by type id**, never by name: after 8482afb63 `layouts` names
  * two same-named classes `Thing` and `Thing11` while their methods are
@@ -227,6 +227,7 @@ export function readHir(text) {
 export function readLayouts(text) {
   const byName = new Map();
   const byId = new Map();
+  const byType = new Map();
   let current = null;
   for (const line of text.split("\n")) {
     const head = /^(\S.*?) \[([\d ]+)\]$/.exec(line);
@@ -237,6 +238,8 @@ export function readLayouts(text) {
       continue;
     }
     if (!current) continue;
+    const hirType = /^ {2}hir-type (managed<[^>]+>)$/.exec(line);
+    if (hirType) byType.set(hirType[1], current);
     const base = /^ {2}base \d+ -> (.+)$/.exec(line);
     if (base) current.base = base[1];
     const implemented = /^ {2}implements (.+)$/.exec(line);
@@ -245,7 +248,7 @@ export function readLayouts(text) {
     const table = /^ {2}methods (?!:)(.+)$/.exec(line);
     if (table && table[1].includes("#")) current.methods.push(...table[1].split(/ (?=\S+#)/));
   }
-  return { byName, byId };
+  return { byName, byId, byType };
 }
 
 const identifierByte = (b) => (b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5a) || (b >= 0x61 && b <= 0x7a) || b === 0x5f || b === 0x24 || b >= 0x80;
@@ -438,11 +441,16 @@ const ARRAY_ELEMENT = /^call\.extern nts_array_element\((%\d+), %\d+(?:, %\d+)?\
  * built class descends from, and no `instanceof` of the same value guards:
  * `{ fn, target }` each. See `unerase-is-built`.
  */
-export function unbuiltUnerases(prepared, { byName, byId }) {
-  const madeIds = new Set([...prepared.matchAll(/object\.new \S+ : managed<obj#(\d+)>/g)].map((m) => m[1]));
+export function unbuiltUnerases(prepared, { byName, byId, byType }) {
+  const allocations = [...prepared.matchAll(/object\.new \S+ : (managed<[^>]+>)/g)].map((m) => m[1]);
+  const madeIds = new Set(allocations.flatMap((type) => /^managed<obj#(\d+)>$/.exec(type)?.[1] ?? []));
+  // The CLI renders a synthetic frame as `generator#N`, while layouts lists
+  // its actual type id. Join through the renderer's explicit alias: neither
+  // the frame's name nor an independent copy of its synthetic-id bands.
+  const madeLayouts = new Set(allocations.map((type) => byType.get(type) ?? byId.get(/^managed<obj#(\d+)>$/.exec(type)?.[1])).filter(Boolean));
   const covered = new Set();
-  for (const id of madeIds) {
-    for (let at = byId.get(id), seen = 0; at && seen < 64; at = byName.get(at.base), seen++) {
+  for (const layout of madeLayouts) {
+    for (let at = layout, seen = 0; at && seen < 64; at = byName.get(at.base), seen++) {
       covered.add(at.name);
       // **An interface a built class implements, if it declares no fields.**
       // Unerased to it, a value is only dispatched on, and dispatch reads the
@@ -555,7 +563,7 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
   const hir = readHir(prepared);
   if (hir.stated === null) return { unmeasured: 'hir --prepared printed no "N function(s)" line' };
   if (hir.lines !== hir.stated) return { unmeasured: `parsed ${hir.lines} definition(s) where the summary states ${hir.stated}` };
-  const { byName: classes, byId } = readLayouts(layouts);
+  const { byName: classes, byId, byType } = readLayouts(layouts);
   const refused = readRefusals(refusals);
   const refusedGenerically = new Set([...refused].map(generic));
   const out = [];
@@ -695,7 +703,7 @@ export function judge({ prepared, plain, layouts, refusals, whole = true }, sour
     say("location-on-a-token", `${d.code} at ${d.file}:${d.line}:${d.col} is ${where}: ${d.text.slice(0, 80)}`, d.code);
   }
 
-  if (whole) for (const v of unbuiltUnerases(prepared, { byName: classes, byId })) {
+  if (whole) for (const v of unbuiltUnerases(prepared, { byName: classes, byId, byType })) {
     say("unerase-is-built", `\`${v.fn}\` unerases a value to \`${v.target}\`, which nothing in this program builds or descends from`, v.target);
   }
 
@@ -859,6 +867,21 @@ function selfTest() {
   if (unbuiltUnerases(unerase(10), unbuiltImplementor).length !== 1) return "an unerase to an interface nothing built implements was not caught";
   if (unbuiltUnerases(unerase(10, true), withField).length !== 0) return "an instanceof-guarded unerase was caught";
   if (unbuiltUnerases(unerase(13), lay).length !== 0 || unbuiltUnerases(unerase(6), lay).length !== 0) return "an unerase to a built class or a signature layout was caught";
+  const generatorLayoutText = "Declared [39]\n  state : Int32\nConcrete [12345]\n  hir-type managed<generator#7>\n  base 39 -> Declared\n";
+  const generatorLayouts = readLayouts(generatorLayoutText);
+  const generatorRead = [
+    "func constructed() -> void {", "b0:",
+    "  %0 = object.new heap : managed<generator#7>",
+    "  %1 = erase %0 : erased", "  %2 = unerase %1 : managed<obj#39>", "}",
+  ].join("\n");
+  if (unbuiltUnerases(generatorRead, generatorLayouts).length !== 0) return "a built generator's declared base was caught";
+  if (unbuiltUnerases(generatorRead.replace("  %0 = object.new heap : managed<generator#7>", "  %0 = param 0 : erased"), generatorLayouts).length !== 1) return "a generator layout without an allocation counted as built";
+  if (unbuiltUnerases(generatorRead.replace("managed<generator#7>", "managed<generator#8>"), generatorLayouts).length !== 1) return "a different generator allocation counted as the declared frame";
+  const generatorJudgment = (text) => judge({ prepared: `${text}\n1 function(s), nothing refused\n`, plain: text, layouts: generatorLayoutText, refusals: "" });
+  const builtGenerator = generatorJudgment(generatorRead);
+  if (builtGenerator.unmeasured || builtGenerator.violations.length !== 0) return "the complete judge lost the generator allocation's layout alias";
+  const unbuiltGenerator = generatorJudgment(generatorRead.replace("object.new heap", "param 0"));
+  if (unbuiltGenerator.unmeasured || unbuiltGenerator.violations.filter((v) => v.rule === "unerase-is-built").length !== 1) return "the complete judge accepted a generator base without an allocation";
   if (unbuiltUnerases(`export ${unerase(10)}`, withField).length !== 0) return "an unerase of an exported function's own parameter was judged";
   const through = `${unerase(10)}\nexport func g(y: erased) -> void {\nb0:\n  %0 = param 0 : erased\n  call f(%0)\n}`;
   if (unbuiltUnerases(through, withField).length !== 0) return "a parameter filled only by an export's parameter was judged";
