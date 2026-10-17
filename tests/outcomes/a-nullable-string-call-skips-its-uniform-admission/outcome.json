@@ -1,8 +1,8 @@
 {
   "run": "check",
   "category": "aborted",
-  "nts": "the program was killed by signal 11 without refusing anything -- a crash, not a declined case",
+  "nts": "nts: refused at run time: calling `Closure0#call` through an erased signature with an argument not admitted by parameter `x`",
   "node": null,
-  "measured_with": "2c6dd1e3359749a2",
+  "measured_with": "a1b16c9be38160ca",
   "source": "measured"
 }
