@@ -55555,17 +55555,67 @@ impl<'a> FuncBuilder<'a> {
     /// The erased form stays as the last resort rather than being dropped, because
     /// `const xs: any[] = new Array(3)` has no better answer and is an ordinary
     /// thing to write.
+    ///
+    /// **And where the result goes is past any choice that passes it on.** In
+    /// `this.storage = size === 0 ? null : new Array(size)` the arm's context is
+    /// the conditional, whose own type the checker gives as `any[]` -- the
+    /// `null` absorbed into `new Array`'s declared `any[]` -- so the arm was an
+    /// erased array again, refused as "an array of Erased where an array of ...
+    /// is wanted". The conditional chooses no type of its own; the field it is
+    /// stored into does. Are We Fast Yet's `Vector` allocates exactly so, and
+    /// four of its benchmarks stopped there.
     fn allocated_array_type(&mut self, id: NodeId) -> Result<HirType, Diagnostic> {
         let concrete = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased);
         self.type_of(id)
             .filter(concrete)
             .or_else(|| self.contextual_type(id, 0).filter(concrete))
+            .or_else(|| {
+                let destination = self.past_the_choices(id);
+                (destination != id)
+                    .then(|| self.contextual_type(destination, 0).filter(concrete))
+                    .flatten()
+            })
             .or_else(|| self.contextual_type(id, 0))
             .or_else(|| {
                 self.type_of(id)
                     .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
             })
             .ok_or_else(|| self.unrepresentable(id, "a `new Array`"))
+    }
+
+    /// The outermost expression `id`'s value reaches unchanged through choices:
+    /// an arm of `c ? a : b`, either side of `a ?? b`, `a || b` or `a && b`, and
+    /// parentheses. Each picks one operand and chooses no type of its own, so
+    /// what the whole is heading for is what the operand is heading for.
+    fn past_the_choices(&self, id: NodeId) -> NodeId {
+        let mut at = id;
+        for _ in 0..8 {
+            let Some(parent) = self.syntactic_parent(at) else {
+                break;
+            };
+            let passes = match self.kind_of(parent) {
+                Some(syntax::PARENTHESIZED_EXPRESSION) => true,
+                // An arm, not the condition, which is the first child.
+                Some(syntax::CONDITIONAL_EXPRESSION) => self.children(parent).first() != Some(&at),
+                Some(syntax::BINARY_EXPRESSION) => {
+                    let parts = self.children(parent);
+                    matches!(
+                        parts.get(1).and_then(|operator| self.kind_of(*operator)),
+                        Some(
+                            syntax::QUESTION_QUESTION_TOKEN
+                                | syntax::BAR_BAR_TOKEN
+                                | syntax::AMPERSAND_AMPERSAND_TOKEN
+                        )
+                    )
+                }
+                _ => false,
+            };
+            if !passes {
+                break;
+            }
+            at = parent;
+        }
+        at
     }
 
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
@@ -59585,7 +59635,31 @@ impl<'a> FuncBuilder<'a> {
                 .type_of(id)
                 .ok_or_else(|| self.unrepresentable(id, "a conditional"))?,
         };
+        let ty = self.instead_of_an_erased_array(id, ty);
         self.lower_branching_value_at(id, ty, condition, then_branch, else_branch)
+    }
+
+    /// The array a choice is, where the checker's answer is `any[]` only
+    /// because an arm is a bare `new Array(n)`.
+    ///
+    /// `size === 0 ? null : new Array(size)` is typed `any[]`: the `null` is
+    /// absorbed and `new Array`'s declared `any[]` is what is left, which is the
+    /// library's overload and nothing the program chose. Where the choice is
+    /// stored into a typed array -- a `Vector<E>`'s `E[] | null` storage -- that
+    /// array is what the choice is, as [`Self::allocated_array_type`] already
+    /// decides for the arm itself. Only from an erased array to a concrete one:
+    /// an arm that really is erased then fails the width check and is refused,
+    /// never reinterpreted.
+    fn instead_of_an_erased_array(&self, id: NodeId, ty: HirType) -> HirType {
+        let erased = matches!(&ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Erased);
+        if !erased {
+            return ty;
+        }
+        self.contextual_type(self.past_the_choices(id), 0)
+            .filter(|destination| {
+                matches!(destination, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased)
+            })
+            .unwrap_or(ty)
     }
 
     /// The same, at a type the caller supplies rather than the node's own.
@@ -76893,18 +76967,30 @@ impl<'a> FuncBuilder<'a> {
     /// two ways a compiled program makes holes are refused for exactly this
     /// kind ([`Self::refuse_holes_that_read_as_null`]), and for every other
     /// kind a hole and the null slot's absence agree.
+    ///
+    /// **Through a nullable array and a type parameter.** The context is often
+    /// a field `E[] | null` -- a `Vector<E>` that allocates on first use -- so
+    /// the array is the union's array member, and in a generic copy `E` is what
+    /// the copy's sources say it stands for: the representation cannot say,
+    /// since `JsonValue` and `JsonValue | null` are one pointer.
     fn null_only_element(&self, array: TypeId) -> bool {
-        let Some(TypeKind::Array(element)) = self
+        let source = |ty: TypeId| *self.sources.get(&ty).unwrap_or(&ty);
+        let array = source(array);
+        let kind = self
             .snapshot
             .types
             .get(array.0 as usize)
-            .map(|record| &record.kind)
-        else {
+            .map(|record| &record.kind);
+        if let Some(TypeKind::Union(members)) = kind {
+            return members.iter().any(|member| self.null_only_element(*member));
+        }
+        let Some(TypeKind::Array(element)) = kind else {
             return false;
         };
+        let element = source(*element);
         let members = match self.snapshot.types.get(element.0 as usize).map(|r| &r.kind) {
             Some(TypeKind::Union(members)) => members.clone(),
-            _ => vec![*element],
+            _ => vec![element],
         };
         let absences: Vec<Absence> = members
             .iter()
@@ -76952,7 +77038,13 @@ impl<'a> FuncBuilder<'a> {
             .get(&id)
             .copied()
             .filter(|ty| !self.untyped_array(*ty));
-        let context = own.or_else(|| parent.and_then(|at| self.hole_context(id, at)));
+        // Asked where the array ends up, past a choice that passes it on --
+        // `size === 0 ? null : new Array(size)` -- as its type is.
+        let destination = self.past_the_choices(id);
+        let context = own.or_else(|| {
+            self.syntactic_parent(destination)
+                .and_then(|at| self.hole_context(destination, at))
+        });
         let holed = match context {
             Some(ty) => self.null_only_element(ty),
             // Nowhere this can read: refused where a hole could be read as a
@@ -80688,7 +80780,10 @@ impl<'a> FuncBuilder<'a> {
     /// already decided. `lower_branching_value` gives that merge an erased slot,
     /// and this is what tells the operands so. See [`Self::holds_only_absences`].
     fn what_the_whole_expression_is(&self, parent: NodeId, depth: u32) -> Option<HirType> {
+        // The same answer the choice itself lowers at, so that every arm of it
+        // agrees: see [`Self::instead_of_an_erased_array`].
         self.type_of(parent)
+            .map(|ty| self.instead_of_an_erased_array(parent, ty))
             .or_else(|| {
                 let ty = self.snapshot.node_types.get(&parent).copied()?;
                 self.holds_only_absences(ty).then_some(HirType::Erased)
