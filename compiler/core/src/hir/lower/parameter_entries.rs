@@ -178,8 +178,20 @@ impl FuncBuilder<'_> {
                 })
         });
         if captures_parameter {
+            // A constructor has no name of its own: it is its class's, as the
+            // compiled function is (`Subject#constructor`).
             let name = self
                 .declared_name(callable)
+                .or_else(|| {
+                    if self.kind_of(callable) != Some(syntax::CONSTRUCTOR) {
+                        return None;
+                    }
+                    std::iter::successors(self.node(callable).parent, |at| self.node(*at).parent)
+                        .take(3)
+                        .find(|at| self.kind_of(*at).is_some_and(super::declares_a_class))
+                        .and_then(|class| self.declared_name(class))
+                        .map(|class| format!("{class}#constructor"))
+                })
                 .unwrap_or_else(|| "anonymous callable".to_owned());
             return Err(self.unsupported(
                 initializer,
