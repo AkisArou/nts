@@ -25,6 +25,7 @@ struct Input {
     initializer: Option<NodeId>,
     delegated: bool,
     wanted: HirType,
+    numeric: HirType,
     absent: Absent,
     known: super::Facts,
     bigint_range: Option<(i128, i128)>,
@@ -33,10 +34,31 @@ struct Input {
 impl Input {
     fn narrowed(&self) -> bool {
         matches!(
-            self.wanted,
+            self.numeric,
             HirType::Int { .. } | HirType::Float { bits: 32 }
-        ) || (matches!(self.wanted, HirType::Float { .. }) && self.known != super::Facts::TOP)
+        ) || (matches!(self.numeric, HirType::Float { .. }) && self.known != super::Facts::TOP)
             || self.bigint_range.is_some()
+    }
+}
+
+/// A native spelling is a store contract even when lowering keeps the body
+/// input as `number`. Use it to build guards, never to seed the raw parameter.
+#[allow(clippy::cast_precision_loss)]
+fn numeric_contract(parameter: &Param, wanted: &HirType) -> (HirType, super::Facts) {
+    if matches!(wanted, HirType::Float { .. } | HirType::Int { .. })
+        && let Some(kind) = parameter.written
+    {
+        let known = kind
+            .range_on(native::Targets::ALL)
+            .map_or(super::Facts::TOP, |(lo, hi)| {
+                super::Facts::new(lo as f64, hi as f64, true, false, false)
+            });
+        (
+            kind.width_on(native::Targets::ALL),
+            parameter.known.narrow(known),
+        )
+    } else {
+        (wanted.clone(), parameter.known)
     }
 }
 
@@ -106,13 +128,15 @@ impl FuncBuilder<'_> {
                 let bigint_range = (wanted == HirType::BigInt)
                     .then(|| parameter.written?.range_on(native::Targets::ALL))
                     .flatten();
+                let (numeric, known) = numeric_contract(parameter, &wanted);
                 Input {
                     source,
                     initializer,
                     delegated,
                     wanted,
+                    numeric,
                     absent,
-                    known: parameter.known,
+                    known,
                     bigint_range,
                 }
             })
@@ -307,15 +331,14 @@ impl FuncBuilder<'_> {
             return Ok(raw);
         }
         if let Some(checked) = checked {
-            return Ok(if self.values[checked.0 as usize].ty == parameter.ty {
-                checked
-            } else {
-                self.push(
-                    OpKind::Convert(checked),
-                    parameter.ty.clone(),
-                    parameter.origin.clone(),
-                )
-            });
+            // Keep the checked value as the conversion's input. In particular
+            // a float32 body's number slot retains its rounded provenance when
+            // the store validator looks through this final representation step.
+            return Ok(self.push(
+                OpKind::Convert(checked),
+                parameter.ty.clone(),
+                parameter.origin.clone(),
+            ));
         }
         if let Some(initializer) = input.initializer {
             self.bind_parameter_default(raw, initializer, &input.wanted)
@@ -424,7 +447,7 @@ impl FuncBuilder<'_> {
             let checked = if let Some(range) = input.bigint_range {
                 self.check_uniform_bigint(raw, range, names, origin)
             } else {
-                self.check_uniform_numeric(raw, ty, input.known, names, origin)
+                self.check_uniform_numeric(raw, &input.numeric, input.known, names, origin)
             };
             self.terminate(Terminator::Jump {
                 target: accepted,
