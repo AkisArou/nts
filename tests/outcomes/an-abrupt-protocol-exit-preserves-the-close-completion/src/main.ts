@@ -15,7 +15,8 @@ class Source {
     this.count++;
     return { value: this.count, done: this.count > 2 };
   }
-  return(): any {
+  return(value?: any): any {
+    if (value !== undefined) this.trace.add(9);
     this.trace.add(this.ending);
     if (this.failure === 1) throw 33;
     if (this.failure === 2) return 7;
@@ -337,3 +338,104 @@ function mappedClose(early: boolean): number {
 }
 export function mappedThrowSubject(n: number): number { return mappedClose(true); }
 export function mappedThrowControl(n: number): number { return mappedClose(false); }
+class PrimitiveReturnSource {
+  count = 0;
+  return: number | string | boolean | bigint | symbol;
+  constructor(value: number | string | boolean | bigint | symbol) { this.return = value; }
+  [Symbol.iterator](): PrimitiveReturnSource { return this; }
+  next(): { value: number; done: boolean } { return { value: ++this.count, done: this.count > 2 }; }
+}
+function primitiveReturn(value: number | string | boolean | bigint | symbol, expected: string, early: boolean): number {
+  const source = new PrimitiveReturnSource(value);
+  try {
+    // @ts-ignore GetMethod rejects a present primitive return property.
+    for (const item of source) { if (early) break; }
+    return source.count;
+  } catch (e) { return e instanceof TypeError && e.message === expected ? 6 : 19; }
+}
+export function symbolReturnSubject(n: number): number { return primitiveReturn(Symbol("x"), "symbol is not a function", true); }
+export function symbolReturnControl(n: number): number { return primitiveReturn(Symbol("x"), "symbol is not a function", false); }
+export function bigintReturnSubject(n: number): number { return primitiveReturn(7n, "bigint is not a function", true); }
+export function bigintReturnControl(n: number): number { return primitiveReturn(7n, "bigint is not a function", false); }
+export function booleanReturnSubject(n: number): number { return primitiveReturn(true, "boolean true is not a function", true); }
+export function booleanReturnControl(n: number): number { return primitiveReturn(true, "boolean true is not a function", false); }
+export function stringReturnSubject(n: number): number { return primitiveReturn('a"b', 'string "a"b" is not a function', true); }
+export function stringReturnControl(n: number): number { return primitiveReturn('a"b', 'string "a"b" is not a function', false); }
+
+function quietLeaf(value: number): number { return value * 2; }
+function quietCalls(): number {
+  let total = 0;
+  for (const value of new QuietSource()) total += quietLeaf(value);
+  return total;
+}
+// A pure call in the body creates no exit at which return() can run. Even
+// this caller's try must neither select a raising copy nor add a poll.
+// expect-ir: all: no call.extern(nts_raising) in quietCaller
+export function quietCaller(n: number): number {
+  try { return quietCalls() + quietNested() + n; } catch { return -99; }
+}
+class ThisReturnSource {
+  count = 0;
+  closed = 0;
+  return: () => any = finishThisIterator;
+  [Symbol.iterator](): ThisReturnSource { return this; }
+  next(): { value: number; done: boolean } { return { value: ++this.count, done: this.count > 2 }; }
+}
+function finishThisIterator(this: ThisReturnSource): any { this.closed++; return { done: true }; }
+function receiverCase(early: boolean): number {
+  const source = new ThisReturnSource();
+  for (const value of source) { if (early) break; }
+  return source.closed * 10 + source.count;
+}
+export function returnThisSubject(n: number): number { return receiverCase(true); }
+export function returnThisControl(n: number): number { return receiverCase(false); }
+
+// Known return contracts never reach the erased-callable capability stop.
+// expect-ir: all: no call.extern(nts_refused) in drive@raises
+// expect-ir: all: no call.extern(nts_refused) in getterCase
+// expect-ir: all: no call.extern(nts_refused) in fieldCase
+// expect-ir: all: no call.extern(nts_refused) in nullableResult
+// expect-ir: all: no call.extern(nts_refused) in nullableGetter
+// expect-ir: all: no call.extern(nts_refused) in mappedClose
+// expect-ir: all: no call.extern(nts_refused) in primitiveReturn
+// expect-ir: all: no call.extern(nts_refused) in receiverCase
+
+function quietNested(): number {
+  let total = 0;
+  for (const value of new QuietSource()) {
+    for (let i = 0; i < 1; i++) { total += value; break; }
+  }
+  return total;
+}
+
+function defaultCount(trace: Trace, failure: number): number {
+  trace.add(4);
+  if (failure === 1) throw 33;
+  return 3;
+}
+class DefaultReturnSource {
+  count = 0;
+  constructor(public trace: Trace, public failure: number) {}
+  [Symbol.iterator](): DefaultReturnSource { this.trace.add(1); return this; }
+  next(): { value: number; done: boolean } { this.trace.add(2); return { value: ++this.count, done: this.count > 2 }; }
+  return(value: number = defaultCount(this.trace, this.failure)): any {
+    this.trace.add(value);
+    return { done: true };
+  }
+}
+function defaultCase(early: boolean, failure: number, original: boolean): number {
+  const trace = new Trace();
+  try {
+    for (const value of new DefaultReturnSource(trace, failure)) {
+      if (early) { if (original) throw 22; break; }
+    }
+    return trace.code * 100;
+  } catch (e) { return trace.code * 100 + errorCode(e); }
+}
+export function defaultSubject(n: number): number { return defaultCase(true, 0, false); }
+export function defaultControl(n: number): number { return defaultCase(false, 0, false); }
+export function defaultThrowSubject(n: number): number { return defaultCase(true, 1, false); }
+export function defaultThrowControl(n: number): number { return defaultCase(false, 1, false); }
+export function defaultOriginalSubject(n: number): number { return defaultCase(true, 1, true); }
+export function defaultOriginalControl(n: number): number { return defaultCase(false, 1, true); }
+// expect-ir: all: no call.extern(nts_refused) in defaultCase
