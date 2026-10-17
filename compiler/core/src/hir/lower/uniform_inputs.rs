@@ -174,6 +174,26 @@ impl FuncBuilder<'_> {
             .collect()
     }
 
+    /// A bound body forwards its own parameters without a source argument
+    /// node. The `bind` expression's function type cannot say which absence a
+    /// null string/symbol pointer carries; its positional parameter type can.
+    pub(super) fn erase_bound_inputs(&mut self, info: &ClosureInfo, args: &mut [ValueId]) {
+        for (argument, absent) in args.iter_mut().zip(self.uniform_bound_absences(info)) {
+            let ty = &self.values[argument.0 as usize].ty;
+            if primitive(ty) && tags::payload_is_a_reference(ty) && absent != Absent::Impossible {
+                *argument = self.push(
+                    OpKind::Erase {
+                        value: *argument,
+                        absent,
+                        slots: Absent::Impossible,
+                    },
+                    HirType::Erased,
+                    self.origin(info.node),
+                );
+            }
+        }
+    }
+
     /// Align the source declarations with the actual positional body ABI.
     /// A fixed tuple rest expands to several inputs, all from the same
     /// declaration; it cannot have an initializer or a later parameter.

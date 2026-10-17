@@ -31812,6 +31812,7 @@ impl<'a> FuncBuilder<'a> {
         for at in 2..fields.len() {
             args.push(read(self, at));
         }
+        let own_at = args.len();
         args.extend(own);
         let callee_node = *self
             .children(site)
@@ -31824,6 +31825,9 @@ impl<'a> FuncBuilder<'a> {
         // returning a number returned nothing (`ReturnType`, invalid HIR).
         let raising = self.raises && self.hierarchy.raising_call_slot.is_some();
         let callee = self.closure_entry(site, callee_node, function, raising)?;
+        if matches!(callee, ClosureEntry::Uniform(_)) {
+            self.erase_bound_inputs(info, &mut args[own_at..]);
+        }
         self.returns = returns.clone();
         let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
         let carried = (!matches!(returns, HirType::Void | HirType::Never)).then_some(answered);
