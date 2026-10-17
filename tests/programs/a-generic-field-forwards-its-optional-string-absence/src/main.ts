@@ -1,3 +1,5 @@
+// Clean main547 and75a/ee: C/LLVM/JVM abort6/58; Wasm declines6/58.
+// All compare52/58, with the present-string control agreeing29/29.
 // The method copy knows T is string | undefined. Its argument erasure
 // must use that source binding, not the unspecialized snapshot name T.
 // The one-change control substitutes a present string for undefined.

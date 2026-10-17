@@ -31824,7 +31824,7 @@ impl<'a> FuncBuilder<'a> {
             .arguments_of(site)
             .into_iter()
             .skip(1)
-            .map(|node| (node, self.snapshot.node_types.get(&node).copied()))
+            .map(|node| (node, self.read_type(node)))
             .collect();
         self.argument_sources.insert(site, sources);
         self.returns = returns.clone();
@@ -33617,10 +33617,7 @@ impl<'a> FuncBuilder<'a> {
                 }
                 _ => value,
             };
-            sources.push((
-                argument.node,
-                self.snapshot.node_types.get(&argument.node).copied(),
-            ));
+            sources.push((argument.node, self.read_type(argument.node)));
             args.push(value);
         }
         // Defaults run in parameter order, after all supplied expressions,
@@ -74384,7 +74381,7 @@ impl<'a> FuncBuilder<'a> {
                     None => self.lower_expression(*element)?,
                 };
                 args.push(self.coerce_to_parameter(id, at, value, *element)?);
-                sources.push((*element, self.snapshot.node_types.get(element).copied()));
+                sources.push((*element, self.read_type(*element)));
             }
         } else {
             let positions = positions.unwrap_or_default();
@@ -74752,6 +74749,7 @@ impl<'a> FuncBuilder<'a> {
                     && let Some((_, Some(ty))) = source
                     && let OpKind::Erase { absent, .. } = &mut self.values[erased.0 as usize].kind
                 {
+                    let ty = self.sources.get(&ty).copied().unwrap_or(ty);
                     *absent = absent_of_result(self.snapshot, ty);
                 }
                 Ok(erased)
