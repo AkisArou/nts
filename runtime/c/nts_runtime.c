@@ -175,6 +175,10 @@ struct NtsEnvironment {
   size_t retains;
   size_t releases;
   size_t roots_len;
+  /* Candidates at which the next collection runs: what the last one left
+   * alive, or `NTS_COLLECT_THRESHOLD` while that is less. Zero until the
+   * first collection, which reads as the constant. */
+  size_t collect_at;
   size_t roots_cap;
   NtsHeader **roots;
   size_t candidates;
@@ -1472,6 +1476,39 @@ static void nts_destroy(NtsHeader *object) {
  * candidates *accumulate*, and here they do not. */
 #define NTS_COLLECT_THRESHOLD 10000u
 
+/* The threshold actually used: the constant above, as many candidates as the
+ * last collection left objects alive, or half the objects live now --
+ * whichever is largest.
+ *
+ * A collection traces everything its candidates reach, and that is the live
+ * heap, not the buffer. The paragraph above measured a pass with nothing live
+ * behind its candidates; a program that walks a large live structure is the
+ * other case. `json-stringify-doc` retains and releases each node of a
+ * 2,000-row document as it serializes it, every release leaves a count above
+ * zero, so every node is a candidate, and every ten thousand of them the
+ * collector traced the whole document again: 60% of the row, quadratic in the
+ * document. Waiting for as many candidates as there are survivors makes a
+ * collection cost about what accumulated since the last one: the row went
+ * from 6.7 ms to 2.9.
+ *
+ * **Bounded, which a threshold read from the live count alone is not.** The
+ * live count includes the garbage the next collection exists to find, so a
+ * threshold of the whole live count can never be reached by garbage at all --
+ * `json-parse` held 313 MB where it holds 11. Half of it can: garbage reaches
+ * it by the time it is as large as what is really live. The survivors are
+ * fixed when a collection ends, so garbage does not raise them. Either way
+ * cyclic garbage waits until it is as large as what is live, and no larger,
+ * which is the trade a tracing collector's heap growth makes. The half is
+ * there for a program building a large structure between collections, whose
+ * survivors are from before it: `json-parse`, 3.6 ms to 3.0. PHP's
+ * implementation of the same algorithm made its threshold adaptive for the
+ * same reason. */
+static size_t nts_collect_threshold(void) {
+  size_t half = (nts_env->allocated - nts_env->reclaimed) / 2u;
+  size_t at = nts_env->collect_at > half ? nts_env->collect_at : half;
+  return at > NTS_COLLECT_THRESHOLD ? at : NTS_COLLECT_THRESHOLD;
+}
+
 static void nts_push(NtsHeader ***buffer, size_t *len, size_t *cap,
                      NtsHeader *object) {
   if (*len == *cap) {
@@ -1541,7 +1578,7 @@ void nts_release(NtsHeader *object) {
      * count word, so an object on it has no count for the collector to
      * read. */
     if (!nts_env->draining && !nts_env->collecting &&
-        nts_env->roots_len >= NTS_COLLECT_THRESHOLD) {
+        nts_env->roots_len >= nts_collect_threshold()) {
       nts_collect_cycles();
     }
     return;
@@ -1808,6 +1845,7 @@ void nts_collect_cycles(void) {
   }
   while (nts_collect_pass() && nts_env->roots_len > 0) {
   }
+  nts_env->collect_at = nts_env->allocated - nts_env->reclaimed;
   nts_env->epoch++;
 }
 
