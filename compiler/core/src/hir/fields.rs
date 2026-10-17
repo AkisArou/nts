@@ -965,7 +965,7 @@ type Rewrite = (
     usize,
     usize,
     String,
-    super::ValueId,
+    Option<super::ValueId>,
     super::TypeId,
     bool,
     (Vec<super::Param>, HirType, bool, Option<String>),
@@ -992,17 +992,24 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             let Some(receiver) = args.first() else {
                 continue;
             };
-            let source = field_source(func, *receiver);
-            let class = source
-                .and_then(|(object, field)| {
-                    let HirType::Managed(ManagedType::Object(ty)) =
-                        &func.values[object.0 as usize].ty
-                    else {
-                        return None;
-                    };
-                    known.get(&(*ty, field))
-                })
-                .copied();
+            let static_class = match func.values[receiver.0 as usize].ty {
+                HirType::Managed(ManagedType::Object(class)) if super::is_closure_type(class) => {
+                    Some(class)
+                }
+                _ => None,
+            };
+            let class = static_class.or_else(|| {
+                field_source(func, *receiver)
+                    .and_then(|(object, field)| {
+                        let HirType::Managed(ManagedType::Object(ty)) =
+                            &func.values[object.0 as usize].ty
+                        else {
+                            return None;
+                        };
+                        known.get(&(*ty, field))
+                    })
+                    .copied()
+            });
             let Some(class) = class else {
                 continue;
             };
@@ -1049,7 +1056,11 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             }
             // The erased value the receiver was read back from, so the fresh
             // `Unerase` below reads the same thing at a narrower class.
-            let OpKind::Unerase { value: erased } = func.values[receiver.0 as usize].kind else {
+            let erased = if static_class.is_some() {
+                None
+            } else if let OpKind::Unerase { value } = func.values[receiver.0 as usize].kind {
+                Some(value)
+            } else {
                 continue;
             };
             let Some(written) = program.funcs.iter().find(|known| &known.name == name) else {
@@ -1101,11 +1112,11 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
         let result_absent = super::erased_entry_absent(program, class);
         // The receiver read back at the class, which is the cast this pass is
         // entitled to make and the reason it carries `class` at all.
-        let receiver = super::Op {
-            kind: OpKind::Unerase { value: erased },
+        let receiver = erased.map(|value| super::Op {
+            kind: OpKind::Unerase { value },
             ty: HirType::Managed(super::ManagedType::Object(class)),
             origin,
-        };
+        });
         if super::call_directly(
             &mut program.funcs[func],
             index,
@@ -1118,7 +1129,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
                 uniform_name,
             },
             uniform,
-            Some(receiver),
+            receiver,
         ) {
             count += 1;
         }

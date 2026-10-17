@@ -4439,12 +4439,11 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 ///
 /// **Three places decide "the receiver's class is known here, so call the body
 /// that class names"**, and asking how many there are is what produced this
-/// function. The lowering decides it for a receiver whose static type *is* the
-/// closure class, and has nothing to undo because no erasure has happened yet.
-/// [`fields::devirtualize`] decides it for a field that can hold exactly one
-/// class, and [`monomorphize::retype_parameter`] for a clone's parameter that was
-/// given one -- and both of those meet a call **already made** in the uniform
-/// ABI, so both have the same erasure to undo.
+/// function. [`fields::devirtualize`] decides it for a receiver whose static
+/// type is the closure class or a field that can hold exactly one class, and
+/// [`monomorphize::retype_parameter`] for a clone's parameter that was given
+/// one. All meet a call already made in the uniform ABI, and all use the same
+/// argument proof before undoing that erasure.
 ///
 /// **Undoing it is most of what the redirect is worth, which was measured the
 /// wrong way round first.** `retype_parameter` originally redirected such a call
