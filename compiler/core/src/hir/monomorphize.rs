@@ -135,12 +135,27 @@ pub fn monomorphize(program: &mut Program) -> usize {
                 })
         });
         let result_absent = super::erased_entry_absent(program, request.concrete);
+        // The slot the class's written `#call` sits in, for a call that already
+        // dispatches in the written ABI; see `retype_parameter`.
+        let written_slot = written.as_ref().and_then(|(target, ..)| {
+            program
+                .layouts
+                .iter()
+                .find(|layout| layout.types.contains(&request.concrete))
+                .and_then(|layout| {
+                    layout
+                        .methods
+                        .iter()
+                        .position(|method| method.as_deref() == Some(target.as_str()))
+                })
+                .and_then(|slot| u32::try_from(slot).ok())
+        });
         if let Some(written) = written {
             retype_parameter(
                 &mut clone,
                 request.slot,
                 request.concrete,
-                program.erased_call_slot,
+                (program.erased_call_slot, written_slot),
                 written,
                 result_absent,
             );
@@ -275,7 +290,7 @@ fn retype_parameter(
     clone: &mut Func,
     slot: u32,
     concrete: TypeId,
-    erased_slot: Option<u32>,
+    (erased_slot, written_slot): (Option<u32>, Option<u32>),
     written: (String, Vec<HirType>, HirType, bool),
     result_absent: super::Absent,
 ) {
@@ -324,7 +339,30 @@ fn retype_parameter(
             // either. Those keep their dispatch, which `fields::devirtualize` can
             // still resolve because it reads the class's entry at the call's own
             // slot rather than assuming the written one.
-            (args.first() == Some(&param) && Some(*at) == erased_slot).then_some((index, true))
+            if args.first() != Some(&param) {
+                return None;
+            }
+            if Some(*at) == erased_slot {
+                return Some((index, true));
+            }
+            // **And the written slot, which is already the written ABI.** A call
+            // the lowering typed against the signature dispatches at the slot
+            // the class's `#call` sits in, with that entry's arguments, so naming
+            // the entry is the whole change: the arguments stay as they are. It
+            // was left to the table, and `drive(mix, 4096)` in
+            // `benchmarks/cases/closures` made 4,096 indirect calls a run through
+            // a parameter this pass had just typed as the class -- clang can
+            // neither inline nor vectorize through the table, so the row ran at
+            // three times its C++ reference. Only where the call's types are the
+            // entry's own, which a call made against a wider signature need not
+            // be; such a call keeps its dispatch.
+            let written_abi = args.len() == params.len()
+                && args
+                    .iter()
+                    .zip(&params)
+                    .all(|(arg, declared)| clone.values[arg.0 as usize].ty == *declared)
+                && value.ty == returns;
+            (Some(*at) == written_slot && written_abi).then_some((index, false))
         })
         .collect();
     for (index, uniform) in sites {
