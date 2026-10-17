@@ -422,7 +422,17 @@ impl FuncBuilder<'_> {
             })?;
             self.switch_to(no);
         }
-        // The interface's implementations above are the admitted source set.
+        // An interface can also hold a literal at its own identity, outside
+        // the named implementations whose return contracts we can dispatch.
+        let reason = self.push(
+            OpKind::ConstString(
+                "IteratorClose of an interface iterator whose concrete type this compiler does not yet carry"
+                    .into(),
+            ),
+            TEXT,
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![reason], HirType::Void, origin.clone());
         self.terminate(Terminator::Unreachable);
         self.switch_to(join);
         Ok(())
