@@ -1778,6 +1778,19 @@ fn refine_edge(
     cond: ValueId,
     taken: bool,
 ) -> Refinements {
+    // `!c` taken is `c` not taken, and the other way round. Without this a
+    // negated comparison narrowed nothing: `while (!(at > top))` let `at`
+    // count up with no upper bound, so it widened to infinity and stayed a
+    // double. A hand-written iterator's `!done` is the same once its
+    // `{ value, done }` is a value rather than an object, `done` a
+    // comparison. `tests/programs/a-negated-guard-bounds-what-it-compares`.
+    if let OpKind::Unary {
+        op: UnOp::Not,
+        operand,
+    } = func.values[cond.0 as usize].kind
+    {
+        return refine_edge(func, refinements, values, operand, !taken);
+    }
     let mut refined = refinements.clone();
     // `Number.isInteger(x)` taken: `x` is a finite integer -- whole and not
     // NaN, which a guard on its bounds then makes integral. `-0` passes it.
