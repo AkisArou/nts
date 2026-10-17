@@ -38,6 +38,7 @@ pub fn eliminate_checks(
     field_lengths: &super::fields::FieldFacts,
 ) -> usize {
     let mut removed = 0;
+    let least = super::loops::least_lengths(func, analysis);
     for access in checked_accesses(func, analysis.growable()) {
         let Access {
             at,
@@ -46,7 +47,16 @@ pub fn eliminate_checks(
             index,
             guards_hold,
         } = access;
-        if !provably_in_bounds(func, analysis, field_lengths, at, array, index, guards_hold) {
+        if !provably_in_bounds(
+            func,
+            analysis,
+            field_lengths,
+            &least,
+            at,
+            array,
+            index,
+            guards_hold,
+        ) {
             continue;
         }
         match &mut func.values[value.0 as usize].kind {
@@ -197,6 +207,7 @@ pub fn prove_stores_cannot_grow(
                 func,
                 analysis,
                 &field_lengths,
+                &super::loops::least_lengths(func, analysis),
                 access.at,
                 access.array,
                 access.index,
@@ -218,10 +229,12 @@ pub fn prove_stores_cannot_grow(
 }
 
 /// Whether an index is provably a valid slot of an array.
+#[allow(clippy::too_many_arguments)]
 fn provably_in_bounds(
     func: &Func,
     analysis: &Analysis,
     field_lengths: &super::fields::FieldFacts,
+    least: &super::loops::LeastLengths,
     at: BlockId,
     array: ValueId,
     index: ValueId,
@@ -244,7 +257,7 @@ fn provably_in_bounds(
     // container's *shape* says, and what the program proved about a length it
     // read for itself. `BOTTOM` from the first means "nothing structural to
     // say" rather than an empty set, so it is not narrowed into.
-    let structural = length_facts(func, analysis, field_lengths, at, array);
+    let structural = length_facts(func, analysis, field_lengths, least, at, array);
     let computed = computed_length(func, analysis, at, array);
     let length = if structural.is_bottom() {
         computed
@@ -499,6 +512,7 @@ fn length_facts(
     func: &Func,
     analysis: &Analysis,
     field_lengths: &super::fields::FieldFacts,
+    least: &super::loops::LeastLengths,
     at: BlockId,
     array: ValueId,
 ) -> Facts {
@@ -518,6 +532,13 @@ fn length_facts(
         {
             analysis.get_at(at, *length)
         }
+        // Not exact, because something here pushes onto it: but if nothing here
+        // can shorten it, at least what it was allocated with and what has
+        // certainly been pushed since -- a lower bound, which is all a check
+        // asks of a length. See `loops::LeastLengths`.
+        OpKind::ArrayNew { .. } => least.at_least(array, at).map_or(Facts::BOTTOM, |least| {
+            Facts::new(least, super::facts::U32_MAX, true, false, false)
+        }),
         // The array a *parameter* points at, whose length the callers say. The
         // only way to know it inside a function handed a buffer to work on.
         OpKind::Param(slot) => analysis.param_length(*slot),

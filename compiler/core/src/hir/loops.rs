@@ -209,18 +209,25 @@ fn headers(func: &Func, dominates: &impl Fn(BlockId, BlockId) -> bool) -> Vec<Bl
 /// Whether one block dominates another, from the verifier's immediate
 /// dominators. An unreachable block is dominated by nothing but itself.
 pub(super) fn dominance(func: &Func) -> impl Fn(BlockId, BlockId) -> bool {
+    let idom = immediate_dominators(func);
+    move |over: BlockId, under: BlockId| dominated(&idom, over, under)
+}
+
+fn immediate_dominators(func: &Func) -> Vec<Option<BlockId>> {
     let reachable = super::verify::reachable_blocks(func);
-    let idom = super::verify::dominators(func, &reachable);
-    move |over: BlockId, under: BlockId| {
-        let mut at = Some(under);
-        while let Some(block) = at {
-            if block == over {
-                return true;
-            }
-            at = idom[block.0 as usize];
+    super::verify::dominators(func, &reachable)
+}
+
+/// Whether `over` dominates `under`, by walking `under`'s immediate dominators.
+fn dominated(idom: &[Option<BlockId>], over: BlockId, under: BlockId) -> bool {
+    let mut at = Some(under);
+    while let Some(block) = at {
+        if block == over {
+            return true;
         }
-        false
+        at = idom[block.0 as usize];
     }
+    false
 }
 
 /// Whether a block is inside a cycle: control leaves it and can come back.
@@ -725,6 +732,248 @@ fn trip_count(
     Some(trips.max(0.0))
 }
 
+/// The fewest times a loop has gone round when control leaves it through its
+/// header's test.
+///
+/// The other end of [`trip_count`]. That one bounds an accumulator, so it asks
+/// how many times a loop *can* run; this bounds what a loop must have done by
+/// the time it is over, so it asks how few. The test lets control out only once
+/// the counter has reached the bound, and every trip moves the counter by at
+/// most its largest step: so `trips >= (bound.lo - start.hi) / step.hi`, and
+/// the mirror of that for a descending counter. A step that sometimes stands
+/// still or goes back only means more trips, so it takes nothing away.
+///
+/// NaN is the one way out that reaches no bound -- `NaN < n` is false at once
+/// -- so a start, bound or counter that may be NaN proves nothing.
+fn least_trips(
+    func: &Func,
+    analysis: &Analysis,
+    edges: &Edges<'_>,
+    header: BlockId,
+    shape: &Shape,
+) -> Option<f64> {
+    let (comparison, counter, limit, slot) = exit_test(func, edges, header, shape)?;
+    let ascending = matches!(comparison, BinOp::Lt | BinOp::Le);
+    let step = loop_step(func, analysis, edges, shape, slot, counter)?;
+    let start = analysis.get(*shape.entry_args.get(slot)?);
+    let bound = analysis.get(limit);
+    if [start, bound, analysis.get(counter)]
+        .iter()
+        .any(|facts| facts.is_bottom() || facts.maybe_nan)
+    {
+        return None;
+    }
+    let (distance, stride) = if ascending {
+        (bound.lo - start.hi, step.hi)
+    } else {
+        (start.lo - bound.hi, -step.lo)
+    };
+    if !(distance.is_finite() && stride.is_finite() && stride > 0.0) {
+        return None;
+    }
+    let trips = (distance / stride).ceil();
+    (trips.is_finite() && trips <= MAX_TRIPS).then_some(trips.max(0.0))
+}
+
+/// The fewest elements each array this function fills by `push` holds, block by
+/// block.
+///
+/// # Why a lower bound is the whole question
+///
+/// `bounds` removes a check when the index is below the array's *smallest*
+/// possible length -- a longer array only helps -- and in a program that can
+/// `push` anywhere, an allocation's length is no longer exact
+/// ([`super::allocated_length_is_exact`]), so the commonest array of all, one
+/// built empty and pushed in a loop, had no length to compare against. Every
+/// read of it kept its check. That is not the cost of a compare: a checked
+/// read is an exit from its loop, and LLVM forwards a value stored in one trip
+/// to the next trip's load only in a loop with one exit. `growth-grown` reads
+/// `xs[i - 1]` that the trip before had just stored; checked, it reloads it,
+/// pairs the load with its neighbour's, and stalls on a store that cannot
+/// forward into the wider load -- 4.0x its C++, where `growth-fixed`, the same
+/// loop over an array that cannot grow, is 1.04x.
+///
+/// # What is claimed
+///
+/// Only for an array allocated here whose every use is one that cannot shrink
+/// it or hand it on: a read, a store into it, its length, its count, or a
+/// `push` onto it (the `push` family, with the array as the receiver and
+/// nowhere else). A block argument carrying it disqualifies it, since a `pop`
+/// through the parameter would be a use of a different value. Then nothing but
+/// this function's own operations changes its length, and none of them shortens
+/// it, so the length only grows -- and three things say by how much at least:
+///
+/// - what it was allocated with;
+/// - one for each `push` in a block that strictly dominates the read, which
+///   every way to the read went through;
+/// - for a loop whose exit is reached from its header's test and from nowhere
+///   else, [`least_trips`] for each `push` in a block that dominates every back
+///   edge -- every completed trip went through it -- at every block the exit
+///   dominates.
+///
+/// None of them counts a `push` twice: one inside such a loop cannot dominate
+/// anything after it, because the way round the loop zero times skips it.
+pub(super) struct LeastLengths {
+    arrays: FxHashMap<ValueId, Grown>,
+    /// Immediate dominators, as [`dominance`] walks them.
+    idom: Vec<Option<BlockId>>,
+}
+
+/// One array [`LeastLengths`] knows about.
+struct Grown {
+    /// The length it was allocated with, at least.
+    allocated: f64,
+    pushed: Vec<Pushed>,
+}
+
+/// From the top of `from` on -- or, where `after`, from its end, for a `push`
+/// that may come after a read in its own block -- at least `count` more.
+struct Pushed {
+    from: BlockId,
+    count: f64,
+    after: bool,
+}
+
+impl LeastLengths {
+    /// The fewest elements `array` holds at the top of `at`, where this knows.
+    pub(super) fn at_least(&self, array: ValueId, at: BlockId) -> Option<f64> {
+        let grown = self.arrays.get(&array)?;
+        let pushed: f64 = grown
+            .pushed
+            .iter()
+            .filter(|pushed| {
+                dominated(&self.idom, pushed.from, at) && !(pushed.after && pushed.from == at)
+            })
+            .map(|pushed| pushed.count)
+            .sum();
+        Some(grown.allocated + pushed)
+    }
+}
+
+/// Build [`LeastLengths`] for one function.
+pub(super) fn least_lengths(func: &Func, analysis: &Analysis) -> LeastLengths {
+    let idom = immediate_dominators(func);
+    let dominates = |over: BlockId, under: BlockId| dominated(&idom, over, under);
+    let mut arrays: FxHashMap<ValueId, Grown> = FxHashMap::default();
+    for (index, op) in func.values.iter().enumerate() {
+        let OpKind::ArrayNew { length, .. } = op.kind else {
+            continue;
+        };
+        let array = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+        let allocated = analysis.get(length);
+        if allocated.is_bottom() || !allocated.lo.is_finite() || allocated.lo < 0.0 {
+            continue;
+        }
+        if only_grows_here(func, array) {
+            arrays.insert(
+                array,
+                Grown {
+                    allocated: allocated.lo,
+                    pushed: Vec::new(),
+                },
+            );
+        }
+    }
+    if arrays.is_empty() {
+        return LeastLengths { arrays, idom };
+    }
+
+    // Where each candidate is pushed.
+    let mut pushes: FxHashMap<ValueId, Vec<BlockId>> = FxHashMap::default();
+    for (index, block) in func.blocks.iter().enumerate() {
+        let at = BlockId(u32::try_from(index).unwrap_or(0));
+        for op in &block.ops {
+            if let Some(array) = pushed_array(&func.values[op.0 as usize].kind)
+                && arrays.contains_key(&array)
+            {
+                pushes.entry(array).or_default().push(at);
+            }
+        }
+    }
+    for (array, blocks) in &pushes {
+        if let Some(grown) = arrays.get_mut(array) {
+            grown.pushed.extend(blocks.iter().map(|at| Pushed {
+                from: *at,
+                count: 1.0,
+                after: true,
+            }));
+        }
+    }
+
+    let predecessors = predecessors(func);
+    let owners = owners(func);
+    let edges = Edges {
+        predecessors: &predecessors,
+        owners: &owners,
+    };
+    for header in headers(func, &dominates) {
+        let Some(loop_shape) = shape(&predecessors, &dominates, header) else {
+            continue;
+        };
+        let Terminator::Branch { else_target, .. } = func.blocks[header.0 as usize].terminator
+        else {
+            continue;
+        };
+        // Arriving at the exit has to mean the test failed: a `break` that
+        // lands on the same block would arrive with fewer trips behind it.
+        if !predecessors[else_target.0 as usize]
+            .iter()
+            .all(|(from, _)| *from == header)
+        {
+            continue;
+        }
+        let Some(trips) = least_trips(func, analysis, &edges, header, &loop_shape) else {
+            continue;
+        };
+        if trips < 1.0 {
+            continue;
+        }
+        let members = natural_loop(&edges, header, &loop_shape);
+        for (array, blocks) in &pushes {
+            let every_trip = blocks.iter().any(|at| {
+                members.contains(at)
+                    && loop_shape
+                        .latches
+                        .iter()
+                        .all(|(latch, _)| dominates(*at, *latch))
+            });
+            if every_trip && let Some(grown) = arrays.get_mut(array) {
+                grown.pushed.push(Pushed {
+                    from: else_target,
+                    count: trips,
+                    after: false,
+                });
+            }
+        }
+    }
+    LeastLengths { arrays, idom }
+}
+
+/// The array a `push` adds to, when the op is one: the `push` family, with
+/// the array as its receiver and in no other argument.
+fn pushed_array(kind: &OpKind) -> Option<ValueId> {
+    let OpKind::Call {
+        callee: super::Callee::External(name),
+        args,
+        ..
+    } = kind
+    else {
+        return None;
+    };
+    let (receiver, rest) = args.split_first()?;
+    (name.starts_with("nts_array_push") && !rest.contains(receiver)).then_some(*receiver)
+}
+
+/// Whether every use of `array` leaves its length to this function, and none
+/// shortens it. See [`LeastLengths`].
+fn only_grows_here(func: &Func, array: ValueId) -> bool {
+    !super::carried_by_an_edge(func, array)
+        && func.values.iter().all(|op| {
+            pushed_array(&op.kind) == Some(array)
+                || super::use_keeps_the_array_here(array, &op.kind)
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -993,5 +1242,81 @@ mod tests {
 
         let caps = caps_of(&func);
         assert_eq!((caps[&total].lo, caps[&total].hi), (0.0, 30.0));
+    }
+
+    /// `xs = []; for (i = start; i < 10; i += 1) xs.push(..)`, and what is
+    /// certain about `xs.length` in the block after the loop.
+    fn pushed_in_a_loop(start: Facts, exit_from_body: bool) -> (Func, ValueId, BlockId) {
+        let mut f = Build::new();
+        let zero = f.number(0.0);
+        let xs = f.op(OpKind::ArrayNew {
+            length: zero,
+            fill: crate::hir::ArrayFill::Holes,
+        });
+        let first = f.op(OpKind::Param(0));
+        f.jump(Vec::new(), 1, vec![first]);
+        // b1: the header.
+        let header = f.params(1);
+        let i = header[0];
+        let ten = f.number(10.0);
+        let test = f.binary(BinOp::Lt, i, ten);
+        f.branch(header, test, 2, 3);
+        // b2: the body, which may leave for the exit before it pushes.
+        let five = f.number(5.0);
+        let stop = f.binary(BinOp::Eq, i, five);
+        if exit_from_body {
+            f.branch(Vec::new(), stop, 3, 4);
+        } else {
+            f.branch(Vec::new(), stop, 4, 4);
+        }
+        // b3: after the loop.
+        let length = f.op(OpKind::Length(xs));
+        f.end(Vec::new(), Terminator::Return(Some(length)));
+        // b4: push, step, go round.
+        f.op(OpKind::Call {
+            callee: crate::hir::Callee::External("nts_array_push".to_owned()),
+            args: vec![xs, i],
+            frame: None,
+        });
+        let one = f.number(1.0);
+        let next = f.binary(BinOp::Add, i, one);
+        f.jump(Vec::new(), 1, vec![next]);
+        (f.finish(&[start]), xs, BlockId(3))
+    }
+
+    fn least_after(func: &Func, xs: ValueId, at: BlockId) -> Option<f64> {
+        least_lengths(func, &super::super::flow::analyze(func)).at_least(xs, at)
+    }
+
+    /// Ten trips from zero, a push on each: ten at least once the test fails.
+    /// From anywhere in `[0, 4]`, six -- the latest start is the one that
+    /// counts.
+    #[test]
+    fn a_loop_that_pushes_every_trip_leaves_at_least_its_trips() {
+        let exact = Facts::new(0.0, 0.0, true, false, false);
+        let (func, xs, after) = pushed_in_a_loop(exact, false);
+        assert_eq!(least_after(&func, xs, after), Some(10.0));
+        let ranged = Facts::new(0.0, 4.0, true, false, false);
+        let (func, xs, after) = pushed_in_a_loop(ranged, false);
+        assert_eq!(least_after(&func, xs, after), Some(6.0));
+    }
+
+    /// A `break` that lands where the test exits arrives with five trips
+    /// behind it, not ten: the exit no longer says the test failed, so the
+    /// loop says nothing.
+    #[test]
+    fn an_exit_the_body_can_also_reach_proves_no_trips() {
+        let exact = Facts::new(0.0, 0.0, true, false, false);
+        let (func, xs, after) = pushed_in_a_loop(exact, true);
+        assert_eq!(least_after(&func, xs, after), Some(0.0));
+    }
+
+    /// A start that may be NaN fails `NaN < 10` at once and leaves with no
+    /// trips at all.
+    #[test]
+    fn a_start_that_may_be_nan_proves_no_trips() {
+        let nan = Facts::new(0.0, 0.0, true, true, false);
+        let (func, xs, after) = pushed_in_a_loop(nan, false);
+        assert_eq!(least_after(&func, xs, after), Some(0.0));
     }
 }
