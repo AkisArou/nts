@@ -20542,6 +20542,7 @@ struct Comparator {
     function: ValueId,
     callee: ClosureEntry,
     parameters: Vec<HirType>,
+    argument_source: Option<(NodeId, Option<TypeId>)>,
 }
 
 /// What a loop does between one iteration and the next.
@@ -21108,6 +21109,10 @@ struct FuncBuilder<'a> {
     /// -- lowers its own arguments without replacing this, so a question about
     /// *its* parameters must not be answered from the foreign function's.
     omitting_for: Option<(std::sync::Arc<super::native::Function>, usize, NodeId)>,
+    /// The arguments' own source types until a closure call erases them.
+    /// A call's result type cannot say what a null argument pointer means.
+    /// Tuple spreads record each position's type, rather than the tuple's.
+    argument_sources: rustc_hash::FxHashMap<NodeId, Vec<(NodeId, Option<TypeId>)>>,
     /// Object literals a native call passes as its labels, marked before its
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
@@ -21443,6 +21448,7 @@ impl<'a> FuncBuilder<'a> {
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
             omitting_for: None,
+            argument_sources: rustc_hash::FxHashMap::default(),
             labels_pending: rustc_hash::FxHashSet::default(),
             copied_pending: rustc_hash::FxHashMap::default(),
             copied_lent: rustc_hash::FxHashMap::default(),
@@ -31827,6 +31833,13 @@ impl<'a> FuncBuilder<'a> {
         let callee = self.closure_entry(site, callee_node, function, raising)?;
         if matches!(callee, ClosureEntry::Uniform(_)) {
             self.erase_bound_inputs(info, &mut args[own_at..]);
+            let sources = self
+                .arguments_of(site)
+                .into_iter()
+                .skip(1)
+                .map(|node| (node, self.snapshot.node_types.get(&node).copied()))
+                .collect();
+            self.argument_sources.insert(site, sources);
         }
         self.returns = returns.clone();
         let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
@@ -33291,6 +33304,7 @@ impl<'a> FuncBuilder<'a> {
         origin: Origin,
         exported: bool,
     ) -> Func {
+        self.argument_sources.clear();
         let blocks = std::mem::take(&mut self.blocks)
             .into_iter()
             .map(|block| Block {
@@ -33625,7 +33639,7 @@ impl<'a> FuncBuilder<'a> {
         }
         // Defaults run in parameter order, after all supplied expressions,
         // including excess expressions and the expressions gathered into rest.
-        for (at, (node, ty)) in sources.into_iter().enumerate() {
+        for (at, (node, ty)) in sources.iter().copied().enumerate() {
             args[at] = self.unless_undefined(call, node, ty, args[at], &args[..at], receiver)?;
         }
         for omitted in self.omitted_after(call, args.len()) {
@@ -33641,6 +33655,12 @@ impl<'a> FuncBuilder<'a> {
         if rest == Some(args.len()) {
             let gathered = self.gather_rest(call, args.len(), &[])?;
             args.push(gathered);
+        }
+        if args
+            .iter()
+            .any(|value| super::tags::payload_is_a_reference(&self.values[value.0 as usize].ty))
+        {
+            self.argument_sources.insert(call, sources);
         }
         Ok(args)
     }
@@ -74427,6 +74447,7 @@ impl<'a> FuncBuilder<'a> {
 
         let callee = self.closure_callee(id, member, function)?;
         let mut args = vec![function];
+        let mut sources = Vec::new();
         if literal {
             for (at, element) in elements.iter().enumerate() {
                 let value = match self.parameter_representation(id, at) {
@@ -74434,6 +74455,7 @@ impl<'a> FuncBuilder<'a> {
                     None => self.lower_expression(*element)?,
                 };
                 args.push(self.coerce_to_parameter(id, at, value, *element)?);
+                sources.push((*element, self.snapshot.node_types.get(element).copied()));
             }
         } else {
             let positions = positions.unwrap_or_default();
@@ -74444,8 +74466,10 @@ impl<'a> FuncBuilder<'a> {
                     .ok_or_else(|| self.unrepresentable(list, "an `apply` list position"))?;
                 let value = self.read_a_position(array, at, &want, list)?;
                 args.push(self.coerce_to_parameter(id, at, value, list)?);
+                sources.push((list, Some(*position)));
             }
         }
+        self.argument_sources.insert(id, sources);
         self.finish_closure_call(id, function, Some(this), callee, args)
     }
 
@@ -74669,6 +74693,7 @@ impl<'a> FuncBuilder<'a> {
         args: Vec<ValueId>,
         ty: &HirType,
     ) -> Result<ValueId, Diagnostic> {
+        let sources = self.argument_sources.remove(&id).unwrap_or_default();
         let ty = ty.clone();
         let origin = self.origin(id);
         // Through the erased entry, the site spells the one ABI it can: every
@@ -74734,8 +74759,8 @@ impl<'a> FuncBuilder<'a> {
         erased.push(this);
         // More arguments than any closure in this program reads are dropped,
         // as JavaScript drops them; see [`Hierarchy::erased_call_arity`].
-        for arg in args.take(width) {
-            erased.push(self.erase_uniform_argument(arg, id)?);
+        for (position, arg) in args.take(width).enumerate() {
+            erased.push(self.erase_uniform_argument(arg, id, sources.get(position).copied())?);
         }
         // Up to the entry's fixed arity, because this site does not know the
         // closure and so cannot know how many it declares. `undefined` is what
@@ -74807,6 +74832,7 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         value: ValueId,
         id: NodeId,
+        source: Option<(NodeId, Option<TypeId>)>,
     ) -> Result<ValueId, Diagnostic> {
         // Its tag is already correct; retain the value rather than relocating
         // a literal's temporary when the uniform ABI needs no conversion.
@@ -74822,7 +74848,17 @@ impl<'a> FuncBuilder<'a> {
                 let origin = self.origin(id);
                 Ok(self.push(OpKind::ConstNull, HirType::Erased, origin))
             }
-            _ => self.coerce(value, &HirType::Erased, id),
+            _ => {
+                let source_node = source.map_or(id, |(node, _)| node);
+                let erased = self.coerce_from(value, &HirType::Erased, id, source_node)?;
+                if super::tags::payload_is_a_reference(&self.values[value.0 as usize].ty)
+                    && let Some((_, Some(ty))) = source
+                    && let OpKind::Erase { absent, .. } = &mut self.values[erased.0 as usize].kind
+                {
+                    *absent = absent_of_result(self.snapshot, ty);
+                }
+                Ok(erased)
+            }
         }
     }
 
@@ -77130,6 +77166,13 @@ impl<'a> FuncBuilder<'a> {
             function,
             callee,
             parameters,
+            argument_source: self.receiver_of_member(member).and_then(|receiver| {
+                let array = self.read_type(receiver)?;
+                match self.snapshot.types.get(array.0 as usize)?.kind {
+                    TypeKind::Array(element) => Some((receiver, Some(element))),
+                    _ => None,
+                }
+            }),
         };
         let sorted = self.merge_passes(id, runs, &element, &comparator, &origin)?;
         self.write_back(id, (sorted, target), &element, &origin)?;
@@ -77313,6 +77356,10 @@ impl<'a> FuncBuilder<'a> {
         // Keyed on `id`, the `sort` call: that is the node `closure_callee` chose the
         // slot for and the node `call_within` records, so the slot, the flag test and
         // the handler edge are one answer about one node.
+        if let Some(source) = comparator.argument_source {
+            self.argument_sources
+                .insert(id, vec![source; comparator.parameters.len()]);
+        }
         let answer =
             self.call_a_closure_entry(id, comparator.callee.clone(), None, args, &HirType::NUMBER)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());

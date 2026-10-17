@@ -4503,9 +4503,9 @@ fn written_arguments(
     let mut direct: Vec<ValueId> = args.iter().take(leading).copied().collect();
     for (raw, parameter) in written.iter().zip(&params[leading..]) {
         let source = &func.values[raw.0 as usize];
-        let (value, absent) = match source.kind {
-            OpKind::Erase { value, absent, .. } => (value, absent),
-            _ => (*raw, Absent::Impossible),
+        let (value, absent, erased) = match source.kind {
+            OpKind::Erase { value, absent, .. } => (value, absent, true),
+            _ => (*raw, Absent::Impossible, false),
         };
         let actual = &func.values[value.0 as usize];
         let absence = matches!(actual.kind, OpKind::ConstUndefined | OpKind::ConstNull);
@@ -4525,6 +4525,11 @@ fn written_arguments(
             && absent == Absent::Impossible
             && !absence
             && parameter.known == facts::Facts::TOP
+            && (erased
+                || matches!(
+                    actual.ty,
+                    HirType::Bool | HirType::Int { .. } | HirType::Float { .. } | HirType::BigInt
+                ))
         {
             direct.push(value);
         } else {

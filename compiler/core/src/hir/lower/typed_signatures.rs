@@ -304,6 +304,25 @@ fn rewrite(program: &mut Program, site: &UniformSite, abi: &Abi, slot: u32) -> b
     let OpKind::Call { args: uniform, .. } = &func.values[site.answered.0 as usize].kind else {
         return false;
     };
+    // A reference's HIR storage does not distinguish present, null and
+    // undefined. Only its source erasure carries the argument's absence.
+    for (position, want) in abi.params.iter().enumerate() {
+        if !want.is_managed() {
+            continue;
+        }
+        let Some(raw) = uniform.get(position + crate::hir::UNIFORM_ARGUMENTS) else {
+            return false;
+        };
+        if !matches!(
+            func.values[raw.0 as usize].kind,
+            OpKind::Erase {
+                absent: crate::hir::Absent::Impossible,
+                ..
+            }
+        ) {
+            return false;
+        }
+    }
     for (position, defaulted) in abi.defaulted.iter().enumerate() {
         if !defaulted {
             continue;
