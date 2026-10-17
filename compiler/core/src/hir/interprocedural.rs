@@ -558,11 +558,23 @@ fn return_facts(program: &Program, analyses: &[Analysis]) -> FxHashMap<String, F
     let mut returns = FxHashMap::default();
     for (index, func) in program.funcs.iter().enumerate() {
         let mut result = Facts::BOTTOM;
-        for block in &func.blocks {
+        for (at, block) in func.blocks.iter().enumerate() {
             // A `return` with no value is not a number, and a function that
             // never returns one has nothing to say here.
+            //
+            // What the value is worth *where it is returned*, as an argument is
+            // worth what is known where the call happens (see [`arguments`]). A
+            // scan returns its position from inside the loop, under the
+            // `at < value.length` that kept it going: the loop counter is
+            // `[from, +inf]` where it is defined and `[from, length - 1]`
+            // there. Joining the definition's fact said a JSON string's first
+            // escape could be anywhere up to infinity, so the position handed
+            // back for the next scan was not provably an `int32`, the scan's
+            // parameter stayed a double, and its loop counted in floating point
+            // -- `json-build-append` spent a fifth of its time there.
             if let Terminator::Return(Some(value)) = block.terminator {
-                result = result.join(analyses[index].get(value));
+                let at = super::BlockId(u32::try_from(at).unwrap_or(0));
+                result = result.join(analyses[index].get_at(at, value));
             }
         }
         returns.insert(func.name.clone(), result);
