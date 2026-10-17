@@ -31710,6 +31710,29 @@ impl<'a> FuncBuilder<'a> {
             known: Facts::TOP,
             written: None,
         }];
+        for (name, ty) in self.bound_parameter_types(site, result)? {
+            let ty = self
+                .represent(ty)
+                .ok_or_else(|| self.unrepresentable(site, "a bound function's parameter"))?;
+            params.push(Param {
+                name,
+                shape: ParamShape::Ordinary,
+                ty,
+                origin: origin.clone(),
+                known: Facts::TOP,
+                written: None,
+            });
+        }
+        Ok(params)
+    }
+
+    /// The bound body's ABI and its uniform entry read the same positional
+    /// source types, including the elements of `bind`'s tuple rest.
+    fn bound_parameter_types(
+        &self,
+        site: NodeId,
+        result: &nts_semantic_schema::SignatureRecord,
+    ) -> Result<Vec<(String, TypeId)>, Diagnostic> {
         // `bind`'s own declaration types its result `(...args: A) => R`, so the
         // checker's signature is one rest parameter whose type is the tuple of
         // what remains -- which is exactly that many parameters, one per
@@ -31735,20 +31758,7 @@ impl<'a> FuncBuilder<'a> {
                 remaining.push((format!("{}{at}", parameter.name), *element));
             }
         }
-        for (name, ty) in remaining {
-            let ty = self
-                .represent(ty)
-                .ok_or_else(|| self.unrepresentable(site, "a bound function's parameter"))?;
-            params.push(Param {
-                name,
-                shape: ParamShape::Ordinary,
-                ty,
-                origin: origin.clone(),
-                known: Facts::TOP,
-                written: None,
-            });
-        }
-        Ok(params)
+        Ok(remaining)
     }
 
     /// The body of a bound function ([`ClosureSource::Bound`]): read the

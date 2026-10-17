@@ -11,7 +11,7 @@ use super::{
     Absent, BinOp, Callee, ClosureInfo, ClosureSource, Func, FuncBuilder, HirType, ManagedType, Op,
     OpKind, Origin, Param, ParamShape, Terminator, UnOp, ValueId,
 };
-use crate::hir::tags;
+use crate::hir::{native, tags};
 
 pub(super) struct Plan {
     pub(super) needed: bool,
@@ -26,6 +26,18 @@ struct Input {
     delegated: bool,
     wanted: HirType,
     absent: Absent,
+    known: super::Facts,
+    bigint_range: Option<(i128, i128)>,
+}
+
+impl Input {
+    fn narrowed(&self) -> bool {
+        matches!(
+            self.wanted,
+            HirType::Int { .. } | HirType::Float { bits: 32 }
+        ) || (matches!(self.wanted, HirType::Float { .. }) && self.known != super::Facts::TOP)
+            || self.bigint_range.is_some()
+    }
 }
 
 fn primitive(ty: &HirType) -> bool {
@@ -54,6 +66,7 @@ impl FuncBuilder<'_> {
 
     pub(super) fn uniform_input_plan(&self, body: &Func, info: &ClosureInfo) -> Plan {
         let declarations = self.uniform_declarations(info);
+        let bound_absences = self.uniform_bound_absences(info);
         let owns_defaults = self
             .uniform_owner(info)
             .is_some_and(|owner| self.owns_parameter_defaults(owner));
@@ -77,15 +90,30 @@ impl FuncBuilder<'_> {
                 } else {
                     parameter.ty.clone()
                 };
-                let absent = source.map_or(Absent::Impossible, |source| {
-                    self.absence_at_excluding(source, &wanted, false)
-                });
+                let absent = source.map_or_else(
+                    || {
+                        if tags::payload_is_a_reference(&wanted) {
+                            bound_absences
+                                .get(position)
+                                .copied()
+                                .unwrap_or(Absent::Impossible)
+                        } else {
+                            Absent::Impossible
+                        }
+                    },
+                    |source| self.absence_at_excluding(source, &wanted, false),
+                );
+                let bigint_range = (wanted == HirType::BigInt)
+                    .then(|| parameter.written?.range_on(native::Targets::ALL))
+                    .flatten();
                 Input {
                     source,
                     initializer,
                     delegated,
                     wanted,
                     absent,
+                    known: parameter.known,
+                    bigint_range,
                 }
             })
             .collect();
@@ -97,6 +125,29 @@ impl FuncBuilder<'_> {
             leading,
             inputs,
         }
+    }
+
+    fn uniform_bound_absences(&self, info: &ClosureInfo) -> Vec<Absent> {
+        if info.source != ClosureSource::Bound {
+            return Vec::new();
+        }
+        let Some(super::TypeKind::Function(signature)) = self
+            .snapshot
+            .node_types
+            .get(&info.node)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .map(|record| &record.kind)
+        else {
+            return Vec::new();
+        };
+        self.snapshot
+            .signatures
+            .get(signature.0 as usize)
+            .and_then(|signature| self.bound_parameter_types(info.node, signature).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, ty)| super::absent_of_result(self.snapshot, ty))
+            .collect()
     }
 
     /// Align the source declarations with the actual positional body ABI.
@@ -184,29 +235,7 @@ impl FuncBuilder<'_> {
             let input = &plan.inputs[position];
             let source = input.source;
             let at = source.unwrap_or(info.node);
-            let initializer = input.initializer;
-            let wanted = &input.wanted;
-            self.check_uniform_primitive(
-                raw,
-                (wanted, parameter.known, input.absent, initializer.is_some()),
-                &self.origin(at),
-                (&body.name, &parameter.name),
-            );
-            let value = if input.delegated {
-                // That entry owns the initializer and its parameter cells.
-                // Passing raw avoids running a default returning undefined twice.
-                raw
-            } else if let Some(initializer) = initializer {
-                self.bind_parameter_default(raw, initializer, wanted)?
-            } else if parameter.ty == HirType::Erased {
-                raw
-            } else {
-                self.push(
-                    OpKind::Unerase { value: raw },
-                    parameter.ty.clone(),
-                    parameter.origin.clone(),
-                )
-            };
+            let value = self.uniform_value(raw, input, parameter, at, &body.name)?;
             args.push(value);
             if binds_defaults
                 && parameter.shape != ParamShape::Rest
@@ -249,6 +278,58 @@ impl FuncBuilder<'_> {
         Ok(self.finish(name, params, HirType::Erased, body.origin.clone(), false))
     }
 
+    fn uniform_value(
+        &mut self,
+        raw: ValueId,
+        input: &Input,
+        parameter: &Param,
+        at: NodeId,
+        body: &str,
+    ) -> Result<ValueId, Diagnostic> {
+        let selected = if input.narrowed() && !input.delegated {
+            if let Some(initializer) = input.initializer {
+                self.bind_parameter_default(raw, initializer, &HirType::Erased)?
+            } else {
+                raw
+            }
+        } else {
+            raw
+        };
+        let checked = self.check_uniform_primitive(
+            selected,
+            input,
+            input.initializer.is_some() && (input.delegated || !input.narrowed()),
+            &self.origin(at),
+            (body, &parameter.name),
+        );
+        if input.delegated {
+            // The existing parameter entry owns the initializer and its cells.
+            return Ok(raw);
+        }
+        if let Some(checked) = checked {
+            return Ok(if self.values[checked.0 as usize].ty == parameter.ty {
+                checked
+            } else {
+                self.push(
+                    OpKind::Convert(checked),
+                    parameter.ty.clone(),
+                    parameter.origin.clone(),
+                )
+            });
+        }
+        if let Some(initializer) = input.initializer {
+            self.bind_parameter_default(raw, initializer, &input.wanted)
+        } else if parameter.ty == HirType::Erased {
+            Ok(raw)
+        } else {
+            Ok(self.push(
+                OpKind::Unerase { value: raw },
+                parameter.ty.clone(),
+                parameter.origin.clone(),
+            ))
+        }
+    }
+
     fn forward_uniform_bindings(
         &mut self,
         body: &Func,
@@ -276,10 +357,13 @@ impl FuncBuilder<'_> {
     fn check_uniform_primitive(
         &mut self,
         raw: ValueId,
-        (ty, known, absent, defaulted): (&HirType, super::Facts, Absent, bool),
+        input: &Input,
+        defaulted: bool,
         origin: &Origin,
         names: (&str, &str),
-    ) {
+    ) -> Option<ValueId> {
+        let ty = &input.wanted;
+        let absent = input.absent;
         let primary = match ty {
             HirType::Float { .. } | HirType::Int { .. } => tags::NUMBER,
             HirType::Bool => tags::BOOLEAN,
@@ -288,7 +372,7 @@ impl FuncBuilder<'_> {
             HirType::Managed(ManagedType::Symbol) => tags::SYMBOL,
             // Reference storage/layout admission is separately scoped. An
             // OBJECT tag is deliberately not claimed as proof of storage here.
-            _ => return,
+            _ => return None,
         };
         let unsigned = HirType::Int {
             bits: 32,
@@ -300,8 +384,7 @@ impl FuncBuilder<'_> {
             origin.clone(),
         );
         let accepted = self.new_block();
-        let narrowed = matches!(ty, HirType::Int { .. } | HirType::Float { bits: 32 })
-            || (primary == tags::NUMBER && known != super::Facts::TOP);
+        let narrowed = input.narrowed();
         let numeric = if narrowed { self.new_block() } else { accepted };
         let mut allowed = vec![(primary, numeric)];
         if defaulted || absent == Absent::Undefined {
@@ -336,15 +419,29 @@ impl FuncBuilder<'_> {
             self.switch_to(next);
         }
         self.uniform_mismatch(names, origin);
-        if narrowed {
+        let checked = if narrowed {
             self.switch_to(numeric);
-            self.check_uniform_numeric(raw, ty, known, names, origin);
+            let checked = if let Some(range) = input.bigint_range {
+                self.check_uniform_bigint(raw, range, names, origin)
+            } else {
+                self.check_uniform_numeric(raw, ty, input.known, names, origin)
+            };
             self.terminate(Terminator::Jump {
                 target: accepted,
                 args: Vec::new(),
             });
-        }
+            Some(checked)
+        } else {
+            None
+        };
         self.switch_to(accepted);
+        // A default/absence arm bypasses the numeric checks. Only return a
+        // checked SSA value when its definition dominates every admitted arm.
+        if defaulted || absent != Absent::Impossible {
+            None
+        } else {
+            checked
+        }
     }
 
     fn check_uniform_numeric(
@@ -354,8 +451,8 @@ impl FuncBuilder<'_> {
         known: super::Facts,
         names: (&str, &str),
         origin: &Origin,
-    ) {
-        let number = self.push(
+    ) -> ValueId {
+        let mut number = self.push(
             OpKind::Unerase { value: raw },
             HirType::NUMBER,
             origin.clone(),
@@ -371,6 +468,7 @@ impl FuncBuilder<'_> {
                     origin.clone(),
                 );
                 self.require_uniform_comparison((BinOp::Eq, number, truncated), names, origin);
+                number = truncated;
                 let end = 2_f64.powi(i32::from(*bits) - i32::from(*signed));
                 let start = if *signed { -end } else { 0.0 };
                 for (op, limit) in [(BinOp::Ge, start), (BinOp::Lt, end)] {
@@ -379,6 +477,18 @@ impl FuncBuilder<'_> {
                     self.require_uniform_comparison((op, number, bound), names, origin);
                 }
                 self.require_uniform_nonnegative_zero(number, names, origin);
+                // The check rejects -0; +0 preserves every accepted value and
+                // lets the existing number analysis carry that fact onward.
+                let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
+                number = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Add,
+                        lhs: number,
+                        rhs: zero,
+                    },
+                    HirType::NUMBER,
+                    origin.clone(),
+                );
             }
             HirType::Float { bits: 32 } => {
                 let rounded = self.push(OpKind::Convert(number), ty.clone(), origin.clone());
@@ -408,10 +518,31 @@ impl FuncBuilder<'_> {
                     args: Vec::new(),
                 });
                 self.switch_to(accepted);
+                number = widened;
             }
             _ => {}
         }
         self.check_uniform_number(number, known, names, origin);
+        number
+    }
+
+    fn check_uniform_bigint(
+        &mut self,
+        raw: ValueId,
+        (lo, hi): (i128, i128),
+        names: (&str, &str),
+        origin: &Origin,
+    ) -> ValueId {
+        let number = self.push(
+            OpKind::Unerase { value: raw },
+            HirType::BigInt,
+            origin.clone(),
+        );
+        for (op, limit) in [(BinOp::Ge, lo), (BinOp::Le, hi)] {
+            let bound = self.push(OpKind::ConstInt(limit), HirType::BigInt, origin.clone());
+            self.require_uniform_comparison((op, number, bound), names, origin);
+        }
+        number
     }
 
     fn require_uniform_comparison(
