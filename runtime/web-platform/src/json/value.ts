@@ -86,6 +86,24 @@ function buildSeen(keys: readonly string[]): Map<string, number> {
 }
 
 /**
+ * Whether an object's members are already its own keys in order: no array-index key, which
+ * `OrdinaryOwnPropertyKeys` would move to the front, and no repeat, which would keep the first
+ * position with the last value. A wide object answers no without looking, and takes the
+ * general path with its map.
+ */
+function plainMembers(keys: readonly string[]): boolean {
+  if (keys.length >= WIDE_OBJECT) return false;
+  for (let at = 0; at < keys.length; at++) {
+    const key = keys[at] as string;
+    if (arrayIndexOf(key) >= 0) return false;
+    for (let before = 0; before < at; before++) {
+      if (keys[before] === key) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * The positions `0..indexOrder.length`, ordered by the array index each one holds.
  *
  * **This is a hand-written sort because `Array#sort` with a comparator is not lowered yet** --
@@ -261,7 +279,7 @@ export class JsonValue {
   }
 
   static arrayValue(items: readonly JsonValue[], start: number, end: number): JsonValue {
-    return new JsonValue("array", start, end, false, 0, "", items, [], []);
+    return new JsonValue("array", start, end, false, 0, "", items, NO_KEYS, NO_VALUES);
   }
 
   /**
@@ -288,6 +306,16 @@ export class JsonValue {
    * common case -- most objects have a handful of members, where a scan of four strings beats
    * building a hash table. So the scan stays until an object proves to be wide, and the map is
    * built once at the threshold and used from there on. Both paths implement the same rule.
+   *
+   * ### The common object is its source lists
+   *
+   * An object with no array-index key and no repeated key -- which is what documents are made
+   * of -- is already in `OrdinaryOwnPropertyKeys` order, so it keeps the two lists it was given
+   * rather than copying them, as {@link arrayValue} keeps its items. **The lists become the
+   * object's**: every caller builds them for the call and drops them after it, and none may
+   * change them once they are handed over. Measured on `benchmarks/cases/json-parse`: an
+   * object cost a `Frame`'s three lists, five working lists here and an empty items list --
+   * nine arrays, two of which held anything -- and now costs its two.
    */
   static objectValue(
     sourceKeys: readonly string[],
@@ -295,6 +323,9 @@ export class JsonValue {
     start: number,
     end: number,
   ): JsonValue {
+    if (plainMembers(sourceKeys)) {
+      return new JsonValue("object", start, end, false, 0, "", NO_ITEMS, sourceKeys, sourceValues);
+    }
     const indexKeys: string[] = [];
     const indexOrder: number[] = [];
     const indexValues: JsonValue[] = [];
@@ -356,7 +387,7 @@ export class JsonValue {
     // the general path below is what this is skipping and not something it
     // changes.
     if (indexKeys.length === 0) {
-      return new JsonValue("object", start, end, false, 0, "", [], stringKeys, stringValues);
+      return new JsonValue("object", start, end, false, 0, "", NO_ITEMS, stringKeys, stringValues);
     }
 
     // Ascending numeric order, not lexicographic: "10" follows "9".
@@ -373,6 +404,6 @@ export class JsonValue {
       values.push(stringValues[at] as JsonValue);
     }
 
-    return new JsonValue("object", start, end, false, 0, "", [], keys, values);
+    return new JsonValue("object", start, end, false, 0, "", NO_ITEMS, keys, values);
   }
 }

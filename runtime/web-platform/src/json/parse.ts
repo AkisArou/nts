@@ -44,20 +44,33 @@ const LOWER_U = 0x75;
 export const OPEN_BRACE = 0x7b;
 export const CLOSE_BRACE = 0x7d;
 
-/** One open container while parsing. Both payload lists exist so the frame has no union. */
+/**
+ * One open container while parsing. Both payload lists are fields so the frame has no union,
+ * but only the kind's own are allocated: an array frame's `keys` and `values` and an object
+ * frame's `items` are one shared empty list that nothing pushes to, because every push below
+ * is guarded by `isArray`. A frame per container allocated all three, and the two it could
+ * never use were two of the nine arrays an object cost.
+ */
 class Frame {
   readonly isArray: boolean;
   readonly start: number;
-  readonly items: JsonValue[] = [];
-  readonly keys: string[] = [];
-  readonly values: JsonValue[] = [];
+  readonly items: JsonValue[];
+  readonly keys: string[];
+  readonly values: JsonValue[];
   pendingKey = "";
 
   constructor(isArray: boolean, start: number) {
     this.isArray = isArray;
     this.start = start;
+    this.items = isArray ? [] : UNUSED_ITEMS;
+    this.keys = isArray ? UNUSED_KEYS : [];
+    this.values = isArray ? UNUSED_VALUES : [];
   }
 }
+
+const UNUSED_ITEMS: JsonValue[] = [];
+const UNUSED_KEYS: string[] = [];
+const UNUSED_VALUES: JsonValue[] = [];
 
 /**
  * The message shape for a JSON syntax error.
