@@ -40,6 +40,35 @@ impl Supplies {
         self.owners.contains_key(&owner)
     }
 
+    /// The authored bodies reached by a method call on this literal owner.
+    /// Its contextual interface declaration has no body to analyse.
+    pub(super) fn method_declarations(
+        &self,
+        probe: &FuncBuilder,
+        owner: TypeId,
+        key: &str,
+    ) -> Vec<NodeId> {
+        let mut declarations = Vec::new();
+        for literal in self.owners.get(&owner).into_iter().flatten() {
+            for member in probe.children(*literal) {
+                let prefix = match probe.kind_of(member) {
+                    Some(syntax::METHOD_DECLARATION) => "",
+                    Some(syntax::GET_ACCESSOR) => "get ",
+                    Some(syntax::SET_ACCESSOR) => "set ",
+                    _ => continue,
+                };
+                let name = probe
+                    .member_name(member)
+                    .or_else(|| probe.symbol_member_name(*literal, member, Some(owner)));
+                if name.is_some_and(|name| format!("{prefix}{name}") == key) {
+                    declarations
+                        .push(probe.implementation_of(super::the_function_of(probe, member)));
+                }
+            }
+        }
+        declarations
+    }
+
     /// An unknown computed write may replace any member of this owner.
     pub(super) fn collect_writes(&mut self, probe: &FuncBuilder, faces: &FxHashSet<TypeId>) {
         if self.owners.is_empty() {

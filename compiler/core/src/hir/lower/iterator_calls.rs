@@ -28,13 +28,26 @@ pub(super) struct Method {
 impl Method {
     pub(super) fn resolve(probe: &FuncBuilder<'_>, receiver: TypeId, key: &str) -> Option<Self> {
         let owner = probe.hierarchy.declaring(receiver, key)?;
-        let declarations = if probe.hierarchy.overridden(receiver, key) {
+        let mut declarations = if probe.hierarchy.overridden(receiver, key) {
             members_filling(probe.snapshot, probe, &probe.hierarchy, owner, key)
         } else {
             vec![probe.implementation_of(
                 probe.member_declaration(owner, key.strip_prefix("get ").unwrap_or(key))?,
             )]
         };
+        for literal in probe
+            .hierarchy
+            .literal_methods
+            .owners()
+            .filter(|owner| probe.hierarchy.descends_from(*owner, receiver))
+        {
+            declarations.extend(
+                probe
+                    .hierarchy
+                    .literal_methods
+                    .method_declarations(probe, literal, key),
+            );
+        }
         let mut targets: Vec<_> = declarations
             .into_iter()
             .filter_map(|declaration| {
