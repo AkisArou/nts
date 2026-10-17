@@ -28492,6 +28492,7 @@ impl<'a> FuncBuilder<'a> {
         at: usize,
         value: ValueId,
         argument: NodeId,
+        argument_ty: Option<TypeId>,
     ) -> Result<ValueId, Diagnostic> {
         let Some(want) = self.parameter_representation(call, at) else {
             return Ok(value);
@@ -28514,6 +28515,12 @@ impl<'a> FuncBuilder<'a> {
         }
         if self.fills_records(call, at) {
             return Ok(value);
+        }
+        // A tuple position has its own type. Erase it here, before the
+        // concrete value disappears, rather than attributing its absence to
+        // the tuple object used to read it. Already-erased values keep their tag.
+        if want == HirType::Erased && argument_ty.is_some() {
+            return self.erase_uniform_argument(value, argument, Some((argument, argument_ty)));
         }
         self.coerce(value, &want, argument)
     }
@@ -33563,7 +33570,13 @@ impl<'a> FuncBuilder<'a> {
                         .represent(*position)
                         .ok_or_else(|| self.unrepresentable(operand, "a spread position"))?;
                     let value = self.read_a_position(array, offset, &want, operand)?;
-                    let value = self.coerce_to_parameter(call, args.len(), value, operand)?;
+                    let value = self.coerce_to_parameter(
+                        call,
+                        args.len(),
+                        value,
+                        operand,
+                        Some(*position),
+                    )?;
                     sources.push((operand, Some(*position)));
                     args.push(value);
                 }
@@ -33882,7 +33895,7 @@ impl<'a> FuncBuilder<'a> {
             self.this = outer;
         }
         let value = lowered?;
-        self.coerce_to_parameter(call, args.len(), value, node)
+        self.coerce_to_parameter(call, args.len(), value, node, self.read_type(node))
     }
 
     /// The trailing arguments of a call, as the array its callee declared.
@@ -74380,7 +74393,13 @@ impl<'a> FuncBuilder<'a> {
                     Some(want) => self.lower_expecting(*element, &want)?,
                     None => self.lower_expression(*element)?,
                 };
-                args.push(self.coerce_to_parameter(id, at, value, *element)?);
+                args.push(self.coerce_to_parameter(
+                    id,
+                    at,
+                    value,
+                    *element,
+                    self.read_type(*element),
+                )?);
                 sources.push((*element, self.read_type(*element)));
             }
         } else {
@@ -74391,7 +74410,7 @@ impl<'a> FuncBuilder<'a> {
                     .represent(*position)
                     .ok_or_else(|| self.unrepresentable(list, "an `apply` list position"))?;
                 let value = self.read_a_position(array, at, &want, list)?;
-                args.push(self.coerce_to_parameter(id, at, value, list)?);
+                args.push(self.coerce_to_parameter(id, at, value, list, Some(*position))?);
                 sources.push((list, Some(*position)));
             }
         }
