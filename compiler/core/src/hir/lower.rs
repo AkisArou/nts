@@ -33727,6 +33727,7 @@ impl<'a> FuncBuilder<'a> {
             let origin = self.origin(node);
             return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
         }
+        self.check_caller_filled_default(node, callee)?;
         self.a_default_the_instance_cannot_answer(node, callee)?;
         // The parameters before this one, bound to what the call
         // already computed for them.

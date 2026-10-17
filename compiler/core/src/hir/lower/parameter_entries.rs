@@ -149,6 +149,49 @@ impl FuncBuilder<'_> {
         self.owns_parameter_defaults(callable).then_some(callable)
     }
 
+    /// Caller-filled defaults cannot manufacture the callee's parameter cell.
+    /// Reuse the authored capture records, restricted to this initializer;
+    /// another supplied default on the same callable needs no refusal.
+    pub(super) fn check_caller_filled_default(
+        &self,
+        initializer: NodeId,
+        callable: NodeId,
+    ) -> Result<(), Diagnostic> {
+        let callable = self.implementation_of(callable);
+        if !self.closures.needs_parameter_entry(callable) {
+            return Ok(());
+        }
+        let captures_parameter = self.closures.iter().any(|closure| {
+            matches!(closure.source, ClosureSource::Authored)
+                && (closure.node == initializer || self.is_within(closure.node, initializer))
+                && closure.captures.iter().any(|capture| {
+                    self.snapshot
+                        .symbols
+                        .get(capture.symbol as usize)
+                        .is_some_and(|symbol| {
+                            symbol.declarations.iter().any(|declaration| {
+                                parameter_declaration(self, *declaration)
+                                    .and_then(|parameter| self.syntactic_parent(parameter))
+                                    == Some(callable)
+                            })
+                        })
+                })
+        });
+        if captures_parameter {
+            let name = self
+                .declared_name(callable)
+                .unwrap_or_else(|| "anonymous callable".to_owned());
+            return Err(self.unsupported(
+                initializer,
+                &format!(
+                    "a caller-filled default for `{name}` that captures a parameter binding, \
+                     whose callable has no parameter entry"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn bind_parameter_default(
         &mut self,
         raw: ValueId,
