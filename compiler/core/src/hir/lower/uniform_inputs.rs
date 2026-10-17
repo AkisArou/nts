@@ -62,7 +62,7 @@ fn numeric_contract(parameter: &Param, wanted: &HirType) -> (HirType, super::Fac
     }
 }
 
-fn primitive(ty: &HirType) -> bool {
+pub(super) fn primitive(ty: &HirType) -> bool {
     matches!(
         ty,
         HirType::Float { .. }

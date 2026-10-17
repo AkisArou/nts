@@ -4388,6 +4388,24 @@ fn receiving_call_name(index: usize) -> String {
 #[derive(Clone, Copy, Debug)]
 struct ClosureEntry(u32);
 
+/// Argument provenance and routing live only while this one call is lowered.
+/// A known reference input outside scalar admission keeps the previous typed
+/// path, including caller-filled defaults; it must not gain an unchecked cast.
+#[derive(Default)]
+struct UniformArguments {
+    sources: Vec<(NodeId, Option<TypeId>)>,
+    typed_references: Option<usize>,
+}
+
+impl UniformArguments {
+    fn new(sources: Vec<(NodeId, Option<TypeId>)>) -> Self {
+        Self {
+            sources,
+            typed_references: None,
+        }
+    }
+}
+
 /// A `this`-reading function's written entry: its body, called with
 /// `undefined`, the `this` JavaScript gives a plain call. `this_at` is where
 /// the body takes it: after the closure for a closure's `#call`
@@ -21100,7 +21118,7 @@ struct FuncBuilder<'a> {
     /// The arguments' own source types until a closure call erases them.
     /// A call's result type cannot say what a null argument pointer means.
     /// Tuple spreads record each position's type, rather than the tuple's.
-    argument_sources: rustc_hash::FxHashMap<NodeId, Vec<(NodeId, Option<TypeId>)>>,
+    argument_sources: rustc_hash::FxHashMap<NodeId, UniformArguments>,
     /// Object literals a native call passes as its labels, marked before its
     /// arguments are lowered: each is lowered a property at a time and never
     /// built (`Role::Label`).
@@ -31833,7 +31851,8 @@ impl<'a> FuncBuilder<'a> {
             .skip(1)
             .map(|node| (node, self.read_type(node)))
             .collect();
-        self.argument_sources.insert(site, sources);
+        self.argument_sources
+            .insert(site, UniformArguments::new(sources));
         self.returns = returns.clone();
         let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
         let carried = (!matches!(returns, HirType::Void | HirType::Never)).then_some(answered);
@@ -33633,6 +33652,13 @@ impl<'a> FuncBuilder<'a> {
             sources.push((argument.node, self.read_type(argument.node)));
             args.push(value);
         }
+        // Decide the legacy reference route before defaults: those sites
+        // retain the old caller-filled path instead of acquiring entry ownership.
+        let references =
+            receiver.and_then(|receiver| self.known_reference_path(call, receiver, &args));
+        if let Some(needed) = self.argument_sources.get_mut(&call) {
+            needed.typed_references = references;
+        }
         // Defaults run in parameter order, after all supplied expressions,
         // including excess expressions and the expressions gathered into rest.
         for (at, (node, ty)) in sources.iter().copied().enumerate() {
@@ -33653,7 +33679,7 @@ impl<'a> FuncBuilder<'a> {
             args.push(gathered);
         }
         if let Some(needed) = self.argument_sources.get_mut(&call) {
-            *needed = sources;
+            needed.sources = sources;
         }
         Ok(args)
     }
@@ -33691,9 +33717,7 @@ impl<'a> FuncBuilder<'a> {
         let Some((default, callee)) = self.declared_default(call, before.len()) else {
             return Ok(value);
         };
-        if self.parameter_entry_for_call(call).is_some()
-            || self.argument_sources.contains_key(&call)
-        {
+        if self.parameter_entry_for_call(call).is_some() || self.uniform_defaults_at(call) {
             return Ok(value);
         }
         // The literal cannot take the supplied-value arm. Defer its default
@@ -33823,7 +33847,7 @@ impl<'a> FuncBuilder<'a> {
         self.check_caller_filled_default(node, callee)?;
         // A function-value call runs defaults in its uniform entry. Supplying
         // the initializer's result here would run it twice if that is undefined.
-        if self.argument_sources.contains_key(&call) {
+        if self.uniform_defaults_at(call) {
             let origin = self.origin(node);
             return Ok(self.push(OpKind::ConstUndefined, HirType::Erased, origin));
         }
@@ -74236,6 +74260,60 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// Whether this call's uniform entry owns its parameter defaults.
+    fn uniform_defaults_at(&self, call: NodeId) -> bool {
+        self.argument_sources
+            .get(&call)
+            .is_some_and(|arguments| arguments.typed_references.is_none())
+    }
+
+    /// A known identity proves the receiver, not reference storage. Until that
+    /// admission contract is implemented, keep an unproved reference argument
+    /// typed and visible to the same backend checks as the previous call path.
+    /// The decision precedes defaults so a mixed site retains its old ownership.
+    fn known_reference_path(
+        &self,
+        call: NodeId,
+        receiver: ValueId,
+        arguments: &[ValueId],
+    ) -> Option<usize> {
+        if self.dispatches_to_a_raising_entry(call) {
+            return None;
+        }
+        let HirType::Managed(ManagedType::Object(class)) = self.values[receiver.0 as usize].ty
+        else {
+            return None;
+        };
+        if !super::is_closure_type(class) {
+            return None;
+        }
+        let index = closure_index(class);
+        let info = self.closures.get(index)?;
+        if generic_values::is_canonical(self.snapshot, info) {
+            return None;
+        }
+        self.effective_parameters(call)
+            .iter()
+            .enumerate()
+            .any(|(position, (ty, _, _))| {
+                let Some(want) = ty.and_then(|ty| self.represent(ty)) else {
+                    return false;
+                };
+                if !want.is_managed() || uniform_inputs::primitive(&want) {
+                    return false;
+                }
+                let Some(argument) = arguments.get(position) else {
+                    return true;
+                };
+                let (value, absent) = match self.values[argument.0 as usize].kind {
+                    OpKind::Erase { value, absent, .. } => (value, absent),
+                    _ => (*argument, Absent::Impossible),
+                };
+                self.values[value.0 as usize].ty != want || absent != Absent::Impossible
+            })
+            .then_some(index)
+    }
+
     /// `f.apply(receiver, list)` -- the arguments as one array.
     ///
     /// The receiver is passed as [`Self::lower_call_with_receiver`] passes it,
@@ -74422,7 +74500,14 @@ impl<'a> FuncBuilder<'a> {
                 sources.push((list, Some(*position)));
             }
         }
-        self.argument_sources.insert(id, sources);
+        let typed_references = self.known_reference_path(id, function, &args[1..]);
+        self.argument_sources.insert(
+            id,
+            UniformArguments {
+                sources,
+                typed_references,
+            },
+        );
         self.finish_closure_call(id, function, Some(this), callee, args)
     }
 
@@ -74554,7 +74639,8 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let callee = self.closure_callee(id, callee_node, receiver)?;
         let mut args = vec![receiver];
-        self.argument_sources.insert(id, Vec::new());
+        self.argument_sources
+            .insert(id, UniformArguments::default());
         args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         // Through a function type, the callee is any function of the type, so
         // the type's parameter kinds are what a call must fit -- which every
@@ -74645,9 +74731,30 @@ impl<'a> FuncBuilder<'a> {
         args: Vec<ValueId>,
         ty: &HirType,
     ) -> Result<ValueId, Diagnostic> {
-        let sources = self.argument_sources.remove(&id).unwrap_or_default();
+        let arguments = self.argument_sources.remove(&id).unwrap_or_default();
+        let sources = arguments.sources;
         let ty = ty.clone();
         let origin = self.origin(id);
+        if let Some(index) = arguments.typed_references {
+            let mut args = args;
+            let reads_this = self.closures.get(index).is_some_and(|info| info.reads_this);
+            let name = if reads_this {
+                let this = self.erased_this(this, id)?;
+                args.insert(super::UNIFORM_THIS, this);
+                receiving_call_name(index)
+            } else {
+                closure_names(index).1
+            };
+            return Ok(self.push(
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    args,
+                    frame: None,
+                },
+                ty,
+                origin,
+            ));
+        }
         // Through the erased entry, the site spells the one ABI it can: every
         // written argument erased and the answer unerased to what it reads. The
         // receiver is not one of them -- it is the closure object, and the entry
@@ -77279,8 +77386,10 @@ impl<'a> FuncBuilder<'a> {
         // slot for and the node `call_within` records, so the slot, the flag test and
         // the handler edge are one answer about one node.
         if let Some(source) = comparator.argument_source {
-            self.argument_sources
-                .insert(id, vec![source; comparator.parameters.len()]);
+            self.argument_sources.insert(
+                id,
+                UniformArguments::new(vec![source; comparator.parameters.len()]),
+            );
         }
         let answer =
             self.call_a_closure_entry(id, comparator.callee, None, args, &HirType::NUMBER)?;

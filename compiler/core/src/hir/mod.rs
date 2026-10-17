@@ -4538,6 +4538,64 @@ fn written_arguments(
     Some(direct)
 }
 
+struct ReferenceArguments {
+    values: Vec<ValueId>,
+    read_backs: Vec<(usize, Op)>,
+}
+
+/// Recover the previous typed argument path when a known call has a
+/// reference input outside scalar admission. In particular, a concrete payload
+/// stays concrete so the backend still sees its assignability obligation.
+/// Mixed scalar/default positions retain their previous, unestablished contract
+/// at these sites; reference admission is a separately reviewed change.
+fn reference_arguments(
+    func: &Func,
+    index: usize,
+    args: &[ValueId],
+    params: &[Param],
+    takes_this: bool,
+) -> Option<ReferenceArguments> {
+    let leading = if takes_this { UNIFORM_ARGUMENTS } else { 1 };
+    let written = args.get(UNIFORM_ARGUMENTS..)?;
+    let input = |raw: ValueId| match func.values[raw.0 as usize].kind {
+        OpKind::Erase { value, .. } => value,
+        _ => raw,
+    };
+    let unproved = written.iter().zip(&params[leading..]).any(|(raw, parameter)| {
+        matches!(parameter.ty, HirType::Managed(_))
+            && !matches!(parameter.ty, HirType::Managed(ManagedType::String | ManagedType::Symbol | ManagedType::BoxedBigInt))
+            && (func.values[input(*raw).0 as usize].ty != parameter.ty
+                || matches!(func.values[raw.0 as usize].kind, OpKind::Erase { absent, .. } if absent != Absent::Impossible))
+    });
+    if !unproved {
+        return None;
+    }
+    let mut direct: Vec<_> = args.iter().take(leading).copied().collect();
+    let mut read_backs = Vec::new();
+    for (raw, parameter) in written.iter().zip(&params[leading..]) {
+        let value = input(*raw);
+        if verify::compatible(&func.values[value.0 as usize].ty, &parameter.ty) {
+            direct.push(value);
+        } else if parameter.ty == HirType::Erased {
+            direct.push(*raw);
+        } else {
+            read_backs.push((
+                direct.len(),
+                Op {
+                    kind: OpKind::Unerase { value: *raw },
+                    ty: parameter.ty.clone(),
+                    origin: func.values[index].origin.clone(),
+                },
+            ));
+            direct.push(*raw);
+        }
+    }
+    Some(ReferenceArguments {
+        values: direct,
+        read_backs,
+    })
+}
+
 /// Resolve only the receiver when admission or defaults still need the
 /// uniform entry. Its ABI and the caller's result read-back stay intact.
 fn direct_uniform_call(func: &mut Func, index: usize, name: String, receiver: Option<Op>) -> bool {
@@ -4586,6 +4644,22 @@ pub(super) fn read_elsewhere(func: &Func, value: ValueId, except: ValueId) -> bo
     })
 }
 
+/// One live read of a uniform result, kept as the typed call's SSA identity.
+fn sole_typed_result_read(func: &Func, answer: ValueId, returns: &HirType) -> Option<ValueId> {
+    func.blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .copied()
+        .find(|op| {
+            let value = &func.values[op.0 as usize];
+            // A known reference producer must remain visible to the backend's
+            // typed store check even when the declared view has another class.
+            (value.ty == *returns || (value.ty.is_managed() && returns.is_managed()))
+                && matches!(value.kind, OpKind::Unerase { value } if value == answer)
+                && !read_elsewhere(func, answer, *op)
+        })
+}
+
 pub(super) fn call_directly(
     func: &mut Func,
     index: usize,
@@ -4605,14 +4679,18 @@ pub(super) fn call_directly(
     let OpKind::Call { args, .. } = &func.values[index].kind else {
         return false;
     };
-    let mut args = if uniform {
-        let Some(direct) = written_arguments(func, args, params, takes_this) else {
+    let (mut args, read_backs) = if uniform {
+        if let Some(direct) = written_arguments(func, args, params, takes_this) {
+            (direct, Vec::new())
+        } else if let Some(references) = reference_arguments(func, index, args, params, takes_this)
+        {
+            (references.values, references.read_backs)
+        } else {
             return uniform_name
                 .is_some_and(|name| direct_uniform_call(func, index, name, receiver));
-        };
-        direct
+        }
     } else {
-        args.clone()
+        (args.clone(), Vec::new())
     };
 
     // A sole matching read can retain the typed SSA result immediately, so
@@ -4620,18 +4698,7 @@ pub(super) fn call_directly(
     // simplified. Prove its exclusivity with the typed-signature rewrite's
     // same live-use query. The call still executes at its original position.
     let typed_read = uniform
-        .then(|| {
-            func.blocks
-                .iter()
-                .flat_map(|block| &block.ops)
-                .copied()
-                .find(|op| {
-                    let value = &func.values[op.0 as usize];
-                    value.ty == *returns
-                        && matches!(value.kind, OpKind::Unerase { value } if value == id(index))
-                        && !read_elsewhere(func, id(index), *op)
-                })
-        })
+        .then(|| sole_typed_result_read(func, id(index), returns))
         .flatten();
 
     // Keep evaluation at the original call, before every consumer of its
@@ -4659,6 +4726,13 @@ pub(super) fn call_directly(
         at += 1;
         args[0] = value;
     }
+    for (position, read) in read_backs {
+        let value = id(func.values.len());
+        func.values.push(read);
+        func.blocks[block].ops.insert(at, value);
+        at += 1;
+        args[position] = value;
+    }
     let call = OpKind::Call {
         callee: Callee::Direct(name),
         args,
@@ -4681,6 +4755,7 @@ pub(super) fn call_directly(
             }
         }
         func.values[read.0 as usize].kind = call;
+        func.values[read.0 as usize].ty = returns.clone();
         func.values[index].kind = OpKind::ConstUndefined;
         func.values[index].ty = HirType::Erased;
         return true;

@@ -39,7 +39,7 @@ fn prepared(name: &str) -> Option<hir::Program> {
 
 /// A known generator result must reach the store as a typed call. An erased
 /// round trip hides its actual class and turns the JVM's named unrelated-store
-/// decline into an emitted ClassCastException at module initialization.
+/// decline into an emitted `ClassCastException` at module initialization.
 #[test]
 fn known_reference_results_remain_typed_at_the_store() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
@@ -89,6 +89,45 @@ fn known_reference_results_remain_typed_at_the_store() {
     assert!(
         producer.return_type == HirType::Managed(ManagedType::Object(hir::generator_frame(0))),
         "the store must still expose the producer's actual generator result"
+    );
+    assert!(
+        program.funcs.iter().all(|func| {
+            !func.name.contains("#erased_call")
+                || func.blocks.iter().flat_map(|block| &block.ops).all(|id| {
+                    let op = &func.values[id.0 as usize];
+                    !matches!(op.kind, OpKind::Unerase { .. })
+                        || !matches!(op.ty, HirType::Managed(ManagedType::Object(_)))
+                })
+        }),
+        "the known reference consumer must not introduce an unproved entry Unerase"
+    );
+    assert!(init.blocks.iter().flat_map(|block| &block.ops).any(|id| {
+        matches!(&init.values[id.0 as usize].kind, OpKind::Call { callee: Callee::Direct(name), .. } if name == "Closure1#call")
+    }), "the array-pattern consumer keeps its typed reference call");
+}
+
+/// A deferred mixed reference/default call keeps the original typed route.
+/// Its reference cannot be admitted by the scalar tag guards, and the old
+/// caller prefix must not be replaced by an unchecked adapter cast.
+#[test]
+fn mixed_reference_defaults_keep_their_previous_typed_path() {
+    let Some(program) = prepared("a-mixed-reference-default-keeps-its-typed-call") else {
+        return;
+    };
+    let subject = program
+        .funcs
+        .iter()
+        .find(|func| func.name == "subject")
+        .expect("subject is exported");
+    assert!(subject.blocks.iter().flat_map(|block| &block.ops).any(|id| {
+        matches!(&subject.values[id.0 as usize].kind, OpKind::Call { callee: Callee::Direct(name), .. } if name == "Closure0#call")
+    }), "the mixed call retains its known typed body");
+    assert!(
+        !program
+            .funcs
+            .iter()
+            .any(|func| func.name == "Closure0#erased_call"),
+        "the mixed call does not introduce an unchecked reference adapter"
     );
 }
 
