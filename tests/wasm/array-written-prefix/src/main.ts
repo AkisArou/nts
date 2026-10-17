@@ -103,3 +103,19 @@ export function gapFilledOutOfOrder(n: number): number {
 export function indexed(n: number): number {
   const v = new Vector<number>(2); v.append(42); return v.at(n);
 }
+
+// A bounds proof is not an initialization proof. Folding typeof may discard
+// its value, but the read must retain the runtime hole contract.
+export function boundedTypeOfHole(n: number): string {
+  const values = n > 0 ? new Array<number>(2) : new Array<number>(3);
+  let answer = "";
+  for (let i = 0; i < values.length; i++) answer += typeof values[i];
+  return answer;
+}
+export function boundedTypeOfControl(n: number): string {
+  const values = n > 0 ? new Array<number>(2) : new Array<number>(3);
+  values.fill(n);
+  let answer = "";
+  for (let i = 0; i < values.length; i++) answer += typeof values[i];
+  return answer;
+}
