@@ -192,6 +192,10 @@ impl Contract {
                     callable: function_type(probe, property.ty).is_some(),
                 },
             }
+        } else if probe.hierarchy.literal_methods.contains(receiver) {
+            // An unknown writer may supply a property this fixed layout cannot
+            // read. Missing metadata is not evidence of absence.
+            Return::Unavailable
         } else {
             Return::Absent
         };

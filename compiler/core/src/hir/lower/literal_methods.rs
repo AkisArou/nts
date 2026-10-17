@@ -8,6 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::interfaces::{self, Contract};
 use super::{FuncBuilder, Hierarchy, NodeId, NodeKind, PropertyRecord, TypeId, TypeKind, syntax};
 
+mod absence;
 mod adapters;
 mod values;
 pub(super) use adapters::declare;
@@ -17,6 +18,7 @@ pub(super) struct Supplies {
     owners: FxHashMap<TypeId, Vec<NodeId>>,
     allocations: FxHashMap<NodeId, TypeId>,
     writes: FxHashMap<(TypeId, Option<String>), Vec<NodeId>>,
+    effects: absence::Effects,
     mixed: FxHashSet<TypeId>,
     functions: Option<std::sync::Arc<super::closed_calls::Functions>>,
     value_only: FxHashSet<(NodeId, u32)>,
@@ -41,16 +43,13 @@ impl Supplies {
     }
 
     /// Absence at every allocation remains absence only when no supply or
-    /// tracked write can introduce the member. Prototype mutation is otherwise
-    /// refused by the ordinary reflection contract.
+    /// property effect can introduce the member. A value-supply list used to
+    /// fit callable contracts is not a complete proof that no writer exists.
     pub(super) fn known_absent(&self, probe: &FuncBuilder, owner: TypeId, key: &str) -> bool {
         let Some(literals) = self.owners.get(&owner) else {
             return false;
         };
-        if [None, Some(key.to_owned()), Some("__proto__".to_owned())]
-            .iter()
-            .any(|key| self.writes.contains_key(&(owner, key.clone())))
-        {
+        if self.effects.can_supply(probe, self, owner, key) {
             return false;
         }
         literals.iter().all(|literal| {
@@ -101,6 +100,7 @@ impl Supplies {
         let functions = super::closed_calls::Functions::collect(probe);
         (self.value_only, self.legacy) = values::collect(probe, &functions, faces, self);
         self.functions = Some(std::sync::Arc::new(functions));
+        self.effects = absence::Effects::collect(probe);
         for node in &probe.snapshot.nodes {
             if node.kind != NodeKind::Syntax(syntax::BINARY_EXPRESSION) {
                 continue;
