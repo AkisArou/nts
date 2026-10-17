@@ -1,4 +1,7 @@
-// run: check
+// A typed return callback runs its default at the uniform entry when close
+// supplies undefined. On clean 6ead, C/LLVM/JVM answered 29/58 wrong;
+// Wasm declined the 29 subjects and agreed on the 29 exhaustion controls.
+// Clean ccebd9080df9 agrees on 58/58 on each of the four backends.
 // Exhaustion is the one-change control: it never calls return.
 class Source {
   count=0;closed=0;
