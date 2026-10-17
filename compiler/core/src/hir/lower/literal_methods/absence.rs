@@ -228,12 +228,10 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
             TypeKind::Tuple(elements) if effect.nested => {
                 pending.extend(elements.iter().map(|ty| (*ty, false)));
             }
-            TypeKind::Function(signature) if effect.nested => {
-                let Some(signature) = probe.snapshot.signatures.get(signature.0 as usize) else {
-                    return true;
-                };
-                pending.push((signature.return_type, false));
-            }
+            // A function is also an object. Its signature says nothing about
+            // references stored in expando properties that an opaque call can
+            // reach, even when its result is primitive.
+            TypeKind::Function(_) if effect.nested => return true,
             TypeKind::Any
             | TypeKind::Unknown
             | TypeKind::Evolving
