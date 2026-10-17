@@ -847,7 +847,7 @@ fn unknown_callable(probe: &FuncBuilder<'_>, ty: TypeId) -> bool {
         match &probe.snapshot.types[ty.0 as usize].kind {
             TypeKind::Any | TypeKind::Unknown | TypeKind::Object { .. } => return true,
             TypeKind::Union(members) | TypeKind::Intersection(members) => {
-                pending.extend(members.iter().copied())
+                pending.extend(members.iter().copied());
             }
             _ => {}
         }

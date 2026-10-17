@@ -34321,9 +34321,9 @@ impl<'a> FuncBuilder<'a> {
     fn fixed_arity(&self, call: NodeId) -> Option<usize> {
         if self.overriding_signature(call).is_none()
             && !self.snapshot.call_targets.contains_key(&call)
-            && !self
+            && self
                 .argument_declaration
-                .is_some_and(|(site, _)| site == call)
+                .is_none_or(|(site, _)| site != call)
         {
             return None;
         }
