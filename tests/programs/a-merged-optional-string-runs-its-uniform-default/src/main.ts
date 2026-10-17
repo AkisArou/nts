@@ -30,3 +30,9 @@ export function sharedControl(n: number): number {
   const value: string | undefined = n < 0 ? "abc" : "abc";
   return callback(value);
 }
+
+// expect-ir: all: count erase in knownSubject == 1
+// expect-ir: all: count erase in sharedSubject == 1
+// expect-ir: all: no erase in knownControl
+// expect-ir: all: no tagof in knownControl
+// expect-ir: all: no call.extern(nts_refused) in knownControl
