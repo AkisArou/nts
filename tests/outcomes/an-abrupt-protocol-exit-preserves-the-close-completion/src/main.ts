@@ -292,3 +292,48 @@ export function absentSubject(n: number): number { return absentCase(true) + (n 
 export function absentControl(n: number): number { return absentCase(false) + (n & 0); }
 export function nullReturn(n: number): number { return fieldCase(null, true, false) + (n & 0); }
 export function undefinedReturn(n: number): number { return fieldCase(undefined, true, false) + (n & 0); }
+
+// Nullable references must retain the absence when erased for GetMethod and
+// for the object-result check. The sibling changes only the nullish value.
+class NullableResultSource extends Source {
+  constructor(trace: Trace, public emptyResult: boolean) { super(trace, 0); }
+  return(): { value: number; done: boolean } | null {
+    this.trace.add(3);
+    return this.emptyResult ? null : { value: 0, done: true };
+  }
+}
+function nullableResult(empty: boolean, early: boolean): number {
+  const trace = new Trace();
+  try { for (const value of new NullableResultSource(trace, empty)) { if (early) break; } }
+  catch (e) { return trace.code * 100 + (e instanceof TypeError && e.message === "Iterator result null is not an object" ? 6 : 19); }
+  return trace.code * 100;
+}
+export function nullResultSubject(n: number): number { return nullableResult(true, true); }
+export function nullResultControl(n: number): number { return nullableResult(true, false); }
+class NullableGetterSource {
+  count = 0;
+  constructor(public trace: Trace, public absent: boolean) {}
+  [Symbol.iterator](): NullableGetterSource { this.trace.add(1); return this; }
+  next(): { value: number; done: boolean } { this.trace.add(2); return { value: ++this.count, done: this.count > 2 }; }
+  get return(): (() => any) | null {
+    this.trace.add(4);
+    return this.absent ? null : () => { this.trace.add(3); return { done: true }; };
+  }
+}
+function nullableGetter(absent: boolean, early: boolean): number {
+  const trace = new Trace();
+  // @ts-ignore GetMethod explicitly allows a null return property.
+  for (const value of new NullableGetterSource(trace, absent)) { if (early) break; }
+  return trace.code;
+}
+export function nullGetterSubject(n: number): number { return nullableGetter(true, true); }
+export function nullGetterControl(n: number): number { return nullableGetter(true, false); }
+function mappedClose(early: boolean): number {
+  const trace = new Trace();
+  try {
+    const result = Array.from(new Source(trace, 1), (value) => { if (early) throw 22; return value; });
+    return trace.code * 100 + result.length;
+  } catch (e) { return trace.code * 100 + errorCode(e); }
+}
+export function mappedThrowSubject(n: number): number { return mappedClose(true); }
+export function mappedThrowControl(n: number): number { return mappedClose(false); }
