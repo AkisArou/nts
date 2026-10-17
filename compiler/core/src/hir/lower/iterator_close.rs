@@ -646,7 +646,12 @@ impl FuncBuilder<'_> {
             });
             self.switch_to(next);
         }
-        if let Some(function_type) = function_type(self, ty) {
+        let function_type = function_type(self, ty);
+        // A program without function values reserves no uniform call slots.
+        // Still read an optional field and admit null/undefined; only an actual
+        // function needs the unavailable entry.
+        let callable_type = function_type.filter(|_| self.hierarchy.erased_call_slot.is_some());
+        if let Some(function_type) = callable_type {
             let callable = self.new_block();
             let noncallable = self.new_block();
             let test = self.iterator_tag_test(at, tag, tags::FUNCTION);
@@ -682,7 +687,7 @@ impl FuncBuilder<'_> {
             })?;
             self.switch_to(noncallable);
         }
-        if function_type(self, ty).is_none() && unknown_callable(self, ty) {
+        if callable_type.is_none() && (function_type.is_some() || unknown_callable(self, ty)) {
             let refused = self.new_block();
             let primitive = self.new_block();
             let callable = self.iterator_tag_test(at, tag, tags::FUNCTION);
