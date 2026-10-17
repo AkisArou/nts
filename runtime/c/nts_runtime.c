@@ -1585,6 +1585,19 @@ void nts_release(NtsHeader *object) {
   }
 
   object->reserved = 0;
+  /* A string holds nothing -- no references, no erased or foreign slots, its
+   * units in its own block -- so its death is the block and the count, and
+   * nothing else the general path does applies to it. It ran anyway: the
+   * dying list, a walk of no references, of no erased slots and of no foreign
+   * ones, for every temporary a serializer builds and appends: 9% of
+   * `json-stringify-typed`, 7% of `-inline`. It is never a candidate either (a
+   * string cannot lead back to itself), so the buffered case below is not one
+   * it can be in. */
+  if (object->descriptor->kind == NTS_KIND_STRING) {
+    nts_env->reclaimed++;
+    nts_free_block(object);
+    return;
+  }
   nts_paint(object, NTS_BLACK);
   if (object->flags & NTS_BUFFERED) {
     /* The candidate buffer is holding it, so its memory has to outlive this
