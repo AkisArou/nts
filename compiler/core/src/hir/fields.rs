@@ -968,7 +968,7 @@ type Rewrite = (
     super::ValueId,
     super::TypeId,
     bool,
-    (Vec<HirType>, HirType, bool),
+    (Vec<super::Param>, HirType, bool, Option<String>),
 );
 
 /// Every erased or slot dispatch this pass can turn into a direct call.
@@ -1056,13 +1056,13 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
                 continue;
             };
             let shape = (
-                written
-                    .params
-                    .iter()
-                    .map(|param| param.ty.clone())
-                    .collect(),
+                written.params.clone(),
                 written.return_type.clone(),
                 receiving.is_some(),
+                layouts
+                    .of_class(class)
+                    .and_then(|at| program.layouts[at].methods.get(*slot as usize))
+                    .and_then(Clone::clone),
             );
             rewrites.push((at, index, name.clone(), erased, class, uniform, shape));
         }
@@ -1094,7 +1094,9 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
     // Four errors, in a C file no unit test reads. The example caught it and the
     // three tests over the HIR did not, because the shape they check was right.
     let mut count = 0;
-    for (func, index, name, erased, class, uniform, (params, returns, takes_this)) in rewrites {
+    for (func, index, name, erased, class, uniform, (params, returns, takes_this, uniform_name)) in
+        rewrites
+    {
         let origin = program.funcs[func].values[index].origin.clone();
         let result_absent = super::erased_entry_absent(program, class);
         // The receiver read back at the class, which is the cast this pass is
@@ -1109,11 +1111,11 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
             index,
             super::Written {
                 name,
-                arity: params.len(),
                 params: &params,
                 returns: &returns,
                 result_absent,
                 takes_this,
+                uniform_name,
             },
             uniform,
             Some(receiver),

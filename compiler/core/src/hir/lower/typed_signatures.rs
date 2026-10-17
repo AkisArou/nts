@@ -51,6 +51,7 @@ use crate::hir::{
 struct Abi {
     params: Vec<HirType>,
     returns: HirType,
+    defaulted: Vec<bool>,
 }
 
 /// Make the calls through every signature that can take its typed entry take
@@ -108,12 +109,31 @@ fn typed_layouts(
         if !is_signature_name(&layout.name) || unknown.contains(&at) {
             continue;
         }
-        let Some(abi) = abi_of(snapshot, layout.types.first().copied()) else {
+        let Some(mut abi) = abi_of(snapshot, layout.types.first().copied()) else {
             continue;
         };
         if declared_at(program, at, &abi, slot)
             && agrees_everywhere(closures, arrivals, program, at, &abi)
         {
+            // A signature may contain both defaulted and ordinary closures.
+            // Every defaulted position must keep its entry unless this site
+            // proves the default cannot run.
+            for from in 0..program.layouts.len() {
+                if from != at
+                    && descends(program, from, at)
+                    && let Some(index) = closure_of(program, closures, from)
+                    && let Some(body) = program
+                        .funcs
+                        .iter()
+                        .find(|func| func.name == closure_names(index).1)
+                {
+                    for (position, parameter) in body.params.iter().skip(1).enumerate() {
+                        if parameter.shape == crate::hir::ParamShape::Defaulted {
+                            abi.defaulted[position] = true;
+                        }
+                    }
+                }
+            }
             typed.insert(at, abi);
         }
     }
@@ -125,6 +145,7 @@ fn typed_layouts(
 fn abi_of(snapshot: &SemanticSnapshot, ty: Option<TypeId>) -> Option<Abi> {
     let (params, returns) = signature_key(snapshot, ty?)?;
     Some(Abi {
+        defaulted: vec![false; params.len()],
         params: params
             .iter()
             .map(|param| representation(snapshot, *param))
@@ -279,6 +300,26 @@ fn rewrite(program: &mut Program, site: &UniformSite, abi: &Abi, slot: u32) -> b
             .any(|(arg, want)| func.values[arg.0 as usize].ty != *want)
     {
         return false;
+    }
+    let OpKind::Call { args: uniform, .. } = &func.values[site.answered.0 as usize].kind else {
+        return false;
+    };
+    for (position, defaulted) in abi.defaulted.iter().enumerate() {
+        if !defaulted {
+            continue;
+        }
+        let Some(raw) = uniform.get(position + crate::hir::UNIFORM_ARGUMENTS) else {
+            return false;
+        };
+        let OpKind::Erase { value, absent, .. } = &func.values[raw.0 as usize].kind else {
+            return false;
+        };
+        if *absent == crate::hir::Absent::Undefined
+            || func.values[value.0 as usize].ty == HirType::Erased
+            || matches!(func.values[value.0 as usize].kind, OpKind::ConstUndefined)
+        {
+            return false;
+        }
     }
     let origin = func.values[site.answered.0 as usize].origin.clone();
     let typed = |ty: HirType| Op {

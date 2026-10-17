@@ -4477,78 +4477,97 @@ pub fn bridged_through_table(program: &Program, layout: &Layout) -> Option<u32> 
 /// ([`Program::receiving`]).
 pub(super) struct Written<'a> {
     pub name: String,
-    pub arity: usize,
     /// The written entry's parameter types, the closure first: what each
     /// argument a uniform site passed erased has to be read back as.
-    pub params: &'a [HirType],
+    pub params: &'a [Param],
+    pub uniform_name: Option<String>,
     pub returns: &'a HirType,
     pub result_absent: Absent,
     pub takes_this: bool,
 }
 
-/// A uniform site's arguments as the written entry takes them, with the
-/// read-backs that needs: `(arguments, [(position, read-back)])`.
-///
-/// The receiver keeps its place; a caller's `receiver` op replaces it. The
-/// `this` is kept, erased as the body takes it, where the entry takes one, and
-/// dropped with the padding where it does not.
-///
-/// **Each other argument is passed as the written entry takes it**, which is
-/// what the uniform entry's own body did with it. A value the site erased is
-/// passed unerased where the verifier lets it stand for the parameter
-/// ([`verify::compatible`]: two object pointers are, however their classes
-/// relate, so a class goes to a face it satisfies as it would at a direct
-/// call); an erased parameter takes the argument as it is; anything else is
-/// read back at the parameter's type, checked as the body's read-back was.
-/// Undoing every `Erase` and passing the rest through assumed the site's
-/// signature named the closure's own types; `(t as Render<unknown>)(props)`
-/// names `unknown`, and the direct `Closure0#call` was then handed an erased
-/// `props` where it takes `{ n: number }`
-/// (tests/outcomes/a-component-called-on-its-props-through-unknown). Requiring
-/// the *same* type instead read a `Reordered` back as the `Shape` it was
-/// already acceptable as, an unerase to a face nothing builds
-/// (tests/outcomes/a-class-passed-to-a-callback-at-a-structural-type-in-
-/// another-field-order, which `integrity` measures).
+/// Bypass a uniform entry only with arguments already in the body's exact
+/// representation. A known closure identity proves the receiver, not its
+/// arguments. In particular an unchecked Unerase cannot discharge admission.
 fn written_arguments(
     func: &Func,
-    index: usize,
     args: &[ValueId],
-    params: &[HirType],
-    arity: usize,
+    params: &[Param],
     takes_this: bool,
-) -> (Vec<ValueId>, Vec<(usize, Op)>) {
+) -> Option<Vec<ValueId>> {
     let leading = if takes_this { UNIFORM_ARGUMENTS } else { 1 };
-    let written = args.get(UNIFORM_ARGUMENTS..).unwrap_or_default();
+    let written = args.get(UNIFORM_ARGUMENTS..)?;
+    if written.len() < params.len().saturating_sub(leading) {
+        return None;
+    }
     let mut direct: Vec<ValueId> = args.iter().take(leading).copied().collect();
-    let mut read_backs = Vec::new();
-    for (k, arg) in written
-        .iter()
-        .take(arity.saturating_sub(leading))
-        .enumerate()
-    {
-        let unerased = match func.values[arg.0 as usize].kind {
-            OpKind::Erase { value, .. } => value,
-            _ => *arg,
+    for (raw, parameter) in written.iter().zip(&params[leading..]) {
+        let source = &func.values[raw.0 as usize];
+        let (value, absent) = match source.kind {
+            OpKind::Erase { value, absent, .. } => (value, absent),
+            _ => (*raw, Absent::Impossible),
         };
-        match params.get(leading + k) {
-            Some(want) if verify::compatible(&func.values[unerased.0 as usize].ty, want) => {
-                direct.push(unerased);
-            }
-            None | Some(HirType::Erased) => direct.push(*arg),
-            Some(want) => {
-                read_backs.push((
-                    direct.len(),
-                    Op {
-                        kind: OpKind::Unerase { value: *arg },
-                        ty: want.clone(),
-                        origin: func.values[index].origin.clone(),
-                    },
-                ));
-                direct.push(*arg);
-            }
+        let actual = &func.values[value.0 as usize];
+        let absence = matches!(actual.kind, OpKind::ConstUndefined | OpKind::ConstNull);
+        // A defaulted erased input still needs the implementation prefix when
+        // its value might be undefined. Concrete values with no absence prove
+        // the default arm will not run.
+        if parameter.shape == ParamShape::Defaulted
+            && (actual.ty == HirType::Erased
+                || absent == Absent::Undefined
+                || matches!(actual.kind, OpKind::ConstUndefined))
+        {
+            return None;
+        }
+        if parameter.ty == HirType::Erased {
+            direct.push(*raw);
+        } else if actual.ty == parameter.ty
+            && absent == Absent::Impossible
+            && !absence
+            && parameter.known == facts::Facts::TOP
+        {
+            direct.push(value);
+        } else {
+            return None;
         }
     }
-    (direct, read_backs)
+    Some(direct)
+}
+
+/// Resolve only the receiver when admission or defaults still need the
+/// uniform entry. Its ABI and the caller's result read-back stay intact.
+fn direct_uniform_call(func: &mut Func, index: usize, name: String, receiver: Option<Op>) -> bool {
+    let id = |at| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
+    let OpKind::Call { args, .. } = &func.values[index].kind else {
+        return false;
+    };
+    let mut args = args.clone();
+    let Some(block) = func
+        .blocks
+        .iter()
+        .position(|block| block.ops.contains(&id(index)))
+    else {
+        return false;
+    };
+    if let Some(receiver) = receiver {
+        let value = id(func.values.len());
+        func.values.push(receiver);
+        let Some(at) = func.blocks[block]
+            .ops
+            .iter()
+            .position(|op| *op == id(index))
+        else {
+            return false;
+        };
+        func.blocks[block].ops.insert(at, value);
+        args[0] = value;
+    }
+    func.values[index].kind = OpKind::Call {
+        callee: Callee::Direct(name),
+        args,
+        frame: None,
+    };
+    true
 }
 
 pub(super) fn call_directly(
@@ -4560,22 +4579,24 @@ pub(super) fn call_directly(
 ) -> bool {
     let Written {
         name,
-        arity,
         params,
         returns,
         result_absent,
         takes_this,
+        uniform_name,
     } = written;
     let id = |at: usize| ValueId(u32::try_from(at).unwrap_or(u32::MAX));
     let OpKind::Call { args, .. } = &func.values[index].kind else {
         return false;
     };
-    // Read-backs the direct call needs, by argument position: see
-    // [`written_arguments`].
-    let (mut args, read_backs) = if uniform {
-        written_arguments(func, index, args, params, arity, takes_this)
+    let mut args = if uniform {
+        let Some(direct) = written_arguments(func, args, params, takes_this) else {
+            return uniform_name
+                .is_some_and(|name| direct_uniform_call(func, index, name, receiver));
+        };
+        direct
     } else {
-        (args.clone(), Vec::new())
+        args.clone()
     };
 
     // **A live read-back, not merely one in the arena.** A `ValueId` is an index,
@@ -4634,16 +4655,6 @@ pub(super) fn call_directly(
         at += 1;
         if let Some(first) = args.first_mut() {
             *first = pushed;
-        }
-    }
-    // The arguments' read-backs, in front of the call like the receiver's.
-    for (slot, op) in read_backs {
-        let pushed = id(func.values.len());
-        func.values.push(op);
-        func.blocks[block].ops.insert(at, pushed);
-        at += 1;
-        if let Some(arg) = args.get_mut(slot) {
-            *arg = pushed;
         }
     }
     let call = OpKind::Call {

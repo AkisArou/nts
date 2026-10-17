@@ -128,9 +128,17 @@ pub fn monomorphize(program: &mut Program) -> usize {
                 .map(|func| {
                     (
                         target,
-                        func.params.iter().map(|param| param.ty.clone()).collect(),
+                        func.params.clone(),
                         func.return_type.clone(),
                         takes_this,
+                        program.erased_call_slot.and_then(|slot| {
+                            program
+                                .layouts
+                                .iter()
+                                .find(|layout| layout.types.contains(&request.concrete))
+                                .and_then(|layout| layout.methods.get(slot as usize))
+                                .and_then(Clone::clone)
+                        }),
                     )
                 })
         });
@@ -291,7 +299,7 @@ fn retype_parameter(
     slot: u32,
     concrete: TypeId,
     (erased_slot, written_slot): (Option<u32>, Option<u32>),
-    written: (String, Vec<HirType>, HirType, bool),
+    written: (String, Vec<super::Param>, HirType, bool, Option<String>),
     result_absent: super::Absent,
 ) {
     let Some(param) = clone
@@ -317,7 +325,7 @@ fn retype_parameter(
     // surgery, shared with `fields::devirtualize` because both arrive at the same
     // question from different evidence. The receiver needs no re-typing here: the
     // parameter *is* the class, which is what this pass just decided.
-    let (name, params, returns, takes_this) = written;
+    let (name, params, returns, takes_this, uniform_name) = written;
     let sites: Vec<(usize, bool)> = clone
         .values
         .iter()
@@ -360,7 +368,7 @@ fn retype_parameter(
                 && args
                     .iter()
                     .zip(&params)
-                    .all(|(arg, declared)| clone.values[arg.0 as usize].ty == *declared)
+                    .all(|(arg, declared)| clone.values[arg.0 as usize].ty == declared.ty)
                 && value.ty == returns;
             (Some(*at) == written_slot && written_abi).then_some((index, false))
         })
@@ -368,11 +376,11 @@ fn retype_parameter(
     for (index, uniform) in sites {
         let written = super::Written {
             name: name.clone(),
-            arity: params.len(),
             params: &params,
             returns: &returns,
             result_absent,
             takes_this,
+            uniform_name: uniform_name.clone(),
         };
         super::call_directly(clone, index, written, uniform, None);
     }

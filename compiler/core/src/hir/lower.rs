@@ -15255,6 +15255,10 @@ pub fn lower(snapshot: &SemanticSnapshot) -> Lowered {
 /// function like any other and takes the whole of the naming; this site used
 /// to take two of its four fields, see `wire_naming`, which `Shared::builder`
 /// calls.
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep closure lowering and both ABI entries together"
+)]
 fn lower_wanted_closures(
     layout_collector: &mut LayoutCollector,
     snapshot: &LoweringSnapshot<'_>,
@@ -15310,6 +15314,13 @@ fn lower_wanted_closures(
                 // this is the moment the body's own parameter and return types
                 // exist: `coerce_arm` saw the slot and not the closure, and this
                 // sees the closure and not the slot. See [`erased_call`].
+                let inputs = builder.uniform_input_plan(&func, &closures[index]);
+                let mut entry = inputs
+                    .needed
+                    .then(|| shared.builder(snapshot, foreign, copy_for(false)));
+                if let Some(entry) = &mut entry {
+                    entry.retyped_symbols = aliases();
+                }
                 if let Some(adapter) = erased_call(
                     erased_call_name(index),
                     &func,
@@ -15317,8 +15328,15 @@ fn lower_wanted_closures(
                     None,
                     closure_result_absent(snapshot, closures[index].node, &func.return_type),
                     closures[index].reads_this,
+                    entry
+                        .as_mut()
+                        .map(|entry| (entry, &closures[index], &inputs)),
                 ) {
                     lowered.program.funcs.push(adapter);
+                }
+                if let Some(mut entry) = entry {
+                    entry.harvest(wanted, &mut lowered.arrivals);
+                    layout_collector.collect(&mut lowered.program, entry.layouts.into_layouts());
                 }
                 // **And the raising variant, where it is a different program.**
                 // A call inside a `try` that reaches a closure through a function
@@ -15345,6 +15363,7 @@ fn lower_wanted_closures(
                     copy_for(true),
                     ClosureOutput {
                         kernels: &lowered.program.funcs,
+                        inputs: &inputs,
                         wanted,
                         arrivals: &mut lowered.arrivals,
                     },
@@ -15437,6 +15456,7 @@ fn closure_aliases(
 
 struct ClosureOutput<'a> {
     kernels: &'a [Func],
+    inputs: &'a uniform_inputs::Plan,
     wanted: &'a mut std::collections::BTreeSet<usize>,
     arrivals: &'a mut Arrivals,
 }
@@ -15469,6 +15489,10 @@ struct ClosureOutput<'a> {
 /// `declare_raising_entries` and the body is produced here: a hole would leave a
 /// table naming nothing at a site that compiled. Measured at **0 reachable entries**
 /// across all 29 runtime corpora, which is `refuses_to_cross`' standing exactly.
+#[expect(
+    clippy::too_many_lines,
+    reason = "keep raising-copy comparison and its entry together"
+)]
 fn raising_closure(
     snapshot: &LoweringSnapshot<'_>,
     foreign: &super::runtime::ForeignTable,
@@ -15480,6 +15504,7 @@ fn raising_closure(
 ) -> (Vec<Func>, Vec<Layout>) {
     let ClosureOutput {
         kernels,
+        inputs,
         wanted,
         arrivals,
     } = output;
@@ -15511,11 +15536,12 @@ fn raising_closure(
             Some(&because),
             Absent::Impossible,
             takes_this,
+            None,
         )
         .into_iter()
         .collect::<Vec<Func>>()
     };
-    let mut second = shared.builder(snapshot, foreign, copy);
+    let mut second = shared.builder(snapshot, foreign, copy.clone());
     second.retyped_symbols = closure_aliases(snapshot, closures, index);
     let made = generic_values::lower(
         &mut second,
@@ -15526,7 +15552,9 @@ fn raising_closure(
     )
     .or_else(|| second.lower_made_closure(index, &closures[index]));
     match made.unwrap_or_else(|| second.lower_closure(index, &closures[index])) {
-        Ok(raising) if the_same_program(func, &raising) => (Vec::new(), Vec::new()),
+        Ok(raising) if the_same_program(func, &raising) && !inputs.binds_defaults => {
+            (Vec::new(), Vec::new())
+        }
         // **With the layouts its builder made**, which are not the ordinary
         // body's: a non-null assertion throws a `TypeError` here where the
         // ordinary body calls `nts_assertion_failed`, so the error's layout
@@ -15553,6 +15581,12 @@ fn raising_closure(
             second.harvest(wanted, arrivals);
             let result_absent =
                 closure_result_absent(snapshot, closures[index].node, &raising.return_type);
+            let mut entry = inputs
+                .needed
+                .then(|| shared.builder(snapshot, foreign, copy));
+            if let Some(entry) = &mut entry {
+                entry.retyped_symbols = closure_aliases(snapshot, closures, index);
+            }
             let mut produced = erased_call(
                 raising_entry,
                 &raising,
@@ -15560,11 +15594,21 @@ fn raising_closure(
                 None,
                 result_absent,
                 takes_this,
+                entry
+                    .as_mut()
+                    .map(|entry| (entry, &closures[index], inputs)),
             )
             .into_iter()
             .collect::<Vec<Func>>();
+            if let Some(entry) = &mut entry {
+                entry.harvest(wanted, arrivals);
+            }
             produced.push(raising);
-            (produced, std::mem::take(&mut second.layouts).into_layouts())
+            let mut layouts = std::mem::take(&mut second.layouts).into_layouts();
+            if let Some(entry) = entry {
+                layouts.extend(entry.layouts.into_layouts());
+            }
+            (produced, layouts)
         }
         // **Refused where the ordinary body was not**, which reading the raising arm
         // says cannot happen: it is tested *before* every fallible arm of
@@ -17119,6 +17163,7 @@ fn erased_call(
     refusing: Option<&str>,
     result_absent: Absent,
     takes_this: bool,
+    context: Option<(&mut FuncBuilder<'_>, &ClosureInfo, &uniform_inputs::Plan)>,
 ) -> Option<Func> {
     let origin = Origin::generated(
         call.origin.location,
@@ -17208,6 +17253,22 @@ fn erased_call(
             str::to_owned,
         );
         return Some(refuses_to_cross(name, params, values, &origin, &because));
+    }
+    if let Some((builder, info, inputs)) = context {
+        return Some(
+            match builder.uniform_entry(
+                name.clone(),
+                call,
+                (params.clone(), values.clone()),
+                (info, inputs),
+                result_absent,
+            ) {
+                Ok(entry) => entry,
+                Err(diagnostic) => {
+                    refuses_to_cross(name, params, values, &origin, &diagnostic.message)
+                }
+            },
+        );
     }
     // The `this` is passed on only to a body that takes one; a written `#call`
     // takes none.
@@ -17357,20 +17418,23 @@ fn uniform_params(
     ];
     for at in 0..width {
         let index = u32::try_from(at + super::UNIFORM_ARGUMENTS).ok()?;
-        // Everything but the type from the original where there is one -- the name
-        // a reader sees, and whatever `shape` and `known` said, because that is
-        // the *same* parameter in a different representation. Past the written
+        // The name and shape survive, but an erased arrival has none of the
+        // typed body's range or literal proofs. Past the written
         // ones the parameter exists only to make every entry one shape, so a site
         // can pass this many without knowing which closure it has.
         params.push(match written.get(at) {
             Some(param) => Param {
                 ty: HirType::Erased,
+                known: Facts::TOP,
+                written: None,
                 ..param.clone()
             },
             None => Param {
                 name: format!("padding{at}"),
                 ty: HirType::Erased,
                 origin: origin.clone(),
+                known: Facts::TOP,
+                written: None,
                 ..receiver.clone()
             },
         });
@@ -73375,11 +73439,10 @@ impl<'a> FuncBuilder<'a> {
     /// flag set for this function's own caller to find. That is reachable only
     /// inside a raising copy, whose callers all test -- see [`Self::raises`].
     fn test_for_a_raise(&mut self, id: NodeId) {
-        if !self.tested_for_a_raise(id) {
-            return;
+        if self.tested_for_a_raise(id) {
+            let origin = self.origin(id);
+            self.emit_the_raise_test(&origin);
         }
-        let origin = self.origin(id);
-        self.emit_the_raise_test(&origin);
         // **A call that cannot return comes back only by raising**, so the
         // not-raised branch is unreachable and says so. It used to carry on, and
         // whatever the caller did next with the `never` value -- `ret %1` for
@@ -74612,7 +74675,7 @@ impl<'a> FuncBuilder<'a> {
         // `erased`, and C would have compiled.
         let slot = match callee {
             ClosureEntry::Written(name) => {
-                return Ok(self.push(
+                let value = self.push(
                     OpKind::Call {
                         callee: Callee::Direct(name),
                         args,
@@ -74620,13 +74683,15 @@ impl<'a> FuncBuilder<'a> {
                     },
                     ty,
                     origin,
-                ));
+                );
+                self.test_for_a_raise(id);
+                return Ok(value);
             }
             ClosureEntry::Receiving(name) => {
                 let mut args = args;
                 let this = self.erased_this(this, id)?;
                 args.insert(super::UNIFORM_THIS, this);
-                return Ok(self.push(
+                let value = self.push(
                     OpKind::Call {
                         callee: Callee::Direct(name),
                         args,
@@ -74634,7 +74699,9 @@ impl<'a> FuncBuilder<'a> {
                     },
                     ty,
                     origin,
-                ));
+                );
+                self.test_for_a_raise(id);
+                return Ok(value);
             }
             ClosureEntry::Uniform(slot) => slot,
         };
@@ -74694,7 +74761,11 @@ impl<'a> FuncBuilder<'a> {
             // Nothing to read back. An erased site wanted the erased answer, and
             // a `void` one discards it -- the entry returned `undefined` there,
             // which is what makes the two one arm rather than two spellings.
-            HirType::Erased | HirType::Void | HirType::Never => answered,
+            HirType::Erased | HirType::Void => answered,
+            // The call cannot return normally. test_for_a_raise has already
+            // closed that path, so only a dead placeholder, never the erased
+            // result, participates in lowering the rest of the expression.
+            HirType::Never => self.push(OpKind::ConstUndefined, HirType::Never, origin),
             _ => self.push(OpKind::Unerase { value: answered }, ty.clone(), origin),
         };
         if let Some(args) = written
@@ -83962,6 +84033,7 @@ mod parameter_entries;
 mod printed;
 mod property_keys;
 mod typed_signatures;
+mod uniform_inputs;
 mod virtual_returns;
 
 /// An Objective-C property: its declaration, and the selectors that read and
