@@ -4385,7 +4385,7 @@ fn receiving_call_name(index: usize) -> String {
 
 /// The uniform slot a function-value call takes before argument admission
 /// has been proved. Preparation may recover its known typed implementation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct ClosureEntry(u32);
 
 /// A `this`-reading function's written entry: its body, called with
@@ -77256,7 +77256,7 @@ impl<'a> FuncBuilder<'a> {
                 .insert(id, vec![source; comparator.parameters.len()]);
         }
         let answer =
-            self.call_a_closure_entry(id, comparator.callee.clone(), None, args, &HirType::NUMBER)?;
+            self.call_a_closure_entry(id, comparator.callee, None, args, &HirType::NUMBER)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let right_first = binary(self, BinOp::Gt, answer, zero, HirType::Bool);
         // One block per answer rather than both arms into `merged`: an edge is

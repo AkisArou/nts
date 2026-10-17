@@ -293,8 +293,8 @@ fn is_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// What each type parameter's *source* type was, beside its representation.
 ///
 /// Only the types whose representation loses something the copy's identity
-/// needs are ever read back out of this -- today that is a tuple, whose arity
-/// an array representation does not carry.
+/// needs are read back out of this: a tuple's arity, or which absence a null
+/// reference pointer carries when an argument crosses a uniform entry.
 pub type Sources = FxHashMap<TypeId, TypeId>;
 
 /// What each call written inside one copy of a generic function names, by the
