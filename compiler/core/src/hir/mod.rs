@@ -4603,103 +4603,59 @@ pub(super) fn call_directly(
         args.clone()
     };
 
-    // **A live read-back, not merely one in the arena.** A `ValueId` is an index,
-    // so a pass that drops an op from the control flow leaves it in `values`;
-    // moving the direct call into a dead one would put it where nothing runs it.
-    let reads_back = uniform
-        .then(|| {
-            func.blocks
-                .iter()
-                .flat_map(|block| block.ops.iter())
-                .map(|op| op.0 as usize)
-                .find(|&op| {
-                    matches!(func.values[op].kind, OpKind::Unerase { value } if value == id(index))
-                })
-        })
-        .flatten();
-    let target = reads_back.unwrap_or(index);
+    // Keep evaluation at the original call, before every consumer of its
+    // erased answer. A result may be tested here and read back in several
+    // successor blocks; moving the call to one Unerase drops its other uses
+    // and can turn a void return into an operand with no value.
     let Some(block) = func
         .blocks
         .iter()
-        .position(|block| block.ops.contains(&id(target)))
+        .position(|block| block.ops.contains(&id(index)))
     else {
         return false;
     };
-
-    if reads_back.is_some() {
-        func.blocks[block].ops.retain(|op| *op != id(index));
-        // **And it stops being a call**, rather than merely stopping being run.
-        // A value is not removed from the arena -- every `ValueId` after it would
-        // move -- so the dispatch would otherwise sit in `values` looking like a
-        // call nothing evaluates, and several passes read `values` directly:
-        // `elements` matches helper names in it, and the devirtualization test
-        // counts dispatches there. A phantom is how a later reader concludes this
-        // program still dispatches.
-        func.values[index].kind = OpKind::ConstUndefined;
-        func.values[index].ty = HirType::Erased;
-    }
-    // After the removal, because that shifts the positions.
-    let Some(at) = func.blocks[block]
+    let Some(mut at) = func.blocks[block]
         .ops
         .iter()
-        .position(|op| *op == id(target))
+        .position(|op| *op == id(index))
     else {
         return false;
     };
-    // Where the target stands now: one further on once the receiver is inserted
-    // in front of it. A second insertion at the old `at` -- the moved call below
-    // -- landed *before* the receiver it reads: `call Closure2#call(%7, …)` then
-    // `%7 = unerase …`, which C compiled (its declarations hoist) and LLVM and
-    // the JVM verifier rejected (`tests/programs/a-call-on-a-cast-inside-a-closure`).
-    let mut at = at;
     if let Some(op) = receiver {
-        let pushed = id(func.values.len());
+        let value = id(func.values.len());
         func.values.push(op);
-        func.blocks[block].ops.insert(at, pushed);
+        func.blocks[block].ops.insert(at, value);
         at += 1;
-        if let Some(first) = args.first_mut() {
-            *first = pushed;
-        }
+        args[0] = value;
     }
     let call = OpKind::Call {
         callee: Callee::Direct(name),
         args,
         frame: None,
     };
-    if !uniform {
-        func.values[target].kind = call;
+    if !uniform || *returns == HirType::Erased {
+        func.values[index].kind = call;
         return true;
     }
-    // **A site that wanted the answer erased still does.** With no `Unerase` the
-    // site is one of the lowering's other two arms: it discards the result, or its
-    // own type *is* `Erased` -- `const y: any = f(1)`, where `f` is
-    // signature-typed. The written entry answers concretely, so writing the direct
-    // call into that slot would hand a `Float` to a consumer reading an
-    // `NtsValue`. So the slot becomes the erasure and the call is appended behind
-    // it: the same three faces the entry itself has, at the other end of the wire.
-    if reads_back.is_none()
-        && func.values[target].ty == HirType::Erased
-        && *returns != HirType::Erased
-    {
-        let moved = id(func.values.len());
-        let mut op = func.values[target].clone();
-        op.kind = call;
-        op.ty = returns.clone();
-        func.values.push(op);
-        func.blocks[block].ops.insert(at, moved);
-        func.values[target].kind = OpKind::Erase {
-            value: moved,
-            // What the class's own erased entry said a null result means
-            // ([`erased_entry_absent`]): `returns` cannot, since `string |
-            // null` and `string` share a pointer, and assuming no absence made
-            // a null result a string tag over a null pointer.
-            absent: result_absent,
-            slots: Absent::Impossible,
+    // Reproduce the selected uniform entry's result contract at this site.
+    // Simplification removes an erase/read-back pair when the representations
+    // agree; all other readers keep the same tagged result and evaluation order.
+    let value = id(func.values.len());
+    let mut op = func.values[index].clone();
+    op.kind = call;
+    op.ty = returns.clone();
+    func.values.push(op);
+    func.blocks[block].ops.insert(at, value);
+    func.values[index].kind =
+        if matches!(returns, HirType::Void | HirType::Never) || !lower::result_crosses(returns) {
+            OpKind::ConstUndefined
+        } else {
+            OpKind::Erase {
+                value,
+                absent: result_absent,
+                slots: Absent::Impossible,
+            }
         };
-        return true;
-    }
-    func.values[target].kind = call;
-    func.values[target].ty = returns.clone();
     true
 }
 

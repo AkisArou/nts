@@ -3,12 +3,7 @@
 // undefined explicitly. Both conversions run at module initialization.
 // Main 547 compiles both. On ee624/13e0 Wasm cannot emit the subject:
 // devirtualization moves a void call into a numeric read of its erased result.
-const sliced = "report".slice(function () {}());
-const slicedControl = "report".slice(function () { return undefined; }());
-const substring = "report".substring(function () {}());
-const substringControlValue = "report".substring(function () { return undefined; }());
-
-export function sliceSubject(n) { return sliced.length + n; }
-export function sliceControl(n) { return slicedControl.length + n; }
-export function substringSubject(n) { return substring.length + n; }
-export function substringControl(n) { return substringControlValue.length + n; }
+export const sliced = "report".slice(function () {}());
+export const slicedControl = "report".slice(function () { return undefined; }());
+export const substring = "report".substring(function () {}());
+export const substringControlValue = "report".substring(function () { return undefined; }());

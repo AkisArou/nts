@@ -17111,7 +17111,7 @@ fn absent_of_result(snapshot: &SemanticSnapshot, result: TypeId) -> Absent {
 
 /// Whether a closure's result crosses an erased call as itself: already
 /// erased, nothing at all, or something with an erased form.
-fn result_crosses(returns: &HirType) -> bool {
+pub(super) fn result_crosses(returns: &HirType) -> bool {
     matches!(returns, HirType::Erased | HirType::Void | HirType::Never) || erasable(returns)
 }
 
