@@ -264,7 +264,7 @@ fn build(builder: &mut FuncBuilder, target: &TableTarget) -> Option<(Key, Func)>
     let answered = builder
         .call_a_closure_entry(
             at,
-            ClosureEntry::Uniform(uniform_slot),
+            ClosureEntry(uniform_slot),
             Some(this),
             args,
             &HirType::Erased,

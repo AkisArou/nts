@@ -4383,22 +4383,10 @@ fn receiving_call_name(index: usize) -> String {
     format!("Closure{index}#call_this")
 }
 
-/// Which entry of a closure a call through a function value reaches, which
-/// decides the arguments it takes. [`FuncBuilder::closure_callee`] answers it,
-/// and [`FuncBuilder::call_a_closure_entry`] makes the call it names.
+/// The uniform slot a function-value call takes before argument admission
+/// has been proved. Preparation may recover its known typed implementation.
 #[derive(Clone, Debug)]
-enum ClosureEntry {
-    /// A known closure's written `#call`: the closure, then the arguments.
-    Written(String),
-    /// A known closure's body that reads its own `this`
-    /// ([`receiving_call_name`]): the closure, the call's `this`, then the
-    /// arguments.
-    Receiving(String),
-    /// A uniform entry, by slot, which every closure of the signature answers:
-    /// the closure, the call's `this`, then the arguments erased and padded
-    /// ([`super::UNIFORM_THIS`]).
-    Uniform(u32),
-}
+struct ClosureEntry(u32);
 
 /// A `this`-reading function's written entry: its body, called with
 /// `undefined`, the `this` JavaScript gives a plain call. `this_at` is where
@@ -31831,16 +31819,14 @@ impl<'a> FuncBuilder<'a> {
         // returning a number returned nothing (`ReturnType`, invalid HIR).
         let raising = self.raises && self.hierarchy.raising_call_slot.is_some();
         let callee = self.closure_entry(site, callee_node, function, raising)?;
-        if matches!(callee, ClosureEntry::Uniform(_)) {
-            self.erase_bound_inputs(info, &mut args[own_at..]);
-            let sources = self
-                .arguments_of(site)
-                .into_iter()
-                .skip(1)
-                .map(|node| (node, self.snapshot.node_types.get(&node).copied()))
-                .collect();
-            self.argument_sources.insert(site, sources);
-        }
+        self.erase_bound_inputs(info, &mut args[own_at..]);
+        let sources = self
+            .arguments_of(site)
+            .into_iter()
+            .skip(1)
+            .map(|node| (node, self.snapshot.node_types.get(&node).copied()))
+            .collect();
+        self.argument_sources.insert(site, sources);
         self.returns = returns.clone();
         let answered = self.call_a_closure_entry(site, callee, Some(this), args, &returns)?;
         let carried = (!matches!(returns, HirType::Void | HirType::Never)).then_some(answered);
@@ -32133,7 +32119,7 @@ impl<'a> FuncBuilder<'a> {
             );
         };
         let args = std::iter::once(handler).chain(argument).collect();
-        let callee = ClosureEntry::Uniform(slot);
+        let callee = ClosureEntry(slot);
         let answered = if catches {
             let entry = self.bindings.clone();
             self.exits.push(Exit::Handler(Handler {
@@ -33656,11 +33642,8 @@ impl<'a> FuncBuilder<'a> {
             let gathered = self.gather_rest(call, args.len(), &[])?;
             args.push(gathered);
         }
-        if args
-            .iter()
-            .any(|value| super::tags::payload_is_a_reference(&self.values[value.0 as usize].ty))
-        {
-            self.argument_sources.insert(call, sources);
+        if let Some(needed) = self.argument_sources.get_mut(&call) {
+            *needed = sources;
         }
         Ok(args)
     }
@@ -74214,79 +74197,25 @@ impl<'a> FuncBuilder<'a> {
         receiver: ValueId,
         raising: bool,
     ) -> Result<ClosureEntry, Diagnostic> {
-        let HirType::Managed(ManagedType::Object(receiver_ty)) =
-            self.values[receiver.0 as usize].ty
-        else {
+        let HirType::Managed(ManagedType::Object(_)) = self.values[receiver.0 as usize].ty else {
             return Err(self.unsupported(callee_node, "a call of something that is not a function"));
         };
-        // A closure class is final: nothing extends it, and only the arrow it
-        // was made for fills its slot. So where the receiver's static type *is*
-        // the closure class rather than the signature, which body runs is known
-        // here, and the call is a direct one.
-        //
-        // This is not a nicety, because clang cannot recover it: to fold the
-        // table load it would have to prove the callee does not write the
-        // receiver's descriptor, and it cannot know the callee without folding
-        // the load. What is left is an indirect call per iteration where there
-        // should be an inlined multiply.
-        // **A call this `try` handles names the raising entry**, which is the same
-        // uniform ABI at the next index: the entry records an uncaught `throw` and
-        // returns rather than ending the program, and `test_for_a_raise` puts the
-        // flag test after the call. Every backend already reads the slot off the
-        // callee, so this is the whole of the dispatch change.
-        //
-        // Through `dispatches_to_a_raising_entry`, which reads `raising_calls` --
-        // filled by `lower_try` before it lowered the body, so the site cannot name
-        // the raising slot inside a `try` that refused the call, and cannot fail to
-        // name it inside one that accepted it -- and also answers for a raising
-        // copy's own body, where every call that can raise names its raising form.
-        // **And a raising call goes through the slot even here**, where the class *is*
-        // known. The direct name would have to be the raising body, and that body
-        // exists only where it is a different program -- which this site cannot know,
-        // because the closure it names may not have been lowered yet. The slot is
-        // filled per class with the raising entry or the ordinary one, so it is right
-        // either way, and the cost is one table load on a path inside a `try`.
-        //
-        // What it buys is the **IIFE**: `try { (() => { … })() }` has a known class
-        // and is 48 test262 files on the conformance lane's count with nothing else
-        // holding their gate down.
-        let canonical_generic = receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR
-            && self
-                .closures
-                .get(closure_index(receiver_ty))
-                .is_some_and(|info| generic_values::is_canonical(self.snapshot, info));
-        let callee =
-            if receiver_ty.0 >= super::SYNTHETIC_TYPE_FLOOR && !raising && !canonical_generic {
-                // A body that reads its own `this` is named directly, with the
-                // call's: its `#call` is the wrapper that passes `undefined`.
-                let index = closure_index(receiver_ty);
-                if self.closures.get(index).is_some_and(|info| info.reads_this) {
-                    ClosureEntry::Receiving(receiving_call_name(index))
-                } else {
-                    ClosureEntry::Written(closure_names(index).1)
-                }
-            } else if let Some(slot) = if raising {
-                self.hierarchy.raising_call_slot
-            } else {
-                self.hierarchy.erased_call_slot
-            } {
-                // **The erased entry, because this is the branch that does not know
-                // the body.** The comment above states the condition exactly: where
-                // the receiver's static type *is* the closure class, which body runs
-                // is known and the call is direct; where it is only the signature, it
-                // is not -- so the ABI has to be the one every closure answers rather
-                // than the one this site happens to spell. Spelling it was the bug:
-                // `closure_slot`'s own doc claims two closures at one index "cannot
-                // be confused for each other" *because* the call spells the
-                // signature.
-                ClosureEntry::Uniform(slot)
-            } else {
-                return Err(self.unsupported(
-                    id,
-                    "a call of a function value in a program with no closures",
-                ));
-            };
-        Ok(callee)
+        // Knowing the closure's identity does not prove its arguments fit its
+        // body. In particular string, nullable string and optional string share
+        // pointer storage. Start with the uniform entry; call_directly can
+        // recover the typed body only after Erase.absent proves admission and
+        // that a default cannot run. Otherwise it keeps the known uniform entry.
+        let slot = if raising {
+            self.hierarchy.raising_call_slot
+        } else {
+            self.hierarchy.erased_call_slot
+        };
+        slot.map(ClosureEntry).ok_or_else(|| {
+            self.unsupported(
+                id,
+                "a call of a function value in a program with no closures",
+            )
+        })
     }
 
     /// `f.apply(receiver, list)` -- the arguments as one array.
@@ -74601,27 +74530,26 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let callee = self.closure_callee(id, callee_node, receiver)?;
         let mut args = vec![receiver];
+        self.argument_sources.insert(id, Vec::new());
         args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         // Through a function type, the callee is any function of the type, so
         // the type's parameter kinds are what a call must fit -- which every
         // function of the type writes too (Q1). A direct call is obliged by
         // its callee's own parameters (`obligations`).
-        if matches!(callee, ClosureEntry::Uniform(_)) {
-            for (position, (ty, _, rest)) in self.effective_parameters(id).into_iter().enumerate() {
-                if rest {
-                    break;
-                }
-                let (Some(ty), Some(&value)) = (ty, args.get(position + 1)) else {
-                    continue;
-                };
-                if let Some(kind) = super::native::scalar(self.snapshot, ty) {
-                    self.oblige(
-                        value,
-                        kind,
-                        super::obligations::Into::ClosureArgument { position },
-                        id,
-                    );
-                }
+        for (position, (ty, _, rest)) in self.effective_parameters(id).into_iter().enumerate() {
+            if rest {
+                break;
+            }
+            let (Some(ty), Some(&value)) = (ty, args.get(position + 1)) else {
+                continue;
+            };
+            if let Some(kind) = super::native::scalar(self.snapshot, ty) {
+                self.oblige(
+                    value,
+                    kind,
+                    super::obligations::Into::ClosureArgument { position },
+                    id,
+                );
             }
         }
         self.finish_closure_call(id, receiver, this, callee, args)
@@ -74712,38 +74640,7 @@ impl<'a> FuncBuilder<'a> {
         // reading a concrete result where it returns `erased` -- which the probe
         // showed as `call.closure[2] %0(%0) : f64` against an entry returning
         // `erased`, and C would have compiled.
-        let slot = match callee {
-            ClosureEntry::Written(name) => {
-                let value = self.push(
-                    OpKind::Call {
-                        callee: Callee::Direct(name),
-                        args,
-                        frame: None,
-                    },
-                    ty,
-                    origin,
-                );
-                self.test_for_a_raise(id);
-                return Ok(value);
-            }
-            ClosureEntry::Receiving(name) => {
-                let mut args = args;
-                let this = self.erased_this(this, id)?;
-                args.insert(super::UNIFORM_THIS, this);
-                let value = self.push(
-                    OpKind::Call {
-                        callee: Callee::Direct(name),
-                        args,
-                        frame: None,
-                    },
-                    ty,
-                    origin,
-                );
-                self.test_for_a_raise(id);
-                return Ok(value);
-            }
-            ClosureEntry::Uniform(slot) => slot,
-        };
+        let ClosureEntry(slot) = callee;
         // What a typed call here would pass, kept before anything is erased:
         // `type_signature_calls` makes this site one where every closure that
         // can arrive agrees with it. Only the ordinary entry -- a raising call
@@ -79842,6 +79739,7 @@ impl<'a> FuncBuilder<'a> {
         };
 
         let mut args = vec![receiver];
+        self.argument_sources.insert(id, Vec::new());
         args.extend(self.lower_arguments_on(id, arguments, receiver)?);
         let origin = self.origin(id);
         // A `super(...)` produces nothing; `super.m()` produces whatever `m`

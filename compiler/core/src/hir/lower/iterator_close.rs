@@ -740,7 +740,7 @@ impl FuncBuilder<'_> {
         })?;
         let result = self.call_a_closure_entry(
             action.at,
-            ClosureEntry::Uniform(slot),
+            ClosureEntry(slot),
             Some(action.iterator),
             vec![function],
             &HirType::Erased,
