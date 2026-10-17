@@ -32,12 +32,6 @@ interface Optional {
  [Symbol.iterator]():Optional;
  next():{value:number;done:boolean};
 }
-class HasReturn implements Optional {
- count=0;closed=0;
- return=function(this:Optional):{value:number;done:boolean}{this.closed=1;return {value:0,done:true};};
- [Symbol.iterator]():Optional{return this;}
- next():{value:number;done:boolean}{const value=++this.count;return {value,done:value>2};}
-}
 function withoutField():Optional {
  return {count:0,closed:0,return:undefined,
   [Symbol.iterator](){return this;},
@@ -50,4 +44,3 @@ function field(source:Optional,early:boolean):number{
 }
 export function undefinedField(n:number):number{return field(withoutField(),true);}
 export function exhaustedFieldControl(n:number):number{return field(withoutField(),false);}
-export function namedFieldControl(n:number):number{const source=new HasReturn();source.return();return source.closed*10+source.count;}
