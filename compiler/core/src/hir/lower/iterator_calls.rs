@@ -26,12 +26,14 @@ pub(super) struct Method {
 }
 
 impl Method {
-    fn resolve(probe: &FuncBuilder<'_>, receiver: TypeId, key: &str) -> Option<Self> {
+    pub(super) fn resolve(probe: &FuncBuilder<'_>, receiver: TypeId, key: &str) -> Option<Self> {
         let owner = probe.hierarchy.declaring(receiver, key)?;
         let declarations = if probe.hierarchy.overridden(receiver, key) {
             members_filling(probe.snapshot, probe, &probe.hierarchy, owner, key)
         } else {
-            vec![probe.implementation_of(probe.member_declaration(owner, key)?)]
+            vec![probe.implementation_of(
+                probe.member_declaration(owner, key.strip_prefix("get ").unwrap_or(key))?,
+            )]
         };
         let mut targets: Vec<_> = declarations
             .into_iter()
@@ -70,15 +72,23 @@ impl Method {
     }
 }
 
+struct Site {
+    methods: Vec<Rc<Method>>,
+    steps: usize,
+    close: Option<Rc<super::iterator_close::Selection>>,
+    normal_close: bool,
+}
+
 #[derive(Default)]
 pub(super) struct Plan {
-    sites: FxHashMap<NodeId, Vec<Rc<Method>>>,
+    sites: FxHashMap<NodeId, Site>,
     methods: FxHashMap<(TypeId, String), Option<Rc<Method>>>,
 }
 
 impl Plan {
-    pub(super) fn new(probe: &FuncBuilder<'_>) -> Self {
+    pub(super) fn new(probe: &FuncBuilder<'_>, generators: &FxHashMap<NodeId, usize>) -> Self {
         let mut plan = Self::default();
+        let mut closes = FxHashMap::default();
         for at in 0..probe.snapshot.nodes.len() {
             let Ok(at) = u32::try_from(at) else { break };
             let at = NodeId(at);
@@ -101,14 +111,36 @@ impl Plan {
             let Some(iterator) = plan.resolve_method(probe, receiver, &key) else {
                 continue;
             };
-            let mut methods = vec![iterator];
+            let frame = probe
+                .member_declaration(receiver, &key)
+                .is_some_and(|declaration| generators.contains_key(&declaration));
+            let mut site = Site {
+                methods: vec![iterator],
+                steps: 1,
+                close: None,
+                normal_close: false,
+            };
             if let Some(HirType::Managed(ManagedType::Object(receiver))) =
                 probe.member_returns(receiver, &key)
                 && let Some(next) = plan.resolve_method(probe, receiver, "next")
             {
-                methods.push(next);
+                site.methods.push(next);
+                site.steps = site.methods.len();
+                if !frame
+                    && super::iterator_close::may_leave(probe, at)
+                    && let Some(selection) = closes
+                        .entry(receiver)
+                        .or_insert_with(|| {
+                            super::iterator_close::Selection::resolve(probe, receiver).map(Rc::new)
+                        })
+                        .clone()
+                {
+                    site.methods.extend(selection.methods());
+                    site.normal_close = super::iterator_close::may_leave_without_throw(probe, at);
+                    site.close = Some(selection);
+                }
             }
-            plan.sites.insert(at, methods);
+            plan.sites.insert(at, site);
         }
         plan
     }
@@ -125,13 +157,35 @@ impl Plan {
             .clone()
     }
 
+    pub(super) fn closes_at(&self, at: NodeId) -> Option<Rc<super::iterator_close::Selection>> {
+        self.sites.get(&at).and_then(|site| site.close.clone())
+    }
+
+    pub(super) fn close_can_raise(&self, at: NodeId) -> bool {
+        self.sites.get(&at).is_some_and(|site| site.normal_close)
+    }
+
+    pub(super) fn close_calls_value(&self, at: NodeId) -> bool {
+        self.closes_at(at).is_some_and(|close| close.calls_value())
+    }
+
     pub(super) fn at(&self, at: NodeId) -> &[Rc<Method>] {
-        self.sites.get(&at).map_or(&[], Vec::as_slice)
+        self.sites
+            .get(&at)
+            .map_or(&[], |site| site.methods.as_slice())
     }
 
     pub(super) fn potential_calls(&self, at: NodeId) -> impl Iterator<Item = Reached> + '_ {
+        let count = self.sites.get(&at).map_or(0, |site| {
+            if site.normal_close {
+                site.methods.len()
+            } else {
+                site.steps
+            }
+        });
         self.at(at)
             .iter()
+            .take(count)
             .flat_map(|method| &method.targets)
             .map(|target| Reached::Body(target.symbol))
     }

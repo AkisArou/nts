@@ -6017,6 +6017,12 @@ fn an_operator_that_can_raise(probe: &FuncBuilder, at: NodeId) -> bool {
     true
 }
 
+fn a_synthesized_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
+    probe.module.initialization.can_raise_at(at)
+        || an_operator_that_can_raise(probe, at)
+        || probe.iterators.close_can_raise(at)
+}
+
 fn walk_one_declaration(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
@@ -6110,10 +6116,7 @@ fn walk_one_declaration(
         if names_a_body(kind) {
             continue;
         }
-        if kind == Some(syntax::THROW_STATEMENT)
-            || probe.module.initialization.can_raise_at(at)
-            || an_operator_that_can_raise(probe, at)
-        {
+        if kind == Some(syntax::THROW_STATEMENT) || a_synthesized_throw(probe, at) {
             throws.insert(symbol);
         }
         reached.extend(probe.potential_implicit_calls(at));
@@ -7513,6 +7516,12 @@ fn a_copy_can_contain(
         // the same call walk independently.
         return true;
     }
+    if probe.iterators.closes_at(call).is_some() {
+        return (!probe.iterators.close_calls_value(call) || value_held_is_carried)
+            && raising_callees_of(snapshot, probe, call)
+                .iter()
+                .all(|callee| eligible.contains(callee));
+    }
     // **A callee held in a value is carried by the raising uniform entry or not at
     // all**, which is what `value_held_is_carried` answers: there is no declaration to
     // name, so the copy cannot spell an `@raises` for it. See [`a_value_held_callee`],
@@ -7568,7 +7577,7 @@ fn a_call_that_can_raise(
     throwing: &Throwing,
     call: NodeId,
 ) -> bool {
-    if !probe.implicit_iterator_callees(call).is_empty() {
+    if !probe.implicit_iterator_callees(call).is_empty() || probe.iterators.close_can_raise(call) {
         return true;
     }
     if !probe.printers.at(call).is_empty() {
@@ -7961,17 +7970,26 @@ fn calls_guarded_by_a_try(
     // two answers to "which calls does a `try` guard" and they would drift.
     let mut guarded_calls = rustc_hash::FxHashSet::default();
     for (index, node) in snapshot.nodes.iter().enumerate() {
-        if node.kind != NodeKind::Syntax(syntax::TRY_STATEMENT) {
-            continue;
-        }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let regions = if node.kind == NodeKind::Syntax(syntax::TRY_STATEMENT) {
+            probe
+                .children(id)
+                .first()
+                .copied()
+                .into_iter()
+                .collect::<Vec<_>>()
+        } else if probe.iterators.closes_at(id).is_some() {
+            called.extend(probe.implicit_iterator_callees(id));
+            guarded_calls.insert(id);
+            guarded_a_call = true;
+            iterator_close::guarded_regions(probe, id)
+        } else {
+            continue;
+        };
         // The first child is the guarded block. A `catch` body is not guarded
         // by this `try` -- a throw there reaches the handler *above* -- and
         // including it would make a copy for a callee this `try` cannot catch.
-        let Some(&body) = probe.children(id).first() else {
-            continue;
-        };
-        let mut pending = vec![body];
+        let mut pending = regions;
         while let Some(at) = pending.pop() {
             if matches!(
                 probe.kind_of(at),
@@ -7983,6 +8001,7 @@ fn calls_guarded_by_a_try(
             ) || probe.reads_an_accessor(at)
                 || !probe.implicit_printer_callees(at).is_empty()
                 || !probe.implicit_iterator_callees(at).is_empty()
+                || probe.iterators.close_can_raise(at)
             {
                 guarded_a_call = true;
                 guarded_calls.insert(at);
@@ -8086,9 +8105,9 @@ fn naming(
     probe.module.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     probe.printers = std::rc::Rc::new(printed::Plan::new(&probe));
-    probe.iterators = std::rc::Rc::new(iterator_calls::Plan::new(&probe));
-    let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
+    probe.iterators = std::rc::Rc::new(iterator_calls::Plan::new(&probe, &generators));
+    let class_tokens = class_token_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
 
     let (qualified, ambiguous) = qualified_names(snapshot);
@@ -10659,7 +10678,8 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         // symbol's declarations rather than by the syntax around it.
         _ if probe.reads_an_accessor(id)
             || !probe.implicit_printer_callees(id).is_empty()
-            || !probe.implicit_iterator_callees(id).is_empty() =>
+            || !probe.implicit_iterator_callees(id).is_empty()
+            || probe.iterators.close_can_raise(id) =>
         {
             into.push(id);
         }
@@ -20669,6 +20689,8 @@ struct Breakable {
     /// A `break` leaves every `try` between it and here, so it has to run the
     /// `finally` of each -- and this is what says which those are.
     exits_at: usize,
+    /// Continue stays inside this iterator; break leaves it.
+    continues_at: usize,
 }
 
 /// One loop under construction: where it jumps back to, where it leaves
@@ -20712,6 +20734,7 @@ enum Exit {
     /// only version that composes with `return`, which has to run the body and
     /// then leave rather than come back.
     Finally(NodeId),
+    Iterator(iterator_close::Action),
 }
 
 /// One `await` inside a `try`, whose rejection is an edge into the handler.
@@ -35752,8 +35775,8 @@ impl<'a> FuncBuilder<'a> {
             // "this element is done", so it leaves the `try`s written in
             // the callback body and *not* one the call itself is inside
             // -- the enclosing `try` is not being left at all.
-            let floor = self.breakables[target.depth].exits_at;
-            self.run_finallys_to(floor)?;
+            let floor = self.breakables[target.depth].continues_at;
+            self.unwind_to(floor, None)?;
             if self.is_terminated() {
                 return Ok(());
             }
@@ -35761,7 +35784,7 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(result) = self.async_result.clone() {
             // The whole function is being left, so every one of them.
-            self.run_finallys_to(0)?;
+            self.unwind_to(0, None)?;
             if self.is_terminated() {
                 return Ok(());
             }
@@ -35854,7 +35877,7 @@ impl<'a> FuncBuilder<'a> {
         // A `return` leaves every `try` it is inside, so every pending
         // `finally` runs before it -- after the returned expression has
         // been evaluated, which is the order the language specifies.
-        self.run_finallys_to(0)?;
+        self.unwind_to(0, None)?;
         if self.is_terminated() {
             // A `finally` returned or threw, which replaces this
             // return outright.
@@ -36336,6 +36359,7 @@ impl<'a> FuncBuilder<'a> {
             carried: carried.clone(),
             label: self.pending_label.take(),
             exits_at: self.exits.len(),
+            continues_at: self.exits.len(),
         });
 
         let chain = CaseChain {
@@ -36699,6 +36723,7 @@ impl<'a> FuncBuilder<'a> {
             carried: carried.to_vec(),
             label: self.pending_label.take(),
             exits_at: self.exits.len(),
+            continues_at: self.exits.len(),
         });
         Ok(Loop {
             header,
@@ -36907,7 +36932,7 @@ impl<'a> FuncBuilder<'a> {
         // Every `try` between here and the loop is left, so each one's
         // `finally` runs -- before the carried names are read, because a
         // `finally` that assigns one of them assigns it before the loop ends.
-        self.run_finallys_to(self.breakables[depth].exits_at)?;
+        self.unwind_to(self.breakables[depth].exits_at, None)?;
         if self.is_terminated() {
             return Ok(());
         }
@@ -36925,7 +36950,7 @@ impl<'a> FuncBuilder<'a> {
         let depth = self.enclosing(id, "continue", |it| it.latch.is_some())?;
         // The same as `break`: an iteration that ends early still leaves every
         // `try` inside the loop that it was in.
-        self.run_finallys_to(self.breakables[depth].exits_at)?;
+        self.unwind_to(self.breakables[depth].continues_at, None)?;
         if self.is_terminated() {
             return Ok(());
         }
@@ -37410,16 +37435,23 @@ impl<'a> FuncBuilder<'a> {
         if let Some(symbol) = names.get(1) {
             self.bindings.insert(*symbol, position);
         }
-        self.lower_callback_body(
-            id,
-            body,
-            CallbackResult::Append {
-                array: out,
-                index: position,
-            },
-            record.depth,
-            "map",
-        )?;
+        let lower = |this: &mut Self| {
+            this.lower_callback_body(
+                id,
+                body,
+                CallbackResult::Append {
+                    array: out,
+                    index: position,
+                },
+                record.depth,
+                "map",
+            )
+        };
+        if let Walk::Protocol { iterator, .. } = &walk {
+            self.lower_iterator_body(id, *iterator, record.depth, &[body], lower)?;
+        } else {
+            lower(self)?;
+        }
         let step = cursor.map_or(Step::None, |cursor| Step::Walk {
             cursor,
             walk,
@@ -42779,9 +42811,15 @@ impl<'a> FuncBuilder<'a> {
         } else {
             self.read_element(&walk, sequence_value, at, &origin)?
         };
-        self.bind_head(id, &head, &element_symbols, values)?;
-
-        self.lower_statement(body)?;
+        if let Walk::Protocol { iterator, .. } = &walk {
+            self.lower_iterator_body(id, *iterator, record.depth, &[initializer, body], |this| {
+                this.bind_head(id, &head, &element_symbols, values)?;
+                this.lower_statement(body)
+            })?;
+        } else {
+            self.bind_head(id, &head, &element_symbols, values)?;
+            self.lower_statement(body)?;
+        }
         let step = match index {
             // Nothing between iterations: the header is the latch, and the
             // header is where `next()` is called.
@@ -42946,7 +42984,7 @@ impl<'a> FuncBuilder<'a> {
             .exits
             .iter()
             .rposition(|exit| matches!(exit, Exit::Handler(_)));
-        self.run_finallys_to(caught_at.map_or(0, |at| at + 1))?;
+        self.unwind_to(caught_at.map_or(0, |at| at + 1), Some(erased))?;
         if self.is_terminated() {
             // A `finally` left by itself, so this `throw` never arrives.
             return Ok(());
@@ -42955,7 +42993,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(at) = caught_at {
             let mut target = match &self.exits[at] {
                 Exit::Handler(frame) => frame.block,
-                Exit::Finally(_) => unreachable!("rposition found a handler"),
+                Exit::Finally(_) | Exit::Iterator(_) => unreachable!("rposition found a handler"),
             };
             if target.is_none() {
                 let block = self.new_block();
@@ -44994,6 +45032,7 @@ impl<'a> FuncBuilder<'a> {
             carried: carried.clone(),
             label: Some(label),
             exits_at: self.exits.len(),
+            continues_at: self.exits.len(),
         });
         // `lower_statement` rather than `lower_block`: this path now takes any
         // labelled statement, and `lower_statement` dispatches a `BLOCK` to
@@ -45190,7 +45229,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A `throw` in the body finds the `finally` on the exit stack and whatever
     /// encloses that, so it needs nothing from here — the body is lowered as it
-    /// stands and `run_finallys_to` does the rest.
+    /// stands and `unwind_to` does the rest.
     ///
     /// A **rejected `await`** is the exception. It leaves the `try` on a path
     /// no `throw` wrote, and the `finally` has to run on it: node runs it, and
@@ -45201,13 +45240,13 @@ impl<'a> FuncBuilder<'a> {
     /// try { … } finally { F }   ->   try { … } catch (e) { F; throw e } finally { F }
     /// ```
     ///
-    /// — which is what explicit cleanup means and what `run_finallys_to`
+    /// — which is what explicit cleanup means and what `unwind_to`
     /// already does for every other abrupt exit. It is built only when a
     /// rejection recorded itself, so a `try`/`finally` around code that cannot
     /// reject leaves nothing behind.
     ///
     /// The `finally` is taken **off** the exit stack while its own copy is
-    /// lowered here, for the reason `run_finallys_to` takes it off: the rethrow
+    /// lowered here, for the reason `unwind_to` takes it off: the rethrow
     /// at the end must run whatever encloses this `try`, and not this one
     /// again.
     fn lower_unguarded(&mut self, id: NodeId, body: NodeId) -> Result<(), Diagnostic> {
@@ -45355,25 +45394,27 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Each body is lowered *here*, inline, which is what makes a `finally`
     /// duplicated rather than shared. See [`Exit::Finally`].
-    fn run_finallys_to(&mut self, floor: usize) -> Result<(), Diagnostic> {
+    fn unwind_to(
+        &mut self,
+        floor: usize,
+        pending_throw: Option<ValueId>,
+    ) -> Result<(), Diagnostic> {
         let mut at = self.exits.len();
         while at > floor {
             at -= 1;
-            let body = match &self.exits[at] {
-                Exit::Finally(body) => *body,
-                Exit::Handler(_) => continue,
-            };
-            // Taken off the stack while it runs, and put back after. A `throw`
-            // inside a `finally` belongs to whatever encloses the `try`, not to
-            // the `try` whose `finally` it is -- and without this it would find
-            // its own `catch` and loop back into it.
+            if matches!(self.exits[at], Exit::Handler(_)) {
+                continue;
+            }
+            // Remove this action and everything inside it while it runs. An
+            // error from cleanup belongs to the enclosing scope, never itself.
             let above = self.exits.split_off(at);
-            let lowered = self.lower_statement(body);
+            let lowered = match &above[0] {
+                Exit::Finally(body) => self.lower_statement(*body),
+                Exit::Iterator(action) => self.close_iterator(*action, pending_throw),
+                Exit::Handler(_) => unreachable!("skipped above"),
+            };
             self.exits.extend(above);
             lowered?;
-            // A `finally` that returns or throws replaces the completion that
-            // was on its way out, so nothing further runs -- not the outer
-            // `finally`s, and not the `return` this was called for.
             if self.is_terminated() {
                 return Ok(());
             }
@@ -73406,7 +73447,7 @@ impl<'a> FuncBuilder<'a> {
             let thrown = self.runtime_call("nts_raise_take", Vec::new(), HirType::Erased, origin);
             let mut target = match &self.exits[at] {
                 Exit::Handler(frame) => frame.block,
-                Exit::Finally(_) => unreachable!("rposition found a handler"),
+                Exit::Finally(_) | Exit::Iterator(_) => unreachable!("rposition found a handler"),
             };
             if target.is_none() {
                 let block = self.new_block();
@@ -83888,6 +83929,7 @@ mod implementations;
 mod initialization;
 mod interfaces;
 mod iterator_calls;
+mod iterator_close;
 mod layout_collection;
 mod literal_methods;
 mod native_memory;

@@ -403,7 +403,7 @@ fn reject_when(
         else_args: Vec::new(),
     });
     builder.switch_to(rejected);
-    builder.run_finallys_to(0)?;
+    builder.unwind_to(0, None)?;
     if !builder.is_terminated() {
         let origin = builder.origin(id);
         let reason = builder.push(
