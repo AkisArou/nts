@@ -966,6 +966,37 @@ pub enum SnapshotError {
 }
 
 impl SemanticSnapshot {
+    /// Whether the program implements a declaration of its own under `symbol`.
+    ///
+    /// A library's declarations are in files this compiler does not decode, so
+    /// a symbol only the library declares has none here; an augmentation of one
+    /// -- `declare global { interface Set<T> { ... } }`, or anything in a `.d.ts`
+    /// -- is ambient. A declaration that is neither is the program's: a module's
+    /// own `class Set` is a class, not the library's `Set`.
+    #[must_use]
+    pub fn implements_its_own(&self, symbol: SymbolId) -> bool {
+        self.symbols.get(symbol.0 as usize).is_some_and(|record| {
+            record.declarations.iter().any(|at| {
+                self.nodes
+                    .get(at.0 as usize)
+                    .is_some_and(|node| node.flags & crate::syntax::NODE_FLAGS_AMBIENT == 0)
+            })
+        })
+    }
+
+    /// The name of the library type `ty` is, where it is one: what a provided
+    /// type -- `Map`, `Set`, `Promise`, `Date`, an error class -- is recognized
+    /// by. `None` for a type the program declares itself, whatever it is called;
+    /// see [`Self::implements_its_own`].
+    #[must_use]
+    pub fn provided_name(&self, ty: TypeId) -> Option<&str> {
+        let symbol = self.types.get(ty.0 as usize)?.symbol?;
+        if self.implements_its_own(symbol) {
+            return None;
+        }
+        Some(self.symbols.get(symbol.0 as usize)?.name.as_str())
+    }
+
     /// Reject a snapshot the rest of the compiler cannot safely trust.
     ///
     /// Called once at the frontend boundary. Everything downstream indexes these

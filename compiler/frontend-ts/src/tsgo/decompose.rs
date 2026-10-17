@@ -1255,6 +1255,11 @@ impl<'a> Decomposer<'a> {
         let Some(symbol) = record.symbol else {
             return false;
         };
+        // The library's, not a class of the program's that shares the name: a
+        // module's own `class Set` is decomposed like any other class.
+        if snapshot.implements_its_own(symbol) {
+            return false;
+        }
         snapshot
             .symbols
             .get(symbol.0 as usize)

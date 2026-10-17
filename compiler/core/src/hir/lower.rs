@@ -2237,7 +2237,7 @@ fn provided_error_identities(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashM
         let Some(ty) = u32::try_from(at).ok().map(TypeId) else {
             continue;
         };
-        if let Some(index) = named(snapshot, ty).and_then(super::builtin::error_index) {
+        if let Some(index) = provided(snapshot, ty).and_then(super::builtin::error_index) {
             identities.insert(ty, index);
         }
     }
@@ -5591,7 +5591,7 @@ fn abstract_generators(snapshot: &SemanticSnapshot) -> Vec<TypeId> {
 /// a `{ value, done }` result. Representing those names as a frame would take
 /// the working case and give it the wrong machine value.
 fn abstract_generator_kind(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<GeneratorKind> {
-    match named(snapshot, ty)? {
+    match provided(snapshot, ty)? {
         "Generator" => Some(GeneratorKind::Sync),
         "AsyncGenerator" => Some(GeneratorKind::Async),
         _ => None,
@@ -18956,11 +18956,11 @@ pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
         // not be grouped by what actually blocks them.
         TypeKind::Object { .. } | TypeKind::Structured { .. }
             if matches!(
-                named(snapshot, ty),
+                provided(snapshot, ty),
                 Some("Map" | "Set" | "WeakMap" | "WeakSet")
             ) =>
         {
-            let name = named(snapshot, ty).unwrap_or("Map");
+            let name = provided(snapshot, ty).unwrap_or("Map");
             match snapshot.type_arguments.get(&ty) {
                 Some(arguments) if !arguments.is_empty() => {
                     let spelled: Vec<String> = arguments
@@ -19144,7 +19144,7 @@ fn iterator_result_element(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Ty
         TypeKind::Union(members) => {
             let mut yielded = None;
             for member in members {
-                match named(snapshot, *member) {
+                match provided(snapshot, *member) {
                     Some("IteratorYieldResult") => yielded = value_of(snapshot, *member),
                     Some("IteratorReturnResult") => {}
                     _ => return None,
@@ -19158,7 +19158,7 @@ fn iterator_result_element(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Ty
         // its `value` is the `TReturn` that gets no slot — a `next()` that can
         // only finish is a shape nothing in the corpus writes, and refusing it
         // says so rather than inventing an element type.
-        TypeKind::Object { .. } if named(snapshot, ty) == Some("IteratorYieldResult") => {
+        TypeKind::Object { .. } if provided(snapshot, ty) == Some("IteratorYieldResult") => {
             value_of(snapshot, ty)
         }
         _ => None,
@@ -19191,6 +19191,19 @@ fn may_be_a_finished_iterator_result(snapshot: &SemanticSnapshot, ty: TypeId) ->
 fn named(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
     let symbol = snapshot.types.get(ty.0 as usize)?.symbol?;
     Some(snapshot.symbols.get(symbol.0 as usize)?.name.as_str())
+}
+
+/// The library type `ty` is, by name, where it is one -- and not a class of the
+/// program's that happens to share the name. What every "is this the provided
+/// `Map` / `Promise` / `Date` / error class" question asks; [`named`] is for
+/// messages and for whether a type has a name at all.
+///
+/// A module's own `class Set` was read as the library's `Set`: its members were
+/// looked up in the built-in table and refused ("`Set#size`, which this table
+/// has not"), which is what kept Are We Fast Yet's Havlak, whose `som` library
+/// declares one, from compiling. See [`SemanticSnapshot::provided_name`].
+fn provided(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
+    snapshot.provided_name(ty)
 }
 
 /// [`representation`], resolving type parameters through a substitution.
@@ -19237,7 +19250,7 @@ fn inherited_typed_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirT
             continue;
         }
         if at != ty
-            && let Some(name) = named(snapshot, at)
+            && let Some(name) = provided(snapshot, at)
             && let Some(element) = super::builtin::typed_array_element(name)
         {
             return Some(element);
@@ -19554,13 +19567,13 @@ fn provided_representation(
     // of its contents, so there are no arguments to read and no payload
     // representation to decide. First, because it is the only one of these
     // that reads nothing further.
-    if named(snapshot, ty) == Some("Date") {
+    if provided(snapshot, ty) == Some("Date") {
         return Some(HirType::Managed(ManagedType::Date));
     }
 
     // A runtime-immutable source-site object, rather than TypeScript's purely
     // static readonly-array annotation. Raw strings remain a named boundary.
-    if named(snapshot, ty) == Some("TemplateStringsArray") {
+    if provided(snapshot, ty) == Some("TemplateStringsArray") {
         return Some(HirType::Managed(ManagedType::Template));
     }
 
@@ -19570,7 +19583,7 @@ fn provided_representation(
     // state rather than representation -- `ArrayBuffer` is one TypeScript type
     // whether or not `maxByteLength` was passed, so a parameter declared
     // `ArrayBuffer` may be either and the type cannot say which.
-    if named(snapshot, ty) == Some("ArrayBuffer") {
+    if provided(snapshot, ty) == Some("ArrayBuffer") {
         return Some(HirType::Managed(ManagedType::Buffer));
     }
 
@@ -19603,7 +19616,7 @@ fn provided_representation(
     //
     // Both refused before this too, because the type had no representation at
     // all, so nothing that used to compile changes.
-    if named(snapshot, ty) == Some("SharedArrayBuffer") {
+    if provided(snapshot, ty) == Some("SharedArrayBuffer") {
         return Some(HirType::Managed(ManagedType::Buffer));
     }
 
@@ -19612,7 +19625,7 @@ fn provided_representation(
     // type; a `DataView` has none, because the width is chosen per access by
     // the method called. `getUint8` and `getFloat64` are two calls on one type,
     // so there is nothing for a payload to carry.
-    if named(snapshot, ty) == Some("DataView") {
+    if provided(snapshot, ty) == Some("DataView") {
         return Some(HirType::Managed(ManagedType::DataView));
     }
 
@@ -19643,7 +19656,7 @@ fn provided_representation(
     // element to read, because the declaration does not name one -- see
     // `ManagedType::AnyView` for why that is a representation rather than
     // `View` of something.
-    if named(snapshot, ty) == Some("ArrayBufferView") {
+    if provided(snapshot, ty) == Some("ArrayBufferView") {
         return Some(HirType::Managed(ManagedType::AnyView));
     }
 
@@ -19657,7 +19670,7 @@ fn provided_representation(
     //
     // The class itself is not this: `Error` the instance type is laid out by
     // `builtin::error_fields`, and only the constructor's is named this way.
-    if let Some(name) = named(snapshot, ty)
+    if let Some(name) = provided(snapshot, ty)
         && let Some(class) = name.strip_suffix("Constructor")
         && let Some(index) = super::builtin::error_index(class)
     {
@@ -19670,7 +19683,7 @@ fn provided_representation(
     // return annotation, so an inferred `Promise<number>` works as well as a
     // written one. `Promise` with no argument is `Promise<void>`, which is what
     // an `async` function with no `return` has.
-    if named(snapshot, ty) == Some("Promise") {
+    if provided(snapshot, ty) == Some("Promise") {
         // No recorded argument is *not* `Promise<void>`. `Promise<void>` has
         // one argument and it is `void`; none at all means the frontend did not
         // get them -- it stops at the library boundary, and a file large enough
@@ -19701,7 +19714,7 @@ fn provided_representation(
     // through the object -- and 23 of the 25 sites in `runtime/node` keep the
     // object rather than destructuring it, in a local, a reassigned `let` or a
     // private field. Those are exactly the sites a closure would have been for.
-    if named(snapshot, ty) == Some("PromiseWithResolvers") {
+    if provided(snapshot, ty) == Some("PromiseWithResolvers") {
         let argument = *snapshot
             .type_arguments
             .get(&ty)
@@ -19721,7 +19734,7 @@ fn provided_representation(
     // representation was guessed would hash with the wrong function and find
     // nothing, which is the kind of wrong that looks like an empty table rather
     // than like a bug.
-    if matches!(named(snapshot, ty), Some("Map" | "ReadonlyMap")) {
+    if matches!(provided(snapshot, ty), Some("Map" | "ReadonlyMap")) {
         let arguments = snapshot.type_arguments.get(&ty)?;
         let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
         let value = representation_within(snapshot, *arguments.get(1)?, path, subst)?;
@@ -19730,7 +19743,7 @@ fn provided_representation(
             Box::new(value),
         )));
     }
-    if matches!(named(snapshot, ty), Some("Set" | "ReadonlySet")) {
+    if matches!(provided(snapshot, ty), Some("Set" | "ReadonlySet")) {
         let arguments = snapshot.type_arguments.get(&ty)?;
         let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
         return Some(HirType::Managed(ManagedType::Set(Box::new(element))));
@@ -20242,7 +20255,7 @@ fn representation_of(
             if *flags & UNIQUE_SYMBOL != 0 {
                 return Some(HirType::Managed(ManagedType::Symbol));
             }
-            let name = named(snapshot, ty)?;
+            let name = provided(snapshot, ty)?;
             if let Some(element) = super::builtin::typed_array_element(name) {
                 // A view rather than an array. The specification says so --
                 // `new Uint8Array(8)` allocates a buffer and returns a window
@@ -39911,7 +39924,7 @@ impl<'a> FuncBuilder<'a> {
     /// *else* is two things the settle cannot be written for, and the member
     /// read below has to refuse it rather than pick one.
     fn is_a_capability_type(&self, ty: nts_semantic_schema::TypeId) -> bool {
-        if named(self.snapshot, ty) == Some("PromiseWithResolvers") {
+        if provided(self.snapshot, ty) == Some("PromiseWithResolvers") {
             return true;
         }
         let Some(TypeKind::Union(members)) =
@@ -39927,7 +39940,7 @@ impl<'a> FuncBuilder<'a> {
             ) {
                 continue;
             }
-            if named(self.snapshot, member) == Some("PromiseWithResolvers") {
+            if provided(self.snapshot, member) == Some("PromiseWithResolvers") {
                 capability = true;
                 continue;
             }
@@ -52466,7 +52479,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// The layout of a class this compiler provides, if `ty` names one.
     fn provided_layout(&mut self, ty: TypeId) -> Option<Layout> {
-        let name = named(self.snapshot, ty)
+        let name = provided(self.snapshot, ty)
             .filter(|name| super::builtin::is_error(name))?
             .to_owned();
         Some(self.layout_for_provided_error(ty, &name))
@@ -52851,7 +52864,7 @@ impl<'a> FuncBuilder<'a> {
             .fields
             .get(field as usize)
             .is_some_and(|field| matches!(field.ty, HirType::Erased));
-        let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
+        let on_an_error = provided(self.snapshot, ty).is_some_and(super::builtin::is_error)
             || self.provided_error_base(ty).is_some();
         if member == "errors" && erased && on_an_error {
             return Err(self.unsupported(
@@ -53166,7 +53179,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn absent_member(&self, id: NodeId, ty: TypeId, member: &str) -> Diagnostic {
-        let on_an_error = named(self.snapshot, ty).is_some_and(super::builtin::is_error)
+        let on_an_error = provided(self.snapshot, ty).is_some_and(super::builtin::is_error)
             || self.provided_error_base(ty).is_some();
         match super::builtin::omitted(member).filter(|_| on_an_error) {
             Some(reason) => self.unsupported(
@@ -53511,7 +53524,7 @@ impl<'a> FuncBuilder<'a> {
                 continue;
             }
             if at != ty
-                && let Some(name) = named(self.snapshot, at)
+                && let Some(name) = provided(self.snapshot, at)
                 && super::builtin::is_error(name)
             {
                 return Some(name.to_owned());
@@ -55782,7 +55795,7 @@ impl<'a> FuncBuilder<'a> {
         let implemented = if let Some(symbol) = class_symbol(self.snapshot, type_id) {
             self.an_implemented_class(symbol)
         } else {
-            named(self.snapshot, type_id).is_some_and(super::builtin::is_error)
+            provided(self.snapshot, type_id).is_some_and(super::builtin::is_error)
                 || self.provided_error_base(type_id).is_some()
         };
         if implemented {
@@ -55848,7 +55861,7 @@ impl<'a> FuncBuilder<'a> {
             // A provided error class, or one descending from one and declaring
             // no constructor of its own. There is no function to call: this
             // compiler is the constructor, and it is emitted inline.
-            let provided = named(self.snapshot, type_id)
+            let provided = provided(self.snapshot, type_id)
                 .filter(|name| super::builtin::is_error(name))
                 .map(str::to_owned)
                 .or_else(|| self.provided_error_base(type_id));

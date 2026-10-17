@@ -393,6 +393,10 @@ pub fn is_modifier(kind: u16) -> bool {
     )
 }
 
+/// tsgo's `NodeFlagsAmbient`: the node is in an ambient context -- a
+/// declaration file, or under a `declare` (including `declare global`).
+pub const NODE_FLAGS_AMBIENT: u32 = 1 << 23;
+
 /// Whether a kind is one of tsgo's `JSDoc` nodes: a documentation comment or a
 /// part of one, from `KindFirstJSDocNode` (`KindJSDocTypeExpression`) to
 /// `KindLastJSDocNode` (`KindJSDocImportTag`).
