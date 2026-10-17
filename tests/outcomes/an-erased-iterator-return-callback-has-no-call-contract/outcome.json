@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 29 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: IteratorClose of an erased return function, whose callable representation this compiler does not yet carry",
   "node": null,
-  "measured_with": "32eb2d8d1972c7e5",
+  "measured_with": "c5fd88cbec03400c",
   "source": "measured"
 }
