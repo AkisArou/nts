@@ -152,23 +152,22 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
         // A fresh dictionary has no registered record owner. That excludes a
         // direct write to the iterator, but not an iterator stored inside it.
         .filter(|owners| !effect.nested || !owners.is_empty());
-    let mut pending = if let Some(fresh) = &fresh {
-        fresh.clone()
+    let mut pending: Vec<_> = if let Some(fresh) = fresh {
+        fresh.into_iter().map(|ty| (ty, true)).collect()
     } else {
         let Some(ty) = probe.snapshot.node_types.get(&value) else {
             return true;
         };
-        vec![*ty]
+        vec![(*ty, false)]
     };
     let mut seen = FxHashSet::default();
-    while let Some(ty) = pending.pop() {
-        if !seen.insert(ty) {
+    while let Some((ty, exact)) = pending.pop() {
+        if !seen.insert((ty, exact)) {
             continue;
         }
         let Some(record) = probe.snapshot.types.get(ty.0 as usize) else {
             return true;
         };
-        let exact = fresh.as_ref().is_some_and(|owners| owners.contains(&ty));
         if exact && ty == owner {
             return true;
         }
@@ -189,7 +188,9 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
                     return true;
                 }
                 if effect.nested {
-                    pending.extend(properties.iter().map(|property| property.ty));
+                    // The root allocation is exact. A reference stored in it
+                    // can be any inhabitant of its type, even the root's type.
+                    pending.extend(properties.iter().map(|property| (property.ty, false)));
                     pending.extend(
                         probe
                             .snapshot
@@ -197,18 +198,22 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
                             .get(&ty)
                             .into_iter()
                             .flatten()
-                            .map(|signature| signature.value),
+                            .map(|signature| (signature.value, false)),
                     );
                 }
             }
-            TypeKind::Union(members) | TypeKind::Intersection(members) => pending.extend(members),
-            TypeKind::Array(element) if effect.nested => pending.push(*element),
-            TypeKind::Tuple(elements) if effect.nested => pending.extend(elements),
+            TypeKind::Union(members) | TypeKind::Intersection(members) => {
+                pending.extend(members.iter().map(|ty| (*ty, false)));
+            }
+            TypeKind::Array(element) if effect.nested => pending.push((*element, false)),
+            TypeKind::Tuple(elements) if effect.nested => {
+                pending.extend(elements.iter().map(|ty| (*ty, false)));
+            }
             TypeKind::Function(signature) if effect.nested => {
                 let Some(signature) = probe.snapshot.signatures.get(signature.0 as usize) else {
                     return true;
                 };
-                pending.push(signature.return_type);
+                pending.push((signature.return_type, false));
             }
             TypeKind::Any
             | TypeKind::Unknown
