@@ -389,13 +389,13 @@ function receiverCase(early: boolean): number {
 export function returnThisSubject(n: number): number { return receiverCase(true); }
 export function returnThisControl(n: number): number { return receiverCase(false); }
 
-// Known return contracts never reach the erased-callable capability stop.
-// expect-ir: all: no call.extern(nts_refused) in drive@raises
+// These counts are only the cold unlisted-interface fallback, never the erased-callable stop.
+// expect-ir: all: count call.extern(nts_refused) in drive@raises == 3
 // expect-ir: all: no call.extern(nts_refused) in getterCase
 // expect-ir: all: no call.extern(nts_refused) in fieldCase
-// expect-ir: all: no call.extern(nts_refused) in nullableResult
+// expect-ir: all: count call.extern(nts_refused) in nullableResult == 1
 // expect-ir: all: no call.extern(nts_refused) in nullableGetter
-// expect-ir: all: no call.extern(nts_refused) in mappedClose
+// expect-ir: all: count call.extern(nts_refused) in mappedClose == 1
 // expect-ir: all: no call.extern(nts_refused) in primitiveReturn
 // expect-ir: all: no call.extern(nts_refused) in receiverCase
 
