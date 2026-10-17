@@ -322,7 +322,19 @@ fn check(rest: &[String]) -> Result<()> {
         println!("  node {engine}");
     }
     if report.agreed() {
-        println!("agreed on every case");
+        // Every case *compared* agreed. When some were declined, timed out or
+        // never reached, that is fewer than the cases there were, and the
+        // summary says so on this line rather than only in the lines above:
+        // a JVM review read "agreed on every case" over 32 of 87 and took
+        // the backend for at parity.
+        if report.checked < report.expected || report.refused > 0 || report.timeouts > 0 {
+            println!(
+                "agreed on every case it compared: {} of {}",
+                report.checked, report.expected
+            );
+        } else {
+            println!("agreed on every case");
+        }
         return Ok(());
     }
     if !report.aborts.is_empty() {

@@ -166,7 +166,9 @@ export function classify(status, out) {
   const outcome = (() => {
     if (status === 0) {
       if (/^nothing to check/m.test(out)) return Outcome.NOTHING;
-      if (!/^agreed on every case$/m.test(out)) return Outcome.NOT_MEASURED;
+      // The verdict line, in either spelling: `check` says how many it compared
+      // when that is fewer than there were, and a log from before it did not.
+      if (!/^agreed on every case(?: it compared: \d+ of \d+)?$/m.test(out)) return Outcome.NOT_MEASURED;
       const whole = record.checked === record.expected && record.declined === 0 && record.timeouts === 0;
       return whole ? Outcome.AGREES : Outcome.PARTIAL;
     }
@@ -283,6 +285,12 @@ function selfTest() {
     "4 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\n" +
     "checked 20 of 24 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case\n");
   if (partial.outcome !== Outcome.PARTIAL || partial.declined !== 4 || partial.checked !== 20 || partial.expected !== 24) return `four declines read as ${JSON.stringify(partial)}`;
+  // The same run as `check` prints it now, which names the coverage on the
+  // verdict line itself; the line above is a log from before that.
+  const counted = classify(0,
+    "4 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\n" +
+    "checked 20 of 24 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case it compared: 20 of 24\n");
+  if (counted.outcome !== Outcome.PARTIAL || counted.declined !== 4 || counted.checked !== 20 || counted.expected !== 24) return `the counted verdict line read as ${JSON.stringify(counted)}`;
   const nothing = classify(0, "nothing to check: no exported function has scalar arguments and a scalar result\n");
   if (nothing.outcome !== Outcome.NOTHING) return `nothing to check read as ${nothing.outcome}`;
   const wrong = classify(1, "checked 3 cases across 1 function(s)\n  nts  f 1 -> 2\n  node f 1 -> 3\nError: 1 case(s) disagree between the compiled program and node\n");
