@@ -148,7 +148,10 @@ fn fresh_owners(
 
 fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owner: TypeId) -> bool {
     let value = probe.through_assertions(effect.receiver);
-    let fresh = fresh_owners(probe, supplies, value, 0);
+    let fresh = fresh_owners(probe, supplies, value, 0)
+        // A fresh dictionary has no registered record owner. That excludes a
+        // direct write to the iterator, but not an iterator stored inside it.
+        .filter(|owners| !effect.nested || !owners.is_empty());
     let mut pending = if let Some(fresh) = &fresh {
         fresh.clone()
     } else {
@@ -187,6 +190,15 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
                 }
                 if effect.nested {
                     pending.extend(properties.iter().map(|property| property.ty));
+                    pending.extend(
+                        probe
+                            .snapshot
+                            .index_signatures
+                            .get(&ty)
+                            .into_iter()
+                            .flatten()
+                            .map(|signature| signature.value),
+                    );
                 }
             }
             TypeKind::Union(members) | TypeKind::Intersection(members) => pending.extend(members),
