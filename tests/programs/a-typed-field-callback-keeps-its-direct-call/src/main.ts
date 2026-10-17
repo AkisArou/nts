@@ -1,6 +1,8 @@
 // A field-held callback with an already-typed argument may keep the typed
 // body. A forwarding function whose callback signature admits any has to
 // retain the uniform entry's argument obligations.
+// Clean main 6ead61dae14e (binary 2e88745755bd6263): C, LLVM, JVM and Wasm
+// each agree on all 58 cases across 2 exports, with no refused/declined cases.
 class Box {
   callback: (value: number) => number = (value: number): number => value + 3;
 }

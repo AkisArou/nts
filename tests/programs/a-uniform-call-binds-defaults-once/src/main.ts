@@ -2,6 +2,11 @@
 // call site. The supplied-argument arm is the one-change control for omission.
 // A default belongs to the implementation, runs once for exactly undefined,
 // and sees the same captures and earlier bindings as a direct invocation.
+// Before: clean main 6ead61dae14e, binary 2e88745755bd6263, frontend 4ec6b1a5.
+// C/LLVM/JVM each compare 232 cases across 8 exports, with 174 disagreements.
+// Wasm compares 87 of 232, with 29 disagreements; 145 cases decline.
+// Supplied and null controls agree. Full per-backend logs are preserved in
+// ~/.cache/nts-handover/compiler-helper/erased-arguments-20261017/.
 export function invoke(callback: (x?: any) => number, mode: number, n: number): number {
   if (mode === 0) return callback();
   if (mode === 1) return callback(undefined);
