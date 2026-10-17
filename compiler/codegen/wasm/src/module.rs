@@ -82,6 +82,7 @@ pub(crate) enum FuncKey {
     InstanceOf,
     InstanceAt,
     ArrayGrow(u32),
+    ArrayDense(u32),
     ArrayCopy(u32, crate::array_copy::Helper),
     ArrayJoin(u32),
     ArraySort(u32),

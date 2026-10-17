@@ -242,6 +242,9 @@ pub(crate) struct Array {
     pub(crate) wrapper: u32,
     pub(crate) backing: u32,
     pub(crate) descriptor: u32,
+    /// An initialized prefix, or -1 for a statically dense allocation. Only
+    /// modules admitting escaped incomplete arrays add this header word.
+    pub(crate) prefix: Option<u32>,
 }
 
 /// How a collection's keys are stored, hashed and compared.
@@ -402,6 +405,7 @@ fn builtins(
 /// scalar Slot type, so a reference cannot accidentally select integer code.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
+    pub(crate) array_init: crate::array_init::Plan,
     slots: FxHashMap<HirType, Physical>,
     groups: Vec<Vec<SubType>>,
     /// Each defined type's declared supertype and kind, by type index.
@@ -461,6 +465,7 @@ pub(crate) const IDENTITY_HASH: u32 = 1;
 pub(crate) const ARRAY_LENGTH: u32 = ROOT_FIELDS;
 pub(crate) const ARRAY_BACKING: u32 = ROOT_FIELDS + 1;
 pub(crate) const ARRAY_FLAGS: u32 = ROOT_FIELDS + 2;
+pub(crate) const ARRAY_PREFIX: u32 = ROOT_FIELDS + 3;
 /// The flag an erasure of a `(T | null)[]` sets, which nothing clears: a null
 /// slot of the array is `null`, read where its type is gone. C's
 /// `NTS_NULL_SLOTS`.
@@ -697,6 +702,7 @@ enum Work {
 
 struct Builder<'a> {
     program: &'a Program,
+    array_init: crate::array_init::Plan,
     slots: FxHashMap<HirType, PendingSlot>,
     nodes: Vec<Node>,
     objects: FxHashMap<usize, NodeId>,
@@ -752,6 +758,7 @@ impl<'a> Builder<'a> {
     ) -> Self {
         Self {
             program,
+            array_init: crate::array_init::Plan::build(program),
             slots: FxHashMap::default(),
             nodes: Vec::new(),
             objects: FxHashMap::default(),
@@ -1972,6 +1979,12 @@ impl<'a> Builder<'a> {
         fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
         fields.push(Field::value(PendingSlot::Defined(backing, false), true));
         fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        if self.array_init.active()
+            && *element != HirType::Erased
+            && self.arrays.get(&ArrayKey::Template) != Some(&id)
+        {
+            fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        }
         self.nodes[id.0].shape = Shape::Struct(fields);
         Ok(())
     }
@@ -2109,6 +2122,10 @@ impl<'a> Builder<'a> {
                         wrapper: indices[id.0],
                         backing: indices[self.backings[id].0],
                         descriptor: 0,
+                        prefix: (self.array_init.active()
+                            && *element != HirType::Erased
+                            && self.arrays.get(&ArrayKey::Template) != Some(id))
+                        .then_some(ARRAY_PREFIX),
                     },
                 )
             })
@@ -2438,6 +2455,7 @@ impl<'a> Builder<'a> {
             groups,
             supers,
             count,
+            array_init: self.array_init,
         })
     }
     /// The descriptors of the runtime types that are not classes, after every
@@ -2715,6 +2733,65 @@ mod tests {
         let mut module = wasm_encoder::Module::new();
         module.section(&plan.encode());
         module.finish()
+    }
+
+    #[test]
+    fn an_escaped_incomplete_array_has_a_separate_full_width_prefix_word() {
+        let array = HirType::Managed(ManagedType::Array(Box::new(test_common::F64)));
+        let mut f = function("escapes", &[], HirType::Void);
+        let length = value(
+            &mut f,
+            OpKind::ConstInt(i128::from(i32::MAX)),
+            test_common::I32,
+        );
+        let allocation = value(
+            &mut f,
+            OpKind::ArrayNew {
+                length,
+                fill: nts_core::hir::ArrayFill::Holes,
+            },
+            array.clone(),
+        );
+        let escaped = value(
+            &mut f,
+            OpKind::Call {
+                callee: nts_core::hir::Callee::Direct("consumer".into()),
+                args: vec![allocation],
+                frame: None,
+            },
+            HirType::Void,
+        );
+        f.blocks.push(block(
+            &[],
+            &[length, allocation, escaped],
+            Terminator::Return(None),
+        ));
+        let p = program(vec![f]);
+        let plan = Plan::build(&p).unwrap();
+        assert!(plan.array_init.tracks(&p.funcs[0], allocation));
+        let shape = plan.array(&array).unwrap();
+        assert_eq!(shape.prefix, Some(ARRAY_PREFIX));
+        let wrapper = plan
+            .groups
+            .iter()
+            .flatten()
+            .nth(shape.wrapper as usize)
+            .unwrap();
+        let CompositeInnerType::Struct(fields) = &wrapper.composite_type.inner else {
+            panic!("array wrapper must be a struct")
+        };
+        assert_eq!(fields.fields.len(), ARRAY_PREFIX as usize + 1);
+        let prefix = fields.fields[ARRAY_PREFIX as usize];
+        assert!(prefix.mutable);
+        assert_eq!(
+            prefix.element_type,
+            StorageType::Val(wasm_encoder::ValType::I32)
+        );
+        // It is a word after the flags, not packed i8/i16 spare bits: every
+        // prefix through i32::MAX and the unsigned dense sentinel fits.
+        crate::validate(&bytes(&plan)).unwrap();
+        let dense = Plan::build(&typed_program(std::slice::from_ref(&array))).unwrap();
+        assert_eq!(dense.array(&array).unwrap().prefix, None);
     }
 
     /// A presence word goes only where a call records presence, and then to

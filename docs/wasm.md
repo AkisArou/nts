@@ -1903,7 +1903,27 @@ array contract; decline shapes whose storage cannot express them.
 In particular, HIR's zero fill of a typed `new Array(n)` is not an undefined
 element representation. Wasm checks initialization before admitting observations:
 core's `hir::holes` names every op that may observe a hole, and `array_init.rs`
-refuses the first by name. The analysis is a forward must-analysis over the
+keeps the direct-read and direct-erasure floors. An incomplete typed allocation
+that escapes through a field, typed call, return or CFG edge instead carries a
+runtime initialized prefix on its identity wrapper. In modules needing this
+contract, a separate mutable i32 word holds every prefix through 2^31−1; -1 is
+the unsigned dense sentinel. A successful store at exactly the prefix advances
+it by one. Reads check the prefix after the ordinary index guards. Bulk helpers
+and erasure require the whole logical length, except a full fill or truncation
+to zero, which establishes density. Nested array erasure checks the same
+contract. The core proof is unchanged.
+
+This prefix is conservative: a write past it does not become observable merely
+because that slot was written, and filling a gap later does not recover an
+earlier out-of-order write. Such reads stop with NTS5001 rather than answering
+zero, false or null for a hole. `tests/wasm/array-written-prefix` pins both false
+stops beside sequential, alias, growth and hole controls. Setting
+`NTS_WASM_ARRAY_PREFIX=0` retains the previous compile-time floor for A/B. A
+module already admitted by the static proof keeps its original layout and
+instructions with either setting; prefix metadata is added only to a module
+that needs the new escape contract.
+
+The static analysis is a forward must-analysis over the
 control-flow graph: a
 constant slot is ready at a point when a store wrote it on every path from the
 allocation to there. An element read needs its slot, complete initialization
@@ -1920,7 +1940,8 @@ allocation's own; and the index values stored, so `a[at] = v; … a[at]` reads a
 written slot. A start other than 0, a step other than 1, a test other than
 `i < length` (`i <= length - 1` is not normalised), a store under an `if`, or a
 `break` before the store leaves the array incomplete. Unproven typed holes
-decline by function and source origin; `zeroed: false` retains HIR's explicit
+decline by function and source origin on the direct path, or at runtime through
+an escaped wrapper; `zeroed: false` retains HIR's explicit
 promise that lowering fills every slot before observation. Erased backing starts
 with the undefined singleton. This admission check changes no native lane.
 Closed push/pop/fill/truncation helper rows use the same wrapper and backing.

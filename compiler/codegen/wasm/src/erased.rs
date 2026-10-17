@@ -294,6 +294,7 @@ pub(crate) fn erase(
     value: ValueId,
     absent: Absent,
 ) -> Result<(), Failure> {
+    crate::arrays::dense(body, value)?;
     match body.ty(value).clone() {
         HirType::Void => get_singleton(body, Singleton::Undefined)?,
         HirType::Managed(ManagedType::String) => erase_string(body, value, absent)?,
@@ -416,6 +417,7 @@ pub(crate) fn erase_in(
     code: &mut ir::Code,
     ty: &HirType,
 ) -> Result<(), Failure> {
+    crate::arrays::dense_stack(m, code, ty)?;
     match ty {
         HirType::Erased
         | HirType::Managed(

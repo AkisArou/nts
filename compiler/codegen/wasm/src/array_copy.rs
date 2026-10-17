@@ -210,8 +210,8 @@ fn wrap(
         I::LocalGet(local),
         I::RefAsNonNull,
         I::I32Const(0),
-        I::StructNew(shape.wrapper),
     ]);
+    f.instructions(&crate::arrays::wrapper(shape, -1));
     Ok(())
 }
 fn copy(f: &mut Function, shape: &gc::Array) {

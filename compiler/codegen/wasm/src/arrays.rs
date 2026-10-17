@@ -245,7 +245,12 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     index(b, length)?;
     b.instruction(&I::ArrayNew(array.backing));
     b.instruction(&I::I32Const(0));
-    b.instruction(&I::StructNew(array.wrapper));
+    let prefix = if b.types().array_init.tracks(b.func, result) {
+        0
+    } else {
+        -1
+    };
+    b.instructions(&wrapper(array, prefix));
     Ok(())
 }
 /// A tagged template's cooked strings: one immortal object per source site,
@@ -276,8 +281,8 @@ fn template(
                 array_size: length,
             },
             I::I32Const(0),
-            I::StructNew(wrapper),
         ]);
+        code.instructions(&self::wrapper(shape, -1));
         Ok((crate::module::constant_type(wrapper), code))
     })?;
     b.global_get(global);
@@ -425,6 +430,7 @@ pub(crate) fn get(
             "an index past the end, whose undefined this element type cannot hold",
         )?;
     }
+    initialized(b, shape, array, at)?;
     backing(b, array, shape.wrapper)?;
     checked_gc_index(b, at)?;
     b.instruction(&get_instruction(shape)?);
@@ -490,6 +496,163 @@ fn store(
     b.load(value)?;
     objects::adapt(b, &b.ty(value).clone(), &shape.element)?;
     b.instruction(&I::ArraySet(shape.backing));
+    if let Some(prefix) = shape.prefix {
+        checked_gc_index(b, at)?;
+        b.load(array)?;
+        b.instruction(&I::StructGet {
+            struct_type_index: shape.wrapper,
+            field_index: prefix,
+        });
+        b.instruction(&I::I32Eq);
+        b.instruction(&I::If(BlockType::Empty));
+        b.load(array)?;
+        checked_gc_index(b, at)?;
+        b.instructions(&[
+            I::I32Const(1),
+            I::I32Add,
+            I::StructSet {
+                struct_type_index: shape.wrapper,
+                field_index: prefix,
+            },
+            I::End,
+        ]);
+    }
+    Ok(())
+}
+
+/// Construct one wrapper. A negative prefix means every logical slot is
+/// proven written; a nonnegative prefix holds its exact conservative bound.
+/// A separate word holds every prefix through `i32::MAX` without flag packing.
+pub(crate) fn wrapper(shape: &gc::Array, prefix: i32) -> Vec<I<'static>> {
+    let mut code = Vec::new();
+    if shape.prefix.is_some() {
+        code.push(I::I32Const(prefix));
+    }
+    code.push(I::StructNew(shape.wrapper));
+    code
+}
+
+fn initialized(
+    b: &mut Body<'_, '_>,
+    shape: &gc::Array,
+    array: ValueId,
+    at: ValueId,
+) -> Result<(), Failure> {
+    let Some(prefix) = shape.prefix else {
+        return Ok(());
+    };
+    // Bounds have already guarded the total-to-GC index conversion. The
+    // dense sentinel (-1 as unsigned) admits every representable valid index.
+    checked_gc_index(b, at)?;
+    b.load(array)?;
+    b.instruction(&I::StructGet {
+        struct_type_index: shape.wrapper,
+        field_index: prefix,
+    });
+    b.instruction(&I::I32LtU);
+    contract::require(b, crate::array_init::HOLE)
+}
+
+/// Consumers that do not carry a partial initialization contract require all
+/// logical slots. Null is left to the consumer's existing null contract.
+pub(crate) fn dense(b: &mut Body<'_, '_>, array: ValueId) -> Result<(), Failure> {
+    if !is_array(b.ty(array)) {
+        return Ok(());
+    }
+    let shape = storage(b, array)?;
+    let Some(prefix) = shape.prefix else {
+        return Ok(());
+    };
+    b.load(array)?;
+    b.instructions(&[I::RefIsNull, I::I32Eqz, I::If(BlockType::Empty)]);
+    b.load(array)?;
+    b.instruction(&I::StructGet {
+        struct_type_index: shape.wrapper,
+        field_index: prefix,
+    });
+    logical_length(b, array, shape.wrapper)?;
+    b.instruction(&I::I32GeU);
+    contract::require(b, crate::array_init::HOLE)?;
+    b.instruction(&I::End);
+    Ok(())
+}
+
+pub(crate) fn mark_dense(b: &mut Body<'_, '_>, array: ValueId) -> Result<(), Failure> {
+    if !is_array(b.ty(array)) {
+        return Ok(());
+    }
+    let shape = storage(b, array)?;
+    let Some(prefix) = shape.prefix else {
+        return Ok(());
+    };
+    b.load(array)?;
+    b.instructions(&[I::RefIsNull, I::I32Eqz, I::If(BlockType::Empty)]);
+    b.load(array)?;
+    b.instructions(&[
+        I::I32Const(-1),
+        I::StructSet {
+            struct_type_index: shape.wrapper,
+            field_index: prefix,
+        },
+        I::End,
+    ]);
+    Ok(())
+}
+
+/// Preserve an array on the stack while enforcing the erasure boundary's
+/// dense-array contract. Helpers erasing nested array elements use this path.
+pub(crate) fn dense_stack(
+    m: &mut Builder<'_>,
+    code: &mut ir::Code,
+    ty: &HirType,
+) -> Result<(), Failure> {
+    if !is_array(ty) {
+        return Ok(());
+    }
+    let shape = m.types.array(ty)?;
+    let Some(prefix) = shape.prefix else {
+        return Ok(());
+    };
+    let wrapper = shape.wrapper;
+    let physical = m.types.value_slot(ty)?;
+    let target = m.helper(
+        FuncKey::ArrayDense(wrapper),
+        format!("array.require_dense<{wrapper}>"),
+        vec![physical],
+        Some(physical),
+        |m| {
+            let decline = contract::decline(m)?;
+            let name = m.literal("erasing a typed array");
+            let reason = m.literal(crate::array_init::HOLE);
+            let mut f = Function::default();
+            f.instructions(&[
+                I::LocalGet(0),
+                I::RefIsNull,
+                I::If(BlockType::Empty),
+                I::LocalGet(0),
+                I::Return,
+                I::End,
+                I::LocalGet(0),
+                I::StructGet {
+                    struct_type_index: wrapper,
+                    field_index: prefix,
+                },
+                I::LocalGet(0),
+                I::StructGet {
+                    struct_type_index: wrapper,
+                    field_index: gc::ARRAY_LENGTH,
+                },
+                I::I32LtU,
+                I::If(BlockType::Empty),
+            ]);
+            f.global_get(name);
+            f.global_get(reason);
+            f.call(decline);
+            f.instructions(&[I::Unreachable, I::End, I::LocalGet(0), I::End]);
+            Ok(f)
+        },
+    )?;
+    code.call(target);
     Ok(())
 }
 /// Grow the array by the slot at its end, which the index is known to name.

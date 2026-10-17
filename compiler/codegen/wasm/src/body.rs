@@ -116,7 +116,7 @@ pub(crate) fn lower(
     func: &Func,
     m: &mut Builder<'_>,
 ) -> Result<(ir::Function, FunctionRoute), EmitError> {
-    crate::array_init::check(func)?;
+    crate::array_init::check(func, &m.types.array_init)?;
     let plan = cfg::plan(func).map_err(|reason| EmitError::Structuring {
         function: func.name.clone(),
         reason,
@@ -872,6 +872,21 @@ impl<'b, 'p> Body<'b, 'p> {
         name: &str,
         args: &[ValueId],
     ) -> Result<(), Failure> {
+        for (at, &argument) in args.iter().enumerate() {
+            let initializes = at == 0
+                && (nts_core::hir::fills_every_slot(name)
+                    || (nts_core::hir::sets_length(name)
+                        && args
+                            .get(1)
+                            .is_some_and(|id| match self.func.value(*id).kind {
+                                OpKind::ConstInt(0) => true,
+                                OpKind::ConstFloat(n) => n == 0.0,
+                                _ => false,
+                            })));
+            if !initializes {
+                crate::arrays::dense(self, argument)?;
+            }
+        }
         if let Some(helper) = crate::raising::external(name) {
             crate::raising::call(self, result, name, helper, args)?;
         } else if let Some(helper) = crate::strings::external(name) {
@@ -926,6 +941,9 @@ impl<'b, 'p> Body<'b, 'p> {
                 Some(crate::Support::Intrinsic | crate::Support::WasmHelper | crate::Support::HostImport) => Failure::Invariant(format!("cataloged helper `{name}` has no implementation binding")),
                 None => format!("unclassified runtime/external helper `{name}` is outside the implemented Wasm helper surface").into(),
             });
+        }
+        for &argument in args {
+            crate::arrays::mark_dense(self, argument)?;
         }
         Ok(())
     }

@@ -1599,9 +1599,9 @@ fn keys_str(m: &mut Builder<'_>, c: &Collection, result: &HirType) -> Result<Fun
                 I::LocalGet(backing),
                 I::RefAsNonNull,
                 I::I32Const(0),
-                I::StructNew(wrapper),
-                I::End,
             ]);
+            f.instructions(&crate::arrays::wrapper(&m.types.arrays[&wrapper], -1));
+            f.instruction(&I::End);
             Ok(f)
         },
     )

@@ -128,9 +128,9 @@ fn body(
         I::LocalGet(STORE),
         I::RefAsNonNull,
         I::I32Const(0),
-        I::StructNew(wrapper),
-        I::End,
     ]);
+    f.instructions(&crate::arrays::wrapper(&m.types.arrays[&wrapper], -1));
+    f.instruction(&I::End);
     Ok(f)
 }
 
