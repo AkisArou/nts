@@ -548,8 +548,7 @@ impl FuncBuilder<'_> {
                 .hierarchy
                 .name
                 .get(&receiver)
-                .map(String::as_str)
-                .unwrap_or("<iterator>");
+                .map_or("<iterator>", String::as_str);
             return Err(self.unsupported(
                 action.at,
                 &format!(
