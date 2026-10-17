@@ -3369,11 +3369,53 @@ NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
   return out;
 }
 
+/* The empty string and every string of one narrow code unit, made once.
+ *
+ * A range of a string is a new string, and a short one is mostly header: a
+ * parser's `"a"`, a tokenizer's `charAt`, a split into characters each cost an
+ * allocation, and under counting a death, for a value that is the same every
+ * time. A string is immutable to the program -- the one write into an existing
+ * string is `nts_str_append`'s, and that only into one whose count says it is
+ * the sole owner, which an immortal never is -- so these are shared, as V8's
+ * single-character string table is. `benchmarks/cases/json-parse` makes two per
+ * row, its `"tags":["a","b"]`. */
+typedef struct {
+  NtsHeader header;
+  unsigned char units[2];
+} NtsUnitString;
+
+#define NTS_UNIT_STRING(unit)                                                  \
+  {{&nts_desc_string1, NTS_IMMORTAL, 0u, 1u}, {(unsigned char)(unit), 0u}}
+#define NTS_UNIT_STRINGS_4(unit)                                               \
+  NTS_UNIT_STRING(unit), NTS_UNIT_STRING((unit) + 1),                          \
+      NTS_UNIT_STRING((unit) + 2), NTS_UNIT_STRING((unit) + 3)
+#define NTS_UNIT_STRINGS_16(unit)                                              \
+  NTS_UNIT_STRINGS_4(unit), NTS_UNIT_STRINGS_4((unit) + 4),                    \
+      NTS_UNIT_STRINGS_4((unit) + 8), NTS_UNIT_STRINGS_4((unit) + 12)
+#define NTS_UNIT_STRINGS_64(unit)                                              \
+  NTS_UNIT_STRINGS_16(unit), NTS_UNIT_STRINGS_16((unit) + 16),                 \
+      NTS_UNIT_STRINGS_16((unit) + 32), NTS_UNIT_STRINGS_16((unit) + 48)
+
+static const NtsUnitString nts_unit_strings[256] = {
+    NTS_UNIT_STRINGS_64(0), NTS_UNIT_STRINGS_64(64), NTS_UNIT_STRINGS_64(128),
+    NTS_UNIT_STRINGS_64(192)};
+static const NtsUnitString nts_empty_string = {
+    {&nts_desc_string1, NTS_IMMORTAL, 0u, 0u}, {0u, 0u}};
+
 /* Copy a range of code units out of a string, into the caller's storage where
- * it supplied one. */
+ * it supplied one, and as a shared string where it is one of those above. */
 static NtsString *nts_str_range(NtsHeader *into, const NtsString *s,
                                 uint32_t from, uint32_t to) {
   uint32_t length = to > from ? to - from : 0u;
+  if (into == NULL && length <= 1u) {
+    if (length == 0u) {
+      return (NtsString *)(void *)&nts_empty_string;
+    }
+    uint16_t unit = nts_unit(s, from);
+    if (unit <= 0xFFu) {
+      return (NtsString *)(void *)&nts_unit_strings[unit];
+    }
+  }
   if (length == 0) {
     return nts_str_build(into, 0, 0);
   }
