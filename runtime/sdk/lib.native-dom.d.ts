@@ -13774,6 +13774,17 @@ declare var AmbientLightSensor: {
   new (options?: SensorOptions): AmbientLightSensor;
 };
 
+interface ProximitySensor extends Sensor {
+  readonly distance: number | null;
+  readonly max: number | null;
+  readonly near: boolean | null;
+}
+
+declare var ProximitySensor: {
+  prototype: ProximitySensor;
+  new (options?: SensorOptions): ProximitySensor;
+};
+
 // ---- Contact Picker API ------------------------------------------------------
 // https://developer.mozilla.org/en-US/docs/Web/API/ContactsManager/select
 // Spec: https://wicg.github.io/contact-api/spec/

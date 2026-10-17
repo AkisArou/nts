@@ -36,6 +36,15 @@ assistive-technology path.
 - Adaptive app shell/navigation, safe-area and keyboard layout policy:
   revisit with the react-* host implementations, where the platforms'
   real layout guides and navigation machinery are available.
+- **Frame scheduling and visibility are UI-host concepts, not
+  web-platform globals on native targets.** `requestAnimationFrame` /
+  `cancelAnimationFrame`, `requestIdleCallback` /
+  `cancelIdleCallback`, and `IntersectionObserver` exist today only
+  as Chromium DOM binding types; `runtime/web-platform` will not
+  grow them. Decide with the react-* hosts: frame callbacks map to
+  the host's vsync/frame clock, idle callbacks to its scheduler, and
+  intersection to viewport visibility of native elements (lazy
+  rendering, impression tracking, `List` virtualization hints).
 - (Resolved) Yoga Grid styles were added against upstream `main` —
   see yoga-style.md. Named grid lines/areas remain out because
   upstream Yoga does not model them.

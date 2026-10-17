@@ -52,7 +52,7 @@ stance when adopted.
 
 | API | Cost | Note |
 |---|---|---|
-| Remote Playback | +4 / +54 | The standard half of casting |
+| Remote Playback | +4 / +54 | Decided: adopt the Web API when casting enters scope. Providers map to AirPlay (iOS/macOS), Google Cast (Android, iOS), `Windows.Media.Casting`; no per-app toolkit API on GTK, so `unsupported` there. Blink supplies it on the Chromium host |
 | Web MIDI | +16 / +240 | Clean closure; `MIDIAccess` |
 | WebTransport | +9 / +159 | QUIC streams/datagrams |
 | WebGPU | +151 / +1,464, DOM texture-source refs | Deferred by decision; graphics surface is its own round (Dawn/wgpu provider) |
@@ -66,7 +66,7 @@ stance when adopted.
 | WebXR (`XRSystem` …) | Large surface (sessions, spaces, input, layers) and an OpenXR-sized provider per platform; Blink provides it on the Chromium host meanwhile. Its own round when XR is a product goal |
 | WebOTP (`OTPCredential`) | Small; unblocks SMS verification codes (section 1, item 11) |
 | ScreenDetails / ScreenDetailed (Window Management) | The standard form of multi-display detail; would let `desktop/displays` align field names with the spec |
-| Presentation API | Second-screen presentation; mostly superseded by Remote Playback for media |
+| Presentation API | Decided: skip the Web shape (a receiver web page). Native second-display content (iOS external screens, Android `Presentation`, Windows `ProjectionManager`, a window on another monitor) is covered by `desktop/displays` + `desktop/windows` and the projections |
 | Document Picture-in-Picture | Requires a document; UI-layer concern in DOM hosts only |
 | NavigatorUAData | UA client hints; low value natively (`app.device` answers directly) |
 

@@ -10,6 +10,13 @@ the main checkout. The output is a *temporary* stand-in until nts owns a
 real native lib generated from WebIDL (see DESIGN.md). Re-running with a
 newer TypeScript is the intended update path; hand-edits belong in the
 ADDITIONS / OVERRIDES constants below, never in the generated file.
+
+Known gap: the generated file on disk was additionally passed through a
+TypeScript formatter (2-space indent, expanded object types) that this
+script does not run. Regenerating today therefore reformats the whole
+file; until the formatter step is restored here, additions are applied
+to the generated file in its formatted style and this script stays the
+content source of truth.
 """
 import os
 import re
@@ -356,6 +363,15 @@ interface AmbientLightSensor extends Sensor {
 }
 
 declare var AmbientLightSensor: { prototype: AmbientLightSensor; new (options?: SensorOptions): AmbientLightSensor };
+
+// Proximity Sensor: no MDN page; shape from https://www.w3.org/TR/proximity/
+interface ProximitySensor extends Sensor {
+  readonly distance: number | null;
+  readonly max: number | null;
+  readonly near: boolean | null;
+}
+
+declare var ProximitySensor: { prototype: ProximitySensor; new (options?: SensorOptions): ProximitySensor };
 
 // ---- Contact Picker API ------------------------------------------------------
 // https://developer.mozilla.org/en-US/docs/Web/API/ContactsManager/select

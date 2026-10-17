@@ -2,7 +2,7 @@
  * @nts/sdk/device — hardware odds and ends.
  *
  * Standard parts (use directly, in lib.native-dom):
- * - Motion/orientation/light: Generic Sensors — `new Accelerometer({frequency: 60})`
+ * - Motion/orientation/light/proximity: Generic Sensors — `new Accelerometer({frequency: 60})`
  * - Battery: `await navigator.getBattery()`
  * - Keep-awake: `await navigator.wakeLock.request("screen")`
  * - Coarse vibration: `navigator.vibrate(pattern)`
@@ -21,6 +21,7 @@ export type Gyroscope = globalThis.Gyroscope;
 export type Magnetometer = globalThis.Magnetometer;
 export type AbsoluteOrientationSensor = globalThis.AbsoluteOrientationSensor;
 export type AmbientLightSensor = globalThis.AmbientLightSensor;
+export type ProximitySensor = globalThis.ProximitySensor;
 export type BatteryManager = globalThis.BatteryManager;
 export type WakeLock = globalThis.WakeLock;
 export type WakeLockSentinel = globalThis.WakeLockSentinel;

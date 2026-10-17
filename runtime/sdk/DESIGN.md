@@ -135,3 +135,14 @@ scanner). Apps never select providers.
    background location delivery.
 6. **`Date` vs Temporal** for schedules/calendars once the Temporal track
    lands (`docs/temporal.md`).
+7. **Performance family implementation debt**: the lib types the whole
+   User Timing / Performance Timeline family (`performance`,
+   `PerformanceObserver`, `PerformanceMark/Measure`,
+   `PerformanceResourceTiming`, `PerformanceEventTiming`,
+   `PerformanceLongTaskTiming`, `EventCounts`), but
+   `runtime/web-platform` implements none of it yet — only a
+   provider-side monotonic-clock primitive exists (`runtime/node`'s
+   `perf_hooks` is a separate realm). Adopted standard, missing
+   implementation; the web-platform lane owns closing it. Adjacent:
+   the `navigator` object itself has no web-platform implementation
+   (host/bootstrap-provided per target — unconfirmed natively).
