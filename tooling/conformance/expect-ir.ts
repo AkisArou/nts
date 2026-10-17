@@ -6,10 +6,10 @@
 // A fact is a `// expect-ir: <backends>: <fact>` line in a fixture's or a
 // benchmark's source (`nts expect-ir` has the form, in
 // tooling/cli/src/expect_ir.rs). This finds every case that states one and
-// runs `nts expect-ir` on it: a case under `tests/programs/` through its own
-// tsconfig, a benchmark's `case.ts` through one made here the way the bench
-// makes its own. A case fails when any of its facts does not hold, is
-// unresolved, or does not parse.
+// runs `nts expect-ir` on it: a case under `tests/programs/` or
+// `tests/refusals/` through its own tsconfig, a benchmark's `case.ts` through
+// one made here the way the bench makes its own. A case fails when any of its
+// facts does not hold, is unresolved, or does not parse.
 //
 // # Why its own step
 //
@@ -78,11 +78,12 @@ function projectFor(name: string, file: string): string {
 
 function cases(): Case[] {
   const found: Case[] = [];
-  const programs = join(ROOT, "tests/programs");
-  for (const name of readdirSync(programs).sort()) {
-    const dir = join(programs, name);
-    if (existsSync(join(dir, "tsconfig.json")) && statesAFact(dir)) {
-      found.push({ name: `tests/programs/${name}`, tsconfig: join(dir, "tsconfig.json") });
+  for (const corpus of ["tests/programs", "tests/refusals"]) {
+    for (const name of readdirSync(join(ROOT, corpus)).sort()) {
+      const dir = join(ROOT, corpus, name);
+      if (existsSync(join(dir, "tsconfig.json")) && statesAFact(dir)) {
+        found.push({ name: `${corpus}/${name}`, tsconfig: join(dir, "tsconfig.json") });
+      }
     }
   }
   const benchmarks = join(ROOT, "benchmarks/cases");
