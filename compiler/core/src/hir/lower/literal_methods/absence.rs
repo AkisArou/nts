@@ -139,7 +139,11 @@ fn fresh_owners(
     } else {
         body
     };
-    fresh_owners(probe, supplies, returned, depth + 1)
+    let owners = fresh_owners(probe, supplies, returned, depth + 1)?;
+    // A generic factory may be instantiated at another owner. Its template's
+    // allocation is exact only when the call preserves that same identity.
+    let result = probe.snapshot.node_types.get(&value)?;
+    owners.iter().all(|owner| owner == result).then_some(owners)
 }
 
 fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owner: TypeId) -> bool {
