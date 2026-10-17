@@ -1,4 +1,5 @@
 // expect: nothing refused
+// expect-ir: all: no unerase in made
 //
 // **Closed 2026-09-21**, and kept as the regression guard. The closure now
 // captures the **promise** rather than the settler and re-derives the settle

@@ -4582,7 +4582,18 @@ fn reference_arguments(
             read_backs.push((
                 direct.len(),
                 Op {
-                    kind: OpKind::Unerase { value: *raw },
+                    // Restore the old typed null at a reference call. A
+                    // literal null needs no object read-back, and making one
+                    // would invent a layout obligation for an absent object.
+                    // Undefined and non-constant erased values keep their
+                    // existing read-back and assignability obligations.
+                    kind: if matches!(func.values[raw.0 as usize].kind, OpKind::ConstNull)
+                        && parameter.ty.is_managed()
+                    {
+                        OpKind::ConstNull
+                    } else {
+                        OpKind::Unerase { value: *raw }
+                    },
                     ty: parameter.ty.clone(),
                     origin: func.values[index].origin.clone(),
                 },
@@ -8000,6 +8011,89 @@ fn frame_capacity(func: &Func, value: ValueId) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(clippy::unwrap_used, clippy::expect_used)]
+    fn literal_null_reference_arguments_do_not_reinterpret_undefined() {
+        use nts_frontend_ts::{SemanticSource, TsgoApi};
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            return;
+        };
+        let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/refusals/a-promise-settler-captured-by-a-closure/tsconfig.json");
+        let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+        assert!(!snapshot.has_errors());
+        let prepared = prepare(&snapshot).expect("the promise guard verifies");
+        let mut caller = prepared
+            .program
+            .funcs
+            .iter()
+            .find(|f| f.name == "made")
+            .unwrap()
+            .clone();
+        let target = caller
+            .values
+            .iter()
+            .find_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } => Some(name),
+                _ => None,
+            })
+            .unwrap();
+        let params = &prepared
+            .program
+            .funcs
+            .iter()
+            .find(|f| &f.name == target)
+            .unwrap()
+            .params;
+        assert_eq!(params.len(), 2);
+        let origin = caller.origin.clone();
+        let payload = ValueId(u32::try_from(caller.values.len()).unwrap());
+        caller.values.push(Op {
+            kind: OpKind::ConstNull,
+            ty: HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER))),
+            origin: origin.clone(),
+        });
+        // The last two cases erase a null pointer under their own absence
+        // contract. Peeling their Erase must not make them literal nulls.
+        for kind in [
+            OpKind::ConstNull,
+            OpKind::ConstUndefined,
+            OpKind::Param(0),
+            OpKind::Erase {
+                value: payload,
+                absent: Absent::Undefined,
+                slots: Absent::Impossible,
+            },
+            OpKind::Erase {
+                value: payload,
+                absent: Absent::Impossible,
+                slots: Absent::Impossible,
+            },
+        ] {
+            let literal_null = matches!(kind, OpKind::ConstNull);
+            let raw = ValueId(u32::try_from(caller.values.len()).unwrap());
+            caller.values.push(Op {
+                kind,
+                ty: HirType::Erased,
+                origin: origin.clone(),
+            });
+            let mut args = vec![ValueId(0); UNIFORM_ARGUMENTS];
+            args.push(raw);
+            let inputs = reference_arguments(&caller, 0, &args, params, false).unwrap();
+            assert_eq!(inputs.read_backs.len(), 1);
+            let input = &inputs.read_backs[0].1;
+            assert_eq!(input.ty, params[1].ty);
+            if literal_null {
+                assert!(matches!(input.kind, OpKind::ConstNull));
+            } else {
+                assert!(matches!(input.kind, OpKind::Unerase { value } if value == raw));
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::unwrap_used, clippy::expect_used)]
