@@ -661,6 +661,17 @@ static void nts_free_block(void *object) {
 #endif
 }
 
+/* A string's death: its block, and the count that says it was reclaimed.
+ *
+ * A string holds nothing -- no references, no erased or foreign slots, its
+ * units in its own block -- so nothing else the general death path does
+ * applies to one, and the two places strings die both come here: a release
+ * that reaches zero, and an append that outgrew the block it was given. */
+static void nts_free_string(NtsHeader *string) {
+  nts_env->reclaimed++;
+  nts_free_block(string);
+}
+
 /* Whether an array's elements still sit in the block the array itself lives in.
  *
  * The one growth that moves them out is the only thing that makes this false,
@@ -1594,8 +1605,7 @@ void nts_release(NtsHeader *object) {
    * string cannot lead back to itself), so the buffered case below is not one
    * it can be in. */
   if (object->descriptor->kind == NTS_KIND_STRING) {
-    nts_env->reclaimed++;
-    nts_free_block(object);
+    nts_free_string(object);
     return;
   }
   nts_paint(object, NTS_BLACK);
@@ -3268,17 +3278,19 @@ __attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
    * reference fields is never a collection candidate, so nothing is buffered
    * that could be left pointing at it.
    *
-   * `nts_destroy` and not `nts_free`: the first is the death path every other
-   * object takes and does the reclaiming bookkeeping, and `nts_live_count` is
-   * how reference counting is tested. Freeing the block alone gave the memory
-   * back and left the object counted as live, which the suite reported as five
-   * leaks -- correctly.
+   * `nts_free_string` and not `nts_free_block`: the first does the reclaiming
+   * bookkeeping, and `nts_live_count` is how reference counting is tested.
+   * Freeing the block alone gave the memory back and left the object counted
+   * as live, which the suite reported as five leaks -- correctly. It was
+   * `nts_destroy`, the general death path, which costs a string a walk of
+   * everything it does not hold: 13% of `json-serialize` and 15% of
+   * `json-stringify-typed`, whose accumulators outgrow their blocks.
    *
    * This is what keeps growth off the bill. Six reallocations building a string
    * were six releases, and the operation they were counted against is one the
    * program never asked for. */
   if (a->reserved == 1u) {
-    nts_destroy((NtsHeader *)a);
+    nts_free_string((NtsHeader *)a);
   } else if (a->reserved != NTS_IMMORTAL) {
     nts_release((NtsHeader *)a);
   }
