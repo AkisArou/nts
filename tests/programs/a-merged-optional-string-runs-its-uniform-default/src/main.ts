@@ -1,3 +1,5 @@
+// Clean75a baseline: C/LLVM/JVM abort 12/116, with 104 compared;
+// Wasm declines 12/116, with 104 compared (partial agreement). Controls agree.
 // Undefined and a present string share pointer storage here. The argument's
 // source type must survive erasure, and neither known identity nor a typed
 // signature may bypass the implementation's default. Each control changes
