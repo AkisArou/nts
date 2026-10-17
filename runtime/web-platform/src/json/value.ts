@@ -283,6 +283,20 @@ export class JsonValue {
   }
 
   /**
+   * An object whose keys are already known to be plain -- no array-index key and no repeated one
+   * -- so it keeps its two lists, as {@link objectValue} would after checking. For the parser,
+   * which knows it for a record row that ends with the very list a plain sibling kept.
+   */
+  static plainObjectValue(
+    keys: readonly string[],
+    values: readonly JsonValue[],
+    start: number,
+    end: number,
+  ): JsonValue {
+    return new JsonValue("object", start, end, false, 0, "", NO_ITEMS, keys, values);
+  }
+
+  /**
    * An object, with its keys placed in `OrdinaryOwnPropertyKeys` order.
    *
    * Canonical array-index names come first in ascending numeric order, then every other key in

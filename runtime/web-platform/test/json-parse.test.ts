@@ -63,6 +63,66 @@ suite("invalid JSON is rejected, and node rejects it too", () => {
   }
 });
 
+test("rows that spell their sibling's keys share its list, and a row that does not builds its own", () => {
+  // Observable only as identity, which is the point: the shared list is the allocation saved.
+  const rows = parseJsonText('[{"id":1,"name":"a"},{"id":2,"name":"b"},{"id":3,"nick":"c"}]').items;
+  const [first, second, third] = rows as [JsonValue, JsonValue, JsonValue];
+  assert.equal(second.keys, first.keys, "the second row shares the first's keys");
+  assert.notEqual(third.keys, first.keys, "a row with another key has its own list");
+  assert.deepEqual([...third.keys], ["id", "nick"]);
+  assert.deepEqual([...first.keys], ["id", "name"]);
+});
+
+suite("an array of records reads each key the way the row before it spelled it, or afresh", () => {
+  // `readKey` takes a key from the previous sibling's keys when the source spells it plainly.
+  // The valid half: rows that agree, disagree, reorder, extend, shorten, nest, and repeat a key,
+  // where only the comparison of units decides what is taken. The invalid half is the
+  // correctness argument for "plainly": a key that needed an escape in one row must not let a
+  // raw quote, newline or backslash through in the next.
+  const valid = [
+    '[{"id":1,"name":"a"},{"id":2,"name":"b"},{"id":3,"name":"c"}]',
+    '[{"id":1,"name":"a"},{"name":"b","id":2}]',
+    '[{"ab":1},{"a":2},{"abc":3},{"ab":4}]',
+    '[{"a":1},{"a":2,"b":3},{"a":4}]',
+    '[{"a":1},{},{"a":2}]',
+    '[{"a":1,"b":2},{"a":3}]',
+    '[{"a":1,"b":2},{"a":3,"a":4}]',
+    '[{"a":{"x":1}},{"a":{"x":2,"y":3}}]',
+    '[{"a":1,"a":2},{"a":3,"a":4}]',
+    '[{"10":1,"b":2},{"10":3,"b":4}]',
+    '[{"a\\"b":1},{"a\\"b":2}]',
+    '[{"a\\nb":1},{"a\\nb":2}]',
+    '[{"a\\\\b":1},{"a\\\\b":2}]',
+    '[{"\\u0061":1},{"a":2},{"\\u0061":3}]',
+    '[{"a\\\\b":1},{"a\\b":2}]',
+    '[ { "id" : 1 } , { "id" : 2 } ]',
+    '[[{"k":1}],[{"k":2}]]',
+    '[{"k":1},[1],{"k":2}]',
+  ];
+  for (const text of valid) {
+    const actual = plain(parseJsonText(text));
+    const expected = JSON.parse(text);
+    assert.deepEqual(actual, expected, `value for ${JSON.stringify(text)}`);
+    assert.deepEqual(keyOrder(actual), keyOrder(expected), `key order for ${JSON.stringify(text)}`);
+  }
+  const invalid = [
+    '[{"a\\"b":1},{"a"b":2}]',
+    '[{"a\\nb":1},{"a\nb":2}]',
+    '[{"a\\\\q":1},{"a\\q":2}]',
+    '[{"id":1},{"id" 2}]',
+    '[{"id":1},{"id":]',
+    '[{"id":1},{"id',
+  ];
+  for (const text of invalid) {
+    assert.throws(() => JSON.parse(text), SyntaxError, `node accepted ${JSON.stringify(text)}`);
+    assert.throws(
+      () => parseJsonText(text),
+      SyntaxError,
+      `this parser accepted ${JSON.stringify(text)}`,
+    );
+  }
+});
+
 suite("a lone surrogate survives parsing as a code unit", () => {
   // The plan is explicit that parsing operates on UTF-16 code units and that a lone surrogate
   // is not normalised through UTF-8 to U+FFFD. Comparing against node covers the value; this

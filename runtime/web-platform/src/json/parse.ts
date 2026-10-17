@@ -52,19 +52,82 @@ export const CLOSE_BRACE = 0x7d;
  * never use were two of the nine arrays an object cost.
  */
 class Frame {
-  readonly isArray: boolean;
-  readonly start: number;
-  readonly items: JsonValue[];
-  readonly keys: string[];
-  readonly values: JsonValue[];
+  isArray = false;
+  start = 0;
+  items: JsonValue[] = UNUSED_ITEMS;
+  values: JsonValue[] = UNUSED_VALUES;
+  /** The keys an object frame expects, in order; see {@link templateFor}. */
+  template: readonly string[] = UNUSED_KEYS;
+  /**
+   * Whether every key so far has been the template's, in its order: then {@link matched} counts
+   * them and {@link keys} is not used. An array of records spells the same keys in every row, so
+   * the row shares the row before's list instead of building and growing one of its own -- three
+   * of `benchmarks/cases/json-parse`'s twenty-eight allocations a row. The first key that is not
+   * the template's next copies the shared prefix into `keys`, and the frame builds its own.
+   */
+  sharing = true;
+  matched = 0;
+  keys: string[] = UNUSED_KEYS;
+  /**
+   * The keys of the last object this array frame received that kept its own list unchanged (the
+   * plain path in {@link JsonValue.objectValue}). A sibling ending with exactly that list is plain
+   * too, so it does not ask again.
+   */
+  plainKeys: readonly string[] = UNUSED_KEYS;
   pendingKey = "";
+  /** Whether {@link pendingKey} is the template's next, so the member continues the sharing. */
+  pendingShared = false;
 
-  constructor(isArray: boolean, start: number) {
+  /**
+   * Make this frame the container opened now. A frame outlives its container: the stack keeps one
+   * per depth it has reached and reopens it, rather than allocating one per container -- two of a
+   * record row's allocations.
+   */
+  open(isArray: boolean, start: number, template: readonly string[]): void {
     this.isArray = isArray;
     this.start = start;
     this.items = isArray ? [] : UNUSED_ITEMS;
-    this.keys = isArray ? UNUSED_KEYS : [];
     this.values = isArray ? UNUSED_VALUES : [];
+    this.template = template;
+    this.sharing = !isArray;
+    this.matched = 0;
+    this.keys = UNUSED_KEYS;
+    this.plainKeys = UNUSED_KEYS;
+    this.pendingKey = "";
+    this.pendingShared = false;
+  }
+
+  /** How many members this object frame has. */
+  keyCount(): number {
+    return this.sharing ? this.matched : this.keys.length;
+  }
+
+  /**
+   * Record the pending member's key, as its value is pushed beside it.
+   *
+   * The key alone, and not the value: a value handed to a method that stores it is retained by
+   * the store and released by the caller, and a count that falls without reaching zero makes a
+   * JSON value a cycle candidate -- five a row, and a collection every parse, where the value
+   * pushed in the parser's own loop is moved into the list instead.
+   */
+  addKey(): void {
+    if (this.sharing && this.pendingShared) {
+      this.matched++;
+      return;
+    }
+    if (this.sharing) {
+      this.keys = this.template.slice(0, this.matched);
+      this.sharing = false;
+    }
+    this.keys.push(this.pendingKey);
+  }
+
+  /** The object's keys, once it is closed: the template itself when they are all of it. */
+  finishedKeys(): readonly string[] {
+    if (!this.sharing) return this.keys;
+    return this.matched === this.template.length
+      ? this.template
+      : this.template.slice(0, this.matched);
   }
 }
 
@@ -416,41 +479,30 @@ export function parseJsonText(text: string): JsonValue {
 
 /** Reads one complete value, iterating over an explicit frame stack rather than recursing. */
 function readValue(scanner: Scanner): JsonValue {
+  // One frame per depth reached, reopened for each container at that depth: `depth` are open.
   const frames: Frame[] = [];
+  let depth = 0;
   for (;;) {
     scanner.skipWhitespace();
     const start = scanner.at;
     const code = scanner.peek();
     let value: JsonValue;
-    let opened = false;
 
-    if (code === OPEN_BRACE) {
+    if (code === OPEN_BRACE || code === OPEN_BRACKET) {
+      const isArray = code === OPEN_BRACKET;
       scanner.at++;
-      const frame = new Frame(false, start);
-      frames.push(frame);
+      const frame = openFrame(frames, depth, isArray, start);
+      depth++;
       scanner.skipWhitespace();
-      if (scanner.peek() === CLOSE_BRACE) {
-        scanner.at++;
-        frames.pop();
-        value = JsonValue.objectValue(frame.keys, frame.values, start, scanner.at);
-      } else {
-        frame.pendingKey = readMemberKey(scanner);
-        opened = true;
-        value = JsonValue.nullValue(start, start);
+      if (scanner.peek() !== (isArray ? CLOSE_BRACKET : CLOSE_BRACE)) {
+        // A container was opened and its first member still has to be read, so go round again
+        // rather than unwinding. This is the branch a recursive parser would have made a call.
+        if (!isArray) readKey(scanner, frame);
+        continue;
       }
-    } else if (code === OPEN_BRACKET) {
       scanner.at++;
-      const frame = new Frame(true, start);
-      frames.push(frame);
-      scanner.skipWhitespace();
-      if (scanner.peek() === CLOSE_BRACKET) {
-        scanner.at++;
-        frames.pop();
-        value = JsonValue.arrayValue(frame.items, start, scanner.at);
-      } else {
-        opened = true;
-        value = JsonValue.nullValue(start, start);
-      }
+      depth--;
+      value = closeFrame(frames, depth, scanner.at);
     } else if (code === QUOTE) {
       value = JsonValue.stringValue(scanner.readString(), start, scanner.at);
     } else if (code === MINUS || isDigit(code)) {
@@ -468,17 +520,13 @@ function readValue(scanner: Scanner): JsonValue {
       throw scanner.fail(`Unexpected token ${scanner.describe()}`);
     }
 
-    // A container was opened and its first member still has to be read, so go round again
-    // rather than unwinding. This is the branch a recursive parser would have made a call.
-    if (opened) continue;
-
     for (;;) {
-      if (frames.length === 0) return value;
-      const frame = frames[frames.length - 1] as Frame;
+      if (depth === 0) return value;
+      const frame = frames[depth - 1] as Frame;
       if (frame.isArray) {
         frame.items.push(value);
       } else {
-        frame.keys.push(frame.pendingKey);
+        frame.addKey();
         frame.values.push(value);
       }
       scanner.skipWhitespace();
@@ -486,7 +534,7 @@ function readValue(scanner: Scanner): JsonValue {
       if (next === COMMA) {
         scanner.at++;
         // A trailing comma is JavaScript, not JSON: the next token has to open a value.
-        if (!frame.isArray) frame.pendingKey = readMemberKey(scanner);
+        if (!frame.isArray) readKey(scanner, frame);
         break;
       }
       const closer = frame.isArray ? CLOSE_BRACKET : CLOSE_BRACE;
@@ -498,12 +546,112 @@ function readValue(scanner: Scanner): JsonValue {
         );
       }
       scanner.at++;
-      frames.pop();
-      value = frame.isArray
-        ? JsonValue.arrayValue(frame.items, frame.start, scanner.at)
-        : JsonValue.objectValue(frame.keys, frame.values, frame.start, scanner.at);
+      depth--;
+      value = closeFrame(frames, depth, scanner.at);
     }
   }
+}
+
+/** The frame for a container opened at `depth`: the one that depth had, reopened. */
+function openFrame(frames: Frame[], depth: number, isArray: boolean, start: number): Frame {
+  const template = isArray ? UNUSED_KEYS : templateFor(frames, depth);
+  if (depth === frames.length) frames.push(new Frame());
+  const frame = frames[depth] as Frame;
+  frame.open(isArray, start, template);
+  return frame;
+}
+
+/**
+ * The value of the container at `depth`, which has just closed at `end`.
+ *
+ * An object whose keys are the very list a plain sibling kept is plain itself -- the answer
+ * depends on the list alone, and nothing changes a list once an object has it -- so it skips
+ * {@link JsonValue.objectValue}'s check for index-like and repeated keys, a scan of every key
+ * against every other once per row.
+ */
+function closeFrame(frames: Frame[], depth: number, end: number): JsonValue {
+  const frame = frames[depth] as Frame;
+  if (frame.isArray) return JsonValue.arrayValue(frame.items, frame.start, end);
+  const keys = frame.finishedKeys();
+  if (depth === 0) return JsonValue.objectValue(keys, frame.values, frame.start, end);
+  const parent = frames[depth - 1] as Frame;
+  if (!parent.isArray) return JsonValue.objectValue(keys, frame.values, frame.start, end);
+  if (keys === parent.plainKeys) {
+    return JsonValue.plainObjectValue(keys, frame.values, frame.start, end);
+  }
+  const value = JsonValue.objectValue(keys, frame.values, frame.start, end);
+  // The plain path keeps the list it was given; every other path builds its own.
+  if (value.keys === keys) parent.plainKeys = keys;
+  return value;
+}
+
+/**
+ * The keys an object opened now is likely to have, in order: those of the object before it in
+ * the same array. That is what an array of records is -- every row spelling the same few keys --
+ * and the guess costs nothing when it is wrong, because {@link readKey} only takes a key from it
+ * after reading the same text in the source. Anything else expects nothing.
+ */
+function templateFor(frames: readonly Frame[], depth: number): readonly string[] {
+  if (depth === 0) return UNUSED_KEYS;
+  const parent = frames[depth - 1] as Frame;
+  if (!parent.isArray || parent.items.length === 0) return UNUSED_KEYS;
+  const previous = parent.items[parent.items.length - 1] as JsonValue;
+  return previous.kind === "object" ? previous.keys : UNUSED_KEYS;
+}
+
+/**
+ * Read the next member key into the frame: its expected one when the source spells exactly
+ * that, and a fresh read otherwise.
+ *
+ * Taking the expected string is not only a skipped scan. A key read is a new string, made from
+ * a slice of the source and given back when its object dies, and an array of records made one
+ * per member per row -- 10,000 of `benchmarks/cases/json-parse`'s 2,000 rows -- each identical to
+ * the one before. Now the rows share their keys.
+ */
+function readKey(scanner: Scanner, frame: Frame): void {
+  const index = frame.keyCount();
+  if (index < frame.template.length) {
+    const expected = frame.template[index] as string;
+    if (matchPlainKey(scanner, expected)) {
+      frame.pendingKey = expected;
+      frame.pendingShared = frame.sharing;
+      return;
+    }
+  }
+  frame.pendingKey = readMemberKey(scanner);
+  frame.pendingShared = false;
+}
+
+/**
+ * Consume `"expected" :` if that is what comes next, and say whether it was.
+ *
+ * Only a key the source writes *plainly* -- with no quote, backslash or control character in it --
+ * is matched, and that is the whole correctness argument: for such a key the source text between
+ * the quotes is the key, unit for unit, so comparing units is comparing keys. A key that needed
+ * an escape (`"a\"b"`, `"\n"`) is never taken from the template, because its decoded units are
+ * not its source text: a raw `"a"b"` would match the decoded `a"b` and be accepted where the
+ * grammar refuses it. Those keys, and every mismatch, go to {@link readMemberKey} with nothing
+ * consumed but whitespace.
+ */
+function matchPlainKey(scanner: Scanner, expected: string): boolean {
+  scanner.skipWhitespace();
+  const source = scanner.source;
+  const open = scanner.at;
+  if (source.charCodeAt(open) !== QUOTE) return false;
+  const length = expected.length;
+  const close = open + 1 + length;
+  if (close >= scanner.length) return false;
+  for (let index = 0; index < length; index++) {
+    const code = expected.charCodeAt(index);
+    if (code === QUOTE || code === BACKSLASH || code < SPACE) return false;
+    if (source.charCodeAt(open + 1 + index) !== code) return false;
+  }
+  if (source.charCodeAt(close) !== QUOTE) return false;
+  scanner.at = close + 1;
+  scanner.skipWhitespace();
+  if (scanner.peek() !== COLON) throw scanner.fail(`Expected ':' after property name`);
+  scanner.at++;
+  return true;
 }
 
 /** Reads `"key" :` and parks the key on the frame until its value completes. */
