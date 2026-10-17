@@ -2600,6 +2600,14 @@ fn raising_member_slots(
         .iter()
         .chain(&naming.raising_body_calls)
     {
+        for method in naming.iterators.at(*call) {
+            if method.can_raise(&naming.throwing)
+                && let Some(root) = hierarchy.root_declaring(method.receiver, &method.key)
+                && hierarchy.overridden(root, &method.key)
+            {
+                families.push((root, method.key.clone()));
+            }
+        }
         let access_families: Vec<_> = hierarchy.access_families.at(*call).collect();
         if !access_families.is_empty() {
             for family in access_families {
@@ -2827,11 +2835,10 @@ fn member_dispatch_key(probe: &FuncBuilder, member: NodeId) -> Option<String> {
         syntax::SET_ACCESSOR => "set ",
         _ => return None,
     };
-    let name = probe
-        .children(member)
-        .into_iter()
-        .find(|child| probe.kind_of(*child) == Some(syntax::IDENTIFIER))
-        .and_then(|child| probe.node(child).text.clone())?;
+    let name = probe.member_name(member).or_else(|| {
+        let class = probe.enclosing_class(member)?;
+        probe.symbol_member_name(class, member, None)
+    })?;
     Some(format!("{prefix}{name}"))
 }
 
@@ -5217,6 +5224,7 @@ const A_GENERIC_DECLARATION_READING_THIS: &str =
 #[derive(Default, Clone)]
 struct Naming {
     printers: std::rc::Rc<printed::Plan>,
+    iterators: std::rc::Rc<iterator_calls::Plan>,
     parameter_entries: std::rc::Rc<rustc_hash::FxHashSet<NodeId>>,
     initialization: std::rc::Rc<initialization::Analysis>,
     /// Which declarations a [raising copy](FuncBuilder::raises) is emitted for.
@@ -6108,7 +6116,7 @@ fn walk_one_declaration(
         {
             throws.insert(symbol);
         }
-        reached.extend(probe.printers.potential_calls(at));
+        reached.extend(probe.potential_implicit_calls(at));
         // **An accessor access is a call to its body**, which this walk did
         // not see either -- the same omission as `calls_in_the_body_of`, in
         // the other of the two walks that answer "what can raise here". One
@@ -6790,7 +6798,8 @@ fn raising_callees_of(
     node: NodeId,
 ) -> Vec<NodeId> {
     let mut callees = probe.implicit_printer_callees(node);
-    if !probe.printers.at(node).is_empty() {
+    callees.extend(probe.implicit_iterator_callees(node));
+    if !probe.printers.at(node).is_empty() || !probe.iterators.at(node).is_empty() {
         return callees;
     }
     if let Some(callee) = a_raising_callee_of(snapshot, probe, node) {
@@ -7559,6 +7568,9 @@ fn a_call_that_can_raise(
     throwing: &Throwing,
     call: NodeId,
 ) -> bool {
+    if !probe.implicit_iterator_callees(call).is_empty() {
+        return true;
+    }
     if !probe.printers.at(call).is_empty() {
         return probe.printers.at(call).iter().any(|target| {
             throwing
@@ -7970,6 +7982,7 @@ fn calls_guarded_by_a_try(
                 )
             ) || probe.reads_an_accessor(at)
                 || !probe.implicit_printer_callees(at).is_empty()
+                || !probe.implicit_iterator_callees(at).is_empty()
             {
                 guarded_a_call = true;
                 guarded_calls.insert(at);
@@ -8073,6 +8086,7 @@ fn naming(
     probe.module.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     probe.printers = std::rc::Rc::new(printed::Plan::new(&probe));
+    probe.iterators = std::rc::Rc::new(iterator_calls::Plan::new(&probe));
     let class_tokens = class_token_indices(snapshot);
     let generators = generator_indices(snapshot);
     let written_order = written_field_orders(snapshot, &probe);
@@ -8080,6 +8094,7 @@ fn naming(
     let (qualified, ambiguous) = qualified_names(snapshot);
     let mut naming = Naming {
         printers: probe.printers.clone(),
+        iterators: probe.iterators.clone(),
         parameter_entries: probe.closures.parameter_entries(),
         initialization: probe.module.initialization.clone(),
         qualified,
@@ -10642,7 +10657,10 @@ fn calls_under(probe: &FuncBuilder, id: NodeId, into: &mut Vec<NodeId>) {
         // A read is the same shape, which is what their private-static-getter
         // file shows, and `reads_an_accessor` answers for both by the member
         // symbol's declarations rather than by the syntax around it.
-        _ if probe.reads_an_accessor(id) || !probe.implicit_printer_callees(id).is_empty() => {
+        _ if probe.reads_an_accessor(id)
+            || !probe.implicit_printer_callees(id).is_empty()
+            || !probe.implicit_iterator_callees(id).is_empty() =>
+        {
             into.push(id);
         }
         _ => {}
@@ -13098,6 +13116,7 @@ impl Shared {
 /// involved.
 fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.printers = naming.printers.clone();
+    builder.iterators = naming.iterators.clone();
     builder.module.initialization = naming.initialization.clone();
     builder.qualified.clone_from(&naming.qualified);
     builder.generators.clone_from(&naming.generators);
@@ -21106,6 +21125,7 @@ struct FuncBuilder<'a> {
     throwing: rustc_hash::FxHashSet<u32>,
     /// The descriptor's implicit call edges, shared with throwing analysis.
     printers: std::rc::Rc<printed::Plan>,
+    iterators: std::rc::Rc<iterator_calls::Plan>,
     /// The declarations a raising copy exists for. See [`raising_copies`].
     raising: rustc_hash::FxHashSet<NodeId>,
     /// For a `(root, member)` family whose raising slot was **withheld**: the member
@@ -21322,6 +21342,7 @@ impl<'a> FuncBuilder<'a> {
             generator_calls: rustc_hash::FxHashSet::default(),
             throwing: rustc_hash::FxHashSet::default(),
             printers: std::rc::Rc::default(),
+            iterators: std::rc::Rc::default(),
             presence_keys: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
             written_order: rustc_hash::FxHashMap::default(),
@@ -40976,6 +40997,7 @@ impl<'a> FuncBuilder<'a> {
         let Walk::Protocol {
             iterator,
             next,
+            next_raises,
             result,
             done,
             ..
@@ -40983,7 +41005,8 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Err(self.unsupported(id, "a `for...of` with no cursor and no iterator"));
         };
-        let (iterator, next, result, done) = (*iterator, next.clone(), result.clone(), *done);
+        let (iterator, next, result, done, raises) =
+            (*iterator, next.clone(), result.clone(), *done, *next_raises);
         let step = self.push(
             OpKind::Call {
                 callee: next,
@@ -40993,6 +41016,9 @@ impl<'a> FuncBuilder<'a> {
             result,
             origin.clone(),
         );
+        if raises {
+            self.iterator_raise_test(id, origin)?;
+        }
         let answered = self.push(
             OpKind::FieldGet {
                 object: step,
@@ -41366,7 +41392,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(iterator_member) = self.symbol_property_name(ty, "iterator") else {
             return Err(self.unsupported(sequence, "a `for...of` over a type with no iterator"));
         };
-        let callee = self.callee_for(sequence, ty, &iterator_member)?;
+        let (callee, raises) = self.iterator_method(sequence, ty, &iterator_member)?;
         // **A generator `[Symbol.iterator]()` hands back its frame**, and
         // `member_returns` reads the declared `Generator<T, …>`, which has no
         // representation because this compiler does not build that object. The
@@ -41396,8 +41422,11 @@ impl<'a> FuncBuilder<'a> {
                 frame: None,
             },
             iterator_ty.clone(),
-            origin,
+            origin.clone(),
         );
+        if raises {
+            self.iterator_raise_test(sequence, &origin)?;
+        }
         let iterator = self.note_generator_call(iterator, reserved);
 
         // **A generator `[Symbol.iterator]()` is walked as a generator**, not as
@@ -41432,7 +41461,7 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(iterator_id)) = iterator_ty else {
             return Err(self.unsupported(sequence, "an iterator that is not an object"));
         };
-        let next = self.callee_for(sequence, iterator_id, "next")?;
+        let (next, next_raises) = self.iterator_method(sequence, iterator_id, "next")?;
         let Some(result) = self.member_returns(iterator_id, "next") else {
             return Err(self.unsupported(sequence, "a `next()` whose result has no representation"));
         };
@@ -41456,6 +41485,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(Walk::Protocol {
             iterator,
             next,
+            next_raises,
             result,
             done,
             value: value_at,
@@ -60406,6 +60436,19 @@ impl<'a> FuncBuilder<'a> {
     /// reaches no handler by design. Refusing those would have cost the working
     /// half to fix the broken one.
     fn call_within(&self, node: NodeId, handled: &mut Vec<NodeId>) -> Option<(NodeId, String)> {
+        let implicit = self.implicit_iterator_callees(node);
+        if !implicit.is_empty() {
+            if implicit
+                .iter()
+                .any(|declaration| !self.raising.contains(declaration))
+            {
+                return Some((
+                    node,
+                    "an implicit iterator call whose raising entry is unavailable".to_owned(),
+                ));
+            }
+            handled.push(node);
+        }
         if !self.printers.at(node).is_empty() {
             return children_that_run(self, node)
                 .into_iter()
@@ -61084,7 +61127,7 @@ impl<'a> FuncBuilder<'a> {
         // An inline conversion has implicit printer callees, but the builtin
         // itself has no suffixed entry to name. printer_text tests and throws
         // the callback's pending payload at the conversion boundary instead.
-        if !self.printers.at(call).is_empty() {
+        if !self.printers.at(call).is_empty() || !self.iterators.at(call).is_empty() {
             return false;
         }
         if self.raising_specializations.contains(&call) {
@@ -82797,6 +82840,7 @@ enum Walk {
         iterator: ValueId,
         /// `next()` on it, resolved once instead of per iteration.
         next: Callee,
+        next_raises: bool,
         /// What `next()` hands back, and where the two fields sit in it.
         result: HirType,
         done: u32,
@@ -83843,6 +83887,7 @@ mod gobject;
 mod implementations;
 mod initialization;
 mod interfaces;
+mod iterator_calls;
 mod layout_collection;
 mod literal_methods;
 mod native_memory;

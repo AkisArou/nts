@@ -1,4 +1,3 @@
-// run: check
 // expect-ir: all: count call.extern(nts_raising) in observed == 2
 // expect-ir: all: no call.extern(nts_raising) in quiet
 // The control changes only which protocol method throws.
