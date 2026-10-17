@@ -20897,6 +20897,9 @@ struct FuncBuilder<'a> {
     /// signature. A bare `Option<TypeId>` would have been inherited by every
     /// nested call in the argument list.
     callee_signature: Option<(NodeId, TypeId)>,
+    /// An implicit call's concrete implementation, keyed by its source site.
+    /// Its syntax supplies arity and defaults when there is no call target.
+    argument_declaration: Option<(NodeId, NodeId)>,
     /// A delegated call's own signature (`delegated_method`): one overload of
     /// a bound member, which no type in the snapshot carries -- a function
     /// type records its first signature only -- so it is built from the
@@ -21329,6 +21332,7 @@ impl<'a> FuncBuilder<'a> {
             returns: HirType::Void,
             layouts: BuilderLayouts::default(),
             callee_signature: None,
+            argument_declaration: None,
             delegated_signature: None,
             dictionary_slots: None,
             this: None,
@@ -34224,6 +34228,11 @@ impl<'a> FuncBuilder<'a> {
 
     /// The parameters as the callee declares them, before any expansion.
     fn declared_parameters(&self, call: NodeId) -> Vec<(Option<TypeId>, bool, bool)> {
+        if let Some((site, declaration)) = self.argument_declaration
+            && site == call
+        {
+            return self.parameters_declared_by(declaration);
+        }
         if let Some(signature) = self.overriding_signature(call) {
             return signature
                 .parameters
@@ -34244,26 +34253,7 @@ impl<'a> FuncBuilder<'a> {
         if let Some(callee) = target.callee {
             let implementation = self.implementation_of(callee);
             if implementation != callee {
-                return self
-                    .children(implementation)
-                    .into_iter()
-                    .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
-                    .map(|param| {
-                        let children = self.children(param);
-                        let rest = children
-                            .iter()
-                            .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
-                        let optional = self.default_of(param).is_some()
-                            || children
-                                .iter()
-                                .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN));
-                        (
-                            self.snapshot.node_types.get(&param).copied(),
-                            optional,
-                            rest,
-                        )
-                    })
-                    .collect();
+                return self.parameters_declared_by(implementation);
             }
         }
         self.snapshot
@@ -34277,6 +34267,35 @@ impl<'a> FuncBuilder<'a> {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn parameters_declared_by(&self, declaration: NodeId) -> Vec<(Option<TypeId>, bool, bool)> {
+        self.children(declaration)
+            .into_iter()
+            .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
+            .map(|param| {
+                let children = self.children(param);
+                let rest = children
+                    .iter()
+                    .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN));
+                let optional = self.default_of(param).is_some()
+                    || children
+                        .iter()
+                        .any(|child| self.kind_of(*child) == Some(syntax::QUESTION_TOKEN));
+                (
+                    self.snapshot.node_types.get(&param).copied(),
+                    optional,
+                    rest,
+                )
+            })
+            .collect()
+    }
+
+    fn argument_callee(&self, call: NodeId) -> Option<NodeId> {
+        self.argument_declaration
+            .filter(|(site, _)| *site == call)
+            .map(|(_, declaration)| declaration)
+            .or_else(|| self.snapshot.call_targets.get(&call)?.callee)
     }
 
     fn parameter_shapes(&self, call: NodeId) -> Vec<(bool, bool)> {
@@ -34302,6 +34321,9 @@ impl<'a> FuncBuilder<'a> {
     fn fixed_arity(&self, call: NodeId) -> Option<usize> {
         if self.overriding_signature(call).is_none()
             && !self.snapshot.call_targets.contains_key(&call)
+            && !self
+                .argument_declaration
+                .is_some_and(|(site, _)| site == call)
         {
             return None;
         }
@@ -34337,7 +34359,7 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::omitted_after`] gives. The one answer both an omitted argument
     /// and a passed `undefined` take their default from.
     fn declared_default(&self, call: NodeId, at: usize) -> Option<(NodeId, NodeId)> {
-        let callee = self.snapshot.call_targets.get(&call)?.callee?;
+        let callee = self.argument_callee(call)?;
         let parameter = self
             .children(self.implementation_of(callee))
             .into_iter()
@@ -34347,9 +34369,10 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn omitted_after(&self, call: NodeId, provided: usize) -> Vec<Omitted> {
-        let Some(target) = self.snapshot.call_targets.get(&call) else {
+        let callee = self.argument_callee(call);
+        if callee.is_none() && !self.snapshot.call_targets.contains_key(&call) {
             return Vec::new();
-        };
+        }
         // **The implementation's parameter list, not the one the checker
         // resolved to.**
         //
@@ -34359,7 +34382,7 @@ impl<'a> FuncBuilder<'a> {
         // built against: `p.pick(n)` matches `pick(a: number)` and lands on
         // `Picker#pick(this, a, b)`, which is where
         // `CallArgumentCount { expected: 3, found: 2 }` came from.
-        let implementation = target.callee.map(|callee| self.implementation_of(callee));
+        let implementation = callee.map(|callee| self.implementation_of(callee));
         // The declaration's parameter list, where there is one. A shape says
         // *that* a parameter has a default; the default **expression** only
         // exists in the syntax.
@@ -34433,7 +34456,7 @@ impl<'a> FuncBuilder<'a> {
             let absence_is_representable = optional
                 || (declaration.is_some()
                     && self.parameter_representation(call, at) == Some(HirType::Erased));
-            if absence_is_representable && (target.callee.is_none() || declaration.is_some()) {
+            if absence_is_representable && (callee.is_none() || declaration.is_some()) {
                 omitted.push(Omitted::Absent);
             }
         }

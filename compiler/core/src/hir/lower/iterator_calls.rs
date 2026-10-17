@@ -127,7 +127,7 @@ impl Plan {
                 site.methods.push(next);
                 site.steps = site.methods.len();
                 if !frame
-                    && super::iterator_close::may_leave(probe, at)
+                    && !super::iterator_close::guarded_regions(probe, at).is_empty()
                     && let Some(selection) = closes
                         .entry(receiver)
                         .or_insert_with(|| {

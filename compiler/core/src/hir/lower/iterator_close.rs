@@ -47,6 +47,7 @@ struct Contract {
 pub(super) struct Selection {
     contracts: Vec<Contract>,
     direct: bool,
+    error: Option<&'static str>,
 }
 
 impl Selection {
@@ -66,21 +67,27 @@ impl Selection {
             classes = vec![receiver];
         }
         // JVM instanceof includes descendants; test children before parents.
-        classes.sort_by_key(|ty| {
+        let mut ordered = Vec::with_capacity(classes.len());
+        for ty in classes {
             let mut depth = 0;
-            let mut at = *ty;
-            for _ in 0..64 {
-                let Some(base) = probe.hierarchy.base.get(&at) else {
-                    break;
-                };
+            let mut at = ty;
+            while let Some(base) = probe.hierarchy.base.get(&at) {
+                if depth >= probe.hierarchy.base.len() {
+                    return Some(Self {
+                        contracts: Vec::new(),
+                        direct: false,
+                        error: Some("IteratorClose with a cycle in the class hierarchy"),
+                    });
+                }
                 at = *base;
                 depth += 1;
             }
-            (std::cmp::Reverse(depth), *ty)
-        });
-        let contracts: Vec<_> = classes
+            ordered.push((std::cmp::Reverse(depth), ty));
+        }
+        ordered.sort_unstable();
+        let contracts: Vec<_> = ordered
             .into_iter()
-            .filter_map(|receiver| Contract::resolve(probe, receiver))
+            .filter_map(|(_, receiver)| Contract::resolve(probe, receiver))
             .collect();
         if contracts.is_empty()
             || contracts
@@ -89,7 +96,11 @@ impl Selection {
         {
             return None;
         }
-        Some(Self { contracts, direct })
+        Some(Self {
+            contracts,
+            direct,
+            error: None,
+        })
     }
 
     pub(super) fn methods(&self) -> Vec<Rc<Method>> {
@@ -156,37 +167,6 @@ impl Contract {
     }
 }
 
-/// Close need not be represented for a body with no possible abrupt exit.
-/// Function bodies nested in it do not run as part of this iteration.
-pub(super) fn may_leave(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
-    let mut pending = guarded_regions(probe, at);
-    while let Some(at) = pending.pop() {
-        let kind = probe.kind_of(at);
-        if super::names_a_body(kind) {
-            continue;
-        }
-        if matches!(
-            kind,
-            Some(
-                syntax::BREAK_STATEMENT
-                    | syntax::CONTINUE_STATEMENT
-                    | syntax::RETURN_STATEMENT
-                    | syntax::THROW_STATEMENT
-                    | syntax::CALL_EXPRESSION
-                    | syntax::NEW_EXPRESSION
-                    | syntax::AWAIT_EXPRESSION
-            )
-        ) || probe.reads_an_accessor(at)
-            || probe.module.initialization.can_raise_at(at)
-            || super::an_operator_that_can_raise(probe, at)
-        {
-            return true;
-        }
-        pending.extend(super::children_that_run(probe, at));
-    }
-    false
-}
-
 /// A close can introduce a new throw only when replacing a non-throw
 /// completion. On a throwing body path its own failure is discarded.
 pub(super) fn may_leave_without_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
@@ -199,14 +179,77 @@ pub(super) fn may_leave_without_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bo
         if super::names_a_body(kind) {
             continue;
         }
-        if matches!(
-            kind,
-            Some(syntax::RETURN_STATEMENT | syntax::BREAK_STATEMENT)
-        ) || kind == Some(syntax::CONTINUE_STATEMENT) && !probe.children(node).is_empty()
+        if kind == Some(syntax::RETURN_STATEMENT)
+            || matches!(
+                kind,
+                Some(syntax::BREAK_STATEMENT | syntax::CONTINUE_STATEMENT)
+            ) && crosses_iterator(probe, at, node)
         {
             return true;
         }
         pending.extend(super::children_that_run(probe, node));
+    }
+    false
+}
+
+/// The syntactic exit target is used only to omit impossible close effects;
+/// emitted exits still use the builder's one lexical action stack.
+fn crosses_iterator(probe: &FuncBuilder<'_>, owner: NodeId, exit: NodeId) -> bool {
+    let continuing = probe.kind_of(exit) == Some(syntax::CONTINUE_STATEMENT);
+    let label = probe
+        .children(exit)
+        .first()
+        .and_then(|name| probe.node(*name).text.as_deref());
+    let mut parent = probe.node(exit).parent;
+    for _ in 0..probe.snapshot.nodes.len() {
+        let Some(at) = parent else { return false };
+        let kind = probe.kind_of(at);
+        let target = if let Some(label) = label {
+            let parts = probe.children(at);
+            if kind == Some(syntax::LABELED_STATEMENT)
+                && parts
+                    .first()
+                    .and_then(|name| probe.node(*name).text.as_deref())
+                    == Some(label)
+            {
+                if continuing {
+                    parts.last().copied()
+                } else {
+                    Some(at)
+                }
+            } else {
+                None
+            }
+        } else if matches!(
+            kind,
+            Some(
+                syntax::FOR_STATEMENT
+                    | syntax::FOR_OF_STATEMENT
+                    | syntax::FOR_IN_STATEMENT
+                    | syntax::WHILE_STATEMENT
+                    | syntax::DO_STATEMENT
+            )
+        ) || !continuing && kind == Some(syntax::SWITCH_STATEMENT)
+        {
+            Some(at)
+        } else {
+            None
+        };
+        if let Some(target) = target {
+            if target == owner {
+                return !continuing;
+            }
+            let mut ancestor = probe.node(owner).parent;
+            for _ in 0..probe.snapshot.nodes.len() {
+                let Some(here) = ancestor else { return false };
+                if here == target {
+                    return true;
+                }
+                ancestor = probe.node(here).parent;
+            }
+            return false;
+        }
+        parent = probe.node(at).parent;
     }
     false
 }
@@ -290,24 +333,23 @@ impl FuncBuilder<'_> {
         action: Action,
         pending: Option<ValueId>,
     ) -> Result<(), Diagnostic> {
-        if pending.is_none() {
-            return self.iterator_return(action, true);
-        }
-        // The original throw wins over GetMethod, the call, and its result.
-        // Catch the secondary completion locally; the outer payload stays SSA.
+        // Catch GetMethod, defaults and the call at one boundary. An original
+        // throw wins; otherwise the close's failure replaces the completion.
         let entry = self.bindings.clone();
         self.exits.push(Exit::Handler(Handler {
             block: None,
             edges: Vec::new(),
             rejections: Vec::new(),
         }));
-        let closed = self.iterator_return(action, false);
+        let closed = self.iterator_return(action, pending.is_none());
         let Some(Exit::Handler(frame)) = self.exits.pop() else {
             unreachable!("pushed above")
         };
         closed?;
-        let join = self.new_block();
-        if !self.is_terminated() {
+        let normal = self.current;
+        let open = !self.is_terminated();
+        let join = pending.is_some().then(|| self.new_block());
+        if open && let Some(join) = join {
             self.terminate(Terminator::Jump {
                 target: join,
                 args: Vec::new(),
@@ -316,16 +358,20 @@ impl FuncBuilder<'_> {
         if let Some(handler) = frame.block {
             let origin = self.origin(action.at);
             self.lower_arm(|this| {
-                this.open_handler(handler, &frame, &entry, &origin);
+                let thrown = this.open_handler(handler, &frame, &entry, &origin);
                 this.switch_to(handler);
-                this.terminate(Terminator::Jump {
-                    target: join,
-                    args: Vec::new(),
-                });
-                Ok(())
+                if let Some(join) = join {
+                    this.terminate(Terminator::Jump {
+                        target: join,
+                        args: Vec::new(),
+                    });
+                    Ok(())
+                } else {
+                    this.throw_erased(action.at, thrown, thrown, &HirType::Erased)
+                }
             })?;
         }
-        self.switch_to(join);
+        self.switch_to(join.unwrap_or(normal));
         Ok(())
     }
 
@@ -333,6 +379,9 @@ impl FuncBuilder<'_> {
         let Some(selection) = self.iterators.closes_at(action.at) else {
             return Ok(());
         };
+        if let Some(error) = selection.error {
+            return Err(self.unsupported(action.at, error));
+        }
         if selection.direct {
             return self.iterator_return_contract(action, &selection.contracts[0], validate);
         }
@@ -393,12 +442,15 @@ impl FuncBuilder<'_> {
             Return::Absent => return Ok(()),
             Return::Unavailable => return Err(self.unsupported(action.at, "an IteratorClose return member whose existing callable representation is unavailable")),
             Return::Method { method, result, absent } => {
+                let mut args = vec![action.iterator];
+                args.extend(self.iterator_return_arguments(action, contract.receiver, &method.key)?);
+                if self.is_terminated() { return Ok(()); }
                 let (callee, raises) =
                     self.iterator_method(action.at, contract.receiver, &method.key)?;
                 let value = self.push(
                     OpKind::Call {
                         callee,
-                        args: vec![action.iterator],
+                        args,
                         frame: None,
                     },
                     result.clone(),
@@ -406,6 +458,10 @@ impl FuncBuilder<'_> {
                 );
                 if raises {
                     self.iterator_raise_test(action.at, &origin)?;
+                }
+                if *result == HirType::Never {
+                    self.terminate(Terminator::Unreachable);
+                    return Ok(());
                 }
                 if *result == HirType::Erased || *result == HirType::Void {
                     value
@@ -454,6 +510,31 @@ impl FuncBuilder<'_> {
             self.validate_iterator_return(action.at, result)?;
         }
         Ok(())
+    }
+
+    fn iterator_return_arguments(
+        &mut self,
+        action: Action,
+        receiver: TypeId,
+        key: &str,
+    ) -> Result<Vec<ValueId>, Diagnostic> {
+        let declaration = self
+            .member_declaration(receiver, key)
+            .map(|declaration| self.implementation_of(declaration))
+            .ok_or_else(|| {
+                self.unsupported(
+                    action.at,
+                    "an IteratorClose method without an implementation declaration",
+                )
+            })?;
+        let before = self.argument_declaration.replace((action.at, declaration));
+        let handled = self.raising_calls.insert(action.at);
+        let args = self.lower_arguments_on(action.at, &[], action.iterator);
+        if handled {
+            self.raising_calls.remove(&action.at);
+        }
+        self.argument_declaration = before;
+        args
     }
 
     fn iterator_return_value(
