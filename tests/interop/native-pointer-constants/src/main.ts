@@ -36,6 +36,10 @@ export function nativeArgument(): boolean { return sentinel_is_broadcast(BROADCA
 export function returnedEquals(fail: c_int): boolean { return sentinel_from(fail) === FAILED; }
 export function localAlias(): Sentinel { const value = WIDE; return value; }
 export function namespaceAlias(): Window { return Constants.BROADCAST; }
+export function zeroIsNull(): boolean { return ZERO === null; }
+export function broadcastIsNull(): boolean { return BROADCAST === null; }
+export function zeroIsTruthy(): boolean { return !!ZERO; }
+export function broadcastIsTruthy(): boolean { return !!BROADCAST; }
 export function shorthand(): Sentinel {
   const box: { WIDE: Sentinel } = { WIDE };
   return box.WIDE;
