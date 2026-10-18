@@ -34,6 +34,16 @@ pub(crate) enum TypeDecl {
         fields: Vec<(String, String)>,
         uses: BTreeSet<Name>,
     },
+    Interface {
+        name: String,
+        iid: String,
+        tag: String,
+        /// Nearest parent first; method surfaces are flattened explicitly.
+        bases: Vec<Name>,
+        methods: Vec<ComMethod>,
+        /// Only the base chain: each method carries its own dependencies.
+        uses: BTreeSet<Name>,
+    },
     Enum {
         name: String,
         members: Vec<(String, String)>,
@@ -43,14 +53,19 @@ pub(crate) enum TypeDecl {
 impl TypeDecl {
     pub(crate) fn uses(&self) -> Option<&BTreeSet<Name>> {
         match self {
-            Self::Alias { uses, .. } | Self::Record { uses, .. } => Some(uses),
+            Self::Alias { uses, .. } | Self::Record { uses, .. } | Self::Interface { uses, .. } => {
+                Some(uses)
+            }
             Self::Enum { .. } => None,
         }
     }
 
     pub(crate) fn name(&self) -> &str {
         match self {
-            Self::Alias { name, .. } | Self::Record { name, .. } | Self::Enum { name, .. } => name,
+            Self::Alias { name, .. }
+            | Self::Record { name, .. }
+            | Self::Enum { name, .. }
+            | Self::Interface { name, .. } => name,
         }
     }
 }
@@ -69,6 +84,15 @@ pub(crate) struct Function {
     pub(crate) no_escape: Vec<String>,
     /// The named types it depends on, `(namespace, name)`.
     pub(crate) uses: BTreeSet<Name>,
+}
+
+/// A checked signature uses exactly the same parameter/result mapping as a
+/// free function. HRESULT changes only the projected result, never the ABI.
+#[derive(Debug, Clone)]
+pub(crate) struct ComMethod {
+    pub(crate) signature: Function,
+    pub(crate) slot: u32,
+    pub(crate) hresult: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -114,9 +138,25 @@ pub(crate) fn ask(
     let vtables: Vec<_> = model
         .types
         .iter()
-        .filter_map(|((_, name), info)| match &info.kind {
-            Kind::Interface(interface) => Some((format!("{name}Vtbl"), &interface.methods)),
-            _ => None,
+        .filter_map(|(name, info)| {
+            if !matches!(info.kind, Kind::Interface(_)) {
+                return None;
+            }
+            let mut methods = Vec::new();
+            let mut next = Some(name);
+            let mut seen = BTreeSet::new();
+            while let Some(name) = next {
+                if !seen.insert(name) {
+                    break;
+                }
+                let Some(Kind::Interface(interface)) = model.types.get(name).map(|info| &info.kind)
+                else {
+                    break;
+                };
+                methods.extend(&interface.methods);
+                next = interface.parent.as_ref();
+            }
+            Some((format!("{}Vtbl", name.1), methods))
         })
         .collect();
     let field_slots: Vec<_> = vtables
@@ -146,7 +186,9 @@ pub(crate) fn ask(
                     fields.push((name.as_str(), field.as_str()));
                 }
             }
-            Kind::Typedef { .. } | Kind::Delegate { .. } => typedefs.push(name.as_str()),
+            Kind::Typedef { .. } | Kind::Delegate { .. } | Kind::Interface(_) => {
+                typedefs.push(name.as_str());
+            }
             _ => {}
         }
     }
@@ -189,6 +231,7 @@ struct Mapper<'a> {
     declared: BTreeMap<Name, Option<TypeDecl>>,
     brands: BTreeSet<&'static str>,
     record_refusals: BTreeMap<Name, String>,
+    method_refusals: BTreeMap<Name, String>,
 }
 
 /// The TypeScript and emitted-C spellings of a type.
@@ -417,21 +460,266 @@ impl Mapper<'_> {
             Kind::Delegate { parameters, result } => {
                 self.delegate(name, parameters, result, c, how)
             }
-            Kind::Interface(interface) => {
-                if interface.iid.is_none() {
-                    Err(format!(
-                        "`{}`, a COM interface with no GuidAttribute",
-                        name.1
-                    ))
-                } else {
-                    Err(format!("`{}`, a COM interface (W2)", name.1))
-                }
-            }
+            Kind::Interface(_) => self.interface(name, c, how),
             Kind::Other => Err(format!(
                 "`{}`, a kind of type this binder does not read",
                 name.1
             )),
         }
+    }
+
+    /// Resolve the first-base chain from metadata alone. Counts include methods
+    /// that cannot be projected: refusing one must never renumber later slots.
+    fn interface_chain(&self, name: &Name) -> Result<(Vec<Name>, u32), String> {
+        let mut bases = Vec::new();
+        let mut seen = BTreeSet::from([name.clone()]);
+        let mut current = name;
+        let mut inherited = 0_u32;
+        loop {
+            let Some(Kind::Interface(interface)) = self.model.types.get(current).map(|i| &i.kind)
+            else {
+                return Err(format!(
+                    "`{}`, a base not defined as a COM interface",
+                    current.1
+                ));
+            };
+            if interface.iid.is_none() {
+                return Err(format!(
+                    "`{}`, a COM interface with no GuidAttribute",
+                    current.1
+                ));
+            }
+            if let Some(parent) = &interface.parent {
+                if !seen.insert(parent.clone()) {
+                    return Err(format!("`{}`, a cyclic COM base chain", parent.1));
+                }
+                bases.push(parent.clone());
+                current = parent;
+            } else {
+                if interface.iid.as_deref() != Some("00000000-0000-0000-C000-000000000046")
+                    || interface
+                        .methods
+                        .iter()
+                        .map(|m| m.name.as_str())
+                        .collect::<Vec<_>>()
+                        != ["QueryInterface", "AddRef", "Release"]
+                {
+                    return Err(format!(
+                        "`{}`, a COM base chain without IUnknown",
+                        current.1
+                    ));
+                }
+                return Ok((bases, inherited));
+            }
+            if let Some(Kind::Interface(parent)) = self.model.types.get(current).map(|i| &i.kind) {
+                inherited = inherited
+                    .checked_add(
+                        u32::try_from(parent.methods.len()).map_err(|_| "too many COM methods")?,
+                    )
+                    .ok_or("too many COM methods")?;
+            }
+        }
+    }
+
+    fn interface(&mut self, name: &Name, c: &CType, how: Use) -> Result<Spelled, String> {
+        let (bases, first) = self.interface_chain(name)?;
+        if how.stored {
+            return Err(format!(
+                "`{}`, typed COM storage and out slots await an ownership contract",
+                name.1
+            ));
+        }
+        let Some(CType::Record { tag, union: false }) = self.facts.typedefs.get(&name.1) else {
+            return Err(format!(
+                "`{}`, no interface record declared by the headers asked",
+                name.1
+            ));
+        };
+        let expected = CType::Pointer {
+            to: Box::new(CType::Record {
+                tag: tag.clone(),
+                union: false,
+            }),
+            constant: false,
+        };
+        if c != &expected {
+            return Err(format!(
+                "`{}`, an interface pointer in metadata and `{}` in the header",
+                name.1,
+                c.spelled()
+            ));
+        }
+        let ts = if how.optional {
+            format!("{} | null", name.1)
+        } else {
+            name.1.clone()
+        };
+        let spelled = Spelled {
+            ts,
+            c: expected.spelled(),
+            uses: BTreeSet::from([name.clone()]),
+        };
+        if self.declared.contains_key(name) {
+            return Ok(spelled);
+        }
+        // Self-referential input parameters are allowed; the metadata base
+        // graph was already checked before installing this recursion guard.
+        self.declared.insert(name.clone(), None);
+        let result = self.declare_interface(name, tag.clone(), bases, first);
+        if result.is_err() {
+            self.declared.remove(name);
+        }
+        result?;
+        Ok(spelled)
+    }
+
+    fn declare_interface(
+        &mut self,
+        name: &Name,
+        tag: String,
+        bases: Vec<Name>,
+        first: u32,
+    ) -> Result<(), String> {
+        for base in &bases {
+            let record = self
+                .facts
+                .typedefs
+                .get(&base.1)
+                .ok_or_else(|| format!("`{}`, no base interface header fact", base.1))?;
+            self.interface(
+                base,
+                &CType::Pointer {
+                    to: Box::new(record.clone()),
+                    constant: false,
+                },
+                Use::default(),
+            )?;
+        }
+        let Kind::Interface(interface) = &self.model.types[name].kind else {
+            unreachable!()
+        };
+        let iid = interface.iid.clone().expect("chain checked the IID");
+        let own = interface.methods.clone();
+        let is_root = bases.is_empty();
+        // Every inherited entry must also occupy the same slot in the derived
+        // header's table. A different base with the same method count cannot
+        // silently lend it the wrong inherited Methods surface.
+        for base in &bases {
+            let (_, base_first) = self.interface_chain(base)?;
+            let Kind::Interface(parent) = &self.model.types[base].kind else {
+                unreachable!()
+            };
+            for (index, method) in parent.methods.iter().enumerate() {
+                let slot = base_first + u32::try_from(index).map_err(|_| "too many COM methods")?;
+                self.method_slot(name, &method.name, slot)
+                    .map_err(|why| format!("inherited `{}.{}`: {why}", base.1, method.name))?;
+            }
+        }
+        let mut methods = Vec::new();
+        for (index, method) in own.iter().enumerate() {
+            let slot = first
+                .checked_add(u32::try_from(index).map_err(|_| "too many COM methods")?)
+                .ok_or("too many COM methods")?;
+            let bound = self.map_method(name, method, slot);
+            match bound {
+                Ok(bound) if !is_root => methods.push(bound),
+                Ok(_) => {}
+                Err(why) if is_root => return Err(format!("IUnknown.{}: {why}", method.name)),
+                Err(why) => {
+                    self.method_refusals
+                        .insert((name.0.clone(), format!("{}.{}", name.1, method.name)), why);
+                }
+            }
+        }
+        self.declared.insert(
+            name.clone(),
+            Some(TypeDecl::Interface {
+                name: name.1.clone(),
+                iid,
+                tag,
+                uses: bases.iter().cloned().collect(),
+                bases,
+                methods,
+            }),
+        );
+        Ok(())
+    }
+
+    fn method_slot(&self, interface: &Name, method: &str, slot: u32) -> Result<(), String> {
+        let key = (format!("{}Vtbl", interface.1), method.to_owned());
+        let header_slot = self.facts.field_slots.get(&key).ok_or_else(|| {
+            format!(
+                "`{}.{}`, no vtable slot declared by the headers asked",
+                key.0, key.1
+            )
+        })?;
+        if *header_slot != slot {
+            return Err(format!(
+                "vtable slot {slot} in metadata and {header_slot} in the header"
+            ));
+        }
+        Ok(())
+    }
+
+    fn map_method(
+        &mut self,
+        interface: &Name,
+        method: &super::read::Method,
+        slot: u32,
+    ) -> Result<ComMethod, String> {
+        self.method_slot(interface, &method.name, slot)?;
+        let key = (format!("{}Vtbl", interface.1), method.name.clone());
+        let Some(CType::Pointer { to, .. }) = self.facts.fields.get(&key).cloned() else {
+            return Err(format!(
+                "`{}.{}`, no method declared by the headers asked",
+                key.0, key.1
+            ));
+        };
+        let CType::Function {
+            result,
+            parameters,
+            variadic,
+        } = *to
+        else {
+            return Err("the header field is not a function pointer".into());
+        };
+        let Some((this, parameters)) = parameters.split_first() else {
+            return Err("the header method has no This parameter".into());
+        };
+        let record = self
+            .facts
+            .typedefs
+            .get(&interface.1)
+            .ok_or("no interface record header fact")?;
+        if *this
+            != (CType::Pointer {
+                to: Box::new(record.clone()),
+                constant: false,
+            })
+        {
+            return Err("its This parameter disagrees with the interface header".into());
+        }
+        let function = super::read::Function {
+            namespace: interface.0.clone(),
+            name: method.name.clone(),
+            library: String::new(),
+            documentation: method.documentation.clone(),
+            parameters: method.parameters.clone(),
+            result: method.result.clone(),
+        };
+        let mut signature =
+            map_signature(self, &function, &result, parameters, variadic, Some(this))?;
+        let hresult = matches!(&method.result, Type::ValueName(n) | Type::ClassName(n) if n.namespace == "Windows.Win32.Foundation" && n.name == "HRESULT");
+        if hresult {
+            signature.result = "void".into();
+        }
+        // IUnknown is owned by the compiler. Do not bind, rename or project
+        // its three methods as user methods (including raw void** QueryInterface).
+        Ok(ComMethod {
+            signature,
+            slot,
+            hresult,
+        })
     }
 
     /// `System.Guid`, which the metadata names and no `.winmd` defines:
@@ -1007,6 +1295,49 @@ fn constant_brand(model: &Model, meta: &Type) -> Option<&'static str> {
     }
 }
 
+fn namespace_binding(namespace: &str) -> Binding {
+    Binding {
+        namespace: namespace.to_owned(),
+        module: module_of(namespace),
+        ..Binding::default()
+    }
+}
+
+fn map_interfaces(mapper: &mut Mapper<'_>, by_namespace: &mut BTreeMap<String, Binding>) {
+    let model = mapper.model;
+    for (name, info) in &model.types {
+        if matches!(info.kind, Kind::Interface(_)) {
+            by_namespace
+                .entry(name.0.clone())
+                .or_insert_with(|| Binding {
+                    namespace: name.0.clone(),
+                    module: module_of(&name.0),
+                    ..Binding::default()
+                });
+            let c = mapper
+                .facts
+                .typedefs
+                .get(&name.1)
+                .cloned()
+                .unwrap_or(CType::Void);
+            if let Err(why) = mapper.interface(
+                name,
+                &CType::Pointer {
+                    to: Box::new(c),
+                    constant: false,
+                },
+                Use::default(),
+            ) {
+                by_namespace
+                    .get_mut(&name.0)
+                    .expect("inserted")
+                    .refused
+                    .push((name.1.clone(), why));
+            }
+        }
+    }
+}
+
 /// Every namespace's module: the ones asked for, and each one owning a type
 /// they reach.
 pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
@@ -1016,14 +1347,12 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
         declared: BTreeMap::new(),
         brands: BTreeSet::new(),
         record_refusals: BTreeMap::new(),
+        method_refusals: BTreeMap::new(),
     };
     let mut by_namespace: BTreeMap<String, Binding> = BTreeMap::new();
     let entry = |by: &mut BTreeMap<String, Binding>, namespace: &str| {
-        by.entry(namespace.to_owned()).or_insert_with(|| Binding {
-            namespace: namespace.to_owned(),
-            module: module_of(namespace),
-            ..Binding::default()
-        });
+        by.entry(namespace.to_owned())
+            .or_insert_with(|| namespace_binding(namespace));
     };
     for function in &model.functions {
         entry(&mut by_namespace, &function.namespace);
@@ -1068,7 +1397,11 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
             ));
         }
     }
-    for ((namespace, name), why) in std::mem::take(&mut mapper.record_refusals) {
+    map_interfaces(&mut mapper, &mut by_namespace);
+    for ((namespace, name), why) in std::mem::take(&mut mapper.record_refusals)
+        .into_iter()
+        .chain(std::mem::take(&mut mapper.method_refusals))
+    {
         entry(&mut by_namespace, &namespace);
         by_namespace
             .get_mut(&namespace)
@@ -1124,6 +1457,17 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
             .cloned()
             .unwrap_or_else(|| "not declared by the headers asked".into()));
     };
+    map_signature(mapper, function, &result, &parameters, variadic, None)
+}
+
+fn map_signature(
+    mapper: &mut Mapper,
+    function: &super::read::Function,
+    result: &CType,
+    parameters: &[CType],
+    variadic: bool,
+    receiver: Option<&CType>,
+) -> Result<Function, String> {
     if variadic {
         return Err("variadic".into());
     }
@@ -1135,10 +1479,10 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
         ));
     }
     let mut typescript = Vec::new();
-    let mut c_list = Vec::new();
+    let mut c_list: Vec<_> = receiver.into_iter().map(CType::spelled).collect();
     let mut uses = BTreeSet::new();
     let mut no_escape = Vec::new();
-    for (parameter, c) in function.parameters.iter().zip(&parameters) {
+    for (parameter, c) in function.parameters.iter().zip(parameters) {
         let how = Use {
             optional: parameter.optional,
             constant: parameter.constant,
@@ -1162,7 +1506,7 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
     let returned = mapper
         .spell(
             &function.result,
-            &result,
+            result,
             Use {
                 optional: true,
                 direct: true,
@@ -1197,6 +1541,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::number;
+    use std::fmt::Write as _;
     use windows_metadata::Value;
 
     const VALUES: &str = "Windows.Win32.Test.Values";
@@ -1326,57 +1671,322 @@ mod tests {
         assert_eq!(values.refused.len(), 1);
     }
 
-    /// The only difference is `GuidAttribute`: missing IIDs are refused by
-    /// name, while interfaces with one retain the existing COM refusal.
-    #[test]
-    fn an_interface_without_a_guid_has_a_named_refusal() {
-        use std::collections::{BTreeMap, BTreeSet};
-
-        use super::super::read::{Interface, Kind, TypeInfo};
-        use super::{CType, Facts, Mapper, Model, Use};
-
-        for iid in [
-            None,
-            Some("00000001-0000-0000-C000-000000000046".to_owned()),
-        ] {
-            let missing = iid.is_none();
-            let name = ("Windows.Win32.ReaderTest".to_owned(), "ITest".to_owned());
-            let model = Model {
-                types: [(
-                    name.clone(),
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Complete metadata fixture for one-difference controls"
+    )]
+    fn com_model() -> super::Model {
+        use super::super::read::{Interface, Kind, Method, Parameter, TypeInfo};
+        use windows_metadata::{Type, TypeName};
+        let named = |ns, name| Type::ValueName(TypeName::named(ns, name));
+        let parameter = |name: &str, ty, optional, constant, output| Parameter {
+            name: name.into(),
+            ty,
+            optional,
+            constant,
+            output,
+        };
+        let method = |name: &str, parameters, result| Method {
+            name: name.into(),
+            parameters,
+            result,
+            documentation: None,
+        };
+        let hresult = || named("Windows.Win32.Foundation", "HRESULT");
+        let guid = || Type::PtrConst(Box::new(named("System", "Guid")), 1);
+        let out = || Type::PtrMut(Box::new(Type::Void), 2);
+        let interface = |iid: &str, parent: Option<&str>, methods| TypeInfo {
+            kind: Kind::Interface(Interface {
+                iid: Some(iid.into()),
+                parent: parent.map(|name| (VALUES.into(), name.into())),
+                methods,
+            }),
+        };
+        super::Model {
+            types: [
+                (
+                    (VALUES.into(), "IUnknown".into()),
+                    interface(
+                        "00000000-0000-0000-C000-000000000046",
+                        None,
+                        vec![
+                            method(
+                                "QueryInterface",
+                                vec![
+                                    parameter("iid", guid(), false, true, false),
+                                    parameter("out", out(), false, false, true),
+                                ],
+                                hresult(),
+                            ),
+                            method("AddRef", vec![], Type::U32),
+                            method("Release", vec![], Type::U32),
+                        ],
+                    ),
+                ),
+                (
+                    (VALUES.into(), "IBase".into()),
+                    interface(
+                        "00000001-0000-0000-C000-000000000046",
+                        Some("IUnknown"),
+                        vec![method(
+                            "GetAttributesOf",
+                            vec![
+                                parameter("count", Type::U32, false, false, false),
+                                parameter(
+                                    "items",
+                                    Type::PtrConst(Box::new(Type::Void), 1),
+                                    true,
+                                    true,
+                                    false,
+                                ),
+                                parameter(
+                                    "attributes",
+                                    Type::PtrMut(Box::new(Type::U32), 1),
+                                    false,
+                                    false,
+                                    true,
+                                ),
+                            ],
+                            hresult(),
+                        )],
+                    ),
+                ),
+                (
+                    (VALUES.into(), "IDerived".into()),
+                    interface(
+                        "00000002-0000-0000-C000-000000000046",
+                        Some("IBase"),
+                        vec![
+                            method(
+                                "Open",
+                                vec![
+                                    parameter("iid", guid(), false, true, false),
+                                    parameter("out", out(), false, false, true),
+                                ],
+                                hresult(),
+                            ),
+                            method("Count", vec![], Type::U32),
+                            method(
+                                "TypedOut",
+                                vec![parameter(
+                                    "out",
+                                    Type::PtrMut(
+                                        Box::new(Type::ClassName(TypeName::named(VALUES, "IBase"))),
+                                        1,
+                                    ),
+                                    false,
+                                    false,
+                                    true,
+                                )],
+                                hresult(),
+                            ),
+                        ],
+                    ),
+                ),
+                (
+                    ("Windows.Win32.Foundation".into(), "HRESULT".into()),
                     TypeInfo {
-                        kind: Kind::Interface(Interface {
-                            iid,
+                        kind: Kind::Typedef {
+                            value: Type::I32,
                             parent: None,
-                            methods: Vec::new(),
-                        }),
+                        },
                     },
-                )]
-                .into(),
-                ..Model::default()
-            };
-            let facts = Facts::default();
-            let mut mapper = Mapper {
-                model: &model,
-                facts: &facts,
-                declared: BTreeMap::new(),
-                brands: BTreeSet::new(),
-                record_refusals: BTreeMap::new(),
-            };
-            let Err(reason) = mapper.named(&name, &CType::Void, Use::default()) else {
-                panic!("classic COM must stay refused until header facts and emission are ready")
-            };
-            assert_eq!(
-                reason,
-                if missing {
-                    "`ITest`, a COM interface with no GuidAttribute"
-                } else {
-                    "`ITest`, a COM interface (W2)"
-                }
-            );
+                ),
+            ]
+            .into(),
+            ..super::Model::default()
         }
     }
 
+    fn com_header() -> String {
+        let mut header = String::from(
+            "typedef int HRESULT; struct _GUID { unsigned a; unsigned short b,c; unsigned char d[8]; };\n",
+        );
+        for name in ["IUnknown", "IBase", "IDerived"] {
+            let _ = writeln!(header, "typedef struct {name} {name};");
+        }
+        for name in ["IUnknown", "IBase", "IDerived"] {
+            let _ = write!(
+                header,
+                "typedef struct {name}Vtbl {{ HRESULT (*QueryInterface)({name} *,const struct _GUID *,void **); unsigned (*AddRef)({name} *); unsigned (*Release)({name} *);"
+            );
+            if name != "IUnknown" {
+                let _ = write!(
+                    header,
+                    "HRESULT (*GetAttributesOf)({name} *,unsigned,const void *,unsigned *);"
+                );
+            }
+            if name == "IDerived" {
+                header += "HRESULT (*Open)(IDerived *,const struct _GUID *,void **); unsigned (*Count)(IDerived *); HRESULT (*TypedOut)(IDerived *,IBase **);";
+            }
+            let _ = writeln!(
+                header,
+                "}} {name}Vtbl; struct {name} {{ {name}Vtbl *lpVtbl; }};"
+            );
+        }
+        header
+    }
+
+    fn assert_com_control(bound: &mut [super::Binding], headers: &[Vec<String>], args: &[String]) {
+        use super::super::{check, emit};
+        use super::TypeDecl;
+        let binding = bound.iter().find(|b| b.namespace == VALUES).unwrap();
+        assert!(
+            binding.refused.iter().any(
+                |(name, why)| name == "IDerived.TypedOut" && why.contains("ownership contract")
+            )
+        );
+        let owners = bound
+            .iter()
+            .flat_map(|b| {
+                b.types
+                    .iter()
+                    .map(|d| (d.name().into(), b.namespace.clone()))
+            })
+            .collect();
+        let text = emit::render(binding, "test", &owners).declarations;
+        assert!(
+            text.contains("@ntsVtable 3 GetAttributesOf\n     * @ntsHresult"),
+            "{text}"
+        );
+        assert!(text.contains("GetAttributesOf(this: IBase, count: c_uint, items: ConstPtr<void> | null, attributes: Ptr<c_uint>): void;"));
+        assert!(text.contains("@ntsVtable 4 Open\n     * @ntsHresult"));
+        assert!(text.contains(
+            "Open(this: IDerived, iid: ConstPtr<Guid>, out: Ptr<Ptr<void> | null>): void;"
+        ));
+        assert!(text.contains("@ntsVia 00000002-0000-0000-C000-000000000046 IDerived"));
+        assert!(text.contains("Count(this: IDerived): c_uint;"));
+        assert!(text.contains("& IBaseMethods & IBaseMembers & IUnknownMethods & IUnknownMembers"));
+        assert!(!text.contains("QueryInterface("));
+        // The final check independently refuses a stale/mutated
+        // signature, even after facts passed during mapping.
+        for decl in &mut bound
+            .iter_mut()
+            .find(|b| b.namespace == VALUES)
+            .unwrap()
+            .types
+        {
+            if let TypeDecl::Interface { name, methods, .. } = decl
+                && name == "IBase"
+            {
+                methods[0].signature.c_type =
+                    "int (*)(IBase *, unsigned long long, const void *, unsigned *)".into();
+            }
+        }
+        check::against_headers(bound, headers, args).unwrap();
+        let binding = bound.iter().find(|b| b.namespace == VALUES).unwrap();
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, w)| n == "IBase.GetAttributesOf"
+                    && w.contains("disagrees with the header"))
+        );
+        assert!(
+            emit::render(binding, "test", &owners)
+                .declarations
+                .contains("Count(this: IDerived): c_uint;")
+        );
+    }
+
+    /// Same borrowed-interface callback as the Windows witness: the binder
+    /// must reject a bad slot/signature before a program can call it.
+    #[test]
+    fn com_emission_checks_metadata_slots_signatures_and_explicit_out_slots() {
+        use super::super::check;
+        use super::bindings;
+        let dir =
+            std::env::temp_dir().join(format!("nts-winmd-com-emission-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("interfaces.h");
+        let headers = vec![vec![path.to_str().unwrap().to_owned()]];
+        for target in ["x86_64-w64-windows-gnu", "aarch64-w64-windows-gnu"] {
+            let args = vec![format!("--target={target}")];
+            for change in [
+                "control",
+                "slot",
+                "signature",
+                "missing",
+                "iid",
+                "base",
+                "cycle",
+            ] {
+                let mut header = com_header();
+                if change == "slot" {
+                    header = header.replace(
+                        "HRESULT (*GetAttributesOf)(IBase",
+                        "void *hidden; HRESULT (*GetAttributesOf)(IBase",
+                    );
+                }
+                if change == "signature" {
+                    header = header.replace(
+                        "(IBase *,unsigned,const",
+                        "(IBase *,unsigned long long,const",
+                    );
+                }
+                if change == "missing" {
+                    header = header.replace("(*GetAttributesOf)(IBase", "(*Missing)(IBase");
+                }
+                std::fs::write(&path, header).unwrap();
+                let mut model = com_model();
+                if change == "iid" {
+                    let super::Kind::Interface(i) = &mut model
+                        .types
+                        .get_mut(&(VALUES.into(), "IBase".into()))
+                        .unwrap()
+                        .kind
+                    else {
+                        unreachable!()
+                    };
+                    i.iid = None;
+                }
+                if change == "base" {
+                    let super::Kind::Interface(i) = &mut model
+                        .types
+                        .get_mut(&(VALUES.into(), "IDerived".into()))
+                        .unwrap()
+                        .kind
+                    else {
+                        unreachable!()
+                    };
+                    i.parent = Some((VALUES.into(), "IUnknown".into()));
+                }
+                if change == "cycle" {
+                    let super::Kind::Interface(i) = &mut model
+                        .types
+                        .get_mut(&(VALUES.into(), "IBase".into()))
+                        .unwrap()
+                        .kind
+                    else {
+                        unreachable!()
+                    };
+                    i.parent = Some((VALUES.into(), "IDerived".into()));
+                }
+                let facts = super::ask(&model, &headers, &args).unwrap();
+                let mut bound = bindings(&model, &facts);
+                check::against_headers(&mut bound, &headers, &args).unwrap();
+                let binding = bound.iter().find(|b| b.namespace == VALUES).unwrap();
+                let refusal = |name: &str, reason: &str| {
+                    binding
+                        .refused
+                        .iter()
+                        .any(|(n, w)| n == name && w.contains(reason))
+                };
+                match change {
+                    "slot" => assert!(refusal("IBase.GetAttributesOf", "slot 3 in metadata and 4")),
+                    "signature" => {
+                        assert!(refusal("IBase.GetAttributesOf", "4 bytes in the metadata"));
+                    }
+                    "missing" => assert!(refusal("IBase.GetAttributesOf", "no vtable slot")),
+                    "iid" => assert!(refusal("IBase", "no GuidAttribute")),
+                    "base" => assert!(refusal("IDerived.Open", "slot 3 in metadata and 4")),
+                    "cycle" => assert!(refusal("IDerived", "cyclic COM base chain")),
+                    _ => assert_com_control(&mut bound, &headers, &args),
+                }
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     /// `0.1f32` is not 0.1: the declared constant is the widened
     /// double C holds, never the f32's shortest decimal.
     #[test]

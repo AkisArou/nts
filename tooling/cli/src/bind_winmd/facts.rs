@@ -47,7 +47,6 @@ pub(crate) struct Facts {
     pub(crate) fields: BTreeMap<(String, String), CType>,
     /// A C vtable field's byte offset divided by the pointer size. Inherited
     /// fields are present in the C declaration, so these are absolute slots.
-    #[allow(dead_code, reason = "Classic COM emission follows the header facts.")]
     pub(crate) field_slots: BTreeMap<(String, String), u32>,
     /// Typedef name to what it resolves to.
     pub(crate) typedefs: BTreeMap<String, CType>,

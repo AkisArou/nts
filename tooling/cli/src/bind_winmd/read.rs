@@ -50,10 +50,6 @@ pub(crate) struct Constant {
 
 /// One declared vtable entry, in metadata order. Inherited entries stay in
 /// the parent interface rather than being copied into this list.
-#[allow(
-    dead_code,
-    reason = "Classic COM emission follows the metadata reader."
-)]
 #[derive(Debug, Clone)]
 pub(crate) struct Method {
     pub(crate) name: String,
@@ -62,10 +58,6 @@ pub(crate) struct Method {
     pub(crate) documentation: Option<String>,
 }
 
-#[allow(
-    dead_code,
-    reason = "Classic COM emission follows the metadata reader."
-)]
 #[derive(Debug, Clone)]
 pub(crate) struct Interface {
     /// Absent or malformed `GuidAttribute` stays absent; no IID is guessed.

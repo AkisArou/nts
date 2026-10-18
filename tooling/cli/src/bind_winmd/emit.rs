@@ -8,7 +8,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 
-use super::map::{Binding, TypeDecl};
+use super::map::{Binding, ComMethod, TypeDecl};
 
 /// Every name of the C vocabulary a binding may use: `c:types`' and the
 /// scalars of `@nts/scalars`, each imported from its own module.
@@ -62,15 +62,24 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
         brands.iter().copied(),
         "  ",
     ));
-    // The one `Guid` is `winrt:types`', which the shared vocabulary
-    // routing (scalars or `c:types`) does not reach.
-    if used.contains("Guid") {
-        out.push_str("  import type { Guid } from \"winrt:types\";\n");
+    let com: Vec<_> = ["ComClass", "Guid"]
+        .into_iter()
+        .filter(|name| used.contains(name))
+        .collect();
+    if !com.is_empty() {
+        let _ = writeln!(
+            out,
+            "  import type {{ {} }} from \"winrt:types\";",
+            com.join(", ")
+        );
     }
     let mut foreign: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for name in &used {
-        if let Some(namespace) = owners.get(*name)
-            && namespace != own
+        if let Some(namespace) = owners.get(*name).or_else(|| {
+            name.strip_suffix("Methods")
+                .or_else(|| name.strip_suffix("Members"))
+                .and_then(|base| owners.get(base))
+        }) && namespace != own
         {
             foreign.entry(namespace.as_str()).or_default().push(name);
         }
@@ -82,6 +91,45 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
             names.join(", ")
         );
     }
+    out
+}
+
+/// The ABI name stays available beside its camelCase member. An inherited
+/// member asks for the declaring interface rather than using a derived table.
+fn com_method(method: &ComMethod, interface: &str, via: Option<(&str, &str)>) -> String {
+    let signature = &method.signature;
+    let mut out = String::from("    /**\n");
+    if let Some(page) = &signature.documentation {
+        let _ = writeln!(out, "     * {page}");
+    }
+    let _ = writeln!(out, "     * @ntsVtable {} {}", method.slot, signature.name);
+    if method.hresult {
+        out.push_str("     * @ntsHresult\n");
+    }
+    if let Some((iid, tag)) = via {
+        let _ = writeln!(out, "     * @ntsVia {iid} {tag}");
+    }
+    for parameter in &signature.no_escape {
+        let _ = writeln!(out, "     * @ntsNoEscape {parameter}");
+    }
+    out.push_str("     */\n");
+    let name = via.map_or_else(
+        || signature.name.clone(),
+        |_| nts_core::hir::native::js_name(&signature.name),
+    );
+    let mut parameters = vec![format!("this: {interface}")];
+    parameters.extend(
+        signature
+            .parameters
+            .iter()
+            .map(|(name, ts)| format!("{}: {ts}", safe(name))),
+    );
+    let _ = writeln!(
+        out,
+        "    {name}({}): {};",
+        parameters.join(", "),
+        signature.result
+    );
     out
 }
 
@@ -118,6 +166,55 @@ pub(crate) fn write(
     write_file(&out.join(format!("{stem}.refused.txt")), &rendered.refused)
 }
 
+fn render_type(decl: &TypeDecl, body: &mut String) {
+    match decl {
+        TypeDecl::Alias { name, ts, .. } | TypeDecl::Record { name, ts, .. } => {
+            let _ = writeln!(body, "  export type {name} = {ts};");
+        }
+        TypeDecl::Interface {
+            name,
+            iid,
+            tag,
+            bases,
+            methods,
+            ..
+        } => {
+            let _ = writeln!(body, "  export interface {name}Methods {{");
+            for method in methods {
+                body.push_str(&com_method(method, name, None));
+            }
+            body.push_str("  }\n");
+            let _ = writeln!(body, "  export interface {name}Members {{");
+            for method in methods {
+                body.push_str(&com_method(method, name, Some((iid, tag))));
+            }
+            body.push_str("  }\n");
+            let _ = writeln!(
+                body,
+                "  /**\n   * @ntsQuery {iid}\n   * Explicit void** results remain raw Ptr<void>; no COM ownership is inferred.\n   */"
+            );
+            let parent = bases
+                .first()
+                .map_or_else(String::new, |base| format!(", {}", base.1));
+            let _ = write!(
+                body,
+                "  export type {name} = ComClass<\"{tag}\"{parent}> & {name}Methods & {name}Members"
+            );
+            for base in bases {
+                let _ = write!(body, " & {}Methods & {}Members", base.1, base.1);
+            }
+            body.push_str(";\n");
+        }
+        TypeDecl::Enum { name, members } => {
+            let _ = writeln!(body, "  export const enum {name} {{");
+            for (member, value) in members {
+                let _ = writeln!(body, "    {member} = {value},");
+            }
+            body.push_str("  }\n");
+        }
+    }
+}
+
 /// One binding's module, as text.
 pub(crate) fn render(
     binding: &Binding,
@@ -127,18 +224,7 @@ pub(crate) fn render(
     let stem = &binding.namespace;
     let mut body = String::new();
     for decl in &binding.types {
-        match decl {
-            TypeDecl::Alias { name, ts, .. } | TypeDecl::Record { name, ts, .. } => {
-                let _ = writeln!(body, "  export type {name} = {ts};");
-            }
-            TypeDecl::Enum { name, members } => {
-                let _ = writeln!(body, "  export const enum {name} {{");
-                for (member, value) in members {
-                    let _ = writeln!(body, "    {member} = {value},");
-                }
-                body.push_str("  }\n");
-            }
-        }
+        render_type(decl, &mut body);
     }
     if !binding.types.is_empty() {
         body.push('\n');

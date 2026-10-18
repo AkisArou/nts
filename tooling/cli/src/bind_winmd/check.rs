@@ -18,6 +18,7 @@ enum Line {
     Function(String),
     Field(String),
     Constant(String),
+    Method(String, String),
 }
 
 /// The check file, and which declaration each assertion line is about.
@@ -61,6 +62,7 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
     // spellings nts emits (`uint16_t`, `bool`) need these, and `windows.h`
     // includes neither.
     probe.line("#include <stdint.h>", None);
+    probe.line("#include <stddef.h>", None);
     probe.line("#include <stdbool.h>", None);
     for line in super::facts::include_lines(headers) {
         probe.line(&line, None);
@@ -102,6 +104,15 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
             &format!("_Static_assert({assertion}, \"{record}.{field}\");"),
             Some(Line::Field(record.clone())),
         );
+    }
+    for decl in &binding.types {
+        let TypeDecl::Interface { name, methods, .. } = decl else {
+            continue;
+        };
+        for method in methods {
+            let field = &method.signature.name;
+            probe.line(&format!("_Static_assert(__builtin_types_compatible_p(__typeof__((({name}Vtbl *)0)->{field}), {}) && offsetof({name}Vtbl, {field}) == {} * sizeof(void *), \"{name}.{field}\");", method.signature.c_type, method.slot), Some(Line::Method(name.clone(), field.clone())));
+        }
     }
     for constant in &binding.constants {
         // Only a macro can be compared here: an enumerator, or a value the
@@ -156,6 +167,7 @@ fn drop_rejected(
     let mut functions = BTreeSet::new();
     let mut records = BTreeSet::new();
     let mut constants = BTreeSet::new();
+    let mut methods = BTreeSet::new();
     for error in stderr
         .lines()
         .filter(|line| line.contains(": error:") && line.contains(&file))
@@ -171,6 +183,9 @@ fn drop_rejected(
             Some(Line::Function(name)) => functions.insert(name.clone()),
             Some(Line::Field(record)) => records.insert(record.clone()),
             Some(Line::Constant(name)) => constants.insert(name.clone()),
+            Some(Line::Method(interface, name)) => {
+                methods.insert((interface.clone(), name.clone()))
+            }
             None => anyhow::bail!("the Windows headers did not compile for the check: {error}"),
         };
     }
@@ -183,6 +198,25 @@ fn drop_rejected(
     }
     binding.types.retain(|decl| !records.contains(decl.name()));
     let mut refused = Vec::new();
+    for decl in &mut binding.types {
+        if let TypeDecl::Interface {
+            name,
+            methods: entries,
+            ..
+        } = decl
+        {
+            entries.retain(|method| {
+                let keep = !methods.contains(&(name.clone(), method.signature.name.clone()));
+                if !keep {
+                    refused.push((
+                        format!("{name}.{}", method.signature.name),
+                        "its method type or slot disagrees with the header".into(),
+                    ));
+                }
+                keep
+            });
+        }
+    }
     binding.functions.retain(|function| {
         let keep = !functions.contains(&function.name);
         if !keep {
@@ -214,6 +248,20 @@ fn cascade(bindings: &mut [Binding], mut dropped: BTreeSet<Name>) {
         for binding in bindings.iter_mut() {
             let namespace = binding.namespace.clone();
             let mut refused = Vec::new();
+            for decl in &mut binding.types {
+                if let TypeDecl::Interface { name, methods, .. } = decl {
+                    methods.retain(|method| {
+                        let named = method.signature.uses.iter().any(|u| dropped.contains(u));
+                        if named {
+                            refused.push((
+                                format!("{name}.{}", method.signature.name),
+                                "it names a type that was dropped".into(),
+                            ));
+                        }
+                        !named
+                    });
+                }
+            }
             binding.types.retain(|decl| {
                 let named = decl
                     .uses()

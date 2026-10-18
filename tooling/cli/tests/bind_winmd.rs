@@ -159,12 +159,37 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         &messaging,
         &refused,
     );
+    com_declarations(
+        &read("Windows.Win32.UI.Shell.d.ts"),
+        &read("Windows.Win32.System.Com.d.ts"),
+        &read("Windows.Win32.UI.Shell.refused.txt"),
+    );
     let functions = messaging.matches("export function ").count();
     assert!(
         functions >= 250,
         "only {functions} functions bound from WindowsAndMessaging"
     );
     let _ = std::fs::remove_dir_all(&out);
+}
+
+fn com_declarations(shell: &str, com: &str, refused: &str) {
+    assert!(shell.contains("@ntsVtable 9 GetAttributesOf\n     * @ntsHresult"));
+    assert!(shell.contains("GetAttributesOf(this: IShellFolder, cidl: c_uint, apidl: Ptr<ConstPtr<ITEMIDLIST> | null>, rgfInOut: Ptr<c_ulong32>): void;"));
+    assert!(shell.contains("getAttributesOf(this: IShellFolder"));
+    assert!(shell.contains("riid: ConstPtr<Guid>, ppv: Ptr<Ptr<void> | null>): void;"));
+    assert!(
+        shell.contains(
+            "Explicit void** results remain raw Ptr<void>; no COM ownership is inferred."
+        )
+    );
+    assert!(!shell.contains("export function SHGetDesktopFolder("));
+    assert!(refused.lines().any(
+        |line| line.starts_with("SHGetDesktopFolder\t") && line.contains("ownership contract")
+    ));
+    assert!(com.contains(
+        "export type IUnknown = ComClass<\"IUnknown\"> & IUnknownMethods & IUnknownMembers;"
+    ));
+    assert!(!com.contains("QueryInterface("));
 }
 
 fn record_layout_declarations(shell: &str, common: &str, messaging: &str, refused: &str) {
@@ -244,7 +269,7 @@ fn a_guid_parameter_binds_as_the_one_guid_type() {
     let shell = std::fs::read_to_string(out.join("Windows.Win32.UI.Shell.d.ts")).unwrap();
     let refused = std::fs::read_to_string(out.join("Windows.Win32.UI.Shell.refused.txt")).unwrap();
     assert!(
-        shell.contains("import type { Guid } from \"winrt:types\";"),
+        shell.contains("import type { ComClass, Guid } from \"winrt:types\";"),
         "the one Guid is not imported"
     );
     assert!(
