@@ -36,8 +36,21 @@ set -eu
 # Pin this shell before any build, so every descendant inherits the mask.
 gate_cpus=$(node "$(dirname -- "$0")/affinity.ts" --gate-cpus "$$")
 if [ -n "$gate_cpus" ]; then
+  # An environment marker can only demand verification, never supply proof.
+  # If re-entry did not get the actual ceiling, refuse instead of recursing.
+  if [ -n "${NTS_GATE_SCOPE_EXPECTED:-}" ]; then
+    node "$(dirname -- "$0")/affinity.ts" --verify-ceiling "$NTS_GATE_SCOPE_EXPECTED" "$$"
+  fi
+  gate_scope=$(node "$(dirname -- "$0")/affinity.ts" --scope-mechanism "$gate_cpus" "$$")
+  case "$gate_scope" in
+    scope:*)
+      echo "gate: cpuset scope $gate_cpus; $gate_scope"
+      export NTS_GATE_SCOPE_EXPECTED="$gate_cpus"
+      exec node "$(dirname -- "$0")/affinity.ts" --launch-scope "$gate_cpus" sh "$0" "$@"
+      ;;
+  esac
   taskset -pc "$gate_cpus" "$$" >/dev/null
-  echo "gate: affinity $gate_cpus; measurement CPUs 4-5 excluded"
+  echo "gate: affinity $gate_cpus; measurement CPUs 4-5 excluded; $gate_scope"
 fi
 
 # The checkout every worktree shares, wherever this script runs from: the

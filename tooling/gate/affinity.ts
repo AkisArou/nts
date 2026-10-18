@@ -1,6 +1,8 @@
 // CPUs 4 and 5 are the two threads of the physical P-core reserved for
 // measurement. Restrict a gate's inherited set; never broaden an E-core job.
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const MEASUREMENT_CPUS = [4, 5];
@@ -48,10 +50,85 @@ export function inheritedCpus(pid: number = process.pid): string {
   return list.trim();
 }
 
-export function gateCommand(command: string, args: string[]): { command: string; args: string[]; cpus: string | null } {
-  if (process.platform !== "linux") return { command, args, cpus: null };
+export function cpuSubset(actual: string, ceiling: string): boolean {
+  const allowed = new Set(cpuList(ceiling));
+  return cpuList(actual).every((cpu) => allowed.has(cpu));
+}
+
+function cgroupPath(pid: number): string {
+  const path = /^0::(.*)$/m.exec(readFileSync(`/proc/${pid}/cgroup`, "utf8"))?.[1];
+  if (!path?.startsWith("/")) throw new Error("no unified cgroup path");
+  return path;
+}
+
+export function effectiveCeiling(pid: number = process.pid): string | undefined {
+  let directory = "/sys/fs/cgroup" + cgroupPath(pid);
+  // The controller may be enabled only at an ancestor. Its ceiling still
+  // bounds this process; a sched_setaffinity mask does not.
+  while (directory.startsWith("/sys/fs/cgroup")) {
+    try {
+      const cpus = readFileSync(directory + "/cpuset.cpus.effective", "utf8").trim();
+      if (cpus) return cpus;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    directory = dirname(directory);
+  }
+  return undefined;
+}
+
+export function verifyCeiling(expected: string, pid: number = process.pid): boolean {
+  const actual = effectiveCeiling(pid);
+  return actual !== undefined && cpuSubset(actual, expected);
+}
+
+function cpusetDelegated(pid: number): boolean {
+  const manager = /^(.*\/user@\d+\.service)(?:\/|$)/.exec(cgroupPath(pid))?.[1];
+  if (!manager) return false;
+  return readFileSync(`/sys/fs/cgroup${manager}/cgroup.controllers`, "utf8").trim().split(/\s+/).includes("cpuset");
+}
+
+function scopeArgs(cpus: string): string[] {
+  return ["--user", "--scope", "--quiet", "--collect", "--no-ask-password", "--expand-environment=no", `--property=AllowedCPUs=${cpus}`, "--"];
+}
+
+type Scope = { kind: "scope" | "inherited-cpuset" | "best-effort"; reason: string };
+
+/** Selection happens before work starts. A failed gate is never a probe. */
+export function selectScope(cpus: string, ceiling: string | undefined, delegated: boolean, probe: () => { ok: boolean; reason: string }): Scope {
+  if (ceiling && cpuSubset(ceiling, cpus)) return { kind: "inherited-cpuset", reason: `effective cpuset ${ceiling}` };
+  if (!delegated) return { kind: "best-effort", reason: "cpuset is not delegated to this user manager" };
+  const checked = probe();
+  return { kind: checked.ok ? "scope" : "best-effort", reason: checked.reason };
+}
+
+export function gateScope(cpus: string, pid: number = process.pid): Scope {
+  try {
+    return selectScope(cpus, effectiveCeiling(pid), cpusetDelegated(pid), () => {
+      const online = readFileSync("/sys/devices/system/cpu/online", "utf8").trim();
+      // Deliberately widen inside the proposed scope. Only a kernel ceiling
+      // can keep this grandchild inside cpus. It runs no gate work.
+      const probe = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", online, process.execPath, "-e",
+        'process.stdout.write(require("node:fs").readFileSync("/proc/self/status","utf8").match(/^Cpus_allowed_list:\\s*(.+)$/m)[1])'],
+        { encoding: "utf8", timeout: 10000 });
+      const mask = probe.stdout?.trim();
+      const ok = probe.status === 0 && !!mask && cpuSubset(mask, cpus);
+      const reason = ok ? `widening probe bounded to ${mask}` : `scope probe failed (${probe.error?.message ?? probe.signal ?? probe.status}): ${probe.stderr?.trim() || `allowed ${mask || "unknown"}`}`;
+      return { ok, reason: reason.replace(/\s+/g, " ").slice(0, 400) };
+    });
+  } catch (error) {
+    return { kind: "best-effort", reason: `cannot establish cpuset ceiling: ${error instanceof Error ? error.message : error}` };
+  }
+}
+
+export function gateCommand(command: string, args: string[]): { command: string; args: string[]; cpus: string | null; mechanism: string } {
+  if (process.platform !== "linux") return { command, args, cpus: null, mechanism: "host affinity (not Linux)" };
   const cpus = gateCpus(inheritedCpus());
-  return { command: "taskset", args: ["-c", cpus, command, ...args], cpus };
+  const scope = gateScope(cpus);
+  const pinned = ["-c", cpus, command, ...args];
+  return scope.kind === "scope"
+    ? { command: "systemd-run", args: [...scopeArgs(cpus), "taskset", ...pinned], cpus, mechanism: `cpuset scope; ${scope.reason}` }
+    : { command: "taskset", args: pinned, cpus, mechanism: `${scope.kind}; ${scope.reason}` };
 }
 
 // pinned.sh changes its own mask before starting any build, so every child
@@ -62,7 +139,22 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else if (process.argv[2] === "--default-cpus") {
     const preferred = process.argv[3];
     console.log(process.platform === "linux" ? defaultCpus(preferred, inheritedCpus(Number(process.argv[4]))) : preferred);
+  } else if (process.argv[2] === "--scope-mechanism") {
+    const scope = gateScope(process.argv[3], Number(process.argv[4]));
+    console.log(`${scope.kind}:${scope.reason}`);
+  } else if (process.argv[2] === "--verify-ceiling") {
+    if (!verifyCeiling(process.argv[3], Number(process.argv[4]))) {
+      console.error("gate: requested cpuset ceiling is absent on scope entry");
+      process.exitCode = 75;
+    }
+  } else if (process.argv[2] === "--launch-scope") {
+    const cpus = process.argv[3];
+    cpuList(cpus);
+    const child = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", cpus, ...process.argv.slice(4)], { stdio: "inherit" });
+    // This is the actual command, not a capability probe. Never retry it.
+    if (child.error) console.error(`gate: scope launch failed: ${child.error.message}`);
+    process.exitCode = child.status ?? 1;
   } else {
-    throw new Error("usage: affinity.ts --gate-cpus <pid> | --default-cpus <preferred> <pid>");
+    throw new Error("usage: affinity.ts --gate-cpus <pid> | --default-cpus <preferred> <pid> | --scope-mechanism <cpus> <pid> | --verify-ceiling <cpus> <pid> | --launch-scope <cpus> <command...>");
   }
 }

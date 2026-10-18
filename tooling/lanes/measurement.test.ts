@@ -5,7 +5,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cpuList, defaultCpus, formatCpus, gateCpus, inheritedCpus } from "../gate/affinity.ts";
+import { cpuList, cpuSubset, defaultCpus, formatCpus, gateCommand, gateCpus, inheritedCpus, selectScope, verifyCeiling } from "../gate/affinity.ts";
 import { coreIsQuiet, coreTicks, waitForQuiet } from "../gate/measurement.ts";
 
 const WITH_LOCK = new URL("../gate/with-lock.sh", import.meta.url).pathname;
@@ -81,6 +81,58 @@ test("quiet admission ignores other busy cores and rejects either busy sibling",
   assert.throws(() => coreTicks("cpu4 1 0 0 9 0 0 0 0"), /does not name/);
   const sample = coreTicks(stat(10));
   assert.equal(coreIsQuiet(sample, sample), false, "zero elapsed ticks are not proof of idle");
+});
+
+test("scope selection proves a ceiling before work and labels unavailable or failed probes best-effort", () => {
+  let probes = 0;
+  const good = () => { probes++; return { ok: true, reason: "widening probe stayed inside ceiling" }; };
+  assert.equal(selectScope("0-3,6-31", "16-31", false, good).kind, "inherited-cpuset");
+  assert.equal(probes, 0, "an existing kernel ceiling needs no new scope");
+  assert.equal(selectScope("0-3,6-31", "0-31", false, good).kind, "best-effort");
+  assert.equal(probes, 0, "do not widen even a probe when the controller is unavailable");
+  assert.equal(selectScope("0-3,6-31", "0-31", true, good).kind, "scope");
+  assert.equal(probes, 1);
+  const failed = selectScope("0-3,6-31", undefined, true, () => ({ ok: false, reason: "grandchild escaped" }));
+  assert.deepEqual(failed, { kind: "best-effort", reason: "grandchild escaped" });
+});
+
+test("the real host scope is verified, or the absence is reported before launching any work", { skip: process.platform !== "linux" }, (t) => {
+  const cpus = gateCpus(inheritedCpus());
+  const online = readFileSync("/sys/devices/system/cpu/online", "utf8").trim();
+  const launch = gateCommand("taskset", ["-c", online, "sh", "-c", "awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status"]);
+  if (launch.mechanism.startsWith("best-effort")) {
+    assert.equal(launch.command, "taskset");
+    assert.match(launch.mechanism, /best-effort; .+/);
+    t.diagnostic(`real ceiling not measured: ${launch.mechanism}`);
+    // A forged marker must not turn a taskset restriction into cpuset proof.
+    const result = spawnSync("sh", [PINNED], { env: { ...process.env, NTS_GATE_SCOPE_EXPECTED: cpus }, encoding: "utf8" });
+    assert.equal(result.status, 75, result.stderr);
+    assert.match(result.stderr, /ceiling is absent/);
+    return;
+  }
+  const result = spawnSync(launch.command, launch.args, { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(cpuSubset(result.stdout.trim(), cpus), true, "an explicit all-CPU child must stay inside the ceiling");
+  if (launch.mechanism.startsWith("inherited-cpuset")) assert.equal(verifyCeiling(cpus), true);
+});
+
+test("a failed actual scope launch is returned once, never retried as a taskset gate", () => {
+  const dir = mkdtempSync(join(tmpdir(), "nts-scope-failure-test-"));
+  try {
+    const calls = join(dir, "calls");
+    const ran = join(dir, "ran");
+    const fake = join(dir, "systemd-run");
+    writeFileSync(fake, '#!/bin/sh\necho attempt >> "$TEST_SCOPE_CALLS"\nexit 19\n');
+    chmodSync(fake, 0o755);
+    const result = spawnSync(process.execPath, [new URL("../gate/affinity.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
+      env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TEST_SCOPE_CALLS: calls }, encoding: "utf8",
+    });
+    assert.equal(result.status, 19, result.stderr);
+    assert.equal(readFileSync(calls, "utf8"), "attempt\n");
+    assert.equal(existsSync(ran), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("quiet admission needs a full quiet window after activity", async () => {

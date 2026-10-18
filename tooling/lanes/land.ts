@@ -399,7 +399,7 @@ function gate(root: string, base: string, landing: string, members: string[]): G
       CARGO_INCREMENTAL: "0",
     });
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
-    const affinity = launch.cpus === null ? "host affinity unchanged (not Linux)" : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded`;
+    const affinity = launch.cpus === null ? launch.mechanism : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded; ${launch.mechanism}`;
     say(`gate affinity: ${affinity}`);
     say(`gating; log ${join(run, "gate.log")}`);
     const gated = spawnSync(launch.command, launch.args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
