@@ -29,6 +29,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use windows_metadata::reader::{File, HasAttributes, Index, TypeCategory, TypeDef};
 use windows_metadata::{Type, Value};
 
+use super::iid::from_attribute as iid;
+
 /// The Windows Runtime metadata: `Microsoft.Windows.SDK.Contracts`, one `.winmd` per API
 /// contract (`Windows.Foundation.UniversalApiContract.winmd` holds most of
 /// `Windows.*`). A released version, unlike the Win32 package.
@@ -3631,35 +3633,6 @@ fn method_name(method: windows_metadata::reader::MethodDef) -> String {
             _ => None,
         })
         .unwrap_or_else(|| method.name().to_owned())
-}
-
-/// `A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E`, from `GuidAttribute`.
-fn iid(def: TypeDef) -> Option<String> {
-    let values: Vec<Value> = def
-        .find_attribute("GuidAttribute")?
-        .value()
-        .into_iter()
-        .map(|(_, value)| value)
-        .collect();
-    let [
-        Value::U32(a),
-        Value::U16(b),
-        Value::U16(c),
-        Value::U8(d0),
-        Value::U8(d1),
-        Value::U8(d2),
-        Value::U8(d3),
-        Value::U8(d4),
-        Value::U8(d5),
-        Value::U8(d6),
-        Value::U8(d7),
-    ] = values.as_slice()
-    else {
-        return None;
-    };
-    Some(format!(
-        "{a:08X}-{b:04X}-{c:04X}-{d0:02X}{d1:02X}-{d2:02X}{d3:02X}{d4:02X}{d5:02X}{d6:02X}{d7:02X}"
-    ))
 }
 
 /// A parameter name TypeScript accepts.

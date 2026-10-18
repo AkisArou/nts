@@ -1,4 +1,4 @@
-//! The IID of a generic Windows Runtime interface's instantiation.
+//! Interface IIDs from `GuidAttribute`, and generic Windows Runtime instantiations.
 //!
 //! `IIterable<String>` has no `GuidAttribute`: its IID is computed from the
 //! generic interface's own and its arguments', as every projection computes
@@ -11,6 +11,38 @@
 //! by IIDs Windows answers `QueryInterface` for.
 
 use std::fmt::Write as _;
+
+use windows_metadata::Value;
+use windows_metadata::reader::{HasAttributes, TypeDef};
+
+/// `A3219ECB-F0B3-4DCD-BEEE-19D48CD3ED1E`, from `GuidAttribute`.
+pub(crate) fn from_attribute(def: TypeDef) -> Option<String> {
+    let values: Vec<Value> = def
+        .find_attribute("GuidAttribute")?
+        .value()
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect();
+    let [
+        Value::U32(a),
+        Value::U16(b),
+        Value::U16(c),
+        Value::U8(d0),
+        Value::U8(d1),
+        Value::U8(d2),
+        Value::U8(d3),
+        Value::U8(d4),
+        Value::U8(d5),
+        Value::U8(d6),
+        Value::U8(d7),
+    ] = values.as_slice()
+    else {
+        return None;
+    };
+    Some(format!(
+        "{a:08X}-{b:04X}-{c:04X}-{d0:02X}{d1:02X}-{d2:02X}{d3:02X}{d4:02X}{d5:02X}{d6:02X}{d7:02X}"
+    ))
+}
 
 /// `11F47AD5-7B73-42C0-ABAE-878B1E16ADEE`, the namespace every parameterized
 /// IID is derived under.

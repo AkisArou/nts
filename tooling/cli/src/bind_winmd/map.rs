@@ -385,7 +385,16 @@ impl Mapper<'_> {
             Kind::Delegate { parameters, result } => {
                 self.delegate(name, parameters, result, c, how)
             }
-            Kind::Interface => Err(format!("`{}`, a COM interface (W2)", name.1)),
+            Kind::Interface(interface) => {
+                if interface.iid.is_none() {
+                    Err(format!(
+                        "`{}`, a COM interface with no GuidAttribute",
+                        name.1
+                    ))
+                } else {
+                    Err(format!("`{}`, a COM interface (W2)", name.1))
+                }
+            }
             Kind::Other => Err(format!(
                 "`{}`, a kind of type this binder does not read",
                 name.1
@@ -1051,6 +1060,56 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
 mod tests {
     use super::number;
     use windows_metadata::Value;
+
+    /// The only difference is `GuidAttribute`: missing IIDs are refused by
+    /// name, while interfaces with one retain the existing COM refusal.
+    #[test]
+    fn an_interface_without_a_guid_has_a_named_refusal() {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        use super::super::read::{Interface, Kind, TypeInfo};
+        use super::{CType, Facts, Mapper, Model, Use};
+
+        for iid in [
+            None,
+            Some("00000001-0000-0000-C000-000000000046".to_owned()),
+        ] {
+            let missing = iid.is_none();
+            let name = ("Windows.Win32.ReaderTest".to_owned(), "ITest".to_owned());
+            let model = Model {
+                types: [(
+                    name.clone(),
+                    TypeInfo {
+                        kind: Kind::Interface(Interface {
+                            iid,
+                            parent: None,
+                            methods: Vec::new(),
+                        }),
+                    },
+                )]
+                .into(),
+                ..Model::default()
+            };
+            let facts = Facts::default();
+            let mut mapper = Mapper {
+                model: &model,
+                facts: &facts,
+                declared: BTreeMap::new(),
+                brands: BTreeSet::new(),
+            };
+            let Err(reason) = mapper.named(&name, &CType::Void, Use::default()) else {
+                panic!("classic COM must stay refused until header facts and emission are ready")
+            };
+            assert_eq!(
+                reason,
+                if missing {
+                    "`ITest`, a COM interface with no GuidAttribute"
+                } else {
+                    "`ITest`, a COM interface (W2)"
+                }
+            );
+        }
+    }
 
     /// `0.1f32` is not 0.1: the declared constant is the widened
     /// double C holds, never the f32's shortest decimal.
