@@ -31943,6 +31943,74 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.finish(name, params, returns, origin, false))
     }
 
+    /// Whether bound arguments beyond the signature's stored positions cannot
+    /// be observed by the actual target. A signature alone is not a proof: its
+    /// implementation may have more parameters, a rest, or read `arguments`.
+    fn bound_extras_are_ignored(&self, function: ValueId, stored: usize) -> bool {
+        let HirType::Managed(ManagedType::Object(class)) = self.values[function.0 as usize].ty
+        else {
+            return false;
+        };
+        if !super::is_closure_type(class) {
+            return false;
+        }
+        let Some(info) = self.closures.get(closure_index(class)) else {
+            return false;
+        };
+        if !matches!(
+            info.source,
+            ClosureSource::Authored | ClosureSource::Function
+        ) {
+            return false;
+        }
+        let declaration = self.implementation_of(the_function_of(self, info.node));
+        let kind = self.kind_of(declaration);
+        if !matches!(
+            kind,
+            Some(
+                syntax::FUNCTION_DECLARATION | syntax::FUNCTION_EXPRESSION | syntax::ARROW_FUNCTION
+            )
+        ) || (kind != Some(syntax::ARROW_FUNCTION)
+            && !self
+                .children(declaration)
+                .iter()
+                .any(|child| self.kind_of(*child) == Some(syntax::BLOCK)))
+        {
+            return false;
+        }
+        let parameters: Vec<_> = parameters_of(self, declaration)
+            .into_iter()
+            .filter(|parameter| {
+                !self
+                    .children(*parameter)
+                    .iter()
+                    .any(|child| self.annotates_this(*child))
+            })
+            .collect();
+        if parameters.len() > stored
+            || parameters.iter().any(|parameter| {
+                self.children(*parameter)
+                    .iter()
+                    .any(|child| self.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
+            })
+        {
+            return false;
+        }
+        // Conservative over nested syntax too, including an arrow capturing
+        // the target's arguments. Nothing inspects a signature's arity to
+        // conclude that these values are unobservable.
+        let mut pending = vec![declaration];
+        while let Some(node) = pending.pop() {
+            if self.kind_of(node) == Some(syntax::IDENTIFIER)
+                && self.node(node).text.as_deref() == Some("arguments")
+            {
+                return false;
+            }
+            pending.extend(self.children(node));
+        }
+        true
+    }
+
     /// `f.bind(r, ...bound)`: the bound function ([`ClosureSource::Bound`]), its
     /// fields filled here. `r` is the `this` the call writes, `undefined` where
     /// it writes none, lowered as `.call` lowers its own.
@@ -31963,6 +32031,15 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, reason));
         }
         let (fields, _, _) = self.bound_shape(id)?;
+        let stored = fields.len().saturating_sub(2);
+        if arguments.len().saturating_sub(1) > stored
+            && !self.bound_extras_are_ignored(function, stored)
+        {
+            return Err(self.unsupported(
+                id,
+                "a `bind` with extra arguments whose target is not a known body that ignores them",
+            ));
+        }
         let origin = self.origin(id);
         let this = match arguments.first() {
             Some(given) => self.lower_this_argument(*given)?,
@@ -31970,9 +32047,15 @@ impl<'a> FuncBuilder<'a> {
         };
         let mut bound = Vec::new();
         for (at, argument) in arguments.iter().skip(1).enumerate() {
-            let ty = fields[2 + at].ty.clone();
-            let value = self.lower_expecting(*argument, &ty)?;
-            bound.push(self.coerce(value, &ty, *argument)?);
+            if let Some(field) = fields.get(2 + at) {
+                let ty = field.ty.clone();
+                let value = self.lower_expecting(*argument, &ty)?;
+                bound.push(self.coerce(value, &ty, *argument)?);
+            } else {
+                // Even an ignored value is evaluated once, at bind time and
+                // in order, including any exception it throws.
+                self.lower_for_its_effects(*argument)?;
+            }
         }
         self.used_closures.push(index);
         let object = self.push(
