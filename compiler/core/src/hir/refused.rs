@@ -64,31 +64,7 @@ pub(super) fn guard_slots(program: &mut Program) {
     // Slots are program-wide (lower::number_slots), but a subclass can drop
     // parameters. Keep a fallback contract for chains with no surviving entry;
     // prefer each receiver's actual inherited ABI below.
-    let mut contracts = FxHashMap::default();
-    for func in &program.funcs {
-        for op in func
-            .blocks
-            .iter()
-            .flat_map(|block| &block.ops)
-            .map(|id| func.value(*id))
-        {
-            if let OpKind::Call {
-                callee: Callee::Virtual { slot, declared },
-                ..
-            } = &op.kind
-                && let Some(at) = by_name.get(declared.as_str())
-            {
-                contracts.entry(*slot as usize).or_insert(*at);
-            }
-        }
-    }
-    for layout in &program.layouts {
-        for (slot, entry) in layout.methods.iter().enumerate() {
-            if let Some(at) = entry.as_deref().and_then(|name| by_name.get(name)) {
-                contracts.entry(slot).or_insert(*at);
-            }
-        }
-    }
+    let contracts = fallback_contracts(program, &by_name);
     let mut names: FxHashSet<String> = program.funcs.iter().map(|func| func.name.clone()).collect();
     names.extend(program.uncompiled.iter().map(|(name, _)| name.clone()));
     let layouts = super::fields::LayoutIndex::build(program);
@@ -166,6 +142,40 @@ pub(super) fn guard_slots(program: &mut Program) {
         program.layouts[owner].methods[slot] = Some(name);
         program.funcs.push(func);
     }
+}
+
+/// A declared contract for a slot with no surviving ancestor signature. Keep
+/// virtual-call declarations first, followed by source-order layout entries.
+fn fallback_contracts(
+    program: &Program,
+    by_name: &FxHashMap<&str, usize>,
+) -> FxHashMap<usize, usize> {
+    let mut contracts = FxHashMap::default();
+    for func in &program.funcs {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|id| func.value(*id))
+        {
+            if let OpKind::Call {
+                callee: Callee::Virtual { slot, declared },
+                ..
+            } = &op.kind
+                && let Some(at) = by_name.get(declared.as_str())
+            {
+                contracts.entry(*slot as usize).or_insert(*at);
+            }
+        }
+    }
+    for layout in &program.layouts {
+        for (slot, entry) in layout.methods.iter().enumerate() {
+            if let Some(at) = entry.as_deref().and_then(|name| by_name.get(name)) {
+                contracts.entry(slot).or_insert(*at);
+            }
+        }
+    }
+    contracts
 }
 
 /// First surviving signature in this inheritance chain. Cache intermediate
