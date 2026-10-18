@@ -155,10 +155,9 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
 /// A constant the metadata types by a scalar typedef (`HRESULT` over
 /// `i32`) binds as that scalar, and a float constant binds as its float
 /// brand: both state values plainly, and refusing them lost exactly
-/// what `@ntsConstant` exists to carry. A pointer-typed sentinel
-/// (`HWND_BROADCAST`, the MAKEINTRESOURCE names) is still refused, and
-/// the refusal names the metadata type so the ledger reads without
-/// re-opening the winmd.
+/// what `@ntsConstant` exists to carry. True handle sentinels keep their
+/// native type, with null allowed for zero. The MAKEINTRESOURCE atoms stay
+/// refused as PWSTR, whose string projection cannot carry an integer atom.
 fn constants_carry_their_values(messaging: &str, refused: &str) {
     assert!(
         messaging.contains("export const STRSAFE_E_INSUFFICIENT_BUFFER: c_int;"),
@@ -168,10 +167,27 @@ fn constants_carry_their_values(messaging: &str, refused: &str) {
         messaging.contains("export const TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_DELTA: Float32;"),
         "a float constant was refused instead of bound as Float32"
     );
+    for declaration in [
+        "/** @ntsConstant 65535 */\n  export const HWND_BROADCAST: HWND;",
+        "/** @ntsConstant -1 */\n  export const HWND_TOPMOST: HWND;",
+        "/** @ntsConstant 0 */\n  export const HWND_DESKTOP: HWND | null;",
+        "/** @ntsConstant 0 */\n  export const HWND_TOP: HWND | null;",
+        "/** @ntsConstant -1 */\n  export const HBMMENU_CALLBACK: HBITMAP;",
+    ] {
+        assert!(messaging.contains(declaration), "missing {declaration}");
+    }
     assert!(
-        refused.lines().any(|line| line
-            == "HWND_BROADCAST\ta constant that is not a plain integer (metadata type `HWND`, value an integer)"),
-        "HWND_BROADCAST's refusal does not name its metadata type"
+        !refused
+            .lines()
+            .any(|line| line.starts_with("HWND_") || line.starts_with("HBMMENU_"))
+    );
+    assert_eq!(
+        refused
+            .lines()
+            .filter(|line| line.contains("metadata type `PWSTR`, value an integer"))
+            .count(),
+        47,
+        "MAKEINTRESOURCE atoms must retain their named refusal"
     );
 }
 

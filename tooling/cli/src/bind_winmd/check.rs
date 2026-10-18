@@ -223,11 +223,115 @@ fn cascade(bindings: &mut [Binding], mut dropped: BTreeSet<Name>) {
                 }
                 !named
             });
+            binding.constants.retain(|constant| {
+                let named = constant.uses.iter().any(|u| dropped.contains(u));
+                if named {
+                    refused.push((
+                        constant.name.clone(),
+                        "it names a type that was dropped".into(),
+                    ));
+                }
+                !named
+            });
             binding.refused.extend(refused);
         }
         if more.is_empty() {
             break;
         }
         dropped.extend(more);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use std::collections::BTreeSet;
+
+    use super::super::map::{Binding, Constant};
+
+    #[test]
+    fn header_values_distinguish_sign_extension_from_zero_extension() {
+        let dir =
+            std::env::temp_dir().join(format!("nts-winmd-sentinel-values-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let header = dir.join("sentinels.h");
+        std::fs::write(
+            &header,
+            "_Static_assert(sizeof(void *) == 8, \"a 64-bit pointer target\");\n\
+             #define EXTENDED ((void *)(intptr_t)-1)\n\
+             #define ZERO_EXTENDED ((void *)(uintptr_t)0xFFFFFFFFU)\n\
+             #define NULL_HANDLE ((void *)0)\n",
+        )
+        .unwrap();
+        let mut bindings = [Binding {
+            namespace: "SentinelValues".into(),
+            constants: [
+                ("EXTENDED", "-1"),
+                ("ZERO_EXTENDED", "-1"),
+                ("NULL_HANDLE", "0"),
+            ]
+            .into_iter()
+            .map(|(name, value)| Constant {
+                name: name.into(),
+                value: value.into(),
+                ts: "TestHandle".into(),
+                uses: BTreeSet::new(),
+            })
+            .collect(),
+            ..Binding::default()
+        }];
+        super::against_headers(
+            &mut bindings,
+            &[vec![header.to_str().unwrap().to_owned()]],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            bindings[0]
+                .constants
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["EXTENDED", "NULL_HANDLE"]
+        );
+        assert_eq!(
+            bindings[0].refused,
+            [(
+                "ZERO_EXTENDED".into(),
+                "its value disagrees with the header".into()
+            )]
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_constant_depending_on_a_dropped_handle_is_refused_too() {
+        let handle = ("Types".into(), "DroppedHandle".into());
+        let mut bindings = [Binding {
+            constants: [
+                ("dependent", BTreeSet::from([handle.clone()])),
+                ("control", BTreeSet::new()),
+            ]
+            .into_iter()
+            .map(|(name, uses)| Constant {
+                name: name.into(),
+                value: "1".into(),
+                ts: "Handle".into(),
+                uses,
+            })
+            .collect(),
+            ..Binding::default()
+        }];
+        super::cascade(&mut bindings, BTreeSet::from([handle]));
+        assert_eq!(bindings[0].constants.len(), 1);
+        assert_eq!(bindings[0].constants[0].name, "control");
+        assert_eq!(
+            bindings[0].refused,
+            [(
+                "dependent".into(),
+                "it names a type that was dropped".into()
+            )]
+        );
     }
 }

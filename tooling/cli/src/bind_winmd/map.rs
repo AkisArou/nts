@@ -75,6 +75,8 @@ pub(crate) struct Constant {
     pub(crate) name: String,
     pub(crate) value: String,
     pub(crate) ts: String,
+    /// Named handle types, which must survive the header check too.
+    pub(crate) uses: BTreeSet<Name>,
 }
 
 /// One namespace's module.
@@ -793,6 +795,55 @@ impl Mapper<'_> {
             uses,
         })
     }
+
+    /// An integer the metadata types as a native handle. Character pointers
+    /// and callbacks do not have this representation: their integer atoms
+    /// need a separate projection rather than becoming handles.
+    fn handle_constant(&mut self, constant: &super::read::Constant) -> Option<Constant> {
+        let value = match &constant.value {
+            Value::ISize(v) => v.to_string(),
+            Value::USize(v) => v.to_string(),
+            Value::I8(_)
+            | Value::U8(_)
+            | Value::I16(_)
+            | Value::U16(_)
+            | Value::I32(_)
+            | Value::U32(_)
+            | Value::I64(_)
+            | Value::U64(_) => number(&constant.value)?,
+            _ => return None,
+        };
+        let (Type::ValueName(type_name) | Type::ClassName(type_name)) = &constant.ty else {
+            return None;
+        };
+        let name = super::read::name_of(type_name);
+        if !matches!(self.model.types.get(&name)?.kind, Kind::Typedef { .. }) {
+            return None;
+        }
+        let c = self.facts.typedefs.get(&name.1)?;
+        let CType::Pointer { to, .. } = c else {
+            return None;
+        };
+        if !matches!(**to, CType::Record { .. } | CType::Void) {
+            return None;
+        }
+        let spelled = self
+            .named(
+                &name,
+                c,
+                Use {
+                    optional: value == "0",
+                    ..Use::default()
+                },
+            )
+            .ok()?;
+        Some(Constant {
+            name: constant.name.clone(),
+            value,
+            ts: spelled.ts,
+            uses: spelled.uses,
+        })
+    }
 }
 
 /// A numeric constant as TypeScript source, or `None` for anything else.
@@ -921,23 +972,29 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
     for constant in &model.constants {
         entry(&mut by_namespace, &constant.namespace);
         let binding = by_namespace.get_mut(&constant.namespace).expect("inserted");
-        match (constant_brand(model, &constant.ty), number(&constant.value)) {
+        let bound = match (constant_brand(model, &constant.ty), number(&constant.value)) {
             (Some(brand), Some(value)) => {
                 mapper.brands.insert(brand);
-                binding.constants.push(Constant {
+                Some(Constant {
                     name: constant.name.clone(),
                     value,
                     ts: brand.to_owned(),
-                });
+                    uses: BTreeSet::new(),
+                })
             }
-            _ => binding.refused.push((
+            _ => mapper.handle_constant(constant),
+        };
+        if let Some(bound) = bound {
+            binding.constants.push(bound);
+        } else {
+            binding.refused.push((
                 constant.name.clone(),
                 format!(
                     "a constant that is not a plain integer (metadata type {}, value {})",
                     constant_type_name(&constant.ty),
                     constant_value_kind(&constant.value),
                 ),
-            )),
+            ));
         }
     }
     // Each type declared where the metadata puts it.
@@ -1058,8 +1115,137 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::number;
     use windows_metadata::Value;
+
+    const VALUES: &str = "Windows.Win32.Test.Values";
+    const HANDLES: &str = "Windows.Win32.Test.Handles";
+
+    fn handle_model(value: Value, pointee: super::CType) -> (super::Model, super::Facts) {
+        use super::super::read::{Constant, Kind, TypeInfo};
+        use windows_metadata::{Type, TypeName};
+
+        let model = super::Model {
+            constants: vec![Constant {
+                namespace: VALUES.into(),
+                name: "SENTINEL".into(),
+                ty: Type::ValueName(TypeName::named(HANDLES, "TestHandle")),
+                value,
+            }],
+            types: [(
+                (HANDLES.into(), "TestHandle".into()),
+                TypeInfo {
+                    kind: Kind::Typedef {
+                        value: Type::PtrMut(Box::new(Type::Void), 1),
+                        parent: None,
+                    },
+                },
+            )]
+            .into(),
+            ..super::Model::default()
+        };
+        let facts = super::Facts {
+            typedefs: [(
+                "TestHandle".into(),
+                super::CType::Pointer {
+                    to: Box::new(pointee),
+                    constant: false,
+                },
+            )]
+            .into(),
+            ..super::Facts::default()
+        };
+        (model, facts)
+    }
+
+    #[test]
+    fn handle_sentinels_keep_exact_values_nullability_and_foreign_type_imports() {
+        use std::collections::BTreeMap;
+
+        use super::{CType, bindings};
+
+        for pointee in [
+            CType::Void,
+            CType::Record {
+                tag: "TestHandle__".into(),
+                union: false,
+            },
+        ] {
+            for (value, expected, ts) in [
+                (Value::I32(0), "0", "TestHandle | null"),
+                (Value::I32(-1), "-1", "TestHandle"),
+                (
+                    Value::U64(9_007_199_254_740_993),
+                    "9007199254740993",
+                    "TestHandle",
+                ),
+            ] {
+                let (model, facts) = handle_model(value, pointee.clone());
+                let bindings = bindings(&model, &facts);
+                let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+                assert!(values.refused.is_empty(), "{:?}", values.refused);
+                assert_eq!(values.constants.len(), 1);
+                let constant = &values.constants[0];
+                assert_eq!(constant.value, expected);
+                assert_eq!(constant.ts, ts);
+                assert!(
+                    constant
+                        .uses
+                        .contains(&(HANDLES.into(), "TestHandle".into()))
+                );
+                let owners: BTreeMap<_, _> = bindings
+                    .iter()
+                    .flat_map(|b| {
+                        b.types
+                            .iter()
+                            .map(|t| (t.name().to_owned(), b.namespace.clone()))
+                    })
+                    .collect();
+                let text = super::super::emit::render(values, "test", &owners).declarations;
+                assert!(text.contains(&format!(
+                    "import type {{ TestHandle }} from \"c:{HANDLES}\";"
+                )));
+                assert!(text.contains(&format!(
+                    "/** @ntsConstant {expected} */\n  export const SENTINEL: {ts};"
+                )));
+            }
+        }
+    }
+
+    #[test]
+    fn a_float_or_a_character_pointer_does_not_become_a_handle_constant() {
+        use super::{CType, bindings};
+
+        // The float differs from the valid handle sentinel only in value kind;
+        // the pointer differs only in the header's pointee.
+        for (value, pointee) in [
+            (Value::F64(1.0), CType::Void),
+            (Value::I32(1), CType::Scalar("unsigned short".into())),
+        ] {
+            let (model, facts) = handle_model(value, pointee);
+            let bindings = bindings(&model, &facts);
+            let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+            assert!(values.constants.is_empty());
+            assert_eq!(values.refused.len(), 1);
+            assert_eq!(values.refused[0].0, "SENTINEL");
+        }
+    }
+
+    #[test]
+    fn a_pointer_in_the_header_is_not_enough_without_a_native_typedef() {
+        let (mut model, facts) = handle_model(Value::I32(1), super::CType::Void);
+        model
+            .types
+            .get_mut(&(HANDLES.into(), "TestHandle".into()))
+            .unwrap()
+            .kind = super::Kind::Other;
+        let bindings = super::bindings(&model, &facts);
+        let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+        assert!(values.constants.is_empty());
+        assert_eq!(values.refused.len(), 1);
+    }
 
     /// The only difference is `GuidAttribute`: missing IIDs are refused by
     /// name, while interfaces with one retain the existing COM refusal.

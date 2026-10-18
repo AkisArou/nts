@@ -142,10 +142,9 @@ pub(crate) fn render(
     if !binding.types.is_empty() {
         body.push('\n');
     }
-    // A constant is declared in the module, as its value: the program imports
-    // it by name, `import { WM_CREATE } from "c:Windows.Win32...."`, and a
-    // read of it is the number, folded where it is read. So a module needs no
-    // values file, and one from the platform store needs no path.
+    // A constant is declared with its value: a read folds to that number or
+    // native handle. A module needs no values file, and one from the platform
+    // store needs no path.
     for constant in &binding.constants {
         let _ = writeln!(
             body,
