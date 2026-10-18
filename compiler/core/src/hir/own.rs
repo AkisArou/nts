@@ -3817,7 +3817,10 @@ mod tests {
         let inert = &program.funcs[0];
         let mut live = super::liveness::analyze(inert);
         let ownership = super::analyze(inert, &program.layouts, &summaries, &mut live);
-        assert_eq!(ownership.of(super::ValueId(0)), super::Ownership::Borrowed);
+        // The unused Param is outside executable block ops, so its local map
+        // needs no ownership at all. The borrowed calling convention is the
+        // consumes(None) assertion above; neither side takes a reference.
+        assert_eq!(ownership.of(super::ValueId(0)), super::Ownership::Unowned);
     }
 
     /// Helpers that return a parameter and are rightly not in
