@@ -144,9 +144,13 @@ then a guard once fixed), `tests/memory/`.
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
   heavy job of yours at a time, a heavy phase started only when `MemAvailable`
-  (`/proc/meminfo`) is at least 14 GB, and paused when it drops under 12. A
-  gate step's memory pre-check is what a neighbour breaks, and a red gate costs
-  its lane a half-hour rerun.
+  (`/proc/meminfo`) is at least 14 GB. Below 12 GB, stop starting new cases
+  (the conformance feeder and gate-pool tokens); let running cases finish, and
+  resume admission at 14 GB. Until the runners hold admission themselves, an
+  agent holds its own next case or phase by hand. Never SIGSTOP timed work:
+  its wall-clock timeout keeps running, so suspension fabricates a timeout.
+  A gate step's memory pre-check is what a neighbour breaks, and a red gate
+  costs its lane a half-hour rerun.
 - Benchmark on the P-cores (CPUs 0–15) only, from a worktree pinned to a
   commit, and compare ratios within one run, never absolute times across runs.
   `nts-bench` links the compiler crates directly: run a plain
