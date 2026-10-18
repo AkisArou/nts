@@ -9,6 +9,8 @@
 // expect-ir: c llvm: count const.handle in resource == 1
 // expect-ir: c llvm: count const.handle in wide == 1
 // expect-ir: c llvm: count const.handle in returnedEquals == 1
+// expect-ir: c llvm: no const.handle in zero
+// expect-ir: c llvm: count const in zero == 1
 import {
   ALL_BITS, BROADCAST, FAILED, HIGH_BIT, NEGATIVE_THREE, NEGATIVE_TWO,
   NUMBER_CONTROL, READONLY, RESOURCE, VOID_POINTER, WIDE, ZERO,
