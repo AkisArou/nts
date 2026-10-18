@@ -30,6 +30,7 @@ mod bound;
 pub mod decompose;
 mod executable_identity;
 pub mod generated;
+mod jvm_attributes;
 pub mod proto;
 pub mod symbols;
 pub mod transform;
@@ -1542,6 +1543,8 @@ impl SemanticSource for TsgoApi {
                     file: path.to_string(),
                     source,
                 })?;
+
+                snapshot.diagnostics.extend(decoded.diagnostics);
 
                 // Nodes from later files must not collide with earlier ones, so
                 // every index is rebased onto the shared arena as it is appended.

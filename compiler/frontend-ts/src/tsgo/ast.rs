@@ -30,7 +30,7 @@
 //! Every offset in this file comes from a subprocess, so every read is checked.
 //! The crate forbids `unsafe`, so there is no unchecked path to reach for.
 
-use nts_diagnostics::{Location, SourceId, Span};
+use nts_diagnostics::{Diagnostic, Location, Severity, SourceId, Span};
 use nts_semantic_schema::{DeclarationModifiers, NodeData, NodeId, NodeKind, NodeRecord, Origin};
 
 /// Protocol version this decoder implements.
@@ -137,6 +137,8 @@ pub struct EncodedSourceFile {
     pub content_hash: [u8; 16],
     /// Nodes in source order. Index 0 is the nil sentinel and is not included.
     pub nodes: Vec<NodeRecord>,
+    /// Binding-annotation errors are source diagnostics, never invalid schema values.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -161,11 +163,13 @@ pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstEr
         data,
     };
 
+    let mut diagnostics = Vec::new();
     let mut nodes = decode_nodes(
         &payload[header.nodes_at..],
         &payload[header.extended_at..header.structured_at],
         file,
         &strings,
+        &mut diagnostics,
     )?;
     rebuild_children(&mut nodes);
     assign_modifiers(&mut nodes);
@@ -173,6 +177,7 @@ pub fn decode(payload: &[u8], file: SourceId) -> Result<EncodedSourceFile, AstEr
     Ok(EncodedSourceFile {
         content_hash: header.content_hash,
         nodes,
+        diagnostics,
     })
 }
 
@@ -345,6 +350,7 @@ fn decode_nodes(
     extended: &[u8],
     file: SourceId,
     strings: &StringTable<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<Vec<NodeRecord>, AstError> {
     if !nodes_bytes.len().is_multiple_of(NODE_SIZE) {
         return Err(AstError::RaggedNodes {
@@ -463,12 +469,54 @@ fn decode_nodes(
             }
         }
 
+        let location = Location {
+            file,
+            span: Span::new(token_start(strings.data, &strings.utf16, raw.pos), raw.end),
+        };
+        let mut native = if carries_native_attributes(kind) {
+            strings.source(raw.pos, raw.end).and_then(native_attributes)
+        } else {
+            None
+        };
+        // File/module tags describe a whole surface; JVM contracts belong to
+        // individual members, so a file's first member cannot annotate its file.
+        if carries_native_attributes(kind)
+            && !matches!(
+                kind,
+                NodeKind::Syntax(
+                    nts_semantic_schema::syntax::SOURCE_FILE
+                        | nts_semantic_schema::syntax::MODULE_DECLARATION
+                )
+            )
+            && let Some(source) = strings.source(raw.pos, raw.end)
+        {
+            match super::jvm_attributes::read(source) {
+                Ok(Some(jvm)) => native.get_or_insert_with(Default::default).jvm = Some(jvm),
+                Ok(None) => {}
+                Err(reason) => {
+                    let declaration = strings
+                        .source(location.span.start, raw.end)
+                        .unwrap_or("declaration")
+                        .lines()
+                        .next()
+                        .unwrap_or("declaration")
+                        .chars()
+                        .take(120)
+                        .collect::<String>();
+                    diagnostics.push(Diagnostic {
+                        severity: Severity::Error,
+                        code: "NTS0005".to_owned(),
+                        message: format!("{reason} on declaration `{declaration}`"),
+                        primary: location,
+                        labels: Vec::new(),
+                    });
+                }
+            }
+        }
+
         nodes.push(NodeRecord {
             kind,
-            origin: Origin::source(Location {
-                file,
-                span: Span::new(token_start(strings.data, &strings.utf16, raw.pos), raw.end),
-            }),
+            origin: Origin::source(location),
             // Shift down by one; encoded 0 means "no parent".
             parent: (raw.parent != 0).then(|| NodeId(raw.parent - 1)),
             children: Vec::new(),
@@ -501,11 +549,7 @@ fn decode_nodes(
             // its accessors, `get title()` and `set title(value)`. And an
             // interface, an Objective-C protocol: `@ntsProtocol
             // NSXMLParserDelegate` on `interface XMLParserDelegate`.
-            native: if carries_native_attributes(kind) {
-                strings.source(raw.pos, raw.end).and_then(native_attributes)
-            } else {
-                None
-            },
+            native,
             data,
             text,
         });
@@ -607,6 +651,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
     let bound_by = leading_tag(source, "@ntsBoundBy");
     let is = leading_tag(source, "@ntsIs");
     let attributes = nts_semantic_schema::NativeAttributes {
+        jvm: None,
         abi,
         no_escape,
         headers,
@@ -652,7 +697,7 @@ fn native_abi(source: &str) -> Option<String> {
     leading_tag(source, "@ntsAbi")
 }
 
-fn leading_tag(mut source: &str, marker: &str) -> Option<String> {
+pub(super) fn leading_tags<'a>(mut source: &'a str, marker: &str) -> Vec<&'a str> {
     let mut tags = Vec::new();
     loop {
         source = source.trim_start();
@@ -683,6 +728,11 @@ fn leading_tag(mut source: &str, marker: &str) -> Option<String> {
     // It keeps the property the join was there for: a repeated `@ntsAbi managed`
     // becomes `managed managed`, still not an ABI anyone declared, so lowering
     // still reports the duplicate rather than honouring one of them.
+    tags
+}
+
+fn leading_tag(source: &str, marker: &str) -> Option<String> {
+    let tags = leading_tags(source, marker);
     (!tags.is_empty()).then(|| tags.join(" "))
 }
 
@@ -1277,6 +1327,32 @@ mod tests {
         assert_eq!(attributes.is.as_deref(), Some("nts_dom_is 5"));
         // A tag is matched whole: `@ntsIsland` is not `@ntsIs`.
         assert!(native_attributes("/** @ntsIsland x */\ninterface A {}").is_none());
+    }
+
+    #[test]
+    fn malformed_jvm_contracts_are_named_source_errors() {
+        let source = "/** @ntsJvm virtual broken */\nfunction visibleName(): void;";
+        let decoded = decode(
+            &payload(
+                &[node(
+                    u32::from(nts_semantic_schema::syntax::FUNCTION_DECLARATION),
+                    0,
+                    u32::try_from(source.len()).unwrap(),
+                    0,
+                    0,
+                )],
+                &[source],
+            ),
+            SourceId(7),
+        )
+        .unwrap();
+        assert_eq!(decoded.diagnostics.len(), 1);
+        let error = &decoded.diagnostics[0];
+        assert_eq!(error.severity, Severity::Error);
+        assert_eq!(error.code, "NTS0005");
+        assert_eq!(error.primary.file, SourceId(7));
+        assert!(error.message.contains("visibleName"));
+        assert!(decoded.nodes[0].native.is_none());
     }
 
     #[test]

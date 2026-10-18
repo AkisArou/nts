@@ -56,8 +56,9 @@ use crate::origin::Origin;
 /// compiler-defined declaration a call names (`@ntsIntrinsic gobject.signal`).
 /// 43: `bound_by` and `is`, a declaration bound by delegation and its
 /// `instanceof` test (`@ntsBoundBy`, `@ntsIs`), and `bound_types`, the types
-/// those bindings resolve to.
-pub const SCHEMA_VERSION: u32 = 43;
+/// those bindings resolve to. 44: declaration-attached JVM contracts and their
+/// three-way parameter-retention evidence.
+pub const SCHEMA_VERSION: u32 = 44;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -740,9 +741,24 @@ pub struct NodeRecord {
     pub text: Option<String>,
 }
 
+/// A declaration's JVM invocation contract, supplied by `nts bind` or an author.
+/// Descriptor grammar is interpreted by the JVM binding layer, not the frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JvmAttributes {
+    /// `@ntsJvm <kind> <owner.member:descriptor>`, without re-deriving the ABI
+    /// from TypeScript's lossy numeric and generic types.
+    pub binding: String,
+    /// None means unanalysed: assume retention. Some([]) is the explicit
+    /// `@ntsJvmKeeps none` proof; Some(indices) names retained parameters.
+    pub keeps: Option<Vec<u32>>,
+}
+
 /// Explicit native contracts from leading declaration documentation.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NativeAttributes {
+    /// A JVM member contract attached to this declaration.
+    #[serde(default)]
+    pub jvm: Option<JvmAttributes>,
     /// Unknown and duplicate ABI tags survive for lowering to diagnose.
     pub abi: Option<String>,
     /// None is unclassified; Some(empty) is a malformed explicit annotation.
