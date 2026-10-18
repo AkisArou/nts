@@ -2,7 +2,7 @@
 // NTS_TEST_IOS_RUNNER selects the saved old helper for the negative control.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -43,7 +43,7 @@ if (args[1] === "bootstatus") {
   if (mode === "missing") { console.error("Invalid device: " + args[2]); process.exit(148); }
   if (mode === "boot-77") process.exit(77);
   if (mode === "boot-timeout") await new Promise((resolve) => setTimeout(resolve, 60_000));
-  if (mode === "slow-ready") await new Promise((resolve) => setTimeout(resolve, 1_200));
+  if (mode === "slow-ready") await new Promise((resolve) => setTimeout(resolve, 3_200));
   writeFileSync(process.env.TEST_DIR + "/state", "Booted");
   console.log("Device is Booted");
 } else {
@@ -75,7 +75,7 @@ if (args[1] === "bootstatus") {
     state: () => readFileSync(join(dir, "state"), "utf8"),
     events: () => readFileSync(join(dir, "events"), "utf8").trim().split("\n").map((line) => JSON.parse(line) as string[]),
     run: (args = ["--reachable"], extra: Record<string, string> = {}) => spawnSync("bash", [runner, ...args], {
-      encoding: "utf8", timeout: 8_000,
+      encoding: "utf8", timeout: 12_000,
       env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_CACHE_HOME: dir,
         NTS_APPLE_SSH: "test-mac", NTS_IOS_DEVICE: "Test Phone", TEST_DIR: dir,
         TEST_EVENTS: join(dir, "events"), TEST_MODE: mode, ...extra },
@@ -128,7 +128,7 @@ test("an unreachable Mac is the sole 77 control and never tries to boot", () => 
 test("readiness does not consume the application budget", () => {
   const f = fixture("slow-ready");
   try {
-    const p = f.run([f.bundle], { NTS_IOS_READY_TIMEOUT: "4", NTS_IOS_TIMEOUT: "1" });
+    const p = f.run([f.bundle], { NTS_IOS_READY_TIMEOUT: "8", NTS_IOS_TIMEOUT: "3" });
     assert.equal(p.status, 0, p.stderr);
     assert.equal(p.stdout, "golden application output\n");
   } finally { f.clean(); }
@@ -161,3 +161,43 @@ for (const mode of ["ok", "install-fails", "app-fails", "boot-fails"] as const) 
     } finally { f.clean(); }
   });
 }
+
+test("successful interop retains only the named stage clocks", () => {
+  const cache = join(homedir(), ".cache", "nts-tests");
+  mkdirSync(cache, { recursive: true });
+  const dir = mkdtempSync(join(cache, "ios-clock-log-"));
+  const source = fileURLToPath(new URL("../gate/", import.meta.url));
+  const gate = join(dir, "tooling", "gate");
+  const clocks = [
+    "run-ios: readiness (Test Phone) exit 0 after 3s",
+    "run-ios: install exit 0 after 1s",
+    "run-ios: launch-and-app exit 0 after 2s",
+  ];
+  try {
+    mkdirSync(gate, { recursive: true });
+    copyFileSync(process.env.NTS_TEST_INTEROP_GATE ?? join(source, "all.sh"), join(gate, "all.sh"));
+    for (const name of ["costs.mjs", "token.sh"]) copyFileSync(join(source, name), join(gate, name));
+    chmodSync(join(gate, "token.sh"), 0o755);
+    for (const name of ["ios-clock", "native-control"]) {
+      const project = join(dir, "tests", "interop", name);
+      mkdirSync(project, { recursive: true });
+      const output = name === "ios-clock" ? [
+        ...clocks, "run-ios: install begin", "application stdout",
+        "run-ios: install exit zero after 1s", "run-ios: install exit 0 after 1s trailing",
+        "run-ios: unrelated exit 0 after 1s",
+      ] : ["native control"];
+      writeFileSync(join(project, "build.sh"), `#!/bin/sh\nprintf '%s\\n' ${output.map(quote).join(" ")}\n`);
+    }
+    const p = spawnSync("sh", [join(gate, "all.sh"), "--call", "interop"], {
+      encoding: "utf8", timeout: 12_000,
+      env: { ...process.env, TMPDIR: join(dir, "tmp"), NTS_INTEROP_PROJECTS: "ios-clock native-control",
+        NTS_INTEROP_LOCAL_LANES: "1", NTS_INTEROP_LOCK: join(dir, "interop.lock"),
+        NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_COSTS_DIR: join(dir, "costs") },
+    });
+    assert.equal(p.status, 0, p.stdout + p.stderr);
+    for (const clock of clocks) assert.ok(p.stdout.includes(`    ${clock}\n`), p.stdout);
+    assert.equal(p.stdout.match(/^    run-ios:/gm)?.length, 3, p.stdout);
+    assert.doesNotMatch(p.stdout, /begin|application stdout|exit zero|trailing|unrelated/);
+    assert.match(p.stdout, /2 built and ran, 0 skipped/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

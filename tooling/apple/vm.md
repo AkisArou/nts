@@ -70,6 +70,8 @@ from losing the session.
 
 ## Before an Apple landing
 
+Start each VM under `systemd-run --user --scope -p MemorySwapMax=0` so host swapping cannot stall the guest.
+
 Boot the VM before queueing, confirm `tooling/apple/run.sh --reachable` and
 `--gui`, and keep it running through the Apple interop arms. For iOS, also run
 `tooling/apple/run-ios.sh --reachable`: it boots the configured `NTS_IOS_DEVICE`

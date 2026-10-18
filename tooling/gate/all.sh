@@ -2440,7 +2440,10 @@ interop() {
                   why=$(printf '%s' "$output" | grep -m1 SKIP)
                   printf '  %-16s skipped: %s\n' "$project" "$why"
                   printf '%s\n' "$why" >> "$reasons" ;;
-          *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project" ;;
+          *) ran=$((ran + 1)); printf '  %-16s ok\n' "$project"
+             # Retain the diagnostic clocks on success without flooding the
+             # gate log with the application's output or simulator progress.
+             printf '%s\n' "$output" | awk '/^run-ios: (readiness \(.*\)|install|launch-and-app) exit [0-9]+ after [0-9]+s$/ { print "    " $0 }' ;;
         esac ;;
       failed)
         failed=$((failed + 1))
