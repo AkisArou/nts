@@ -2,9 +2,9 @@
 //!
 //! `nts_refused` and `nts_assertion_failed` end a path the compiler could not
 //! decide statically: a construct this compiler refuses, or an input that fails
-//! a representation assertion. Both report through the host's named input
-//! refusal with the reason the lowering gave, never an answer node would not
-//! give. `nts_bool_to_string` and `nts_value_to_string` are `String(value)`
+//! a representation assertion. Both preserve the lowering's reason, with a
+//! distinct host error kind for the compiler stop and the input decline.
+//! `nts_bool_to_string` and `nts_value_to_string` are `String(value)`
 //! for a boolean and for an erased value; `nts_value_inspect` is what the
 //! console prints for an erased value.
 use crate::{
@@ -101,7 +101,11 @@ pub(crate) fn call(
     }
     match helper {
         Helper::Refused | Helper::AssertionFailed => {
-            let target = contract::decline(b.m)?;
+            let target = if helper == Helper::Refused {
+                contract::compiler_stop(b.m)?
+            } else {
+                contract::decline(b.m)?
+            };
             strings::constant(b, &b.func.name.clone());
             b.load(arg)?;
             b.call(target);

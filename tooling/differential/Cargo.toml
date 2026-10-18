@@ -18,6 +18,7 @@ nts-core.workspace = true
 nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
 nts-semantic-schema.workspace = true
+serde_json.workspace = true
 xxhash-rust.workspace = true
 
 [lints]

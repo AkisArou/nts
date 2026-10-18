@@ -10,7 +10,8 @@ let cases = 0;
 for (const [name, why] of [['refused', 'a thenable no job can call'], ['assertionFailed', 'an input outside the asserted representation']]) {
   assert.equal(wasm[name](-2), -2); cases++;
   assert.equal(wasm[name](0), 0); cases++;
-  assert.throws(() => wasm[name](1), e => e instanceof WasmInputDecline && e.message.includes(name) && e.message.includes(why), name);
+  const kind = name === 'refused' ? 'compiler-stop' : undefined;
+  assert.throws(() => wasm[name](1), e => e instanceof WasmInputDecline && e.code === 'NTS5001' && e.kind === kind && e.reason === why && e.message.includes(name) && e.message.includes(why), name);
   cases++;
 }
 console.log(JSON.stringify({ cases }));

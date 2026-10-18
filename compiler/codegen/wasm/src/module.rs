@@ -100,6 +100,7 @@ pub(crate) enum FuncKey {
     Cold(String, usize),
     Raising(crate::raising::Helper),
     DeclineInput,
+    CompilerStop,
     ValueText,
     /// A property key as a null receiver's `TypeError` names it, or null.
     AccessKey,

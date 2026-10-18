@@ -369,6 +369,10 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
             function(&[STRING, STRING], None),
             "(name, reason) => { throw new WasmInputDecline(name, reason, 'operation in'); }".into(),
         ),
+        "compilerStop" => (
+            function(&[STRING, STRING], None),
+            "(name, reason) => { const stopped = new WasmInputDecline(name, reason, 'operation in'); stopped.kind = 'compiler-stop'; throw stopped; }".into(),
+        ),
         // The refusal carries what the object reports itself as, for a host
         // ending the program to say as C's runtime does (run-program.ts).
         "uncaughtDecline" => (

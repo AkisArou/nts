@@ -563,6 +563,7 @@ pub fn check(
             &snapshot.sources,
             &testable,
             &mut refused,
+            &mut aborts,
         )?,
         Backend::C | Backend::Llvm => run_native(
             dir,
@@ -2197,21 +2198,12 @@ fn growth(complaint: &str) -> Option<String> {
 /// the Wasm backend -- so both runs ask the same questions in the same order.
 ///
 /// A case that throws is `threw` (or `rejected`), whatever was thrown: neither
-/// side's value is compared. Under Wasm a case the module *declines* by name
-/// (NTS5001) is `refused` instead, as a native stop on that case is; an
-/// uncaught object the program made carries `uncaught` and is its own throw.
+/// side's value is compared. Under Wasm an input-contract decline is `refused`;
+/// a compiler stop or trap is an abort with its original message. An explicit
+/// error kind marks a compiler stop; its reason is never parsed. An uncaught
+/// object the program made carries `uncaught` and is its own throw.
 fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
-    let stopped = match engine {
-        Engine::Node => {
-            "function stopped(name, at, error, word) { emit(`${name} ${at} ${word}\\n`); }\n"
-        }
-        Engine::Wasm => {
-            "function stopped(name, at, error, word) {\n\
-             \x20 const declined = error?.code === \"NTS5001\" && !error.uncaught;\n\
-             \x20 emit(`${name} ${at} ${declined ? \"refused\" : word}\\n`);\n\
-             }\n"
-        }
-    };
+    let load = engine.load_module(import);
     let mut driver = format!(
         "import {{ openSync, writeSync, closeSync }} from \"node:fs\";\n\
          // Results to their own file, as on the compiled side: stdout is the\n\
@@ -2219,7 +2211,7 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
          // mistaken for a case.\n\
          const resultsFd = openSync(process.env.NTS_DIFF_RESULTS, \"a\");\n\
          function emit(line) {{ writeSync(resultsFd, line); }}\n\
-         const m = await import({:?});\n\
+         {load}\
          const view = new DataView(new ArrayBuffer(8));\n\
          function showString(name, at, s) {{\n\
          \x20 // The compiled side answers `undefined` for an absent string, and\n\
@@ -2240,10 +2232,9 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
          \x20 view.setFloat64(0, n);\n\
          \x20 const bits = view.getBigUint64(0).toString(16).padStart(16, \"0\");\n\
          \x20 emit(`${{name}} ${{at}} ${{bits}}\\n`);\n\
-         }}\n",
-        import.to_owned()
+         }}\n"
     );
-    driver.push_str(stopped);
+    driver.push_str(engine.stop_handler());
     for (one, at, tuple) in interleaved(testable) {
         // A method lowers to `Class#method`, which is not an export.
         let exported = one.name.replace('#', "__");
@@ -2357,6 +2348,7 @@ fn run_wasm(
     sources: &[nts_diagnostics::SourceFile],
     testable: &[Testable],
     refused: &mut Vec<usize>,
+    aborts: &mut Vec<String>,
 ) -> Result<Run> {
     let mut program = program.clone();
     let called: std::collections::HashSet<&str> =
@@ -2416,17 +2408,12 @@ fn run_wasm(
         .arg(&path)
         .output()
         .context("running the Wasm module under node")?;
-    let mut results = Vec::new();
-    for (at, line) in node_results("wasm", &results_path, &run)?
-        .into_iter()
-        .enumerate()
-    {
-        if line.ends_with(" refused") {
-            refused.push(at);
-        } else {
-            results.push(line);
-        }
-    }
+    let results = wasm_results(
+        node_results("wasm", &results_path, &run)?,
+        testable,
+        refused,
+        aborts,
+    )?;
     Ok(Run {
         results,
         output: lines(&run.stdout),
@@ -2434,11 +2421,87 @@ fn run_wasm(
     })
 }
 
+/// Read the driver's own results channel. A compiler abort is not an input
+/// decline, even if earlier cases answered or a later case also throws in node.
+/// JSON keeps a reason containing quotes or newlines on one physical line.
+fn wasm_results(
+    lines: Vec<String>,
+    testable: &[Testable],
+    refused: &mut Vec<usize>,
+    aborts: &mut Vec<String>,
+) -> Result<Vec<String>> {
+    let expected = results(testable);
+    let mut collected = Vec::new();
+    let mut at = 0;
+    for line in lines {
+        if let Some(outcome) = expected
+            .get(at)
+            .and_then(|prefix| line.strip_prefix(prefix))
+        {
+            if let Some(message) = outcome.strip_prefix("abort ") {
+                aborts.push(serde_json::from_str(message).context("reading a Wasm compiler stop")?);
+                // Align node's answer, just as collect_restarting does for a
+                // native abort. Report.aborts makes the check fail regardless.
+                refused.push(at);
+            } else if outcome == "refused" {
+                refused.push(at);
+            } else {
+                collected.push(line);
+            }
+            at += 1;
+        } else if let Some(message) = line.strip_prefix("abort ") {
+            // The initializer stopped before any exported case was called.
+            aborts.push(serde_json::from_str(message).context("reading a Wasm initializer stop")?);
+        } else {
+            bail!("the Wasm driver wrote an unexpected result: {line}");
+        }
+    }
+    Ok(collected)
+}
+
 /// Which engine a driver's import is run on.
 #[derive(Clone, Copy)]
 enum Engine {
     Node,
     Wasm,
+}
+
+impl Engine {
+    fn stop_handler(self) -> &'static str {
+        match self {
+            Self::Node => {
+                "function stopped(name, at, error, word) { emit(`${name} ${at} ${word}\\n`); }\n"
+            }
+            Self::Wasm => {
+                "function compilerStop(error) {\n\
+                 \x20 if (error?.kind === \"compiler-stop\") return `nts: refused at run time: ${error.reason}`;\n\
+                 \x20 if (error instanceof WebAssembly.RuntimeError) return `nts: wasm trap: ${error.message}`;\n\
+                 \x20 return null;\n\
+                 }\n\
+                 function stopped(name, at, error, word) {\n\
+                 \x20 const why = compilerStop(error);\n\
+                 \x20 if (why !== null) { emit(`${name} ${at} abort ${JSON.stringify(why)}\\n`); return; }\n\
+                 \x20 const declined = error?.code === \"NTS5001\" && !error.uncaught;\n\
+                 \x20 emit(`${name} ${at} ${declined ? \"refused\" : word}\\n`);\n\
+                 }\n"
+            }
+        }
+    }
+
+    fn load_module(self, import: &str) -> String {
+        match self {
+            Self::Node => format!("const m = await import({import:?});\n"),
+            Self::Wasm => format!(
+                "let m;\n\
+                 try {{ m = await import({import:?}); }} catch (error) {{\n\
+                 \x20 const why = compilerStop(error);\n\
+                 \x20 if (why === null) throw error;\n\
+                 \x20 emit(`abort ${{JSON.stringify(why)}}\\n`);\n\
+                 \x20 emit(\"done 0\\n\"); closeSync(resultsFd); process.exit(1);\n\
+                 }}\n"
+            ),
+        }
+    }
 }
 
 fn run_node(dir: &Utf8Path, entry: &Utf8Path, testable: &[Testable]) -> Result<Run> {
@@ -2752,6 +2815,54 @@ mod wasm_compiler_stop_guard {
 
     const REASON: &str = "`Example#method` was refused: the original lowering reason";
 
+    fn case(name: &str) -> Testable {
+        Testable {
+            name: name.to_owned(),
+            returns: HirType::NUMBER,
+            result_absent: Absent::Impossible,
+            params: Vec::new(),
+        }
+    }
+
+    fn directory(label: &str) -> Scratch {
+        let path = Utf8PathBuf::from_path_buf(
+            std::env::temp_dir().join(format!("nts-wasm-stop-{label}-{}", std::process::id())),
+        )
+        .unwrap();
+        std::fs::create_dir_all(&path).unwrap();
+        Scratch::holding(path)
+    }
+
+    fn run_driver(
+        dir: &Utf8Path,
+        source: &str,
+        cases: &[Testable],
+        refused: &mut Vec<usize>,
+        aborts: &mut Vec<String>,
+    ) -> Vec<String> {
+        let module = dir.join("wrapper.mjs");
+        std::fs::write(&module, source).unwrap();
+        let path = dir.join("driver.mjs");
+        std::fs::write(
+            &path,
+            driver(&format!("file://{module}"), cases, Engine::Wasm),
+        )
+        .unwrap();
+        let results = dir.join("driver-results.txt");
+        let run = without_colour(bounded("node"))
+            .env("NTS_DIFF_RESULTS", results.as_str())
+            .arg(path)
+            .output()
+            .unwrap();
+        wasm_results(
+            node_results("wasm", &results, &run).unwrap(),
+            cases,
+            refused,
+            aborts,
+        )
+        .unwrap()
+    }
+
     fn program() -> hir::Program {
         let origin = nts_semantic_schema::Origin::source(nts_diagnostics::Location {
             file: nts_diagnostics::SourceId(0),
@@ -2818,42 +2929,176 @@ mod wasm_compiler_stop_guard {
 
     #[test]
     fn a_wasm_named_runtime_stop_is_a_compiler_stop_with_its_message() {
-        let dir = Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-wasm-compiler-stop-{}", std::process::id())),
-        )
-        .unwrap();
-        std::fs::create_dir_all(&dir).unwrap();
+        let scratch = directory("named");
+        let dir = &scratch.path;
         let program = program();
-        let case = |name: &str| Testable {
-            name: name.to_owned(),
-            returns: HirType::NUMBER,
-            result_absent: Absent::Impossible,
-            params: Vec::new(),
-        };
         // The emitter and the runner work: the same program's ordinary export
         // answers, with no skipped input, before the named-stop subject runs.
         let mut refused = Vec::new();
-        let control = run_wasm(&dir, &program, &[], &[case("control")], &mut refused).unwrap();
+        let mut aborts = Vec::new();
+        let control = run_wasm(
+            dir,
+            &program,
+            &[],
+            &[case("control")],
+            &mut refused,
+            &mut aborts,
+        )
+        .unwrap();
         assert_eq!(control.results.len(), 1);
-        assert!(refused.is_empty());
-        let result = run_wasm(&dir, &program, &[], &[case("stopped")], &mut refused);
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(refused.is_empty() && aborts.is_empty());
+        let cases = [case("control"), case("stopped")];
+        let result = run_wasm(dir, &program, &[], &cases, &mut refused, &mut aborts).unwrap();
         // C's corresponding stop is a compiler defect, never an input decline.
-        assert!(matches!(
-            stopped_with(
-                Some(134),
-                None,
-                &format!("nts: refused at run time: {REASON}")
-            ),
-            Stopped::Defect(_)
-        ));
-        let Err(error) = result else {
-            panic!("Wasm swallowed a named compiler stop as an input decline: {refused:?}");
+        let message = format!("nts: refused at run time: {REASON}");
+        assert_eq!(
+            stopped_with(Some(134), None, &message),
+            Stopped::Defect(message.clone())
+        );
+        assert_eq!(aborts, [message]);
+        assert_eq!(refused, [1]);
+        assert_eq!(
+            result.results.len(),
+            1,
+            "the earlier control still answered"
+        );
+        let report = Report {
+            checked: 1,
+            aborts,
+            ..Report::default()
         };
         assert!(
-            error.to_string().contains(REASON),
-            "the compiler stop lost its reason: {error}"
+            !report.agreed(),
+            "a compiler stop cannot count as agreement"
         );
+    }
+
+    #[test]
+    fn an_assertion_declines_but_a_wasm_trap_aborts() {
+        let scratch = directory("assertion-trap");
+        let mut program = program();
+        let mut asserted = program.funcs[1].clone();
+        asserted.name = "asserted".into();
+        let OpKind::Call { callee, .. } = &mut asserted.values[1].kind else {
+            panic!("fixture call");
+        };
+        *callee = Callee::External("nts_assertion_failed".into());
+        let mut trapped = asserted.clone();
+        trapped.name = "trapped".into();
+        trapped.values.clear();
+        trapped.blocks[0].ops.clear();
+        for f in [asserted, trapped] {
+            program.public_api.push((f.name.clone(), f.name.clone()));
+            program.funcs.push(f);
+        }
+        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
+        let result = run_wasm(
+            &scratch.path,
+            &program,
+            &[],
+            &[case("control"), case("asserted"), case("trapped")],
+            &mut refused,
+            &mut aborts,
+        )
+        .unwrap();
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(refused, [1, 2]);
+        assert_eq!(
+            aborts.len(),
+            1,
+            "the representation assertion is not a compiler abort"
+        );
+        assert!(aborts[0].starts_with("nts: wasm trap: ") && aborts[0].contains("unreachable"));
+    }
+
+    #[test]
+    fn an_async_compiler_stop_keeps_its_reason_and_source_throws_stay_throws() {
+        let scratch = directory("async");
+        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
+        run_wasm(
+            &scratch.path,
+            &program(),
+            &[],
+            &[case("control"), case("stopped")],
+            &mut refused,
+            &mut aborts,
+        )
+        .unwrap();
+        refused.clear();
+        aborts.clear();
+        let mut cases = [
+            case("control"),
+            case("sourceThrow"),
+            case("sourceReject"),
+            case("asyncStop"),
+        ];
+        for at in [2, 3] {
+            cases[at].returns =
+                HirType::Managed(hir::ManagedType::Promise(Box::new(HirType::NUMBER)));
+        }
+        let result = run_driver(
+            &scratch.path,
+            "import { control, stopped } from './wasm/program.mjs';\n\
+             export { control };\n\
+             export function sourceThrow() { throw 17; }\n\
+             export async function sourceReject() { throw 17; }\n\
+             export async function asyncStop() { return stopped(); }\n",
+            &cases,
+            &mut refused,
+            &mut aborts,
+        );
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[1], "sourceThrow 0 threw");
+        assert_eq!(result[2], "sourceReject 0 rejected");
+        assert_eq!(refused, [3]);
+        assert_eq!(aborts, [format!("nts: refused at run time: {REASON}")]);
+    }
+
+    #[test]
+    fn a_compiler_stop_while_importing_is_an_abort_not_a_short_clean_run() {
+        let scratch = directory("init");
+        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
+        run_wasm(
+            &scratch.path,
+            &program(),
+            &[],
+            &[case("control"), case("stopped")],
+            &mut refused,
+            &mut aborts,
+        )
+        .unwrap();
+        refused.clear();
+        aborts.clear();
+        let result = run_driver(
+            &scratch.path,
+            "import { stopped } from './wasm/program.mjs'; stopped();\n",
+            &[case("control")],
+            &mut refused,
+            &mut aborts,
+        );
+        assert!(result.is_empty() && refused.is_empty());
+        assert_eq!(aborts, [format!("nts: refused at run time: {REASON}")]);
+    }
+
+    #[test]
+    fn a_compiler_stop_reason_cannot_write_case_records() {
+        let scratch = directory("reason");
+        let mut program = program();
+        let reason = "a \"quoted\" reason\ncontrol 0 nan\ndone 99\nλ";
+        program.funcs[1].values[0].kind = OpKind::ConstString(reason.into());
+        let (mut refused, mut aborts) = (Vec::new(), Vec::new());
+        let result = run_wasm(
+            &scratch.path,
+            &program,
+            &[],
+            &[case("control"), case("stopped")],
+            &mut refused,
+            &mut aborts,
+        )
+        .unwrap();
+        assert_eq!(result.results.len(), 1);
+        assert_eq!(refused, [1]);
+        assert_eq!(aborts, [format!("nts: refused at run time: {reason}")]);
     }
 }
 

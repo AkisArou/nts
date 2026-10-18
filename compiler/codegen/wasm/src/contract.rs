@@ -16,16 +16,46 @@ pub(crate) const IMPORT: &str = "inputDecline";
 /// it clears any pending raise, so no stale state survives into a later call,
 /// and reports the named refusal through the host.
 pub(crate) fn decline(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    stop(m, Kind::Input)
+}
+
+/// A construct the compiler cannot execute, rather than an input that violates
+/// the compiled representation's contract. The host keeps that distinction.
+pub(crate) fn compiler_stop(m: &mut Builder<'_>) -> Result<Func, Failure> {
+    stop(m, Kind::Compiler)
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Input,
+    Compiler,
+}
+
+fn stop(m: &mut Builder<'_>, kind: Kind) -> Result<Func, Failure> {
+    let (key, symbol, import_key, import) = match kind {
+        Kind::Input => (
+            FuncKey::DeclineInput,
+            "contract.decline",
+            FuncKey::InputDecline,
+            IMPORT,
+        ),
+        Kind::Compiler => (
+            FuncKey::CompilerStop,
+            "contract.compilerStop",
+            FuncKey::Host("compilerStop"),
+            "compilerStop",
+        ),
+    };
     m.helper(
-        FuncKey::DeclineInput,
-        "contract.decline",
+        key,
+        symbol,
         vec![strings::STRING, strings::STRING],
         None,
-        |m| {
+        move |m| {
             let report = m.import(
-                FuncKey::InputDecline,
+                import_key,
                 "nts:host/v1",
-                IMPORT,
+                import,
                 vec![strings::STRING, strings::STRING],
                 None,
                 false,

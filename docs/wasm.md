@@ -144,9 +144,9 @@ them only as quoted export names, and every local it declares is the glue's.
   output the C backend's matches line for line. A refusal is worded by each
   backend, and C's aborts (134).
 - **No pending raise survives an exit to the host.** An uncaught throw and the
-  single input-refusal helper clear the state. In a module that uses the
-  raising helpers, every host entry's return also tests the flag and throws a
-  pending raise uncaught. Lowering never leaves one there; if it ever did, the
+  input-refusal and compiler-stop helpers clear the state. In a module that
+  uses the raising helpers, every host entry's return also tests the flag and
+  throws a pending raise uncaught. Lowering never leaves one there; if it ever did, the
   exception would surface as the throw it is rather than be lost or seen by a
   later call. The check is emitted only where some body records a raise
   (`nts_raise`): a module that only throws uncaught, or never throws, pays
@@ -511,9 +511,13 @@ tell them apart.
 `values.rs` holds the helpers a lowering leaves for run time.
 - **`nts_refused` and `nts_assertion_failed` end a path** the compiler could
   decide only when a value arrived: a construct this compiler refuses, or an
-  input outside an asserted representation. Both report through the host's
-  named input refusal (`WasmInputDecline`), naming the function and the
-  lowering's reason, and never answer.
+  input outside an asserted representation. Both report a `WasmInputDecline`,
+  retaining `code: 'NTS5001'`, the function and the original `reason`. Its
+  structured `kind: 'compiler-stop'` marks only `nts_refused`; assertion and
+  bounds errors keep their original shape. The differential records a compiler
+  stop in its aborts with C's `nts: refused at run time: <reason>` text, so it fails
+  even after earlier cases answered. Neither the glue nor the driver guesses
+  a stop's kind from its reason text. Both kinds never answer.
 - **`nts_bool_to_string`** selects between two literals at the call.
 - **`nts_value_to_string`** is `String(v)` of an erased value, by its tag:
   `undefined`, `null`, `true` and `false` by name, a number by
