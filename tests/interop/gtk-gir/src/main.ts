@@ -113,6 +113,7 @@ import {
   g_key_file_get_integer,
   g_free,
   g_malloc0,
+  g_memdup2,
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
@@ -334,6 +335,11 @@ function main(): void {
   const roundTrip = g_object_get_data(application, "nts-raw-pointer");
   const pointerByte = roundTrip === null ? -1 : bytesFrom(roundTrip, 1)[0];
   console.log("pointer=" + String(roundTrip === raw) + ":" + String(pointerByte));
+  // The same raw address is accepted by a const void* input. The copied
+  // address stays raw too, so the caller supplies its documented g_free.
+  const copy = g_memdup2(raw, 1);
+  console.log("const-pointer=" + String(copy !== null && bytesFrom(copy, 1)[0] === 0));
+  g_free(copy);
   g_object_set_data(application, "nts-raw-pointer", null);
   g_free(raw);
   let ticks = 0;

@@ -2731,31 +2731,11 @@ impl<'a> Mapper<'a> {
             }
             return self.typed(&aliased);
         }
-        // `gpointer` is C's `void *`: any native pointer, which a binding
-        // spells `object` and the compiler checks is not a managed one.
-        // Results use exact raw void pointers; input mappings stay as before.
-        if name == "gpointer"
-            && param.direction == Direction::In
-            && c_type != "gconstpointer"
-            && !c_type.starts_with("const")
-        {
-            return Ok(Mapped {
-                shape: Shape::Other,
-                ts: if param.nullable {
-                    "object | null"
-                } else {
-                    "object"
-                }
-                .to_owned(),
-                c: Type::Pointer(Pointee::Void),
-            });
-        }
+        // Raw addresses use the same exact pointer vocabulary in every
+        // direction. The former `object` input already refused managed values
+        // at lowering; spelling Ptr/ConstPtr makes that contract visible to TS.
         if name == "gpointer" || name == "gconstpointer" {
-            return if param.direction == Direction::In {
-                Err(Reason::Gpointer)
-            } else {
-                self.void_pointer(param)
-            };
+            return self.void_pointer(param);
         }
         // C99's `bool`, which GIR's scanner reports as `gboolean` -- an `int`
         // -- although the ABI is one byte. `c:type` says which it is.
@@ -4056,6 +4036,9 @@ mod tests {
             void raw_optional(gconstpointer *slot); void raw_inout(gpointer *slot);
             void raw_bad_header(gconstpointer *slot); void raw_bad_depth(gpointer **slot);
             void raw_input(gpointer value); void raw_const_input(gconstpointer value);
+            void raw_nullable_input(gpointer value); void raw_legacy_input(gconstpointer value);
+            void raw_optional_input(gpointer value); void raw_bad_input(gconstpointer value);
+            void raw_deep_input(gpointer *value);
         ",
         )
         .expect("header");
@@ -4102,6 +4085,16 @@ mod tests {
             ("bad_depth", "gpointer", "gpointer**", "direction=\"out\""),
             ("input", "gpointer", "gpointer", ""),
             ("const_input", "gconstpointer", "gconstpointer", ""),
+            ("nullable_input", "gpointer", "void*", "nullable=\"1\""),
+            (
+                "legacy_input",
+                "gconstpointer",
+                "void const*",
+                "allow-none=\"1\"",
+            ),
+            ("optional_input", "gpointer", "gpointer", "optional=\"1\""),
+            ("bad_input", "gpointer", "gpointer", ""),
+            ("deep_input", "gpointer", "gpointer*", ""),
         ] {
             let _ = writeln!(
                 xml,
@@ -4155,7 +4148,25 @@ mod tests {
             function("raw_inout").parameters[0].1.ts,
             "Ptr<Ptr<void> | null>"
         );
-        assert_eq!(function("raw_input").parameters[0].1.ts, "object");
+        assert_eq!(function("raw_input").parameters[0].1.ts, "Ptr<void>");
+        assert_eq!(
+            function("raw_const_input").parameters[0].1.ts,
+            "ConstPtr<void>"
+        );
+        assert_eq!(
+            function("raw_nullable_input").parameters[0].1.ts,
+            "Ptr<void> | null"
+        );
+        assert_eq!(
+            function("raw_legacy_input").parameters[0].1.ts,
+            "ConstPtr<void> | null"
+        );
+        // Optionality is distinct from GIR value nullability, as before.
+        assert_eq!(
+            function("raw_optional_input").parameters[0].1.ts,
+            "Ptr<void>"
+        );
+        assert_eq!(function("raw_bad_input").parameters[0].1.ts, "Ptr<void>");
         assert_eq!(function("raw_slot").no_escape, ["slot"]);
         // One difference: metadata says the same slot, but the header makes
         // its pointee const. Mapping alone accepts it; the final check refuses.
@@ -4167,13 +4178,13 @@ mod tests {
             binding
                 .refused
                 .iter()
-                .any(|(n, r)| n == "raw_const_input" && matches!(r, Reason::Gpointer))
+                .any(|(n, r)| n == "raw_bad_depth" && matches!(r, Reason::PointerDepth(_)))
         );
         assert!(
             binding
                 .refused
                 .iter()
-                .any(|(n, r)| n == "raw_bad_depth" && matches!(r, Reason::PointerDepth(_)))
+                .any(|(n, r)| n == "raw_deep_input" && matches!(r, Reason::PointerDepth(_)))
         );
         check::against_headers(&mut binding, &[format!("-I{}", dir.display())])
             .expect("header check");
@@ -4182,6 +4193,12 @@ mod tests {
                 .refused
                 .iter()
                 .any(|(n, r)| n == "raw_bad_header" && matches!(r, Reason::Header(_)))
+        );
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "raw_bad_input" && matches!(r, Reason::Header(_)))
         );
         let text = emit::declarations(&binding, "test");
         assert!(
