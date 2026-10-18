@@ -80401,6 +80401,24 @@ impl<'a> FuncBuilder<'a> {
         Err(self.unsupported(at, "a shorthand naming nothing in scope"))
     }
 
+    /// A declared pointer constant in its admitted native representation.
+    fn native_constant(
+        &mut self,
+        id: NodeId,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> Option<ValueId> {
+        let (bits, ty) = self.module.native_constants.get(&symbol.0).cloned()?;
+        // Admission proved the declaration includes null for zero. Keep
+        // that absence as the existing typed null, with no integer form.
+        let constant = if bits == 0 {
+            OpKind::ConstNull
+        } else {
+            OpKind::ConstHandle(bits)
+        };
+        let origin = self.origin(id);
+        Some(self.push(constant, ty, origin))
+    }
+
     /// Everything a name can denote, keyed by the symbol rather than by the
     /// node that spells it.
     ///
@@ -80462,17 +80480,10 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_accessor_on(id, receiver, window, &getter, None);
             }
         }
-        let origin = self.origin(id);
-        if let Some((bits, ty)) = self.module.native_constants.get(&symbol.0).cloned() {
-            // Admission proved the declaration includes null for zero. Keep
-            // that absence as the existing typed null, with no integer form.
-            let constant = if bits == 0 {
-                OpKind::ConstNull
-            } else {
-                OpKind::ConstHandle(bits)
-            };
-            return Ok(self.push(constant, ty, origin));
+        if let Some(value) = self.native_constant(id, symbol) {
+            return Ok(value);
         }
+        let origin = self.origin(id);
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
             // **At the name's own representation, and it was always a float.**
             // `constant_value` folds `true` to `1.0` -- correct, since "a
