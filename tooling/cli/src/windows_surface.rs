@@ -123,7 +123,7 @@ impl Binder for WindowsPlatform {
         format!(
             "windows winrt {} winappsdk {} win32 {} {named}",
             winrt::WINRT_METADATA_VERSION,
-            winrt::WINAPPSDK_VERSION,
+            winrt::winappsdk_version(),
             bind_winmd::WIN32_METADATA_VERSION
         )
     }

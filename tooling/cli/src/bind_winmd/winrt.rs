@@ -37,22 +37,39 @@ pub(crate) const WINRT_METADATA_VERSION: &str = "10.0.28000.2705";
 /// The Windows App SDK release whose metadata `Microsoft.*` is bound from,
 /// and whose runtime a program using it bootstraps (`MddBootstrapInitialize2`
 /// for its major and minor version): `WinUI` 3 and what it stands on.
-pub(crate) const WINAPPSDK_VERSION: &str = "1.8.260804001";
+///
+/// The release, the packages of it read (`Foundation`, `WinUI`,
+/// `InteractiveExperiences`, as `id=version`), and the
+/// `Microsoft.Web.WebView2` package `WinUI` depends on live in
+/// [`winappsdk.json`](winappsdk.json) beside this file — data, not
+/// Rust source — because `tooling/windows/fetch-winappsdk.sh` reads
+/// the same three values and a script parsing Rust breaks the next
+/// time rustfmt reshapes a line. Both sides read the data file.
+fn winappsdk_json() -> &'static serde_json::Value {
+    static JSON: std::sync::LazyLock<serde_json::Value> = std::sync::LazyLock::new(|| {
+        serde_json::from_str(include_str!("winappsdk.json"))
+            .expect("winappsdk.json beside winrt.rs parses")
+    });
+    &JSON
+}
 
-/// The packages of that release read, as `id=version`: the metadata of
-/// `Microsoft.Windows.*` and the bootstrap DLL (`Foundation`), `WinUI`'s
-/// (`WinUI`), and `Microsoft.UI`'s windowing and dispatching
-/// (`InteractiveExperiences`). The metapackage names these exact versions.
-/// `tooling/windows/fetch-winappsdk.sh` reads this line.
-pub(crate) const WINAPPSDK_PACKAGES: &str =
-    "foundation=1.8.260803002 winui=1.8.260803003 interactiveexperiences=1.8.260708001";
+fn winappsdk_field(key: &str) -> &'static str {
+    winappsdk_json()[key]
+        .as_str()
+        .unwrap_or_else(|| panic!("winappsdk.json names a `{key}` string"))
+}
 
-/// `Microsoft.Web.WebView2`, as `id=version`: the metadata of
-/// `Microsoft.Web.WebView2.Core`, whose `CoreWebView2` `WinUI`'s `WebView2`
-/// control answers. Not part of the Windows App SDK's packages; the `WinUI`
-/// package above depends on exactly this version.
-/// `tooling/windows/fetch-winappsdk.sh` reads this line.
-pub(crate) const WEBVIEW2_PACKAGE: &str = "microsoft.web.webview2=1.0.3179.45";
+pub(crate) fn winappsdk_version() -> &'static str {
+    winappsdk_field("version")
+}
+
+pub(crate) fn winappsdk_packages() -> &'static str {
+    winappsdk_field("packages")
+}
+
+pub(crate) fn webview2_package() -> &'static str {
+    winappsdk_field("webview2")
+}
 
 /// The directories of `.winmd`s bound from: the Windows SDK's contracts, which
 /// `tooling/windows/fetch-winrt-metadata.sh` puts there, and the Windows App
@@ -82,7 +99,7 @@ pub(crate) fn default_metadata() -> Vec<Utf8PathBuf> {
 pub(crate) fn winappsdk() -> Utf8PathBuf {
     crate::windows_root()
         .join("metadata")
-        .join(format!("winappsdk-{WINAPPSDK_VERSION}"))
+        .join(format!("winappsdk-{}", winappsdk_version()))
 }
 
 /// The Windows App SDK's bootstrapper: what an unpackaged program loads to
@@ -414,7 +431,10 @@ pub(crate) fn bind(
     if namespace.starts_with("Microsoft.") {
         let _ = writeln!(
             text,
-            "// (Microsoft.WindowsAppSDK {WINAPPSDK_VERSION}: {WINAPPSDK_PACKAGES}; {WEBVIEW2_PACKAGE}). Edit the command, not this file."
+            "// (Microsoft.WindowsAppSDK {}: {}; {}). Edit the command, not this file.",
+            winappsdk_version(),
+            winappsdk_packages(),
+            webview2_package()
         );
     } else {
         let _ = writeln!(

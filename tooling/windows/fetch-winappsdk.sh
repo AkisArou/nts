@@ -9,19 +9,24 @@
 # `WebView2` control loads from the program's directory -- as a C# WinUI
 # build ships all three.
 #
-# The release and its packages are `WINAPPSDK_VERSION` and `WINAPPSDK_PACKAGES`
-# in tooling/cli/src/bind_winmd/winrt.rs, with WebView2's `WEBVIEW2_PACKAGE`
-# beside them, read from there so the two cannot disagree. Fetched once,
+# The release, its packages and WebView2's package are the three values
+# in tooling/cli/src/bind_winmd/winappsdk.json, which `winrt.rs` reads
+# with `include_str!`, so the two cannot disagree. Fetched once,
 # never committed.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-source_file="$repo/tooling/cli/src/bind_winmd/winrt.rs"
-version=$(sed -n 's/.*WINAPPSDK_VERSION: &str = "\([^"]*\)".*/\1/p' "$source_file")
-packages=$(sed -n 's/.*WINAPPSDK_PACKAGES: &str = "\([^"]*\)".*/\1/p' "$source_file")
-webview2=$(sed -n 's/.*WEBVIEW2_PACKAGE: &str = "\([^"]*\)".*/\1/p' "$source_file")
-[[ -n "$version" && -n "$packages" && -n "$webview2" ]] || { echo "could not read WINAPPSDK_VERSION, WINAPPSDK_PACKAGES and WEBVIEW2_PACKAGE" >&2; exit 1; }
+source_file="$repo/tooling/cli/src/bind_winmd/winappsdk.json"
+# The same data file `winrt.rs` reads (`include_str!`): values are JSON
+# here, never scraped out of Rust source rustfmt may reshape.
+read_field() {
+  node -e 'const j = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); process.stdout.write(j[process.argv[2]] ?? "")' "$source_file" "$1"
+}
+version=$(read_field version)
+packages=$(read_field packages)
+webview2=$(read_field webview2)
+[[ -n "$version" && -n "$packages" && -n "$webview2" ]] || { echo "could not read version, packages and webview2 from $source_file" >&2; exit 1; }
 root="${NTS_WINDOWS_ROOT:-$HOME/.cache/nts/windows}"
 dest="$root/metadata/winappsdk-$version"
 marker="$dest/native/Microsoft.WindowsAppRuntime.Bootstrap.dll"

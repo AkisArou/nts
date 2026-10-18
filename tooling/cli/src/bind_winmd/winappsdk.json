@@ -1,0 +1,5 @@
+{
+  "version": "1.8.260804001",
+  "packages": "foundation=1.8.260803002 winui=1.8.260803003 interactiveexperiences=1.8.260708001",
+  "webview2": "microsoft.web.webview2=1.0.3179.45"
+}

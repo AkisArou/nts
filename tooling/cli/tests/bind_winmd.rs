@@ -1350,13 +1350,9 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
         );
         return;
     };
-    // The release `winrt.rs` pins, read as `fetch-winappsdk.sh` reads it, so a
-    // new pin cannot turn this into a skip.
-    let pinned = include_str!("../src/bind_winmd/winrt.rs")
-        .lines()
-        .find_map(|line| line.split("WINAPPSDK_VERSION: &str = \"").nth(1))
-        .and_then(|rest| rest.split('"').next())
-        .expect("WINAPPSDK_VERSION");
+    // The release `winappsdk.json` pins, read as `fetch-winappsdk.sh`
+    // reads it, so a new pin cannot turn this into a skip.
+    let pinned = pinned_winappsdk_version();
     let sdk = metadata
         .parent()
         .map(|root| root.join(format!("winappsdk-{pinned}")));
@@ -1392,16 +1388,25 @@ fn a_name_two_namespaces_declare_is_imported_under_its_path() {
     let _ = std::fs::remove_dir_all(&out);
 }
 
+/// The Windows App SDK release pinned, from the data file binder and
+/// fetch script both read.
+fn pinned_winappsdk_version() -> &'static str {
+    include_str!("../src/bind_winmd/winappsdk.json")
+        .lines()
+        .find_map(|line| {
+            line.split("\"version\": \"")
+                .nth(1)
+                .and_then(|rest| rest.split('"').next())
+        })
+        .expect("winappsdk.json's version")
+}
+
 /// The runtime bootstraps the Windows App SDK release the bindings are made
 /// from: `NTS_WINAPPSDK_MAJOR_MINOR` in `nts_winrt.c` is the major and minor
-/// version of `WINAPPSDK_VERSION`, as `MddBootstrapInitialize2` spells them.
+/// version `winappsdk.json` pins, as `MddBootstrapInitialize2` spells them.
 #[test]
 fn the_runtime_bootstraps_the_release_bound() {
-    let pinned = include_str!("../src/bind_winmd/winrt.rs")
-        .lines()
-        .find_map(|line| line.split("WINAPPSDK_VERSION: &str = \"").nth(1))
-        .and_then(|rest| rest.split('"').next())
-        .expect("WINAPPSDK_VERSION");
+    let pinned = pinned_winappsdk_version();
     let mut parts = pinned.split('.').map(|part| part.parse::<u32>().unwrap());
     let (major, minor) = (parts.next().unwrap(), parts.next().unwrap());
     let runtime = include_str!("../../../runtime/c/nts_winrt.c");
