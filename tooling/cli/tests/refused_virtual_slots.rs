@@ -64,7 +64,7 @@ fn assert_wasm_stops(scratch: &Path) {
         .unwrap()
         .unwrap()
         .path();
-    let script = r#"
+    let script = r"
         import assert from 'node:assert/strict';
         import {pathToFileURL} from 'node:url';
         const {instantiate} = await import(pathToFileURL(process.argv[1] + '/wasm/program.instance.mjs'));
@@ -78,7 +78,7 @@ fn assert_wasm_stops(scratch: &Path) {
         assert.equal(m.oneInherited(2), 9);
         assert.equal(m.oneMixed(2), 6);
         assert.equal(m.validDispatch(2), 30);
-    "#;
+    ";
     let result = Command::new("node")
         .args(["--input-type=module", "--eval", script])
         .arg(artifact)

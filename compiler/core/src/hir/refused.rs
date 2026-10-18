@@ -38,9 +38,8 @@ pub(super) fn missing_callee<'a>(
     callee: &'a Callee,
     present: &FxHashSet<String>,
 ) -> Option<&'a str> {
-    let name = match callee {
-        Callee::Direct(name) => name,
-        _ => return None,
+    let Callee::Direct(name) = callee else {
+        return None;
     };
     (!present.contains(name)).then_some(name)
 }
