@@ -129,7 +129,10 @@ pub(super) fn guard_slots(program: &mut Program) {
             if contract.params.is_empty() {
                 continue;
             }
-            let mut name = format!("{}#nts$refused${slot}", layout.name);
+            // A dispatch entry is not a source member. Readers such as
+            // published_classes use Class#member as evidence that a class has
+            // a surviving member, even when its constructor was refused.
+            let mut name = format!("nts$refused${}${slot}", layout.name);
             while !names.insert(name.clone()) {
                 name.push('$');
             }
