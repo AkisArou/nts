@@ -52,7 +52,7 @@ fn annotations_select_overloads_after_unicode_and_formatting_edits() {
 package foreign;
 public final class Probe {
     public int x;
-    public static int X = 7;
+    public static final Probe INSTANCE = new Probe(7);
     public Probe(int x) { this.x = x; }
     public int choose(int n) { return x + n; }
     public int choose(String s) { return x + s.length() + 100; }
@@ -93,8 +93,8 @@ declare module "java:foreign" {
     constructor(x: number);
     /** @ntsJvm field foreign/Probe.x:I */
     x: number;
-    /** @ntsJvm staticfield foreign/Probe.X:I */
-    static X: number;
+    /** @ntsJvm staticfield foreign/Probe.INSTANCE:Lforeign/Probe; */
+    static readonly INSTANCE: Probe;
     /** @ntsJvm virtual foreign/Probe.choose:(I)I */
     choose(n: number): number;
     /** @ntsJvm virtual foreign/Probe.choose:(Ljava/lang/String;)I */
@@ -119,9 +119,8 @@ import { Probe } from "java:foreign";
 export function run(): string {
   const p = new Probe(3);
   p.x = 4;
-  Probe.X = 9;
   return p.choose(2) + ":" + p.choose("ab") + ":" + Probe.score(5)
-    + ":" + p.x + ":" + Probe.X + ":" + Probe.callback().apply(1);
+    + ":" + p.x + ":" + Probe.INSTANCE.x + ":" + Probe.callback().apply(1);
 }
 "#,
     )
@@ -169,7 +168,7 @@ export function run(): string {
         success(&result);
         assert_eq!(
             String::from_utf8_lossy(&result.stdout).trim(),
-            "6:106:10:4:9:21"
+            "6:106:10:4:7:21"
         );
     }
 }
