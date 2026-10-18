@@ -349,7 +349,10 @@ pub(crate) enum Reason {
     BoxedTakenOver,
     StringOut,
     CallerAllocates,
-    Array,
+    /// An array shape no lending or copying here covers; the detail
+    /// says which shape, so the refusal ledger separates a missing
+    /// length from an ownership the compiler has no form for.
+    Array(&'static str),
     Varargs,
     Gpointer,
     RecordByValue,
@@ -400,7 +403,7 @@ impl fmt::Display for Reason {
             Self::CallerAllocates => {
                 write!(f, "an out parameter whose storage the caller allocates")
             }
-            Self::Array => write!(f, "an array"),
+            Self::Array(why) => write!(f, "an array: {why}"),
             Self::Varargs => write!(f, "variadic"),
             Self::Gpointer => write!(f, "a `gpointer`"),
             Self::RecordByValue => write!(f, "a record passed by value"),
@@ -2063,7 +2066,7 @@ impl<'a> Mapper<'a> {
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
             return Err(if matches!(param.ty, TypeRef::Array(_)) {
-                Reason::Array
+                Reason::Array("an out array written through no slot here")
             } else {
                 Reason::OutParameter
             });
@@ -2194,23 +2197,30 @@ impl<'a> Mapper<'a> {
                 } else if index + 1 == at {
                     "before"
                 } else {
-                    return Err(Reason::Array);
+                    return Err(Reason::Array("its length is not beside it"));
                 };
                 Some((
-                    self.value(parameters.get(index).ok_or(Reason::Array)?)?,
+                    self.value(
+                        parameters
+                            .get(index)
+                            .ok_or(Reason::Array("its length is not beside it"))?,
+                    )?,
                     side,
                 ))
             }
             None => None,
         };
-        let element = array.element.as_deref().ok_or(Reason::Array)?;
+        let element = array
+            .element
+            .as_deref()
+            .ok_or(Reason::Array("GIR names no element type"))?;
         if param.transfer != Transfer::None {
-            return Err(Reason::Array);
+            return Err(Reason::Array("its transfer is not none"));
         }
         let spelling: String = array
             .c_type
             .as_deref()
-            .ok_or(Reason::Array)?
+            .ok_or(Reason::Array("GIR names no C type"))?
             .split_whitespace()
             .collect();
         let char = Pointee::Scalar(Scalar::Char);
@@ -2228,7 +2238,7 @@ impl<'a> Mapper<'a> {
                             Pointee::Const(Box::new(char)),
                         ))))),
                     ),
-                    _ => return Err(Reason::Array),
+                    _ => return Err(Reason::Array("strings in a spelling not lent here")),
                 };
                 self.binding.brands.insert("CStrings");
                 (
@@ -2252,7 +2262,7 @@ impl<'a> Mapper<'a> {
                         ("const void", Pointee::Const(Box::new(Pointee::Void)))
                     }
                     "gpointer" | "void*" => ("void", Pointee::Void),
-                    _ => return Err(Reason::Array),
+                    _ => return Err(Reason::Array("bytes in a spelling not lent here")),
                 };
                 self.binding.brands.insert("CBytes");
                 (
@@ -2262,7 +2272,7 @@ impl<'a> Mapper<'a> {
                 )
             }
             _ if length.is_some() => self.handles_parameter(param, element, &spelling)?,
-            _ => return Err(Reason::Array),
+            _ => return Err(Reason::Array("with no length beside it")),
         };
         let mut ts = ts;
         if let Some((count, side)) = length {
@@ -2297,16 +2307,19 @@ impl<'a> Mapper<'a> {
         spelling: &str,
     ) -> Result<(String, Type, String), Reason> {
         if !param.transfer_stated {
-            return Err(Reason::Array);
+            return Err(Reason::Array("GIR does not state its transfer"));
         }
         let Some(Resolved::Class(_, class)) = self.resolve(&self.qualify(element)) else {
-            return Err(Reason::Array);
+            return Err(Reason::Array("its element is not a class"));
         };
-        let c_type = class.c_type.clone().ok_or(Reason::Array)?;
+        let c_type = class
+            .c_type
+            .clone()
+            .ok_or(Reason::Array("GIR names no C type"))?;
         let void = match spelling {
             "gpointer*" | "void**" => true,
             _ if spelling == format!("{c_type}**") => false,
-            _ => return Err(Reason::Array),
+            _ => return Err(Reason::Array("objects in a spelling not lent here")),
         };
         let value = Param {
             ty: TypeRef::Named {
@@ -2319,7 +2332,7 @@ impl<'a> Mapper<'a> {
         };
         let mapped = self.typed(&value)?;
         let (Shape::Handle { .. }, Type::Pointer(pointee)) = (&mapped.shape, mapped.c) else {
-            return Err(Reason::Array);
+            return Err(Reason::Array("its element is not a handle"));
         };
         let pointee = if void { Pointee::Void } else { pointee };
         self.binding.brands.insert("CHandles");
@@ -2357,17 +2370,20 @@ impl<'a> Mapper<'a> {
         result: &Param,
         array: &ArrayRef,
     ) -> Result<(Mapped, Option<String>), Reason> {
-        let element = array.element.as_deref().ok_or(Reason::Array)?;
+        let element = array
+            .element
+            .as_deref()
+            .ok_or(Reason::Array("GIR names no element type"))?;
         if !(element == "utf8" || element == "filename")
             || !array.zero_terminated
             || array.length.is_some()
         {
-            return Err(Reason::Array);
+            return Err(Reason::Array("returned, and not NULL-terminated strings"));
         }
         let spelling: String = array
             .c_type
             .as_deref()
-            .ok_or(Reason::Array)?
+            .ok_or(Reason::Array("GIR names no C type"))?
             .replace("gchar", "char")
             .replace("GStrv", "char**")
             .split_whitespace()
@@ -2384,7 +2400,11 @@ impl<'a> Mapper<'a> {
                 ))))),
                 None,
             ),
-            _ => return Err(Reason::Array),
+            _ => {
+                return Err(Reason::Array(
+                    "returned strings in a spelling not copied here",
+                ));
+            }
         };
         let ts = if result.nullable {
             "string[] | null"
@@ -2414,16 +2434,16 @@ impl<'a> Mapper<'a> {
             .length
             .and_then(|index| parameters.get(index))
             .map(|param| identifier(&param.name))
-            .ok_or(Reason::Array)?;
+            .ok_or(Reason::Array("its length is not beside it"))?;
         let owned = match result.transfer {
             Transfer::None => false,
             Transfer::Full => true,
-            Transfer::Container => return Err(Reason::Array),
+            Transfer::Container => return Err(Reason::Array("its transfer is the container only")),
         };
         let spelling: String = array
             .c_type
             .as_deref()
-            .ok_or(Reason::Array)?
+            .ok_or(Reason::Array("GIR names no C type"))?
             .split_whitespace()
             .collect();
         let (ts, pointee) = match spelling.as_str() {
@@ -2437,7 +2457,11 @@ impl<'a> Mapper<'a> {
             ),
             "guint8*" | "guchar*" => ("Ptr<Uint8> | null", Pointee::Scalar(Scalar::UInt8)),
             "gchar*" | "char*" => ("Ptr<c_char> | null", Pointee::Scalar(Scalar::Char)),
-            _ => return Err(Reason::Array),
+            _ => {
+                return Err(Reason::Array(
+                    "returned bytes in a spelling not copied here",
+                ));
+            }
         };
         self.binding
             .brands
@@ -2485,7 +2509,7 @@ impl<'a> Mapper<'a> {
             let length = array
                 .length
                 .and_then(|index| signature.parameters.get(index))
-                .ok_or(Reason::Array)?;
+                .ok_or(Reason::Array("its length is not beside it"))?;
             return self
                 .out_bytes(param, array, &identifier(&length.name))
                 .map(Some);
@@ -2493,7 +2517,7 @@ impl<'a> Mapper<'a> {
         if byte_lengths.contains(&at) {
             let mapped = self.out(param)?;
             let Shape::Out { value } = mapped.shape else {
-                return Err(Reason::Array);
+                return Err(Reason::Array("its length slot is not a plain value"));
             };
             return Ok(Some(Mapped {
                 shape: Shape::Length { value },
@@ -2515,18 +2539,18 @@ impl<'a> Mapper<'a> {
         let owned = match param.transfer {
             Transfer::None => false,
             Transfer::Full => true,
-            Transfer::Container => return Err(Reason::Array),
+            Transfer::Container => return Err(Reason::Array("its transfer is the container only")),
         };
         let spelling: String = array
             .c_type
             .as_deref()
-            .ok_or(Reason::Array)?
+            .ok_or(Reason::Array("GIR names no C type"))?
             .split_whitespace()
             .collect();
         let (ts, element) = match spelling.as_str() {
             "gchar**" | "char**" => ("Ptr<Ptr<c_char> | null>", Scalar::Char),
             "guint8**" | "guchar**" => ("Ptr<Ptr<Uint8> | null>", Scalar::UInt8),
-            _ => return Err(Reason::Array),
+            _ => return Err(Reason::Array("out bytes in a spelling not written here")),
         };
         self.binding.brands.extend(["Ptr", "Uint8", "c_char"]);
         Ok(Mapped {
@@ -2580,7 +2604,7 @@ impl<'a> Mapper<'a> {
     fn typed(&mut self, param: &Param) -> Result<Mapped, Reason> {
         let (name, c_type) = match &param.ty {
             TypeRef::Named { name, c_type } => (name.as_str(), c_type.as_deref().unwrap_or("")),
-            TypeRef::Array(_) => return Err(Reason::Array),
+            TypeRef::Array(_) => return Err(Reason::Array("in a position no array is lent")),
             TypeRef::Varargs => return Err(Reason::Varargs),
             TypeRef::Missing => return Err(Reason::Unknown("(no type)".to_owned())),
         };
