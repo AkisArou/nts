@@ -24,6 +24,7 @@ pub(crate) type Attributes = BTreeMap<String, Vec<Vec<(String, Value)>>>;
 pub(crate) struct Parameter {
     pub(crate) name: String,
     pub(crate) ty: Type,
+    pub(crate) flags: windows_metadata::ParamAttributes,
     /// `[Optional]`: the API documents NULL as meaningful here.
     pub(crate) optional: bool,
     /// `[Const]`: the callee does not write through it.
@@ -154,6 +155,7 @@ fn parameters(method: MethodDef<'static>, types: &[Type]) -> Vec<Parameter> {
             Parameter {
                 name: row.map_or_else(|| format!("p{at}"), |row| row.name().to_owned()),
                 ty: ty.clone(),
+                flags: row.map_or(windows_metadata::ParamAttributes(0), MethodParam::flags),
                 optional: row.is_some_and(MethodParam::is_optional),
                 constant: row.is_some_and(|row| row.has_attribute("ConstAttribute")),
                 attributes: row.map_or_else(Attributes::new, attributes),

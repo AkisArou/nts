@@ -77,6 +77,8 @@ pub(crate) struct Function {
     pub(crate) documentation: Option<String>,
     /// `(name, TypeScript)`.
     pub(crate) parameters: Vec<(String, String)>,
+    /// Only reviewed text parameters also accept a resource atom.
+    pub(crate) resource_parameters: Vec<usize>,
     pub(crate) result: String,
     /// A checked HRESULT call whose trailing typed slot is compiler-owned.
     pub(crate) hresult: bool,
@@ -109,6 +111,8 @@ pub(crate) struct Constant {
     pub(crate) name: String,
     pub(crate) value: String,
     pub(crate) ts: String,
+    /// Require an actual header value; resource pointer bits are never guessed.
+    pub(crate) header_required: bool,
     /// Named handle types, which must survive the header check too.
     pub(crate) uses: BTreeSet<Name>,
 }
@@ -236,6 +240,7 @@ struct Use {
 struct Mapper<'a> {
     model: &'a Model,
     facts: &'a Facts,
+    resources: &'a super::resource_params::Policy,
     /// The declarations each type became, by namespace, as they are needed.
     declared: BTreeMap<Name, Option<TypeDecl>>,
     brands: BTreeSet<&'static str>,
@@ -1245,6 +1250,15 @@ impl Mapper<'_> {
         let mut c_list = Vec::new();
         for ((parameter, meta), c_parameter) in parameters.iter().zip(c_parameters) {
             let spelled = self.spell(meta, c_parameter, Use::default())?;
+            if spelled.ts.starts_with("Utf16String")
+                && self.resources.callback_atom(name, parameter)
+            {
+                let why = format!(
+                    "`{simple}.{parameter}` can be an integer resource atom; a string callback would dereference it (resource-params.json)"
+                );
+                self.record_refusals.insert(name.clone(), why.clone());
+                return Err(why);
+            }
             uses.extend(spelled.uses);
             list.push(format!("{}: {}", super::emit::safe(parameter), spelled.ts));
             c_list.push(spelled.c);
@@ -1274,6 +1288,65 @@ impl Mapper<'_> {
             ts: nullable(simple.into(), how.optional || how.stored),
             c: c_spelled,
             uses,
+        })
+    }
+
+    fn constant(&mut self, constant: &super::read::Constant) -> Option<Constant> {
+        match (
+            constant_brand(self.model, &constant.ty),
+            number(&constant.value),
+        ) {
+            (Some(brand), Some(value)) => {
+                self.brands.insert(brand);
+                Some(Constant {
+                    name: constant.name.clone(),
+                    value,
+                    ts: brand.to_owned(),
+                    header_required: false,
+                    uses: BTreeSet::new(),
+                })
+            }
+            _ => self
+                .resource_constant(constant)
+                .or_else(|| self.handle_constant(constant)),
+        }
+    }
+
+    /// An integer with the representation of MAKEINTRESOURCE: a UTF-16
+    /// pointer whose high bits are zero. No handle or function name list.
+    fn resource_constant(&mut self, constant: &super::read::Constant) -> Option<Constant> {
+        let value = match &constant.value {
+            Value::ISize(v) => v.to_string(),
+            Value::USize(v) => v.to_string(),
+            Value::I8(_)
+            | Value::U8(_)
+            | Value::I16(_)
+            | Value::U16(_)
+            | Value::I32(_)
+            | Value::U32(_)
+            | Value::I64(_)
+            | Value::U64(_) => number(&constant.value)?,
+            _ => return None,
+        };
+        value.parse::<u16>().ok()?;
+        if !super::resource_params::utf16_type(self.model, &constant.ty) {
+            return None;
+        }
+        let Type::ValueName(name) = &constant.ty else {
+            return None;
+        };
+        if !matches!(self.facts.typedefs.get(&name.name), Some(CType::Pointer { to, .. })
+            if **to == CType::Scalar("unsigned short".into()))
+        {
+            return None;
+        }
+        self.brands.extend(["ConstPtr", "Uint16"]);
+        Some(Constant {
+            name: constant.name.clone(),
+            ts: nullable("ConstPtr<Uint16>".into(), value == "0"),
+            value,
+            header_required: true,
+            uses: BTreeSet::new(),
         })
     }
 
@@ -1322,6 +1395,7 @@ impl Mapper<'_> {
             name: constant.name.clone(),
             value,
             ts: spelled.ts,
+            header_required: false,
             uses: spelled.uses,
         })
     }
@@ -1463,10 +1537,15 @@ fn map_interfaces(mapper: &mut Mapper<'_>, by_namespace: &mut BTreeMap<String, B
 
 /// Every namespace's module: the ones asked for, and each one owning a type
 /// they reach.
-pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
+pub(crate) fn bindings(
+    model: &Model,
+    facts: &Facts,
+    resources: &super::resource_params::Policy,
+) -> Vec<Binding> {
     let mut mapper = Mapper {
         model,
         facts,
+        resources,
         declared: BTreeMap::new(),
         brands: BTreeSet::new(),
         record_refusals: BTreeMap::new(),
@@ -1495,18 +1574,7 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
     for constant in &model.constants {
         entry(&mut by_namespace, &constant.namespace);
         let binding = by_namespace.get_mut(&constant.namespace).expect("inserted");
-        let bound = match (constant_brand(model, &constant.ty), number(&constant.value)) {
-            (Some(brand), Some(value)) => {
-                mapper.brands.insert(brand);
-                Some(Constant {
-                    name: constant.name.clone(),
-                    value,
-                    ts: brand.to_owned(),
-                    uses: BTreeSet::new(),
-                })
-            }
-            _ => mapper.handle_constant(constant),
-        };
+        let bound = mapper.constant(constant);
         if let Some(bound) = bound {
             binding.constants.push(bound);
         } else {
@@ -1580,7 +1648,27 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
             .cloned()
             .unwrap_or_else(|| "not declared by the headers asked".into()));
     };
-    map_signature(mapper, function, &result, &parameters, variadic, None)
+    let mut bound = map_signature(mapper, function, &result, &parameters, variadic, None)?;
+    for (at, parameter) in function.parameters.iter().enumerate() {
+        if !mapper
+            .resources
+            .input_atom(&function.namespace, &function.name, &parameter.name)
+        {
+            continue;
+        }
+        if !matches!(&parameters[at], CType::Pointer { to, constant: true }
+            if **to == CType::Scalar("unsigned short".into()))
+            || !bound.parameters[at].1.starts_with("Utf16String")
+        {
+            return Err(format!(
+                "resource parameter `{}` is not a const UTF-16 input in the header",
+                parameter.name
+            ));
+        }
+        bound.resource_parameters.push(at);
+        mapper.brands.extend(["ConstPtr", "Uint16"]);
+    }
+    Ok(bound)
 }
 
 fn marker(attributes: &super::read::Attributes, name: &str) -> Result<bool, String> {
@@ -1683,6 +1771,7 @@ fn map_signature(
         library: function.library.clone(),
         documentation: function.documentation.clone(),
         parameters: typescript,
+        resource_parameters: Vec::new(),
         result: projected
             .as_ref()
             .map_or(returned.ts, |(_, result, _)| result.ts.clone()),
@@ -1765,7 +1854,11 @@ mod tests {
                 ),
             ] {
                 let (model, facts) = handle_model(value, pointee.clone());
-                let bindings = bindings(&model, &facts);
+                let bindings = bindings(
+                    &model,
+                    &facts,
+                    &super::super::resource_params::Policy::default(),
+                );
                 let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
                 assert!(values.refused.is_empty(), "{:?}", values.refused);
                 assert_eq!(values.constants.len(), 1);
@@ -1807,7 +1900,11 @@ mod tests {
             (Value::I32(1), CType::Scalar("unsigned short".into())),
         ] {
             let (model, facts) = handle_model(value, pointee);
-            let bindings = bindings(&model, &facts);
+            let bindings = bindings(
+                &model,
+                &facts,
+                &super::super::resource_params::Policy::default(),
+            );
             let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
             assert!(values.constants.is_empty());
             assert_eq!(values.refused.len(), 1);
@@ -1823,7 +1920,11 @@ mod tests {
             .get_mut(&(HANDLES.into(), "TestHandle".into()))
             .unwrap()
             .kind = super::Kind::Other;
-        let bindings = super::bindings(&model, &facts);
+        let bindings = super::bindings(
+            &model,
+            &facts,
+            &super::super::resource_params::Policy::default(),
+        );
         let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
         assert!(values.constants.is_empty());
         assert_eq!(values.refused.len(), 1);
@@ -1840,6 +1941,7 @@ mod tests {
         let parameter = |name: &str, ty, optional, constant, output| Parameter {
             name: name.into(),
             ty,
+            flags: windows_metadata::ParamAttributes::In,
             optional,
             constant,
             output,
@@ -2118,7 +2220,11 @@ mod tests {
                     i.parent = Some((VALUES.into(), "IDerived".into()));
                 }
                 let facts = super::ask(&model, &headers, &args).unwrap();
-                let mut bound = bindings(&model, &facts);
+                let mut bound = bindings(
+                    &model,
+                    &facts,
+                    &super::super::resource_params::Policy::default(),
+                );
                 check::against_headers(&mut bound, &headers, &args).unwrap();
                 let binding = bound.iter().find(|b| b.namespace == VALUES).unwrap();
                 let refusal = |name: &str, reason: &str| {
@@ -2264,6 +2370,7 @@ mod tests {
                     }
                     "not-last" | "multiple" => {
                         method.parameters.push(read::Parameter {
+                            flags: windows_metadata::ParamAttributes::In,
                             name: "other".into(),
                             ty: Type::PtrMut(Box::new(Type::U32), 1),
                             optional: false,
@@ -2326,7 +2433,11 @@ mod tests {
                 }
                 std::fs::write(&path, header).unwrap();
                 let facts = super::ask(&model, &headers, &args).unwrap();
-                let mut bindings = super::bindings(&model, &facts);
+                let mut bindings = super::bindings(
+                    &model,
+                    &facts,
+                    &super::super::resource_params::Policy::default(),
+                );
                 check::against_headers(&mut bindings, &headers, &args).unwrap();
                 let owners = bindings
                     .iter()
@@ -2410,6 +2521,7 @@ mod tests {
             name: name.into(),
             library: "fixture.dll".into(),
             parameters: vec![Parameter {
+                flags: windows_metadata::ParamAttributes::In,
                 name: "value".into(),
                 ty: Type::PtrMut(Box::new(ty), 1),
                 optional: false,
@@ -2476,7 +2588,11 @@ mod tests {
                 let args = vec![format!("--target={target}")];
                 let facts = super::ask(&model, &headers, &args).unwrap();
                 let layout = &facts.records["packet"];
-                let mut bindings = super::bindings(&model, &facts);
+                let mut bindings = super::bindings(
+                    &model,
+                    &facts,
+                    &super::super::resource_params::Policy::default(),
+                );
                 check::against_headers(&mut bindings, &headers, &args).unwrap();
                 let binding = &bindings[0];
                 if packing == 2 || union {
@@ -2533,7 +2649,11 @@ mod tests {
             (layout.natural_size, layout.natural_align)
         );
         assert!(!layout.natural_matches);
-        let bindings = super::bindings(&model, &facts);
+        let bindings = super::bindings(
+            &model,
+            &facts,
+            &super::super::resource_params::Policy::default(),
+        );
         assert!(
             bindings[0]
                 .refused
@@ -2557,7 +2677,11 @@ mod tests {
                 std::fs::write(&path, format!("typedef struct tag_packet {{ unsigned char byte; {field} }} packet; typedef struct tag_envelope {{ packet body; unsigned char tail; }} envelope; int inspect(packet *); int inspect_envelope(envelope *);\n")).unwrap();
                 let model = layout_model(namespace, false);
                 let facts = super::ask(&model, &headers, &[format!("--target={target}")]).unwrap();
-                let bindings = super::bindings(&model, &facts);
+                let bindings = super::bindings(
+                    &model,
+                    &facts,
+                    &super::super::resource_params::Policy::default(),
+                );
                 let binding = &bindings[0];
                 if field == "unsigned word;" {
                     assert!(facts.records.contains_key("packet"));

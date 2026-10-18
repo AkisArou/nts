@@ -46,6 +46,8 @@ const GENERATOR: u64 = fnv(&[
     include_bytes!("bind_winmd/map.rs"),
     include_bytes!("bind_winmd/mod.rs"),
     include_bytes!("bind_winmd/read.rs"),
+    include_bytes!("bind_winmd/resource_params.rs"),
+    include_bytes!("bind_winmd/resource-params.json"),
     include_bytes!("bind_winmd/winappsdk.json"),
     include_bytes!("bind_winmd/winrt.rs"),
 ]);

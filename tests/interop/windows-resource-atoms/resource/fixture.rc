@@ -1,0 +1,5 @@
+// All four name/type combinations have a two-byte payload. No binary input.
+NTS_NAMED NTS_TYPE BEGIN 0x1234 END
+NTS_HTML 23 BEGIN 0x1234 END
+32512 NTS_TYPE BEGIN 0x1234 END
+32512 23 BEGIN 0x1234 END

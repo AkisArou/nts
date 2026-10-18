@@ -23,6 +23,7 @@ mod facts;
 mod iid;
 pub(crate) mod map;
 mod read;
+mod resource_params;
 pub(crate) mod winrt;
 
 use anyhow::{Context, Result};
@@ -172,12 +173,14 @@ pub(crate) fn generate(
         .with_context(|| format!("reading {winmd}: fetch it with tooling/windows/fetch-win32metadata.sh, or pass --winmd"))?
         .leak();
     let model = read::read(index, namespaces);
+    let resources = resource_params::Policy::embedded()?;
+    resources.validate(&model, namespaces)?;
     let zig = crate::zig_lib_dir()
         .context("`zig env` did not answer; the Windows headers come from zig")?;
     let clang_args = crate::windows_compile_flags(arch, &zig);
     let headers = probe_headers(&model);
     let facts = map::ask(&model, &headers, &clang_args)?;
-    let mut bindings = map::bindings(&model, &facts);
+    let mut bindings = map::bindings(&model, &facts, &resources);
     check::against_headers(&mut bindings, &headers, &clang_args)?;
     let owners = bindings
         .iter()

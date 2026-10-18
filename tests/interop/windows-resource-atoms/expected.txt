@@ -1,0 +1,1 @@
+cursor=true icon=true text/text=2 text/atom=2 atom/text=2 atom/atom=2

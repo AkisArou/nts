@@ -115,9 +115,11 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
         }
     }
     for constant in &binding.constants {
-        // Only a macro can be compared here: an enumerator, or a value the
-        // headers do not define, is Microsoft's word, which is the source.
-        probe.line(&format!("#ifdef {}", constant.name), None);
+        // Scalar enumerators may take their value from metadata when no
+        // macro exists. Pointer atoms require the actual header value.
+        if !constant.header_required {
+            probe.line(&format!("#ifdef {}", constant.name), None);
+        }
         probe.line(
             &format!(
                 "_Static_assert((long long)({0}) == (long long)({1}), \"{0}\");",
@@ -125,7 +127,9 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
             ),
             Some(Line::Constant(constant.name.clone())),
         );
-        probe.line("#endif", None);
+        if !constant.header_required {
+            probe.line("#endif", None);
+        }
     }
     probe
 }
@@ -389,6 +393,7 @@ mod tests {
                 name: name.into(),
                 value: value.into(),
                 ts: "TestHandle".into(),
+                header_required: false,
                 uses: BTreeSet::new(),
             })
             .collect(),
@@ -431,6 +436,7 @@ mod tests {
                 name: name.into(),
                 value: "1".into(),
                 ts: "Handle".into(),
+                header_required: false,
                 uses,
             })
             .collect(),

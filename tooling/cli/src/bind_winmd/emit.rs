@@ -257,47 +257,44 @@ pub(crate) fn render(
         body.push('\n');
     }
     for function in &binding.functions {
-        body.push_str("  /**\n");
-        if let Some(output) = &function.com_output {
-            body.push_str(&com_ownership(output, "   "));
+        for parameters in parameter_lists(function) {
+            body.push_str("  /**\n");
+            if let Some(output) = &function.com_output {
+                body.push_str(&com_ownership(output, "   "));
+            }
+            if function.hresult {
+                body.push_str("   * @ntsHresult\n");
+            }
+            if let Some(page) = &function.documentation {
+                let _ = writeln!(body, "   * {page}");
+            }
+            let header =
+                header_of(function.documentation.as_deref()).unwrap_or_else(|| "windows.h".into());
+            let _ = writeln!(
+                body,
+                "   * Imported from `{}`; declared in `<{header}>`.",
+                function.library
+            );
+            // The import library mingw names after the DLL: `USER32.dll` is
+            // `-luser32`. A program links it only if it calls this.
+            let library = function.library.to_ascii_lowercase();
+            let _ = writeln!(
+                body,
+                "   * @ntsLibrary {}",
+                library.strip_suffix(".dll").unwrap_or(&library)
+            );
+            for parameter in &function.no_escape {
+                let _ = writeln!(body, "   * @ntsNoEscape {parameter}");
+            }
+            body.push_str("   */\n");
+            let _ = writeln!(
+                body,
+                "  export function {}({}): {};",
+                function.name,
+                parameters.join(", "),
+                function.result
+            );
         }
-        if function.hresult {
-            body.push_str("   * @ntsHresult\n");
-        }
-        if let Some(page) = &function.documentation {
-            let _ = writeln!(body, "   * {page}");
-        }
-        let header =
-            header_of(function.documentation.as_deref()).unwrap_or_else(|| "windows.h".into());
-        let _ = writeln!(
-            body,
-            "   * Imported from `{}`; declared in `<{header}>`.",
-            function.library
-        );
-        // The import library mingw names after the DLL: `USER32.dll` is
-        // `-luser32`. A program links it only if it calls this.
-        let library = function.library.to_ascii_lowercase();
-        let _ = writeln!(
-            body,
-            "   * @ntsLibrary {}",
-            library.strip_suffix(".dll").unwrap_or(&library)
-        );
-        for parameter in &function.no_escape {
-            let _ = writeln!(body, "   * @ntsNoEscape {parameter}");
-        }
-        body.push_str("   */\n");
-        let parameters: Vec<String> = function
-            .parameters
-            .iter()
-            .map(|(name, ts)| format!("{}: {ts}", safe(name)))
-            .collect();
-        let _ = writeln!(
-            body,
-            "  export function {}({}): {};",
-            function.name,
-            parameters.join(", "),
-            function.result
-        );
     }
     let mut declarations = String::new();
     let _ = writeln!(
@@ -323,6 +320,35 @@ pub(crate) fn render(
         declarations,
         refused,
     }
+}
+
+/// Only reviewed input positions vary. The all-text signature stays last:
+/// TypeScript's Parameters<typeof f> then preserves its previous meaning.
+fn parameter_lists(function: &super::map::Function) -> Vec<Vec<String>> {
+    let count = 1_usize << function.resource_parameters.len();
+    (1..count)
+        .chain(std::iter::once(0))
+        .map(|mask| {
+            function
+                .parameters
+                .iter()
+                .enumerate()
+                .map(|(at, (name, ts))| {
+                    let atom = function
+                        .resource_parameters
+                        .iter()
+                        .enumerate()
+                        .any(|(bit, index)| *index == at && mask & (1 << bit) != 0);
+                    let ts = if atom {
+                        ts.replace("Utf16String", "ConstPtr<Uint16>")
+                    } else {
+                        ts.clone()
+                    };
+                    format!("{}: {ts}", safe(name))
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A parameter name TypeScript reserves, renamed.

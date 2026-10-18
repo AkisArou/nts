@@ -1,0 +1,162 @@
+{
+  "parameters": [
+    {
+      "namespace": "Windows.Win32.Graphics.Gdi",
+      "function": "LoadBitmapW",
+      "parameter": "lpBitmapName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadbitmapw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceLanguagesExW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-enumresourcelanguagesexw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceLanguagesExW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-enumresourcelanguagesexw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceLanguagesW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-enumresourcelanguagesw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceLanguagesW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-enumresourcelanguagesw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceNamesExW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-enumresourcenamesexw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "EnumResourceNamesW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-enumresourcenamesw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "FindResourceExW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-findresourceexw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "FindResourceExW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-findresourceexw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "FindResourceW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-findresourcew"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "FindResourceW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-findresourcew"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "UpdateResourceW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-updateresourcew"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "function": "UpdateResourceW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-updateresourcew"
+    },
+    {
+      "namespace": "Windows.Win32.UI.Controls",
+      "function": "LoadIconMetric",
+      "parameter": "pszName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-loadiconmetric"
+    },
+    {
+      "namespace": "Windows.Win32.UI.Controls",
+      "function": "LoadIconWithScaleDown",
+      "parameter": "pszName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-loadiconwithscaledown"
+    },
+    {
+      "namespace": "Windows.Win32.UI.Controls",
+      "function": "TaskDialog",
+      "parameter": "pszIcon",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/commctrl/nf-commctrl-taskdialog"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "CreateDialogParamW",
+      "parameter": "lpTemplateName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createdialogparamw"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "DialogBoxParamW",
+      "parameter": "lpTemplateName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-dialogboxparamw"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "LoadAcceleratorsW",
+      "parameter": "lpTableName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadacceleratorsw"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "LoadCursorW",
+      "parameter": "lpCursorName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadcursorw"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "LoadIconW",
+      "parameter": "lpIconName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadiconw"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "LoadImageW",
+      "parameter": "name",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadimagew"
+    },
+    {
+      "namespace": "Windows.Win32.UI.WindowsAndMessaging",
+      "function": "LoadMenuW",
+      "parameter": "lpMenuName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadmenuw"
+    }
+  ],
+  "callbacks": [
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "callback": "ENUMRESNAMEPROCW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumresnameprocw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "callback": "ENUMRESLANGPROCW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumreslangprocw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "callback": "ENUMRESLANGPROCW",
+      "parameter": "lpName",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumreslangprocw"
+    }
+  ]
+}

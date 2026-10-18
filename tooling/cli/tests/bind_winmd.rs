@@ -134,6 +134,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         "no WM_TIMER"
     );
     constants_carry_their_values(&messaging, &refused);
+    resource_declarations(&out, &messaging);
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.
     assert!(
@@ -218,8 +219,8 @@ fn record_layout_declarations(shell: &str, common: &str, messaging: &str, refuse
 /// `i32`) binds as that scalar, and a float constant binds as its float
 /// brand: both state values plainly, and refusing them lost exactly
 /// what `@ntsConstant` exists to carry. True handle sentinels keep their
-/// native type, with null allowed for zero. The MAKEINTRESOURCE atoms stay
-/// refused as PWSTR, whose string projection cannot carry an integer atom.
+/// native type, with null allowed for zero. MAKEINTRESOURCE atoms carry the
+/// exact bits as `ConstPtr<Uint16>`, independently of text conversion.
 fn constants_carry_their_values(messaging: &str, refused: &str) {
     assert!(
         messaging.contains("export const STRSAFE_E_INSUFFICIENT_BUFFER: c_int;"),
@@ -248,9 +249,121 @@ fn constants_carry_their_values(messaging: &str, refused: &str) {
             .lines()
             .filter(|line| line.contains("metadata type `PWSTR`, value an integer"))
             .count(),
-        47,
-        "MAKEINTRESOURCE atoms must retain their named refusal"
+        0,
+        "valid MAKEINTRESOURCE atoms must be emitted"
     );
+}
+
+/// Same generated declarations and caller, changing only a text argument to
+/// an atom. Listed `LoadCursorW` admits it; unlisted `MessageBoxW` must not.
+fn resource_typecheck(out: &std::path::Path) {
+    let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("skipping resource call typecheck: set NTS_TSGO");
+        return;
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let config = serde_json::json!({
+        "compilerOptions": {"target":"ESNext", "module":"ESNext", "moduleResolution":"bundler", "strict":true, "noEmit":true},
+        "include": [out.join("*.d.ts"), out.join("calls.ts"), root.join("runtime/native/libc.d.ts"), root.join("runtime/winrt/winrt.d.ts")],
+    });
+    std::fs::write(
+        out.join("tsconfig.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .unwrap();
+    let source = r#"
+import { IDC_ARROW, LoadCursorW, MessageBoxW } from "c:Windows.Win32.UI.WindowsAndMessaging";
+import type { MESSAGEBOX_STYLE } from "c:Windows.Win32.UI.WindowsAndMessaging";
+import type { CEnum } from "c:types";
+import type { c_uint } from "@nts/scalars";
+LoadCursorW(null, IDC_ARROW);
+const text: Parameters<typeof LoadCursorW>[1] = "named";
+LoadCursorW(null, text);
+MessageBoxW(null, "ordinary text", null, 0 as CEnum<MESSAGEBOX_STYLE, c_uint>);
+"#;
+    for negative in [false, true] {
+        let text = if negative {
+            source.replace("\"ordinary text\"", "IDC_ARROW")
+        } else {
+            source.into()
+        };
+        std::fs::write(out.join("calls.ts"), text).unwrap();
+        let run = Command::new(&tsgo)
+            .args(["--project"])
+            .arg(out.join("tsconfig.json"))
+            .output()
+            .unwrap();
+        let said = format!(
+            "{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            run.status.success(),
+            !negative,
+            "negative={negative}: {said}"
+        );
+        if negative {
+            assert!(
+                said.contains("TS2345")
+                    && said.contains("Utf16String")
+                    && said.contains("__c_pointer"),
+                "{said}"
+            );
+        }
+    }
+}
+
+fn resource_declarations(out: &std::path::Path, messaging: &str) {
+    resource_typecheck(out);
+    let loader =
+        std::fs::read_to_string(out.join("Windows.Win32.System.LibraryLoader.d.ts")).unwrap();
+    let refused =
+        std::fs::read_to_string(out.join("Windows.Win32.System.LibraryLoader.refused.txt"))
+            .unwrap();
+    let atoms: Vec<_> = messaging
+        .lines()
+        .filter(|line| {
+            ["RT_", "IDC_", "IDI_"].iter().any(|prefix| {
+                line.trim_start()
+                    .starts_with(&format!("export const {prefix}"))
+            }) && line.ends_with(": ConstPtr<Uint16>;")
+        })
+        .collect();
+    assert_eq!(atoms.len(), 47, "{atoms:?}");
+    assert!(messaging.contains(
+        "LoadCursorW(hInstance: HINSTANCE | null, lpCursorName: ConstPtr<Uint16>): HCURSOR | null;"
+    ));
+    let cursor: Vec<_> = messaging
+        .lines()
+        .filter(|line| line.contains("export function LoadCursorW("))
+        .collect();
+    assert_eq!(cursor.len(), 2);
+    assert!(cursor[1].contains("lpCursorName: Utf16String"));
+    // Identical const-UTF-16 C shape does not grant the reviewed capability.
+    let message_box: Vec<_> = messaging
+        .lines()
+        .filter(|line| line.contains("export function MessageBoxW("))
+        .collect();
+    assert_eq!(message_box.len(), 1);
+    assert!(!message_box[0].contains("ConstPtr"));
+    assert_eq!(loader.matches("export function FindResourceW(").count(), 4);
+    assert!(
+        loader.contains("export type ENUMRESTYPEPROCW = (hModule: HMODULE, lpType: Ptr<Uint16>")
+    );
+    for callback in ["ENUMRESNAMEPROCW", "ENUMRESLANGPROCW"] {
+        assert!(!loader.contains(&format!("export type {callback} =")));
+        assert!(
+            refused
+                .lines()
+                .any(|line| line.starts_with(&format!("{callback}\t"))
+                    && line.contains("integer resource atom")),
+            "{refused}"
+        );
+    }
 }
 
 /// `System.Guid`, which no `.winmd` defines, binds as the one `Guid`
