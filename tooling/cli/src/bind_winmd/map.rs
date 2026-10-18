@@ -767,7 +767,9 @@ pub(crate) fn number(value: &Value) -> Option<String> {
         Value::U32(v) => v.to_string(),
         Value::I64(v) => v.to_string(),
         Value::U64(v) => v.to_string(),
-        Value::F32(v) if v.is_finite() => v.to_string(),
+        // The exact value C holds: an f32 widened, not its shortest
+        // decimal (`0.1f32` is 0.10000000149011612 as a double).
+        Value::F32(v) if v.is_finite() => f64::from(*v).to_string(),
         Value::F64(v) if v.is_finite() => v.to_string(),
         Value::EnumValue(_, inner) => return number(inner),
         _ => return None,
@@ -817,15 +819,16 @@ fn constant_brand(model: &Model, meta: &Type) -> Option<&'static str> {
     // is over: following the chain here keeps the constant, where
     // refusing it would lose a value the metadata states plainly.
     let mut current = meta;
-    let mut hops = 0;
+    let mut visited: Vec<super::read::Name> = Vec::new();
     loop {
         match current {
             Type::ValueName(type_name) | Type::ClassName(type_name) => {
-                hops += 1;
-                if hops > 8 {
+                let name = super::read::name_of(type_name);
+                if visited.contains(&name) {
                     return None;
                 }
-                let info = model.types.get(&super::read::name_of(type_name))?;
+                visited.push(name.clone());
+                let info = model.types.get(&name)?;
                 match &info.kind {
                     super::read::Kind::Typedef { value, .. } => current = value,
                     _ => return None,
@@ -1012,4 +1015,22 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
         no_escape,
         uses,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::number;
+    use windows_metadata::Value;
+
+    /// `0.1f32` is not 0.1: the declared constant is the widened
+    /// double C holds, never the f32's shortest decimal.
+    #[test]
+    fn a_float_constant_declares_the_exact_value() {
+        assert_eq!(
+            number(&Value::F32(0.1)).as_deref(),
+            Some("0.10000000149011612")
+        );
+        assert_eq!(number(&Value::F64(0.1)).as_deref(), Some("0.1"));
+        assert_eq!(number(&Value::F32(f32::INFINITY)), None);
+    }
 }
