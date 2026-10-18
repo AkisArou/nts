@@ -213,8 +213,10 @@ fn pending_sources(func: &Func, purpose: Purpose) -> FxHashMap<ValueId, Length> 
                     constant: constant(func, *length),
                 },
                 _ if !purpose.carries_arrays() => continue,
-                // Lowering guarantees these are fully written before the
-                // source can read them. Block parameters receive edge facts.
+                // ArrayFill's lowering contract guarantees source reads see
+                // written slots: iteration_result_array, lower_typed_array_of
+                // and lower_mixed_literal fill Uninitialized arrays before
+                // exposing them. Block parameters receive edge facts.
                 OpKind::ArrayNew {
                     fill: ArrayFill::Filled | ArrayFill::Uninitialized,
                     ..
