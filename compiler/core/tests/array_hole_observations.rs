@@ -50,3 +50,48 @@ fn a_folded_typeof_keeps_its_hole_observation_after_bounds_proof() {
             .any(|func| func.name == "boundedTypeOfControl")
     );
 }
+
+#[test]
+fn an_unknown_array_parameter_keeps_its_hole_observation() {
+    let Some(frontend) = nts_frontend_ts::tsgo::locate() else {
+        eprintln!("SKIP: set NTS_TSGO to run the hole-observation guard");
+        return;
+    };
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/outcomes/typeof-an-unwritten-slot-passed-to-a-function/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(frontend)
+        .snapshot(&config)
+        .expect("snapshot");
+    assert!(!snapshot.has_errors(), "{:#?}", snapshot.diagnostics);
+    let prepared = hir::prepare(&snapshot).expect("prepared HIR verifies");
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:#?}",
+        prepared.diagnostics
+    );
+    let consumer = prepared
+        .program
+        .funcs
+        .iter()
+        .find(|func| func.name == "consume")
+        .expect("the shared helper must compile");
+    assert!(
+        consumer
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .any(|id| {
+                matches!(
+                    consumer.value(*id).kind,
+                    OpKind::ArrayGet { checked: false, .. }
+                )
+            }),
+        "an unknown parameter is not evidence that its array is dense"
+    );
+    for name in ["holeThroughCall", "filledThroughCall"] {
+        assert!(
+            prepared.program.funcs.iter().any(|func| func.name == name),
+            "{name} must compile"
+        );
+    }
+}

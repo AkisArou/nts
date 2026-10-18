@@ -80,10 +80,10 @@ impl Written {
 /// analysis's top.
 type Pending = FxHashMap<ValueId, Written>;
 
-/// An allocation's length: its value, and the number when that is constant.
+/// An array's known length: its value, and the number when that is constant.
 #[derive(Clone, Copy)]
 struct Length {
-    value: ValueId,
+    value: Option<ValueId>,
     constant: Option<u32>,
 }
 
@@ -178,28 +178,59 @@ fn readies(func: &Func, kind: &OpKind, allocation: ValueId) -> bool {
     }
 }
 
-/// Each typed allocation that may hold holes, with its length.
-fn allocations(func: &Func) -> FxHashMap<ValueId, Length> {
+fn typed_elements(ty: &HirType) -> bool {
+    matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased)
+}
+
+/// An ordinary typed array carried through an identity operation. A cast from
+/// another representation has unknown provenance instead.
+fn array_alias(func: &Func, kind: &OpKind) -> Option<ValueId> {
+    let value = match kind {
+        OpKind::Convert(value) | OpKind::FieldView { value, .. } => *value,
+        _ => return None,
+    };
+    typed_elements(&func.value(value).ty).then_some(value)
+}
+
+/// Each source that may hold holes. Backend refusals retain their local
+/// allocation proof. Optimizer effects also start unknown origins pending:
+/// lacking a local allocation is not evidence that a parameter, field, call or
+/// global is dense. New array-producing operations default to unknown.
+fn pending_sources(func: &Func, purpose: Purpose) -> FxHashMap<ValueId, Length> {
     let mut lengths = FxHashMap::default();
     for block in &func.blocks {
         for &id in &block.ops {
             let op = func.value(id);
-            if let OpKind::ArrayNew {
-                length,
-                fill: ArrayFill::Holes,
-            } = op.kind
-                && let HirType::Managed(ManagedType::Array(element)) = &op.ty
-                && element.as_ref() != &HirType::Erased
-            {
-                let constant = constant(func, length);
-                lengths.insert(
-                    id,
-                    Length {
-                        value: length,
-                        constant,
-                    },
-                );
+            if !typed_elements(&op.ty) {
+                continue;
             }
+            let length = match &op.kind {
+                OpKind::ArrayNew {
+                    length,
+                    fill: ArrayFill::Holes,
+                } => Length {
+                    value: Some(*length),
+                    constant: constant(func, *length),
+                },
+                _ if !purpose.carries_arrays() => continue,
+                // Lowering guarantees these are fully written before the
+                // source can read them. Block parameters receive edge facts.
+                OpKind::ArrayNew {
+                    fill: ArrayFill::Filled | ArrayFill::Uninitialized,
+                    ..
+                }
+                | OpKind::BlockParam(_) => continue,
+                OpKind::Call {
+                    callee: Callee::External(name),
+                    ..
+                } if super::fills_every_slot(name) => continue,
+                kind if array_alias(func, kind).is_some() => continue,
+                _ => Length {
+                    value: None,
+                    constant: None,
+                },
+            };
+            lengths.insert(id, length);
         }
     }
     lengths
@@ -262,7 +293,7 @@ impl Purpose {
 /// written-slot facts still hold, but no constant allocation length is known.
 fn length_of(lengths: &FxHashMap<ValueId, Length>, array: ValueId) -> Length {
     lengths.get(&array).copied().unwrap_or(Length {
-        value: array,
+        value: None,
         constant: None,
     })
 }
@@ -412,6 +443,16 @@ fn transfer(
             written.forget(id);
         }
         if purpose.carries_arrays()
+            && typed_elements(&func.value(id).ty)
+            && let Some(source) = array_alias(func, kind)
+        {
+            if let Some(written) = pending.get(&source).cloned() {
+                pending.insert(id, written);
+            } else {
+                pending.remove(&id);
+            }
+        }
+        if purpose.carries_arrays()
             && let OpKind::Length(array) = kind
             && let Some(written) = pending.get_mut(array)
         {
@@ -436,7 +477,7 @@ fn transfer(
             && length.constant != Some(0)
         {
             let written = Written {
-                length: Some(length.value),
+                length: length.value,
                 ..Written::default()
             };
             pending.insert(id, written);
@@ -469,8 +510,9 @@ pub fn observations(func: &Func) -> Vec<ValueId> {
 /// Reads that must reach the backend's initialization check even when their
 /// result is folded away and their index is proven in bounds. This is the same
 /// must-proof as [`observations`], carrying incomplete allocations through CFG
-/// array arguments. A fill or proven written slot admits the read; dense arrays
-/// never enter the pending set. Backend refusal observations stay unchanged.
+/// array arguments, and treating an unknown origin as possibly incomplete. A
+/// fill or proven written slot admits the read; known dense arrays never enter
+/// the pending set. Backend refusal observations stay unchanged.
 ///
 /// Build once per optimizer pass, not once per read.
 pub(crate) fn read_observations(func: &Func) -> FxHashSet<ValueId> {
@@ -481,7 +523,7 @@ pub(crate) fn read_observations(func: &Func) -> FxHashSet<ValueId> {
 }
 
 fn observations_for(func: &Func, purpose: Purpose) -> Vec<ValueId> {
-    let lengths = allocations(func);
+    let lengths = pending_sources(func, purpose);
     if lengths.is_empty() {
         return Vec::new();
     }
@@ -963,5 +1005,68 @@ mod tests {
         let read = b.get(array, zero);
         b.end(&[], Terminator::Return(Some(read)));
         assert!(super::read_observations(&b.func).is_empty());
+    }
+
+    #[test]
+    fn unknown_array_origins_need_an_observation_until_filled() {
+        for filled in [false, true] {
+            for source in 0..4 {
+                let mut b = Build::new(0);
+                let object = b.op(
+                    OpKind::Param(0),
+                    HirType::Managed(ManagedType::Object(crate::hir::TypeId(1))),
+                );
+                let array_ty = HirType::Managed(ManagedType::Array(Box::new(F64)));
+                let kind = match source {
+                    0 => OpKind::Param(1),
+                    1 => OpKind::GlobalGet(0),
+                    2 => OpKind::FieldGet { object, field: 0 },
+                    _ => OpKind::Call {
+                        callee: super::Callee::Direct("returns_an_array".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    },
+                };
+                let array = b.op(kind, array_ty.clone());
+                if filled {
+                    let stored = b.op(OpKind::ConstFloat(17.0), F64);
+                    b.op(
+                        OpKind::Call {
+                            callee: super::Callee::External("nts_array_fill".to_owned()),
+                            args: vec![array, stored],
+                            frame: None,
+                        },
+                        array_ty,
+                    );
+                }
+                let zero = b.int(0);
+                let read = b.get(array, zero);
+                b.end(&[], Terminator::Return(Some(zero)));
+                assert!(
+                    observations(&b.func).is_empty(),
+                    "backend scope is unchanged"
+                );
+                assert_eq!(super::read_observations(&b.func).contains(&read), !filled);
+            }
+        }
+    }
+
+    #[test]
+    fn identity_views_of_dense_arrays_stay_dense() {
+        for fill in [ArrayFill::Filled, ArrayFill::Uninitialized] {
+            let mut b = Build::new(1);
+            let length = b.int(2);
+            let array_ty = HirType::Managed(ManagedType::Array(Box::new(F64)));
+            let array = b.op(OpKind::ArrayNew { length, fill }, array_ty.clone());
+            let zero = b.int(0);
+            let one = b.int(1);
+            let stored = b.op(OpKind::ConstFloat(17.0), F64);
+            b.set(array, zero, stored);
+            b.set(array, one, stored);
+            let alias = b.op(OpKind::Convert(array), array_ty);
+            let read = b.get(alias, ValueId(0));
+            b.end(&[], Terminator::Return(Some(read)));
+            assert!(super::read_observations(&b.func).is_empty());
+        }
     }
 }
