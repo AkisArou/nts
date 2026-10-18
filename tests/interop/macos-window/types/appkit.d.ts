@@ -1075,7 +1075,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector validateProposedFirstResponder:forEvent: */
     validateProposedFirstResponder(responder: NSResponder, labels: { for: NSEvent | null }): boolean;
     /** @ntsSelector presentError:modalForWindow:delegate:didPresentSelector:contextInfo: */
-    presentError(error: NSError, labels: { modalFor: NSWindow; delegate: NSObject | null; didPresent: Selector; contextInfo: Ptr<unknown> | null }): void;
+    presentError(error: NSError, labels: { modalFor: NSWindow; delegate: NSObject | null; didPresent: Selector; contextInfo: Ptr<void> | null }): void;
     /** @ntsSelector presentError: */
     presentError(error: NSError): boolean;
     /** @ntsSelector willPresentError: */
@@ -1186,9 +1186,9 @@ declare module "objc:AppKit" {
     /** @ntsSelector initWithData:encoding: */
     constructor(labels: { data: NSData; encoding: UInt });
     /** @ntsSelector initWithBytes:length:encoding: */
-    constructor(labels: { bytes: Ptr<unknown>; length: UInt; encoding: UInt });
+    constructor(labels: { bytes: Ptr<void>; length: UInt; encoding: UInt });
     /** @ntsSelector initWithBytesNoCopy:length:encoding:freeWhenDone: */
-    constructor(labels: { bytesNoCopy: Ptr<unknown>; length: UInt; encoding: UInt; freeWhenDone: boolean });
+    constructor(labels: { bytesNoCopy: Ptr<void>; length: UInt; encoding: UInt; freeWhenDone: boolean });
     /** @ntsSelector initWithCString:encoding: */
     constructor(labels: { cString: CString; encoding: UInt });
     /**
@@ -1294,7 +1294,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector getCString:maxLength:encoding: */
     getCString(buffer: CString, labels: { maxLength: UInt; encoding: UInt }): boolean;
     /** @ntsSelector getBytes:maxLength:usedLength:encoding:options:range:remainingRange: */
-    getBytes(buffer: Ptr<unknown> | null, labels: { maxLength: UInt; usedLength: Ptr<UInt> | null; encoding: UInt; options: CEnum<NSString.EncodingConversionOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange>; remaining: Ptr<NSRange> | null }): boolean;
+    getBytes(buffer: Ptr<void> | null, labels: { maxLength: UInt; usedLength: Ptr<UInt> | null; encoding: UInt; options: CEnum<NSString.EncodingConversionOptions | 0, UInt>; range: ByValue<NSRange> | Fields<NSRange>; remaining: Ptr<NSRange> | null }): boolean;
     /** @ntsSelector maximumLengthOfBytesUsingEncoding: */
     maximumLengthOfBytes(labels: { using: UInt }): UInt;
     /** @ntsSelector lengthOfBytesUsingEncoding: */
@@ -1726,7 +1726,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector didCloseMenu:withEvent: */
     didCloseMenu(menu: NSMenu, labels: { with: NSEvent | null }): void;
     /** @ntsSelector addToolTipRect:owner:userData: */
-    addToolTip(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<unknown> | null }): Int;
+    addToolTip(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<void> | null }): Int;
     /** @ntsSelector removeToolTip: */
     removeToolTip(tag: Int): void;
     /** @ntsSelector removeAllToolTips */
@@ -1814,7 +1814,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector resetCursorRects */
     resetCursorRects(): void;
     /** @ntsSelector addTrackingRect:owner:userData:assumeInside: */
-    addTrackingRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<unknown> | null; assumeInside: boolean }): Int;
+    addTrackingRect(rect: ByValue<CGRect> | Fields<CGRect>, labels: { owner: NSObject; userData: Ptr<void> | null; assumeInside: boolean }): Int;
     /** @ntsSelector removeTrackingRect: */
     removeTrackingRect(tag: Int): void;
     /** @ntsSelector reflectScrolledClipView: */
@@ -2100,7 +2100,7 @@ declare module "objc:AppKit" {
     get areCursorRectsEnabled(): boolean;
     get showsResizeIndicator(): boolean;
     set showsResizeIndicator(value: boolean);
-    get windowRef(): Ptr<unknown>;
+    get windowRef(): Ptr<void>;
     get hasCloseBox(): boolean;
     get hasTitleBar(): boolean;
     get isFloatingPanel(): boolean;
@@ -2132,7 +2132,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector +windowWithContentViewController: */
     constructor(labels: { contentViewController: NSViewController });
     /** @ntsSelector initWithWindowRef: */
-    constructor(labels: { windowRef: Ptr<unknown> });
+    constructor(labels: { windowRef: Ptr<void> });
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector addTitlebarAccessoryViewController: */
@@ -3239,12 +3239,12 @@ declare module "objc:AppKit" {
     get isARepeat(): boolean;
     get keyCode(): UInt16;
     get trackingNumber(): Int;
-    get userData(): Ptr<unknown> | null;
+    get userData(): Ptr<void> | null;
     get trackingArea(): NSTrackingArea | null;
     get subtype(): CEnum<NSEvent.EventSubtype, Int16>;
     get data1(): Int;
     get data2(): Int;
-    get eventRef(): Ptr<unknown> | null;
+    get eventRef(): Ptr<void> | null;
     static get isMouseCoalescingEnabled(): boolean;
     /** @ntsSet setMouseCoalescingEnabled: */
     static set isMouseCoalescingEnabled(value: boolean);
@@ -3282,7 +3282,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector charactersByApplyingModifiers: */
     charactersByApplyingModifiers(modifiers: CEnum<NSEvent.ModifierFlags | 0, UInt>): string | null;
     /** @ntsSelector +eventWithEventRef: */
-    constructor(labels: { eventRef: Ptr<unknown> });
+    constructor(labels: { eventRef: Ptr<void> });
     /** @ntsSelector init */
     constructor();
     /** @ntsSelector touchesMatchingPhase:inView: */
@@ -3304,7 +3304,7 @@ declare module "objc:AppKit" {
     /** @ntsSelector keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode: */
     static keyEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; characters: string; charactersIgnoringModifiers: string; isARepeat: boolean; keyCode: UInt16 }): NSEvent | null;
     /** @ntsSelector enterExitEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:trackingNumber:userData: */
-    static enterExitEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; trackingNumber: Int; userData: Ptr<unknown> | null }): NSEvent | null;
+    static enterExitEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; eventNumber: Int; trackingNumber: Int; userData: Ptr<void> | null }): NSEvent | null;
     /** @ntsSelector otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2: */
     static otherEvent(labels: { with: CEnum<NSEvent.EventType, UInt>; location: ByValue<CGPoint> | Fields<CGPoint>; modifierFlags: CEnum<NSEvent.ModifierFlags | 0, UInt>; timestamp: TimeInterval; windowNumber: Int; context: NSGraphicsContext | null; subtype: Int16; data1: Int; data2: Int }): NSEvent | null;
     /** @ntsSelector addGlobalMonitorForEventsMatchingMask:handler: */
@@ -3821,9 +3821,9 @@ declare module "objc:AppKit" {
     /** @ntsGet CGContextGetPathCurrentPoint */
     readonly currentPointOfPath: ByValue<CGPoint>;
     /** @ntsSymbol CGBitmapContextGetData */
-    CGBitmapContextGetData(this: CGContext): Ptr<unknown> | null;
+    CGBitmapContextGetData(this: CGContext): Ptr<void> | null;
     /** @ntsGet CGBitmapContextGetData */
-    readonly data: Ptr<unknown> | null;
+    readonly data: Ptr<void> | null;
     /** @ntsSymbol CGContextDrawPath */
     drawPath(this: CGContext, labels: { using: CEnum<CGPathDrawingMode, Int32> }): void;
     /** @ntsSymbol CGPDFContextEndPage */
