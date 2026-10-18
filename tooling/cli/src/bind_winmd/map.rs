@@ -360,6 +360,9 @@ impl Mapper<'_> {
     }
 
     fn named(&mut self, name: &Name, c: &CType, how: Use) -> Result<Spelled, String> {
+        if name.1 == "Guid" {
+            return self.guid(c, how);
+        }
         let Some(info) = self.model.types.get(name) else {
             return Err(format!("`{}`, a type the metadata does not define", name.1));
         };
@@ -388,6 +391,33 @@ impl Mapper<'_> {
                 name.1
             )),
         }
+    }
+
+    /// `System.Guid`, which the metadata names and no `.winmd` defines:
+    /// the one `Guid` of `winrt:types`, crossed by value as there, with
+    /// the header's struct spelling (`struct _GUID`) as its C type.
+    fn guid(&mut self, c: &CType, how: Use) -> Result<Spelled, String> {
+        if !how.stored && !how.direct {
+            return Err("`Guid` passed by value to or from a callback".into());
+        }
+        let CType::Record { tag, .. } = c else {
+            return Err(format!(
+                "`Guid` in the metadata and `{}` in the header",
+                c.spelled()
+            ));
+        };
+        self.brands.insert("Guid");
+        let ts = if how.stored {
+            "Guid".to_owned()
+        } else {
+            self.brands.insert("ByValue");
+            "ByValue<Guid>".to_owned()
+        };
+        Ok(Spelled {
+            ts,
+            c: format!("struct {tag}"),
+            uses: BTreeSet::new(),
+        })
     }
 
     /// `PWSTR`: a lent `Utf16String` where the callee only reads it during the

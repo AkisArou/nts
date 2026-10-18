@@ -175,6 +175,45 @@ fn constants_carry_their_values(messaging: &str, refused: &str) {
     );
 }
 
+/// `System.Guid`, which no `.winmd` defines, binds as the one `Guid`
+/// of `winrt:types` in the Win32 half too: by value where crossed,
+/// the header's struct spelling as its C type. The Shell namespace
+/// is where Guid-typed records and parameters live (`QITAB` is
+/// `QueryInterface`'s table); before this, every one was refused
+/// "a type the metadata does not define".
+#[test]
+fn a_guid_parameter_binds_as_the_one_guid_type() {
+    let Some(_metadata) = winmd() else {
+        return;
+    };
+    let out = std::env::temp_dir().join(format!("nts-bind-win32-guid-{}", std::process::id()));
+    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args(["bind-winmd", "Windows.Win32.UI.Shell", "--out"])
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let shell = std::fs::read_to_string(out.join("Windows.Win32.UI.Shell.d.ts")).unwrap();
+    let refused = std::fs::read_to_string(out.join("Windows.Win32.UI.Shell.refused.txt")).unwrap();
+    assert!(
+        shell.contains("import type { Guid } from \"winrt:types\";"),
+        "the one Guid is not imported"
+    );
+    assert!(
+        shell.contains("piid: ConstPtr<Guid> | null"),
+        "QITAB's Guid pointer is not spelled by the one type"
+    );
+    assert!(
+        !refused.contains("a type the metadata does not define"),
+        "a Guid refusal remains:\n{refused}"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
 /// The directory of Windows Runtime contract `.winmd`s, as
 /// `tooling/windows/fetch-winrt-metadata.sh` leaves it.
 fn winrt_metadata() -> Option<PathBuf> {

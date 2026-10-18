@@ -61,6 +61,11 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
         brands.iter().copied(),
         "  ",
     ));
+    // The one `Guid` is `winrt:types`', which the shared vocabulary
+    // routing (scalars or `c:types`) does not reach.
+    if used.contains("Guid") {
+        out.push_str("  import type { Guid } from \"winrt:types\";\n");
+    }
     let mut foreign: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for name in &used {
         if let Some(namespace) = owners.get(*name)
