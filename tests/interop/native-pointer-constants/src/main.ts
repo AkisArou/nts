@@ -17,6 +17,7 @@ import {
 import type { Sentinel, Window } from "c:pointer-constants";
 import type { ConstPtr, Ptr } from "c:types";
 import type { c_int, Uint16 } from "@nts/scalars";
+import * as Constants from "c:pointer-constants";
 
 export function broadcast(): Window { return BROADCAST; }
 export function numberControl(): number { return NUMBER_CONTROL; }
@@ -34,6 +35,7 @@ export function nativeArgument(): boolean { return sentinel_is_broadcast(BROADCA
 // MAP_FAILED's shape: the returned pointer can match or differ from the sentinel.
 export function returnedEquals(fail: c_int): boolean { return sentinel_from(fail) === FAILED; }
 export function localAlias(): Sentinel { const value = WIDE; return value; }
+export function namespaceAlias(): Window { return Constants.BROADCAST; }
 export function shorthand(): Sentinel {
   const box: { WIDE: Sentinel } = { WIDE };
   return box.WIDE;

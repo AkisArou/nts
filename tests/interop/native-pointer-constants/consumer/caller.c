@@ -23,6 +23,7 @@ int main(void) {
   assert(returnedEquals(1));
   assert(!returnedEquals(0));
   assert((uintptr_t)localAlias() == UINT64_C(9007199254740993));
+  assert((uintptr_t)namespaceAlias() == (uintptr_t)65535);
   assert((uintptr_t)shorthand() == UINT64_C(9007199254740993));
   puts("native pointer constants: exact bits, typed calls and equality agree "
        "with C");

@@ -4,7 +4,8 @@ declare module "c:pointer-constants" {
   import type { c_int, Uint16 } from "@nts/scalars";
 
   export type Sentinel = Opaque<"Sentinel">;
-  export type Window = Class<"Window">;
+  export type HandleBase = Class<"HandleBase">;
+  export type Window = Class<"Window", HandleBase>;
 
   /** @ntsConstant 65535 */
   export const BROADCAST: Window;
