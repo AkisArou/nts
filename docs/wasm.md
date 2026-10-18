@@ -1923,6 +1923,12 @@ module already admitted by the static proof keeps its original layout and
 instructions with either setting; prefix metadata is added only to a module
 that needs the new escape contract.
 
+Erasure also retains a conservative density boundary: observing a written slot
+through an erased partially initialized array still requires whole density.
+The bounded controls expose 58 gap-write stops and 29 density-boundary stops
+where node answers. [Decision 0359](records/0359-a-written-prefix-travels-with-the-array.md)
+records their cost and the shared core written-prefix/per-slot successor.
+
 The static analysis is a forward must-analysis over the
 control-flow graph: a
 constant slot is ready at a point when a store wrote it on every path from the
