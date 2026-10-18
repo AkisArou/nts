@@ -151,8 +151,16 @@ then a guard once fixed), `tests/memory/`.
   its wall-clock timeout keeps running, so suspension fabricates a timeout.
   A gate step's memory pre-check is what a neighbour breaks, and a red gate
   costs its lane a half-hour rerun.
-- Benchmark on the P-cores (CPUs 0–15) only, from a worktree pinned to a
-  commit, and compare ratios within one run, never absolute times across runs.
+- **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
+  measurement.** Gates and heavy jobs exclude both: `taskset -c 0-3,6-31`
+  (or a narrower set, such as E-cores `16-31`). `land.ts` and `pinned.sh`
+  apply the exclusion without widening their inherited affinity. Never change
+  an in-flight gate's mask.
+- Benchmark on CPU 4 with sibling 5 idle, under
+  `tooling/gate/with-lock.sh --wait`, from a worktree pinned to a commit.
+  The wrapper waits only for CPUs 4–5 to be quiet and sets `NTS_BENCH_CPUS=4`;
+  a command other than `nts-bench` needs its own `taskset -c 4`.
+  Compare ratios within one run, never absolute times across runs.
   `nts-bench` links the compiler crates directly: run a plain
   `cargo build --release` (no `-p`) before measuring a compiler change.
 - A gate or bench run drives `target/release/nts` unless told otherwise: pass

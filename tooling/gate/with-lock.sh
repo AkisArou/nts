@@ -2,12 +2,17 @@
 # Run a command while holding the measurement lock, and release it only if we
 # were the ones who took it.
 #
-#   tooling/gate/with-lock.sh cargo run --release -p nts-bench
-#   tooling/gate/with-lock.sh --wait bash tooling/gate/all.sh
+#   tooling/gate/with-lock.sh --wait target/release/nts-bench
+#   tooling/gate/with-lock.sh --wait taskset -c 4 perf stat <program>
+#
+# After taking the lock, wait up to 180 seconds for the reserved physical
+# core (CPUs 4-5) to be quiet. Other busy cores do not prevent measurement.
+# nts-bench's timed children use CPU 4, leaving its sibling 5 idle.
+# Gates never use this lock: land.ts and pinned.sh exclude CPUs 4-5 instead.
 #
 # Without `--wait` a held lock is exit 75 and no run, which suits a session that
 # has other work. With it, the acquisition is retried until it succeeds, which
-# suits a gate that wants to queue rather than be skipped.
+# suits a measurement that wants to queue rather than be skipped.
 #
 # # The bug this exists to prevent
 #
@@ -52,7 +57,8 @@
 # Run `with-lock.sh --self-test` to see both halves demonstrated.
 set -eu
 
-lock=/tmp/nts-gate/gate.lock.d
+# The override isolates the wrapper's regression tests from live measurements.
+lock=${NTS_MEASUREMENT_LOCK:-/tmp/nts-gate/gate.lock.d}
 
 # `mkdir` then write the pid; a reader that finds no pid file has caught a
 # holder between the two, so it waits a beat and looks again rather than
@@ -81,9 +87,6 @@ if [ "${1-}" = "--self-test" ]; then
     if ! held_by; then
         echo "self-test FAILED: a live holder read as dead" >&2
         exit 1
-    fi
-    if pgrep -af 'gate/all\.sh|nts-bench' > /dev/null 2>&1; then
-        echo "self-test: pgrep -af still matches something -- which is why it is gone"
     fi
     echo "self-test: a live holder is held -- correct"
     exit 0
@@ -124,4 +127,7 @@ done
 echo $$ > "$lock/pid"
 trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
 
+node "$(dirname -- "$0")/measurement.ts"
+NTS_BENCH_CPUS=4
+export NTS_BENCH_CPUS
 "$@"

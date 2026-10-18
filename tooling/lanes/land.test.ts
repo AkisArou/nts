@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
+import { cpuList, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 
 const LAND = new URL("./land.ts", import.meta.url).pathname;
 
@@ -25,6 +26,10 @@ else
   git worktree add -q --detach "$NTS_GATE_TREE" "$sha"
 fi
 [ -n "\${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
+if [ -n "\${LAND_TEST_AFFINITY:-}" ]; then
+  awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status > "$LAND_TEST_AFFINITY"
+  sh -c 'awk "/^Cpus_allowed_list:/ {print \\$2}" /proc/self/status' >> "$LAND_TEST_AFFINITY"
+fi
 echo "$sha \${NTS_INTEROP_PROJECTS:-}" >> "$LAND_TEST_GATES"
 verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
@@ -93,8 +98,10 @@ function lane(s: Scratch, name: string, files: Record<string, string>): string {
 
 type Landed = { status: number | null; out: string };
 
-function land(s: Scratch, tree: string): { child: ChildProcess; done: Promise<Landed> } {
-  const child = spawn(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env });
+function land(s: Scratch, tree: string, cpus?: string): { child: ChildProcess; done: Promise<Landed> } {
+  const child = cpus
+    ? spawn("taskset", ["-c", cpus, process.execPath, LAND, "HEAD"], { cwd: tree, env: s.env })
+    : spawn(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env });
   let out = "";
   child.stdout?.on("data", (d) => (out += d));
   child.stderr?.on("data", (d) => (out += d));
@@ -133,6 +140,24 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
 
 const gates = (s: Scratch) => (existsSync(s.gates) ? readFileSync(s.gates, "utf8").trim().split("\n").length : 0);
 const onMain = (s: Scratch, path: string) => spawnSync("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
+
+test("the gate and its grandchild exclude the measurement core, preserving an E-core caller", { skip: process.platform !== "linux" }, async () => {
+  const inherited = inheritedCpus();
+  const eCores = cpuList(inherited).filter((cpu) => cpu >= 16);
+  assert.ok(eCores.length > 0, "this host has E-cores for the inherited-mask control");
+  for (const confined of [undefined, String(eCores[0])]) {
+    const s = scratch();
+    s.env.LAND_TEST_AFFINITY = join(s.home, "affinity.json");
+    const tree = lane(s, "affinity", { "a.txt": "a\n" });
+    const result = await land(s, tree, confined).done;
+    assert.equal(result.status, 0, result.out);
+    const expected = gateCpus(confined ?? inherited);
+    assert.deepEqual(readFileSync(s.env.LAND_TEST_AFFINITY, "utf8").trim().split("\n"), [expected, expected]);
+    assert.ok(result.out.includes(`gate affinity: CPUs ${expected}; measurement CPUs 4-5 excluded`), result.out);
+    const run = JSON.parse(readFileSync(join(s.home, ".cache/nts-land/status.json"), "utf8")).run;
+    assert.ok(readFileSync(join(run, "gate.log"), "utf8").includes(`gate affinity: CPUs ${expected};`));
+  }
+});
 
 test("one gate lands every landing queued behind the lock", async () => {
   const s = scratch();

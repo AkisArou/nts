@@ -45,6 +45,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { gateCommand } from "../gate/affinity.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -397,9 +398,12 @@ function gate(root: string, base: string, landing: string, members: string[]): G
       NTS_TSGO: join(root, "target/tsgo"),
       CARGO_INCREMENTAL: "0",
     });
+    const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);
+    const affinity = launch.cpus === null ? "host affinity unchanged (not Linux)" : `CPUs ${launch.cpus}; measurement CPUs 4-5 excluded`;
+    say(`gate affinity: ${affinity}`);
     say(`gating; log ${join(run, "gate.log")}`);
-    const gated = spawnSync("sh", [join(root, "tooling/gate/pinned.sh"), landing], { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
-    writeFileSync(join(run, "gate.log"), `${gated.stdout ?? ""}${gated.stderr ?? ""}`);
+    const gated = spawnSync(launch.command, launch.args, { cwd: root, env, stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+    writeFileSync(join(run, "gate.log"), `land: gate affinity: ${affinity}\n${gated.stdout ?? ""}${gated.stderr ?? ""}`);
 
     const summaryPath = join(run, "summary.json");
     if (!existsSync(summaryPath)) return { ok: false, run, state: "red", message: `the gate wrote no summary (exit ${gated.status}); see ${join(run, "gate.log")}` };

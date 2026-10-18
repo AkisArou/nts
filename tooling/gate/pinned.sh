@@ -31,6 +31,15 @@
 # small, and this week has been mostly about rules with nothing watching them.
 set -eu
 
+# A physical P-core (both threads, 4-5) belongs to timed measurements.
+# Intersect with our inherited affinity: an E-core-only caller stays there.
+# Pin this shell before any build, so every descendant inherits the mask.
+gate_cpus=$(node "$(dirname -- "$0")/affinity.ts" --gate-cpus "$$")
+if [ -n "$gate_cpus" ]; then
+  taskset -pc "$gate_cpus" "$$" >/dev/null
+  echo "gate: affinity $gate_cpus; measurement CPUs 4-5 excluded"
+fi
+
 # The checkout every worktree shares, wherever this script runs from: the
 # gitignored inputs linked below live there and nowhere else, and a worktree's
 # own copies (missing node_modules, a dangling submodule link) gated three steps
