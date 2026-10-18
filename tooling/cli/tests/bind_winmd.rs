@@ -124,6 +124,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         messaging.contains("  /** @ntsConstant 275 */\n  export const WM_TIMER: c_uint;\n"),
         "no WM_TIMER"
     );
+    constants_carry_their_values(&messaging, &refused);
     // `PWSTR` that is not read-only is a buffer the caller owns, not a lent
     // string: `LoadStringW` writes into it.
     assert!(
@@ -149,6 +150,29 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
         "only {functions} functions bound from WindowsAndMessaging"
     );
     let _ = std::fs::remove_dir_all(&out);
+}
+
+/// A constant the metadata types by a scalar typedef (`HRESULT` over
+/// `i32`) binds as that scalar, and a float constant binds as its float
+/// brand: both state values plainly, and refusing them lost exactly
+/// what `@ntsConstant` exists to carry. A pointer-typed sentinel
+/// (`HWND_BROADCAST`, the MAKEINTRESOURCE names) is still refused, and
+/// the refusal names the metadata type so the ledger reads without
+/// re-opening the winmd.
+fn constants_carry_their_values(messaging: &str, refused: &str) {
+    assert!(
+        messaging.contains("export const STRSAFE_E_INSUFFICIENT_BUFFER: c_int;"),
+        "an HRESULT-typed constant was refused instead of bound as c_int"
+    );
+    assert!(
+        messaging.contains("export const TOUCHPREDICTIONPARAMETERS_DEFAULT_RLS_DELTA: Float32;"),
+        "a float constant was refused instead of bound as Float32"
+    );
+    assert!(
+        refused.lines().any(|line| line
+            == "HWND_BROADCAST\ta constant that is not a plain integer (metadata type `HWND`, value an integer)"),
+        "HWND_BROADCAST's refusal does not name its metadata type"
+    );
 }
 
 /// The directory of Windows Runtime contract `.winmd`s, as

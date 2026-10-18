@@ -767,20 +767,81 @@ pub(crate) fn number(value: &Value) -> Option<String> {
         Value::U32(v) => v.to_string(),
         Value::I64(v) => v.to_string(),
         Value::U64(v) => v.to_string(),
+        Value::F32(v) if v.is_finite() => v.to_string(),
+        Value::F64(v) if v.is_finite() => v.to_string(),
+        Value::EnumValue(_, inner) => return number(inner),
         _ => return None,
     })
 }
 
-fn constant_brand(meta: &Type) -> Option<&'static str> {
-    Some(match meta {
-        Type::I8 => "Int8",
-        Type::U8 => "Uint8",
-        Type::I16 => "Int16",
-        Type::U16 => "Uint16",
-        Type::I32 => "c_int",
-        Type::U32 => "c_uint",
-        _ => return None,
-    })
+/// How a refused constant's metadata type is named in the refusal
+/// ledger, so a reader can tell a pointer sentinel (`HWND_BROADCAST`)
+/// from a float or a string without re-reading the winmd.
+fn constant_type_name(meta: &Type) -> String {
+    match meta {
+        Type::ValueName(type_name) | Type::ClassName(type_name) => {
+            format!("`{}`", type_name.name)
+        }
+        Type::PtrMut(..) | Type::PtrConst(..) => "a pointer".into(),
+        Type::String => "a string".into(),
+        Type::F32 | Type::F64 => "a float".into(),
+        Type::Bool => "a boolean".into(),
+        Type::I64 | Type::U64 => "a 64-bit integer".into(),
+        Type::ISize | Type::USize => "a pointer-sized integer".into(),
+        other => format!("{other:?}"),
+    }
+}
+
+fn constant_value_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Bool(_) => "a boolean",
+        Value::U8(_)
+        | Value::I8(_)
+        | Value::U16(_)
+        | Value::I16(_)
+        | Value::U32(_)
+        | Value::I32(_)
+        | Value::U64(_)
+        | Value::I64(_)
+        | Value::USize(_)
+        | Value::ISize(_) => "an integer",
+        Value::F32(_) | Value::F64(_) => "a float",
+        Value::Utf8(_) | Value::Utf16(_) => "a string",
+        Value::TypeName(_) => "a type name",
+        Value::EnumValue(..) => "an enum value",
+    }
+}
+
+fn constant_brand(model: &Model, meta: &Type) -> Option<&'static str> {
+    // A named scalar typedef (`HRESULT` over `i32`) brands as what it
+    // is over: following the chain here keeps the constant, where
+    // refusing it would lose a value the metadata states plainly.
+    let mut current = meta;
+    let mut hops = 0;
+    loop {
+        match current {
+            Type::ValueName(type_name) | Type::ClassName(type_name) => {
+                hops += 1;
+                if hops > 8 {
+                    return None;
+                }
+                let info = model.types.get(&super::read::name_of(type_name))?;
+                match &info.kind {
+                    super::read::Kind::Typedef { value, .. } => current = value,
+                    _ => return None,
+                }
+            }
+            Type::I8 => return Some("Int8"),
+            Type::U8 => return Some("Uint8"),
+            Type::I16 => return Some("Int16"),
+            Type::U16 => return Some("Uint16"),
+            Type::I32 => return Some("c_int"),
+            Type::U32 => return Some("c_uint"),
+            Type::F32 => return Some("Float32"),
+            Type::F64 => return Some("Float64"),
+            _ => return None,
+        }
+    }
 }
 
 /// Every namespace's module: the ones asked for, and each one owning a type
@@ -818,7 +879,7 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
     for constant in &model.constants {
         entry(&mut by_namespace, &constant.namespace);
         let binding = by_namespace.get_mut(&constant.namespace).expect("inserted");
-        match (constant_brand(&constant.ty), number(&constant.value)) {
+        match (constant_brand(model, &constant.ty), number(&constant.value)) {
             (Some(brand), Some(value)) => {
                 mapper.brands.insert(brand);
                 binding.constants.push(Constant {
@@ -829,7 +890,11 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
             }
             _ => binding.refused.push((
                 constant.name.clone(),
-                "a constant that is not a plain integer".into(),
+                format!(
+                    "a constant that is not a plain integer (metadata type {}, value {})",
+                    constant_type_name(&constant.ty),
+                    constant_value_kind(&constant.value),
+                ),
             )),
         }
     }
