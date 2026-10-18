@@ -2744,6 +2744,120 @@ fn report(
 }
 
 #[cfg(test)]
+mod wasm_compiler_stop_guard {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+    use nts_core::hir::{Absent, Block, Callee, Func, Op, OpKind, Provider, Terminator, ValueId};
+
+    const REASON: &str = "`Example#method` was refused: the original lowering reason";
+
+    fn program() -> hir::Program {
+        let origin = nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span { start: 0, end: 0 },
+        });
+        let op = |kind, ty| Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        };
+        let mut stopped = Func {
+            name: "stopped".to_owned(),
+            params: Vec::new(),
+            return_type: HirType::NUMBER,
+            written_return: None,
+            written_return_elements: Vec::new(),
+            result_absent: Absent::Impossible,
+            values: vec![
+                op(
+                    OpKind::ConstString(REASON.to_owned()),
+                    HirType::Managed(hir::ManagedType::String),
+                ),
+                op(
+                    OpKind::Call {
+                        callee: Callee::External("nts_refused".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ],
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(1)],
+                terminator: Terminator::Unreachable,
+            }],
+            origin: origin.clone(),
+            exported: true,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+            obligations: Vec::new(),
+        };
+        let mut control = stopped.clone();
+        control.name = "control".to_owned();
+        control.values = vec![op(OpKind::ConstFloat(7.0), HirType::NUMBER)];
+        control.blocks = vec![Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0)],
+            terminator: Terminator::Return(Some(ValueId(0))),
+        }];
+        stopped.exported = true;
+        hir::Program {
+            funcs: vec![control, stopped],
+            provider: Provider::HostGc,
+            public_api: vec![
+                ("control".to_owned(), "control".to_owned()),
+                ("stopped".to_owned(), "stopped".to_owned()),
+            ],
+            ..hir::Program::default()
+        }
+    }
+
+    #[test]
+    fn a_wasm_named_runtime_stop_is_a_compiler_stop_with_its_message() {
+        let dir = Utf8PathBuf::from_path_buf(
+            std::env::temp_dir().join(format!("nts-wasm-compiler-stop-{}", std::process::id())),
+        )
+        .unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        let program = program();
+        let case = |name: &str| Testable {
+            name: name.to_owned(),
+            returns: HirType::NUMBER,
+            result_absent: Absent::Impossible,
+            params: Vec::new(),
+        };
+        // The emitter and the runner work: the same program's ordinary export
+        // answers, with no skipped input, before the named-stop subject runs.
+        let mut refused = Vec::new();
+        let control = run_wasm(&dir, &program, &[], &[case("control")], &mut refused).unwrap();
+        assert_eq!(control.results.len(), 1);
+        assert!(refused.is_empty());
+        let result = run_wasm(&dir, &program, &[], &[case("stopped")], &mut refused);
+        std::fs::remove_dir_all(&dir).unwrap();
+        // C's corresponding stop is a compiler defect, never an input decline.
+        assert!(matches!(
+            stopped_with(
+                Some(134),
+                None,
+                &format!("nts: refused at run time: {REASON}")
+            ),
+            Stopped::Defect(_)
+        ));
+        let Err(error) = result else {
+            panic!("Wasm swallowed a named compiler stop as an input decline: {refused:?}");
+        };
+        assert!(
+            error.to_string().contains(REASON),
+            "the compiler stop lost its reason: {error}"
+        );
+    }
+}
+
+#[cfg(test)]
 mod classification {
     use super::{Stopped, stopped_with};
 
