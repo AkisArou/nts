@@ -70,50 +70,7 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
             .iter()
             .position(|name| name.as_deref() == Some("Base#value"))
             .unwrap();
-        for class in ["Refused", "Inherited"] {
-            let layout = program
-                .layouts
-                .iter()
-                .find(|layout| layout.name == class)
-                .unwrap();
-            let entry = layout.methods[slot]
-                .as_ref()
-                .expect("a reachable refused receiver needs a real slot entry");
-            let body = program
-                .funcs
-                .iter()
-                .find(|func| &func.name == entry)
-                .expect("the entry must have a body");
-            assert_ne!(
-                entry, "Refused#value",
-                "a direct call must still see the refusal"
-            );
-            assert!(!body.abstract_declaration);
-            assert!(
-                matches!(body.params[0].ty, HirType::Managed(ManagedType::Object(ty)) if layout.types.contains(&ty))
-            );
-            assert_eq!(
-                body.params
-                    .iter()
-                    .skip(1)
-                    .map(|p| &p.ty)
-                    .collect::<Vec<_>>(),
-                declaration
-                    .params
-                    .iter()
-                    .skip(1)
-                    .map(|p| &p.ty)
-                    .collect::<Vec<_>>()
-            );
-            assert_eq!(body.return_type, declaration.return_type);
-            assert!(
-                stops(body)
-                    .iter()
-                    .any(|message| message.contains("Refused#value")
-                        && message.contains(reason.as_str())),
-                "the stop must retain the original method and refusal: {body:?}"
-            );
-        }
+        assert_refused_entries(program, declaration, slot, reason);
         for (class, method) in [
             ("Compiled", "Compiled#value"),
             ("Grandchild", "Grandchild#value"),
@@ -161,5 +118,57 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
                 .any(|func| func.name == "Refused#value")
         );
         hir::verify::verify(program).expect("the typed stop must verify under every provider");
+    }
+}
+
+fn assert_refused_entries(
+    program: &hir::Program,
+    declaration: &hir::Func,
+    slot: usize,
+    reason: &str,
+) {
+    for class in ["Refused", "Inherited"] {
+        let layout = program
+            .layouts
+            .iter()
+            .find(|layout| layout.name == class)
+            .unwrap();
+        let entry = layout.methods[slot]
+            .as_ref()
+            .expect("a reachable refused receiver needs a real slot entry");
+        let body = program
+            .funcs
+            .iter()
+            .find(|func| &func.name == entry)
+            .expect("the entry must have a body");
+        assert_ne!(
+            entry, "Refused#value",
+            "a direct call must still see the refusal"
+        );
+        assert!(!body.abstract_declaration);
+        assert!(
+            matches!(body.params[0].ty, HirType::Managed(ManagedType::Object(ty)) if layout.types.contains(&ty))
+        );
+        assert_eq!(
+            body.params
+                .iter()
+                .skip(1)
+                .map(|p| &p.ty)
+                .collect::<Vec<_>>(),
+            declaration
+                .params
+                .iter()
+                .skip(1)
+                .map(|p| &p.ty)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(body.return_type, declaration.return_type);
+        assert!(
+            stops(body)
+                .iter()
+                .any(|message| message.contains("Refused#value")
+                    && message.contains(reason.as_str())),
+            "the stop must retain the original method and refusal: {body:?}"
+        );
     }
 }
