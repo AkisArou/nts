@@ -15816,6 +15816,9 @@ pub fn lower_with(
     // The instantiations generic bodies make of other generics, written into
     // the snapshot first, so every pass below meets them as the checker's
     // own. See `instantiate`. A clone only where there is something to add.
+    // Types at or after this index in the materialised snapshot were made
+    // here, not read from the checker: they never proved their ancestry.
+    let original_types = snapshot.types.len();
     let materialised = super::instantiate::materialise(snapshot);
     let indexed = LoweringSnapshot::new(materialised.as_ref().unwrap_or(snapshot));
     let snapshot = &indexed;
@@ -16085,7 +16088,12 @@ pub fn lower_with(
     ));
 
     collect_declared_facts(&mut lowered.program, snapshot);
-    super::interface_identities::collect(snapshot, &hierarchy.faces, &mut lowered.program);
+    super::interface_identities::collect(
+        snapshot,
+        &hierarchy.faces,
+        original_types,
+        &mut lowered.program,
+    );
     canonicalize_objects(&mut lowered.program);
     expand_layout_tests(&mut lowered.program);
     printed::decide(

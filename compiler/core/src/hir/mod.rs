@@ -2115,6 +2115,15 @@ pub struct InterfaceIdentity {
     /// Semantic instantiation names, independent of a shared layout's name.
     /// Diagnostic metadata only; it cannot decide storage or assignability.
     pub names: std::collections::BTreeMap<TypeId, String>,
+    /// Each used instantiation's declared parents, in declaration order.
+    ///
+    /// These are semantic edges from the snapshot, independent of shared
+    /// storage. Several parents form a DAG; a parent may share this type's
+    /// layout or have no layout in the emitted program. Consumers must resolve
+    /// and prove the edges they use rather than infer them from field prefixes.
+    /// A present empty list proves a root. A missing entry is unknown.
+    /// This metadata does not participate in layout collection or merging.
+    pub parents: std::collections::BTreeMap<TypeId, Vec<TypeId>>,
 }
 
 /// How one object type is laid out.
