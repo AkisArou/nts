@@ -41,7 +41,7 @@ impl Probe {
 
 pub(crate) fn against_headers(
     bindings: &mut [Binding],
-    headers: &[String],
+    headers: &[Vec<String>],
     clang_args: &[String],
 ) -> Result<()> {
     let mut dropped: BTreeSet<Name> = BTreeSet::new();
@@ -55,15 +55,15 @@ pub(crate) fn against_headers(
 }
 
 /// One assertion per declaration, after what a generated program includes.
-fn probe(binding: &Binding, headers: &[String]) -> Probe {
+fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
     let mut probe = Probe::default();
     // What a generated program always has, through the runtime: the
     // spellings nts emits (`uint16_t`, `bool`) need these, and `windows.h`
     // includes neither.
     probe.line("#include <stdint.h>", None);
     probe.line("#include <stdbool.h>", None);
-    for header in headers {
-        probe.line(&format!("#include <{header}>"), None);
+    for line in super::facts::include_lines(headers) {
+        probe.line(&line, None);
     }
     for function in &binding.functions {
         probe.line(

@@ -100,7 +100,7 @@ pub(crate) fn module_of(namespace: &str) -> String {
 /// The questions the model raises, asked.
 pub(crate) fn ask(
     model: &Model,
-    headers: &[String],
+    headers: &[Vec<String>],
     clang_args: &[String],
 ) -> anyhow::Result<Facts> {
     let mut fields = Vec::new();
@@ -947,7 +947,7 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
             .unanswered
             .get(&function.name)
             .cloned()
-            .unwrap_or_else(|| "not declared by <windows.h>".into()));
+            .unwrap_or_else(|| "not declared by the headers asked".into()));
     };
     if variadic {
         return Err("variadic".into());

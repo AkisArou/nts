@@ -80,7 +80,7 @@ fn imports(body: &str, own: &str, owners: &BTreeMap<String, String>) -> String {
 }
 
 /// The header a documentation page names: `.../api/winuser/nf-winuser-...`.
-fn header_of(documentation: Option<&str>) -> Option<String> {
+pub(crate) fn header_of(documentation: Option<&str>) -> Option<String> {
     let path = documentation?.split("/api/").nth(1)?;
     Some(format!("{}.h", path.split('/').next()?))
 }

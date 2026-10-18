@@ -36,10 +36,32 @@ pub(crate) struct Questions<'a> {
     pub(crate) typedefs: Vec<&'a str>,
 }
 
+/// The include lines for one probe: `<windows.h>` outright (its absence
+/// is an error worth hearing), and each further header behind
+/// `__has_include`, trying the name the documentation gives and then
+/// its unsplit form — which of them this toolchain carries is clang's
+/// search to answer, never a path laid out here.
+pub(crate) fn include_lines(headers: &[Vec<String>]) -> Vec<String> {
+    let mut lines = Vec::new();
+    for group in headers {
+        if group.len() == 1 && group[0] == "windows.h" {
+            lines.push("#include <windows.h>".to_owned());
+            continue;
+        }
+        for (index, header) in group.iter().enumerate() {
+            let if_ = if index == 0 { "#if" } else { "#elif" };
+            lines.push(format!("{if_} __has_include(<{header}>)"));
+            lines.push(format!("#include <{header}>"));
+        }
+        lines.push("#endif".to_owned());
+    }
+    lines
+}
+
 /// One clang run over `headers` and `declarations`, answering with each probe's
 /// `(name, qualType, desugaredQualType)`.
 fn ask(
-    headers: &[String],
+    headers: &[Vec<String>],
     clang_args: &[String],
     declarations: &str,
 ) -> Result<Vec<(String, String, Option<String>)>> {
@@ -51,8 +73,8 @@ fn ask(
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let probe = dir.join("probe.c");
     let mut text = String::new();
-    for header in headers {
-        let _ = writeln!(text, "#include <{header}>");
+    for line in include_lines(headers) {
+        let _ = writeln!(text, "{line}");
     }
     text.push_str(declarations);
     std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
@@ -97,7 +119,7 @@ static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::n
 
 /// Ask, then keep asking about the typedef names the answers mention.
 pub(crate) fn resolve(
-    headers: &[String],
+    headers: &[Vec<String>],
     clang_args: &[String],
     questions: &Questions,
 ) -> Result<Facts> {

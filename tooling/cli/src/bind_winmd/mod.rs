@@ -104,6 +104,33 @@ fn bind(request: &Request, command: &str) -> Result<Vec<String>> {
     Ok(bindings.iter().map(summary).collect())
 }
 
+/// The headers the probe asks for: `<windows.h>`, which leaves out whole
+/// subsystems (`shlobj.h` for the Shell), plus the header each function's
+/// documentation page names. The page names the SDK's split header
+/// (`shlobj_core.h`); mingw may carry only the unsplit one
+/// (`shlobj.h`), so each entry is the alternatives for one header, and
+/// the probe asks clang which it has (`__has_include`) rather than
+/// reproducing any toolchain's include layout here.
+fn probe_headers(model: &read::Model) -> Vec<Vec<String>> {
+    let mut headers: Vec<Vec<String>> = vec![vec!["windows.h".to_owned()]];
+    let mut seen: std::collections::BTreeSet<String> =
+        ["windows.h".to_owned()].into_iter().collect();
+    for function in &model.functions {
+        let Some(header) = emit::header_of(function.documentation.as_deref()) else {
+            continue;
+        };
+        if !seen.insert(header.clone()) {
+            continue;
+        }
+        let mut group = vec![header.clone()];
+        if let Some(stem) = header.strip_suffix("_core.h") {
+            group.push(format!("{stem}.h"));
+        }
+        headers.push(group);
+    }
+    headers
+}
+
 /// One binding's summary line.
 fn summary(binding: &map::Binding) -> String {
     format!(
@@ -135,7 +162,7 @@ pub(crate) fn generate(
     let zig = crate::zig_lib_dir()
         .context("`zig env` did not answer; the Windows headers come from zig")?;
     let clang_args = crate::windows_compile_flags(arch, &zig);
-    let headers = vec!["windows.h".to_owned()];
+    let headers = probe_headers(&model);
     let facts = map::ask(&model, &headers, &clang_args)?;
     let mut bindings = map::bindings(&model, &facts);
     check::against_headers(&mut bindings, &headers, &clang_args)?;
