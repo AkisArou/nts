@@ -68,14 +68,18 @@ for product in list listLlvm; do
 done
 echo "ios: both products built for the simulator and bundled"
 
-if ! "$root/tooling/apple/run-ios.sh" --reachable; then
-  echo "SKIP ios-list: not run -- no Mac reachable (tooling/apple/vm.md)"
-  exit 0
-fi
+ready_status=0
+"$root/tooling/apple/run-ios.sh" --reachable || ready_status=$?
+case $ready_status in
+  0) ;;
+  77) echo "SKIP ios-list: not run -- no Mac reachable (tooling/apple/vm.md)"; exit 0 ;;
+  *) exit "$ready_status" ;;
+esac
 printf '%s\n' "title Fruits" "rows 3 visible 3" "row 1 banana" "rows 4 last date" "selected 1" "asked 4" "tapped banana" "height -1" "header Fruits" "window yes" "plain none" "done" >"$out/expected.txt"
 for product in list listLlvm; do
   "$root/tooling/apple/run-ios.sh" "$out/$product/ios-17-x86_64/$product.app" >"$out/$product.txt" 2>"$out/$product.err" ||
     { cat "$out/$product.txt" "$out/$product.err" >&2; exit 1; }
+  cat "$out/$product.err" >&2
   diff -u "$out/expected.txt" "$out/$product.txt"
 done
 echo "simulator: the table read the TypeScript data source, before and after a reload, on both backends"
@@ -95,5 +99,6 @@ ssh -o BatchMode=yes "$dest" 'cd /tmp && swiftc -O -target x86_64-apple-ios17.0-
 scp -q -o BatchMode=yes "$dest:/tmp/nts-ios-list-swift" "$swift_app/listSwift"
 "$root/tooling/apple/run-ios.sh" "$swift_app" >"$out/swift.txt" 2>"$out/swift.err" ||
   { cat "$out/swift.txt" "$out/swift.err" >&2; exit 1; }
+cat "$out/swift.err" >&2
 diff -u "$out/expected.txt" "$out/swift.txt"
 echo "swift: the same application in Swift says the same, line for line"

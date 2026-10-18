@@ -68,14 +68,18 @@ for product in form formLlvm; do
 done
 echo "ios: both products built for the simulator and bundled"
 
-if ! "$root/tooling/apple/run-ios.sh" --reachable; then
-  echo "SKIP ios-form: not run -- no Mac reachable (tooling/apple/vm.md)"
-  exit 0
-fi
+ready_status=0
+"$root/tooling/apple/run-ios.sh" --reachable || ready_status=$?
+case $ready_status in
+  0) ;;
+  77) echo "SKIP ios-form: not run -- no Mac reachable (tooling/apple/vm.md)"; exit 0 ;;
+  *) exit "$ready_status" ;;
+esac
 printf '%s\n' "first true" "changed hi 1" "return hi" "asked false" "changed hi! 2" "quiet hi!? 2" "done" >"$out/expected.txt"
 for product in form formLlvm; do
   "$root/tooling/apple/run-ios.sh" "$out/$product/ios-17-x86_64/$product.app" >"$out/$product.txt" 2>"$out/$product.err" ||
     { cat "$out/$product.txt" "$out/$product.err" >&2; exit 1; }
+  cat "$out/$product.err" >&2
   diff -u "$out/expected.txt" "$out/$product.txt"
 done
 echo "simulator: typing reached the TypeScript observer, the delegate answered through the field, and a removed observer heard nothing, on both backends"
@@ -95,5 +99,6 @@ ssh -o BatchMode=yes "$dest" 'cd /tmp && swiftc -O -target x86_64-apple-ios17.0-
 scp -q -o BatchMode=yes "$dest:/tmp/nts-ios-form-swift" "$swift_app/formSwift"
 "$root/tooling/apple/run-ios.sh" "$swift_app" >"$out/swift.txt" 2>"$out/swift.err" ||
   { cat "$out/swift.txt" "$out/swift.err" >&2; exit 1; }
+cat "$out/swift.err" >&2
 diff -u "$out/expected.txt" "$out/swift.txt"
 echo "swift: the same application in Swift says the same, line for line"

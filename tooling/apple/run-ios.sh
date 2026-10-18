@@ -3,7 +3,7 @@
 # simulator, and returns its stdout and stderr.
 #
 #   tooling/apple/run-ios.sh <name>.app
-#   tooling/apple/run-ios.sh --reachable      # exit 0 if a Mac answers, else 77
+#   tooling/apple/run-ios.sh --reachable      # Mac and simulator ready; 77 if no Mac
 #
 # The bundle is copied over, the simulator booted if it is not
 # (`NTS_IOS_DEVICE`, default `iPhone 17`), the application installed and
@@ -12,8 +12,12 @@
 # application's and is left out.
 #
 # NTS_APPLE_SSH names the ssh destination, as for run.sh. Exit 77 means "no Mac
-# reachable", which callers print SKIP for; 124, a run that outlasted
-# NTS_IOS_TIMEOUT; 255, a connection that ended during the run.
+# reachable", which callers print SKIP for. A reachable Mac whose configured
+# simulator cannot boot is a failure, never a skip. NTS_IOS_READY_TIMEOUT bounds
+# readiness (default 600 s), separately from NTS_IOS_TIMEOUT (default 300 s)
+# for install/launch and the attached application. Stage times go to stderr;
+# application stdout is unchanged. `launch-and-app` measures simctl's attached
+# launch call, including the application's execution.
 set -uo pipefail
 
 dest="${NTS_APPLE_SSH:-nts-mac}"
@@ -40,6 +44,30 @@ reachable() {
   return 1
 }
 
+stage_time() {
+  local stage_name=$1 stage_status
+  shift
+  printf 'run-ios: %s begin\n' "$stage_name" >&2
+  /usr/bin/time -p "$@"
+  stage_status=$?
+  printf 'run-ios: %s exit %s\n' "$stage_name" "$stage_status" >&2
+  return "$stage_status"
+}
+
+ready() {
+  reachable || return 77
+  local ready_limit=${NTS_IOS_READY_TIMEOUT:-600} ready_status=0
+  # Paid before the application's deadline: the first cold simulator arms
+  # timed out at 300 s, while the same applications ran in seconds once warm.
+  stage_time "readiness ($device)" timeout -k 10 "$ready_limit" \
+    ssh "${ssh_opts[@]}" "$dest" "xcrun simctl bootstatus $(printf '%q' "$device") -b" >&2 || ready_status=$?
+  if [[ $ready_status -ne 0 ]]; then
+    echo "run-ios.sh: configured simulator '$device' did not become ready (exit $ready_status, NTS_IOS_READY_TIMEOUT=$ready_limit s)" >&2
+    [[ $ready_status -ne 124 ]] || return 124
+    return 1
+  fi
+}
+
 # One artifact on the Mac at a time, for every caller of this script and of
 # its sibling (run.sh / run-ios.sh take the same lock). The gate's interop step
 # builds its projects in parallel, and a 4 GB VM running an iOS simulator beside
@@ -52,24 +80,25 @@ exec 9>"${XDG_CACHE_HOME:-$HOME/.cache}/nts-mac.lock"
 flock 9
 
 if [[ "${1:-}" == "--reachable" ]]; then
-  reachable && exit 0 || exit 77
+  ready
+  exit $?
 fi
 [[ $# -eq 1 && -d "$1" && "$1" == *.app ]] || { echo "usage: $0 <name>.app" >&2; exit 2; }
 bundle="$1"
 id=$(sed -n '/<key>CFBundleIdentifier<\/key>/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$bundle/Info.plist")
 [[ -n "$id" ]] || { echo "no CFBundleIdentifier in $bundle/Info.plist" >&2; exit 2; }
-reachable || exit 77
+ready || exit $?
 
 remote=$(ssh "${ssh_opts[@]}" "$dest" mktemp -d /tmp/nts-ios.XXXXXX)
 scp -q -r "${ssh_opts[@]}" "$bundle" "$dest:$remote/"
 name=$(basename "$bundle")
-# Booting, installing and the application's own run, bounded: a simulator
+# Installing and the application's own run, bounded: an application
 # that never finishes is ended after NTS_IOS_TIMEOUT seconds (default 300),
 # says so by name, and exits 124, where it once held a gate for 76 minutes.
 limit="${NTS_IOS_TIMEOUT:-300}"
-timeout -k 10 "$limit" ssh "${ssh_opts[@]}" "$dest" "xcrun simctl bootstatus '$device' -b >/dev/null 2>&1 &&
-  xcrun simctl install '$device' '$remote/$name' &&
-  xcrun simctl launch --console --terminate-running-process '$device' '$id'" |
+timeout -k 10 "$limit" ssh "${ssh_opts[@]}" "$dest" "$(declare -f stage_time)
+  stage_time install xcrun simctl install $(printf '%q' "$device") $(printf '%q' "$remote/$name") &&
+  stage_time launch-and-app xcrun simctl launch --console --terminate-running-process $(printf '%q' "$device") $(printf '%q' "$id")" |
   grep -v "^$id: [0-9][0-9]*\$"
 status=${PIPESTATUS[0]}
 case $status in

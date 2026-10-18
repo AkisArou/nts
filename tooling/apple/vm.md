@@ -68,3 +68,19 @@ from another machine with `ssh -L 5930:$HOME/macos-tahoe/macos-tahoe.sock`.
 Turning on automatic login (System Settings, Users & Groups) keeps a reboot
 from losing the session.
 
+## Before an Apple landing
+
+Boot the VM before queueing, confirm `tooling/apple/run.sh --reachable` and
+`--gui`, and keep it running through the Apple interop arms. For iOS, also run
+`tooling/apple/run-ios.sh --reachable`: it boots the configured `NTS_IOS_DEVICE`
+(default `iPhone 17`) and waits for readiness under the shared Mac lock. SSH
+alone does not establish simulator readiness.
+
+`NTS_IOS_READY_TIMEOUT` bounds that wait separately (default 600 seconds).
+An unavailable Mac returns 77; a reachable Mac with a missing or broken
+simulator fails by name instead of being skipped. Direct application runs
+perform the same readiness check. `NTS_IOS_TIMEOUT` remains 300 seconds for
+installing and running the application. Named readiness, install and attached
+launch/application timings go to stderr; interop forwards them into its gate
+log without adding anything to application stdout or its golden comparison.
+
