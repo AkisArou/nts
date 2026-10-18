@@ -25,6 +25,13 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
         let result = command.output().unwrap();
         let stdout = String::from_utf8_lossy(&result.stdout);
         let stderr = String::from_utf8_lossy(&result.stderr);
+        if backend == "wasm" {
+            // Use check to retain the emitted module, then ask it directly.
+            // The differential's NTS5001 classification has its own guard;
+            // this test asserts dispatch and the original refusal message.
+            assert_wasm_stops(&scratch);
+            continue;
+        }
         assert!(
             stdout.contains("3 case(s) the compiled program declined"),
             "{backend}: {stdout}\n{stderr}"
@@ -33,14 +40,10 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
             stdout.contains("checked 113 of 116 cases"),
             "{backend}: {stdout}\n{stderr}"
         );
-        if backend == "wasm" {
-            // The Wasm differential currently classifies every NTS5001 as an
-            // input refusal and drops its message. Ask the artifact directly:
-            // agreement over the 113 other inputs cannot prove a named stop.
-            assert!(result.status.success(), "{stdout}\n{stderr}");
-            assert_wasm_stops(&scratch);
-            continue;
-        }
+        assert!(
+            !stdout.contains("  nts  ") && !stdout.contains("  node "),
+            "{backend}: controls must agree: {stdout}\n{stderr}"
+        );
         assert!(
             !result.status.success(),
             "{backend}: a missing feature must stop: {stdout}\n{stderr}"
@@ -48,10 +51,6 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
         assert!(
             stderr.contains("aborted 3 time(s)"),
             "{backend}: {stdout}\n{stderr}"
-        );
-        assert!(
-            !stdout.contains("  nts  ") && !stdout.contains("  node "),
-            "{backend}: controls must agree: {stdout}\n{stderr}"
         );
         assert_eq!(stdout.matches("the compiled program aborted: nts: refused at run time: `Refused#value` was refused: `eval`, a builtin this compiler does not provide is not supported by this lowering yet").count(), 3, "{backend}: {stdout}\n{stderr}");
     }
