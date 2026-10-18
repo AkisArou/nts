@@ -105,8 +105,8 @@ fn bind(request: &Request, command: &str) -> Result<Vec<String>> {
 }
 
 /// The headers the probe asks for: `<windows.h>`, which leaves out whole
-/// subsystems (`shlobj.h` for the Shell), plus the header each function's
-/// documentation page names. The page names the SDK's split header
+/// subsystems (`shlobj.h` for the Shell), plus the header each function's or
+/// COM method's documentation page names. The page names the SDK's split header
 /// (`shlobj_core.h`); mingw may carry only the unsplit one
 /// (`shlobj.h`), so each entry is the alternatives for one header, and
 /// the probe asks clang which it has (`__has_include`) rather than
@@ -115,8 +115,21 @@ fn probe_headers(model: &read::Model) -> Vec<Vec<String>> {
     let mut headers: Vec<Vec<String>> = vec![vec!["windows.h".to_owned()]];
     let mut seen: std::collections::BTreeSet<String> =
         ["windows.h".to_owned()].into_iter().collect();
-    for function in &model.functions {
-        let Some(header) = emit::header_of(function.documentation.as_deref()) else {
+    let methods = model
+        .types
+        .values()
+        .filter_map(|info| match &info.kind {
+            read::Kind::Interface(interface) => Some(&interface.methods),
+            _ => None,
+        })
+        .flatten();
+    let pages = model
+        .functions
+        .iter()
+        .map(|function| function.documentation.as_deref())
+        .chain(methods.map(|method| method.documentation.as_deref()));
+    for page in pages {
+        let Some(header) = emit::header_of(page) else {
             continue;
         };
         if !seen.insert(header.clone()) {
@@ -176,4 +189,48 @@ pub(crate) fn generate(
         })
         .collect();
     Ok((bindings, owners))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::probe_headers;
+    use super::read::{Interface, Kind, Method, Model, TypeInfo};
+
+    #[test]
+    fn method_documentation_reaches_headers_without_a_free_function() {
+        let method = |name: &str, header: &str| Method {
+            name: name.to_owned(),
+            parameters: Vec::new(),
+            result: windows_metadata::Type::Void,
+            documentation: Some(format!(
+                "https://learn.microsoft.com/windows/win32/api/{header}/nf-{header}-{name}"
+            )),
+        };
+        let model = Model {
+            types: [(
+                ("Windows.Win32.FactsTest".to_owned(), "ITest".to_owned()),
+                TypeInfo {
+                    kind: Kind::Interface(Interface {
+                        iid: None,
+                        parent: None,
+                        methods: vec![
+                            method("First", "shell_core"),
+                            method("Second", "shell_core"),
+                            method("Third", "other"),
+                        ],
+                    }),
+                },
+            )]
+            .into(),
+            ..Model::default()
+        };
+        assert_eq!(
+            probe_headers(&model),
+            vec![
+                vec!["windows.h"],
+                vec!["shell_core.h", "shell.h"],
+                vec!["other.h"],
+            ]
+        );
+    }
 }

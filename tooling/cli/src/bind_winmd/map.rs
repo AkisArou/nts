@@ -107,6 +107,25 @@ pub(crate) fn ask(
 ) -> anyhow::Result<Facts> {
     let mut fields = Vec::new();
     let mut typedefs = Vec::new();
+    // CINTERFACE exposes each interface's full inherited vtable as an ordinary
+    // C struct. Its fields use the same type resolver as every other record.
+    let vtables: Vec<_> = model
+        .types
+        .iter()
+        .filter_map(|((_, name), info)| match &info.kind {
+            Kind::Interface(interface) => Some((format!("{name}Vtbl"), &interface.methods)),
+            _ => None,
+        })
+        .collect();
+    let field_slots: Vec<_> = vtables
+        .iter()
+        .flat_map(|(record, methods)| {
+            methods
+                .iter()
+                .map(move |method| (record.as_str(), method.name.as_str()))
+        })
+        .collect();
+    fields.extend(field_slots.iter().copied());
     for ((_, name), info) in &model.types {
         match &info.kind {
             Kind::Struct {
@@ -130,6 +149,7 @@ pub(crate) fn ask(
             .map(|function| function.name.as_str())
             .collect(),
         fields,
+        field_slots,
         typedefs,
     };
     facts::resolve(headers, clang_args, &questions)
