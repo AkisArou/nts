@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | refused: NTS1001 `eval`, a builtin this compiler does not provide is not supported by this lowering yet | Error: 28 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: `Refused#value` was refused: `eval`, a builtin this compiler does not provide is not supported by this lowering yet",
   "node": null,
-  "measured_with": "9dd7d558162257d0",
+  "measured_with": "595a3da800145cbc",
   "source": "measured"
 }
