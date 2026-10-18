@@ -6936,10 +6936,9 @@ impl Emitter<'_> {
             return Err(refuse(
                 self.func,
                 &format!(
-                    "a call to the bound member `{name}`, whose binding table row is \
-                             missing -- the `.bind` file beside the declaration says how to \
-                             invoke it, and without it this backend would have to guess \
-                             between `invokevirtual` and `invokeinterface`"
+                    "a call to the bound member `{name}`, whose declaration has no `@ntsJvm` \
+                             invocation contract -- this backend cannot choose between \
+                             `invokevirtual` and `invokeinterface`"
                 ),
             ));
         };

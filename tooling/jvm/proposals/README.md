@@ -264,7 +264,7 @@ out, `ToInt32` on the way in — and only the outward half is in this patch.
 ### The third one-liner: unblocked, not written
 
 `escape.rs`'s `Callee::External` arm taking a `keeps` answer **was** blocked on
-this lane and is not any more. The `.bind` rows now carry what each member keeps
+this lane and is not any more. The declaration-local `@ntsJvmKeeps` tags carry what each member keeps
 (`3db5aa33`), read from its own bytecode by `escapes::table` and keyed by the
 same `owner.member:descriptor` the rows already use:
 
@@ -272,9 +272,9 @@ same `owner.member:descriptor` the rows already use:
                                12 proved nothing escapes
                                 7 keep something
 
-`-` and `.` are opposite claims and the format keeps them apart. `-` is "could
-not read this method" — assume every argument escapes, always sound, only
-pessimistic. `.` is "proved: nothing escapes", which is a claim. Writing the
+An absent tag and `@ntsJvmKeeps none` are opposite claims. An absent tag means
+"could not read this method": assume every argument escapes. `none` means
+"proved: nothing escapes". Writing the
 second for the first turns ignorance into permission.
 
 **What is left is one line and a signature, and it is not this lane's.**

@@ -1,9 +1,7 @@
 # The vocabulary a generated binding is written in.
 #
-# Curated by hand, rendered by `nts bind --members`. A hand-written prelude
-# could be curated and could not carry a binding table: a table is numbered by
-# byte offsets into the text, and a person cannot maintain those. This list is
-# the half a person should write; the offsets come from the run that renders it.
+# Curated by hand, rendered by `nts bind --members`. The list chooses the
+# surface; the generated declarations carry exact JVM descriptors in JSDoc.
 #
 # Named by the DECLARING class -- and that does not compose the way it looks
 # like it should, because a Java interface redeclares what it inherits.

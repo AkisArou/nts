@@ -9,46 +9,115 @@
 declare module "java:nts.intl" {
   /** nts.intl.IcuCalendar Final: cannot be extended. */
   export class IcuCalendar {
+    /** @ntsJvm special nts/intl/IcuCalendar.<init>:(Ljava/lang/String;)V
+     */
     constructor(a0: string);
+    /** @ntsJvm virtual nts/intl/IcuCalendar.load:(D)Z
+     * @ntsJvmKeeps none
+     */
     load(a0: number): boolean;
+    /** @ntsJvm virtual nts/intl/IcuCalendar.field:(I)D
+     * @ntsJvmKeeps none
+     */
     field(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuCalendar.monthCode:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     monthCode(): string;
+    /** @ntsJvm virtual nts/intl/IcuCalendar.toEpochDay:(DDD)D
+     * @ntsJvmKeeps none
+     */
     toEpochDay(a0: number, a1: number, a2: number): number;
   }
 
   /** nts.intl.IcuCaseMapping Final: cannot be extended. */
   export class IcuCaseMapping {
+    /** @ntsJvm static nts/intl/IcuCaseMapping.mapCase:(Ljava/lang/String;Ljava/lang/String;Z)Ljava/lang/String;
+     * @ntsJvmKeeps 0 1
+     */
     static mapCase(a0: string, a1: string, a2: boolean): string;
   }
 
   /** nts.intl.IcuCollator Final: cannot be extended. */
   export class IcuCollator {
+    /** @ntsJvm special nts/intl/IcuCollator.<init>:(Ljava/lang/String;IZZI)V
+     */
     constructor(a0: string, a1: number, a2: boolean, a3: boolean, a4: number);
+    /** @ntsJvm virtual nts/intl/IcuCollator.compare:(Ljava/lang/String;Ljava/lang/String;)I
+     * @ntsJvmKeeps 0 1
+     */
     compare(a0: string, a1: string): number;
+    /** @ntsJvm static nts/intl/IcuCollator.defaults:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     static defaults(a0: string): number;
   }
 
   /** nts.intl.IcuDateFormatter Final: cannot be extended. */
   export class IcuDateFormatter {
+    /** @ntsJvm special nts/intl/IcuDateFormatter.<init>:(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+     */
     constructor(a0: string, a1: string, a2: string);
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.calendarType:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     calendarType(): string;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.format:(DZ)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     format(a0: number, a1: boolean): string;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.addFieldLocator:(Ljava/lang/String;Ljava/lang/String;II)V
+     * @ntsJvmKeeps 0 1
+     */
     addFieldLocator(a0: string, a1: string, a2: number, a3: number): void;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.setYearNameOnly:(Z)V
+     * @ntsJvmKeeps none
+     */
     setYearNameOnly(a0: boolean): void;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.fieldCount:()I
+     * @ntsJvmKeeps none
+     */
     fieldCount(): number;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.field:(I)I
+     * @ntsJvmKeeps none
+     */
     field(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.start:(I)I
+     * @ntsJvmKeeps none
+     */
     start(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.end:(I)I
+     * @ntsJvmKeeps none
+     */
     end(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.rangeCollapsed:()Z
+     * @ntsJvmKeeps none
+     */
     rangeCollapsed(): boolean;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.offsetMilliseconds:(D)I
+     * @ntsJvmKeeps none
+     */
     offsetMilliseconds(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.setCalendarFields:(IIIIZII)Z
+     * @ntsJvmKeeps none
+     */
     setCalendarFields(a0: number, a1: number, a2: number, a3: number, a4: boolean, a5: number, a6: number): boolean;
+    /** @ntsJvm virtual nts/intl/IcuDateFormatter.formatRange:(DDZ)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     formatRange(a0: number, a1: number, a2: boolean): string;
   }
 
   export namespace IcuDateFormatter {
     /** nts.intl.IcuDateFormatter$CalendarFields Final: cannot be extended. */
     export class CalendarFields {
+      /** @ntsJvm virtual nts/intl/IcuDateFormatter$CalendarFields.getType:()Ljava/lang/String;
+       * @ntsJvmKeeps none
+       */
       getType(): string | null;
+      /** @ntsJvm virtual nts/intl/IcuDateFormatter$CalendarFields.computeFields:()V
+       * @ntsJvmKeeps none
+       */
       protected computeFields(): void;
     }
 
@@ -60,110 +129,309 @@ declare module "java:nts.intl" {
 
   /** nts.intl.IcuDatePatterns Final: cannot be extended. */
   export class IcuDatePatterns {
+    /** @ntsJvm special nts/intl/IcuDatePatterns.<init>:(Ljava/lang/String;)V
+     */
     constructor(a0: string);
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.bestPattern:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     bestPattern(a0: string): string;
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.stylePattern:(II)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     stylePattern(a0: number, a1: number): string;
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.patterns:()[Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     patterns(): string[];
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.intervalPattern:(Ljava/lang/String;I)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     intervalPattern(a0: string, a1: number): string;
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.intervalFallback:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     intervalFallback(): string;
+    /** @ntsJvm virtual nts/intl/IcuDatePatterns.dateTimeConnector:(I)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     dateTimeConnector(a0: number): string;
   }
 
   /** nts.intl.IcuDisplayNames Final: cannot be extended. */
   export class IcuDisplayNames {
+    /** @ntsJvm special nts/intl/IcuDisplayNames.<init>:(Ljava/lang/String;IIZ)V
+     */
     constructor(a0: string, a1: number, a2: number, a3: boolean);
+    /** @ntsJvm virtual nts/intl/IcuDisplayNames.name:(Ljava/lang/String;I)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     name(a0: string, a1: number): string | null;
   }
 
   /** nts.intl.IcuLocaleData Final: cannot be extended. */
   export class IcuLocaleData {
+    /** @ntsJvm special nts/intl/IcuLocaleData.<init>:()V
+     */
     constructor();
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.canonicalize:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     canonicalize(a0: string): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.maximize:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     maximize(a0: string): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.minimize:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     minimize(a0: string): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.defaultLocale:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     defaultLocale(): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.availableCount:()I
+     * @ntsJvmKeeps none
+     */
     availableCount(): number;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.availableLocale:(I)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     availableLocale(a0: number): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.bestFit:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     bestFit(a0: string): string | null;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.defaultNumberingSystem:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     defaultNumberingSystem(a0: string): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.hasNumberingSystem:(Ljava/lang/String;)Z
+     * @ntsJvmKeeps 0
+     */
     hasNumberingSystem(a0: string): boolean;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.canonicalType:(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0 1
+     */
     canonicalType(a0: string, a1: string): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.availableValues:(I)[Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     availableValues(a0: number): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.hasCurrencyName:(Ljava/lang/String;)Z
+     * @ntsJvmKeeps 0
+     */
     hasCurrencyName(a0: string): boolean;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.calendarValues:(Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     calendarValues(a0: string): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.availableCalendars:(Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     availableCalendars(a0: string): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.collationValues:(Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     collationValues(a0: string): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.timeZones:(Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     timeZones(a0: string): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.timeZoneNames:()[Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     timeZoneNames(): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.canonicalTimeZone:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     canonicalTimeZone(a0: string): string | null;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.primaryTimeZone:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     primaryTimeZone(a0: string): string | null;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.primaryTimeZoneNames:()[Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     primaryTimeZoneNames(): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.defaultTimeZoneIdentifier:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     defaultTimeZoneIdentifier(): string;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.textDirection:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     textDirection(a0: string): number;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.isHebrew:(I)Z
+     * @ntsJvmKeeps none
+     */
     isHebrew(a0: number): boolean;
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.durationSamples:(Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     durationSamples(a0: string): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.listSamples:(Ljava/lang/String;II[Ljava/lang/String;)[Ljava/lang/String;
+     * @ntsJvmKeeps 0 3
+     */
     listSamples(a0: string, a1: number, a2: number, a3: string[]): string[];
+    /** @ntsJvm virtual nts/intl/IcuLocaleData.weekData:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     weekData(a0: string): number;
   }
 
   /** nts.intl.IcuNumberData Final: cannot be extended. */
   export class IcuNumberData {
+    /** @ntsJvm special nts/intl/IcuNumberData.<init>:()V
+     */
     constructor();
+    /** @ntsJvm virtual nts/intl/IcuNumberData.currencyDigits:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     currencyDigits(a0: string): number;
   }
 
   /** nts.intl.IcuNumberFormatter Final: cannot be extended. */
   export class IcuNumberFormatter {
+    /** @ntsJvm special nts/intl/IcuNumberFormatter.<init>:(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+     */
     constructor(a0: string, a1: string, a2: string);
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.format:(DZZ)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     format(a0: number, a1: boolean, a2: boolean): string;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.formatDecimal:(Ljava/lang/String;ZZ)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     formatDecimal(a0: string, a1: boolean, a2: boolean): string;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.formatRange:(Ljava/lang/String;Ljava/lang/String;ZZZ)Ljava/lang/String;
+     * @ntsJvmKeeps 0 1
+     */
     formatRange(a0: string, a1: string, a2: boolean, a3: boolean, a4: boolean): string;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.fieldCount:()I
+     * @ntsJvmKeeps none
+     */
     fieldCount(): number;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.field:(I)I
+     * @ntsJvmKeeps none
+     */
     field(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.start:(I)I
+     * @ntsJvmKeeps none
+     */
     start(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuNumberFormatter.end:(I)I
+     * @ntsJvmKeeps none
+     */
     end(a0: number): number;
   }
 
   /** nts.intl.IcuPluralRules Final: cannot be extended. */
   export class IcuPluralRules {
+    /** @ntsJvm special nts/intl/IcuPluralRules.<init>:(Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;)V
+     */
     constructor(a0: string, a1: boolean, a2: string, a3: string);
+    /** @ntsJvm virtual nts/intl/IcuPluralRules.categories:()I
+     * @ntsJvmKeeps none
+     */
     categories(): number;
+    /** @ntsJvm virtual nts/intl/IcuPluralRules.select:(DZ)I
+     * @ntsJvmKeeps none
+     */
     select(a0: number, a1: boolean): number;
+    /** @ntsJvm virtual nts/intl/IcuPluralRules.selectDecimal:(Ljava/lang/String;Z)I
+     * @ntsJvmKeeps 0
+     */
     selectDecimal(a0: string, a1: boolean): number;
+    /** @ntsJvm virtual nts/intl/IcuPluralRules.selectRange:(Ljava/lang/String;Ljava/lang/String;ZZ)I
+     * @ntsJvmKeeps 0 1
+     */
     selectRange(a0: string, a1: string, a2: boolean, a3: boolean): number;
   }
 
   /** nts.intl.IcuRelativeFormatter Final: cannot be extended. */
   export class IcuRelativeFormatter {
+    /** @ntsJvm special nts/intl/IcuRelativeFormatter.<init>:(Ljava/lang/String;I)V
+     */
     constructor(a0: string, a1: number);
+    /** @ntsJvm virtual nts/intl/IcuRelativeFormatter.format:(DIZZ)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     format(a0: number, a1: number, a2: boolean, a3: boolean): string;
+    /** @ntsJvm virtual nts/intl/IcuRelativeFormatter.fieldCount:()I
+     * @ntsJvmKeeps none
+     */
     fieldCount(): number;
+    /** @ntsJvm virtual nts/intl/IcuRelativeFormatter.field:(I)I
+     * @ntsJvmKeeps none
+     */
     field(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuRelativeFormatter.start:(I)I
+     * @ntsJvmKeeps none
+     */
     start(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuRelativeFormatter.end:(I)I
+     * @ntsJvmKeeps none
+     */
     end(a0: number): number;
   }
 
   /** nts.intl.IcuSegmenter Final: cannot be extended. */
   export class IcuSegmenter {
+    /** @ntsJvm special nts/intl/IcuSegmenter.<init>:(Ljava/lang/String;I)V
+     */
     constructor(a0: string, a1: number);
+    /** @ntsJvm virtual nts/intl/IcuSegmenter.forText:(Ljava/lang/String;)Lnts/intl/IcuSegmenter;
+     * @ntsJvmKeeps 0
+     */
     forText(a0: string): IcuSegmenter;
+    /** @ntsJvm virtual nts/intl/IcuSegmenter.next:()I
+     * @ntsJvmKeeps none
+     */
     next(): number;
+    /** @ntsJvm virtual nts/intl/IcuSegmenter.previous:()I
+     * @ntsJvmKeeps none
+     */
     previous(): number;
+    /** @ntsJvm virtual nts/intl/IcuSegmenter.following:(I)I
+     * @ntsJvmKeeps none
+     */
     following(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuSegmenter.ruleStatus:()I
+     * @ntsJvmKeeps none
+     */
     ruleStatus(): number;
   }
 
   /** nts.intl.IcuTimeZone Final: cannot be extended. */
   export class IcuTimeZone {
+    /** @ntsJvm static nts/intl/IcuTimeZone.open:(Ljava/lang/String;)Lnts/intl/IcuTimeZone;
+     * @ntsJvmKeeps 0
+     */
     static open(a0: string): IcuTimeZone | null;
+    /** @ntsJvm virtual nts/intl/IcuTimeZone.id:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     id(): string;
+    /** @ntsJvm virtual nts/intl/IcuTimeZone.offsetMilliseconds:(D)D
+     * @ntsJvmKeeps none
+     */
     offsetMilliseconds(a0: number): number;
+    /** @ntsJvm virtual nts/intl/IcuTimeZone.localOffsetMilliseconds:(DZ)D
+     * @ntsJvmKeeps none
+     */
     localOffsetMilliseconds(a0: number, a1: boolean): number;
+    /** @ntsJvm virtual nts/intl/IcuTimeZone.transition:(DZ)D
+     * @ntsJvmKeeps none
+     */
     transition(a0: number, a1: boolean): number;
   }
 
   /** nts.intl.IcuVersions Final: cannot be extended. */
   export class IcuVersions {
+    /** @ntsJvm static nts/intl/IcuVersions.verify:()V
+     * @ntsJvmKeeps none
+     */
     static verify(): void;
   }
 

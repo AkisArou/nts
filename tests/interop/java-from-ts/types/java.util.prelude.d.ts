@@ -7,64 +7,150 @@
 declare namespace java.util {
   /** java.util.Collection */
   export interface Collection<E = unknown> {
+    /** @ntsJvm interface java/util/Collection.size:()I
+     */
     size(): number;
+    /** @ntsJvm interface java/util/Collection.isEmpty:()Z
+     */
     isEmpty(): boolean;
+    /** @ntsJvm interface java/util/Collection.contains:(Ljava/lang/Object;)Z
+     */
     contains(a0: unknown): boolean;
+    /** @ntsJvm interface java/util/Collection.iterator:()Ljava/util/Iterator;
+     */
     iterator(): Iterator<E> | null;
   }
 
   /** java.util.HashMap */
   export class HashMap<K = unknown, V = unknown> {
+    /** @ntsJvm special java/util/HashMap.<init>:(IF)V
+     */
     constructor(a0: number, a1: number);
+    /** @ntsJvm special java/util/HashMap.<init>:(I)V
+     */
     constructor(a0: number);
+    /** @ntsJvm special java/util/HashMap.<init>:()V
+     */
     constructor();
+    /** @ntsJvm special java/util/HashMap.<init>:(Ljava/util/Map;)V
+     */
     constructor(a0: Map<K, V>);
+    /** @ntsJvm virtual java/util/HashMap.size:()I
+     * @ntsJvmKeeps none
+     */
     size(): number;
+    /** @ntsJvm virtual java/util/HashMap.isEmpty:()Z
+     * @ntsJvmKeeps none
+     */
     isEmpty(): boolean;
+    /** @ntsJvm virtual java/util/HashMap.get:(Ljava/lang/Object;)Ljava/lang/Object;
+     * @ntsJvmKeeps 0
+     */
     get(a0: unknown): V | null;
+    /** @ntsJvm virtual java/util/HashMap.containsKey:(Ljava/lang/Object;)Z
+     * @ntsJvmKeeps 0
+     */
     containsKey(a0: unknown): boolean;
+    /** @ntsJvm virtual java/util/HashMap.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+     * @ntsJvmKeeps 0 1
+     */
     put(a0: K, a1: V): V | null;
+    /** @ntsJvm virtual java/util/HashMap.remove:(Ljava/lang/Object;)Ljava/lang/Object;
+     * @ntsJvmKeeps 0
+     */
     remove(a0: unknown): V | null;
+    /** @ntsJvm virtual java/util/HashMap.remove:(Ljava/lang/Object;Ljava/lang/Object;)Z
+     * @ntsJvmKeeps 0 1
+     */
     remove(a0: unknown, a1: unknown): boolean;
   }
 
   /** java.util.Iterator */
   export interface Iterator<E = unknown> {
+    /** @ntsJvm interface java/util/Iterator.hasNext:()Z
+     */
     hasNext(): boolean;
+    /** @ntsJvm interface java/util/Iterator.next:()Ljava/lang/Object;
+     */
     next(): E | null;
   }
 
   /** java.util.List */
   export interface List<E = unknown> {
+    /** @ntsJvm interface java/util/List.size:()I
+     */
     size(): number;
+    /** @ntsJvm interface java/util/List.isEmpty:()Z
+     */
     isEmpty(): boolean;
+    /** @ntsJvm interface java/util/List.contains:(Ljava/lang/Object;)Z
+     */
     contains(a0: unknown): boolean;
+    /** @ntsJvm interface java/util/List.iterator:()Ljava/util/Iterator;
+     */
     iterator(): Iterator<E> | null;
+    /** @ntsJvm interface java/util/List.add:(Ljava/lang/Object;)Z
+     */
     add(a0: E): boolean;
+    /** @ntsJvm interface java/util/List.get:(I)Ljava/lang/Object;
+     */
     get(a0: number): E | null;
+    /** @ntsJvm interface java/util/List.set:(ILjava/lang/Object;)Ljava/lang/Object;
+     */
     set(a0: number, a1: E): E | null;
+    /** @ntsJvm interface java/util/List.add:(ILjava/lang/Object;)V
+     */
     add(a0: number, a1: E): void;
+    /** @ntsJvm interface java/util/List.indexOf:(Ljava/lang/Object;)I
+     */
     indexOf(a0: unknown): number;
   }
 
   /** java.util.Map */
   export interface Map<K = unknown, V = unknown> {
+    /** @ntsJvm interface java/util/Map.size:()I
+     */
     size(): number;
+    /** @ntsJvm interface java/util/Map.isEmpty:()Z
+     */
     isEmpty(): boolean;
+    /** @ntsJvm interface java/util/Map.containsKey:(Ljava/lang/Object;)Z
+     */
     containsKey(a0: unknown): boolean;
+    /** @ntsJvm interface java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;
+     */
     get(a0: unknown): V | null;
+    /** @ntsJvm interface java/util/Map.put:(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+     */
     put(a0: K, a1: V): V | null;
+    /** @ntsJvm interface java/util/Map.remove:(Ljava/lang/Object;)Ljava/lang/Object;
+     */
     remove(a0: unknown): V | null;
+    /** @ntsJvm interface java/util/Map.keySet:()Ljava/util/Set;
+     */
     keySet(): Set<K> | null;
+    /** @ntsJvm interface java/util/Map.values:()Ljava/util/Collection;
+     */
     values(): Collection<V> | null;
+    /** @ntsJvm interface java/util/Map.remove:(Ljava/lang/Object;Ljava/lang/Object;)Z
+     * @ntsJvmKeeps 0 1
+     */
     remove(a0: unknown, a1: unknown): boolean;
   }
 
   /** java.util.Set */
   export interface Set<E = unknown> {
+    /** @ntsJvm interface java/util/Set.size:()I
+     */
     size(): number;
+    /** @ntsJvm interface java/util/Set.isEmpty:()Z
+     */
     isEmpty(): boolean;
+    /** @ntsJvm interface java/util/Set.contains:(Ljava/lang/Object;)Z
+     */
     contains(a0: unknown): boolean;
+    /** @ntsJvm interface java/util/Set.iterator:()Ljava/util/Iterator;
+     */
     iterator(): Iterator<E> | null;
   }
 

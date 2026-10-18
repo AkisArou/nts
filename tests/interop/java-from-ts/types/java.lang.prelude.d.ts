@@ -15,23 +15,38 @@ declare namespace java.lang {
 
   /** java.lang.Double Final: cannot be extended. */
   export class Double {
+    /** @ntsJvm virtual java/lang/Double.doubleValue:()D
+     * @ntsJvmKeeps none
+     */
     doubleValue(): number;
   }
 
   /** java.lang.Integer Final: cannot be extended. */
   export class Integer {
+    /** @ntsJvm virtual java/lang/Integer.intValue:()I
+     * @ntsJvmKeeps none
+     */
     intValue(): number;
   }
 
   /** java.lang.Long Final: cannot be extended. */
   export class Long {
+    /** @ntsJvm virtual java/lang/Long.longValue:()J
+     * @ntsJvmKeeps none
+     */
     longValue(): bigint;
   }
 
   /** java.lang.Number */
   export abstract class Number {
+    /** @ntsJvm virtual java/lang/Number.intValue:()I
+     */
     intValue(): number;
+    /** @ntsJvm virtual java/lang/Number.longValue:()J
+     */
     longValue(): bigint;
+    /** @ntsJvm virtual java/lang/Number.doubleValue:()D
+     */
     doubleValue(): number;
   }
 

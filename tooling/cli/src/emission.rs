@@ -9,8 +9,8 @@ use nts_core::hir;
 use nts_diagnostics::{Severity, SourceFile, SourceLocations};
 
 use super::{
-    Emission, configured_surface_to, foreign_tables_to, frontend_binary, frontend_for,
-    provider_for, selected_roots,
+    Emission, configured_surface_to, foreign_tables, frontend_binary, frontend_for, provider_for,
+    selected_roots,
 };
 
 /// Live commands write directly; a combined command keeps each backend's exact
@@ -149,7 +149,7 @@ impl Input {
                 Some(files) => (files, true),
                 None => (nts_frontend_ts::entry_uris(tsconfig, &snapshot), false),
             };
-        let foreign = foreign_tables_to(&snapshot, report);
+        let foreign = foreign_tables(&snapshot)?;
         let raw = hir::RawProgram::lower(&snapshot, &entry_files, &foreign);
         Ok(Self {
             raw,

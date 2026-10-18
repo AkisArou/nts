@@ -8,7 +8,7 @@ the resulting class files**, and diffs them against what is committed.
 `NTS_REGENERATE=1 ./build.sh` accepts a change.
 
 The TypeScript side **typechecks with zero errors**; what it still refuses is
-the lowering of a call into Java, which needs the binding table and a foreign
+the lowering of a call into Java, which needs the declaration-local JVM contracts and a foreign
 layout — build items 1 and 4. Each refusal names itself:
 
 ```

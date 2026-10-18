@@ -9,53 +9,146 @@
 declare module "java:com.example" {
   /** com.example.Catalog Final: cannot be extended. */
   export class Catalog {
-    /** Inlined at the call site: the class is never loaded for this. */
+    /** Inlined at the call site: the class is never loaded for this.
+     * @ntsJvm staticfield com/example/Catalog.MAX:I
+     */
     static readonly MAX: 512;
-    /** Inlined at the call site: the class is never loaded for this. */
+    /** Inlined at the call site: the class is never loaded for this.
+     * @ntsJvm staticfield com/example/Catalog.NAME:Ljava/lang/String;
+     */
     static readonly NAME: "catalog";
-    /** A real `getstatic`, and it runs the owner's `<clinit>`. */
+    /** A real `getstatic`, and it runs the owner's `<clinit>`.
+     * @ntsJvm staticfield com/example/Catalog.DEFAULT_KIND:Lcom/example/Kind;
+     */
     static readonly DEFAULT_KIND: Kind | null;
+    /** @ntsJvm field com/example/Catalog.hits:I
+     */
     hits: number;
+    /** @ntsJvm special com/example/Catalog.<init>:(Ljava/lang/String;)V
+     */
     constructor(a0: string);
+    /** @ntsJvm virtual com/example/Catalog.index:()Ljava/util/HashMap;
+     * @ntsJvmKeeps none
+     */
     index(): java.util.HashMap<string, number> | null;
+    /** @ntsJvm virtual com/example/Catalog.names:()Ljava/util/List;
+     * @ntsJvmKeeps none
+     */
     names(): java.util.List<string> | null;
+    /** @ntsJvm virtual com/example/Catalog.counts:()[I
+     * @ntsJvmKeeps none
+     */
     counts(): Int32Array | null;
+    /** @ntsJvm virtual com/example/Catalog.bytes:()[B
+     * @ntsJvmKeeps none
+     */
     bytes(): Uint8Array | null;
+    /** @ntsJvm virtual com/example/Catalog.id:()J
+     * @ntsJvmKeeps none
+     */
     id(): bigint;
+    /** @ntsJvm virtual com/example/Catalog.find:(I)I
+     * @ntsJvmKeeps none
+     */
     find$int(a0: number): number;
+    /** @ntsJvm virtual com/example/Catalog.find:(J)I
+     * @ntsJvmKeeps none
+     */
     find(a0: bigint): number;
+    /** @ntsJvm virtual com/example/Catalog.find:(D)I
+     * @ntsJvmKeeps none
+     */
     find(a0: number): number;
+    /** @ntsJvm virtual com/example/Catalog.find:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     find(a0: string): number;
+    /** @ntsJvm virtual com/example/Catalog.render:(Ljava/lang/String;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     render(a0: string): string;
+    /** @ntsJvm virtual com/example/Catalog.render:(Ljava/lang/Object;)Ljava/lang/String;
+     * @ntsJvmKeeps 0
+     */
     render(a0: unknown): string | null;
+    /** @ntsJvm virtual com/example/Catalog.sum:([I)I
+     * @ntsJvmKeeps 0
+     */
     sum(...a0: number[]): number;
-    /** @deprecated */
+    /** @deprecated
+     * @ntsJvm virtual com/example/Catalog.legacyFind:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     legacyFind(a0: string): number;
+    /** @ntsJvm virtual com/example/Catalog.describe:(I)Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     describe(a0: number): string | null;
+    /** @ntsJvm virtual com/example/Catalog.name:()Ljava/lang/String;
+     * @ntsJvmKeeps none
+     */
     name(): string;
-    /** Throws java.lang.NumberFormatException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet. */
+    /** Throws java.lang.NumberFormatException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet.
+     * @ntsJvm virtual com/example/Catalog.parse:(Ljava/lang/String;)I
+     * @ntsJvmKeeps 0
+     */
     parse(a0: string): number;
+    /** @ntsJvm virtual com/example/Catalog.repeat:(Ljava/lang/Object;I)Ljava/util/List;
+     * @ntsJvmKeeps 0
+     */
     repeat<T>(a0: T, a1: number): java.util.List<T> | null;
+    /** @ntsJvm virtual com/example/Catalog.tally:(Ljava/lang/Object;[I)Ljava/util/List;
+     * @ntsJvmKeeps 0 1
+     */
     tally<T>(a0: T, a1: Int32Array): java.util.List<T> | null;
+    /** @ntsJvm virtual com/example/Catalog.total:(Ljava/util/List;)D
+     * @ntsJvmKeeps 0
+     */
     total(a0: java.util.List<number>): number;
+    /** @ntsJvm virtual com/example/Catalog.raw:()Ljava/util/List;
+     * @ntsJvmKeeps none
+     */
     raw(): java.util.List | null;
+    /** @ntsJvm virtual com/example/Catalog.weigh:(Ljava/util/Map;)D
+     * @ntsJvmKeeps 0
+     */
     weigh(a0: (Map<string, number> | java.util.Map<string, number>)): number;
+    /** @ntsJvm virtual com/example/Catalog.countOf:(Ljava/util/Map;)I
+     * @ntsJvmKeeps 0
+     */
     countOf(a0: java.util.Map<string, number>): number;
+    /** @ntsJvm virtual com/example/Catalog.countIn:(Ljava/util/Set;)I
+     * @ntsJvmKeeps 0
+     */
     countIn(a0: (Set<string> | java.util.Set<string>)): number;
+    /** @ntsJvm virtual com/example/Catalog.cursorAt:(I)Lcom/example/Catalog$Cursor;
+     * @ntsJvmKeeps none
+     */
     cursorAt(a0: number): Catalog.Cursor | null;
   }
 
   export namespace Catalog {
     /** com.example.Catalog$Cursor Final: cannot be extended. */
     export class Cursor {
+      /** @ntsJvm field com/example/Catalog$Cursor.at:I
+       */
       at: number;
+      /** @ntsJvm special com/example/Catalog$Cursor.<init>:(Lcom/example/Catalog;I)V
+       */
       constructor(a0: Catalog, a1: number);
+      /** @ntsJvm virtual com/example/Catalog$Cursor.owner:()Ljava/lang/String;
+       * @ntsJvmKeeps none
+       */
       owner(): string | null;
     }
 
     /** com.example.Catalog$Entry Final: cannot be extended. */
     export class Entry {
+      /** @ntsJvm field com/example/Catalog$Entry.key:Ljava/lang/String;
+       */
       readonly key: string | null;
+      /** @ntsJvm special com/example/Catalog$Entry.<init>:(Ljava/lang/String;)V
+       */
       constructor(a0: string);
     }
 
@@ -63,14 +156,29 @@ declare module "java:com.example" {
 
   /** com.example.Kind Final: cannot be extended. */
   export class Kind {
-    /** A real `getstatic`, and it runs the owner's `<clinit>`. */
+    /** A real `getstatic`, and it runs the owner's `<clinit>`.
+     * @ntsJvm staticfield com/example/Kind.SMALL:Lcom/example/Kind;
+     */
     static readonly SMALL: Kind;
-    /** A real `getstatic`, and it runs the owner's `<clinit>`. */
+    /** A real `getstatic`, and it runs the owner's `<clinit>`.
+     * @ntsJvm staticfield com/example/Kind.MEDIUM:Lcom/example/Kind;
+     */
     static readonly MEDIUM: Kind;
-    /** A real `getstatic`, and it runs the owner's `<clinit>`. */
+    /** A real `getstatic`, and it runs the owner's `<clinit>`.
+     * @ntsJvm staticfield com/example/Kind.LARGE:Lcom/example/Kind;
+     */
     static readonly LARGE: Kind;
+    /** @ntsJvm static com/example/Kind.values:()[Lcom/example/Kind;
+     * @ntsJvmKeeps none
+     */
     static values(): Kind[] | null;
+    /** @ntsJvm static com/example/Kind.valueOf:(Ljava/lang/String;)Lcom/example/Kind;
+     * @ntsJvmKeeps 0
+     */
     static valueOf(a0: string): Kind | null;
+    /** @ntsJvm virtual com/example/Kind.weight:()I
+     * @ntsJvmKeeps none
+     */
     weight(): number;
   }
 

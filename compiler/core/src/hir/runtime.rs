@@ -1803,12 +1803,11 @@ pub fn is_foreign_key(name: &str) -> bool {
     name.contains(':') && name.contains('/')
 }
 
-/// How a bound foreign member is invoked, and what it retains.
+/// How a bound foreign member is invoked.
 ///
-/// One row of the binding table `nts bind` writes beside a `.d.ts`. The kind
-/// cannot live in the key -- a key that names one method twice is not an
-/// identity, and [`keeps`] looks up the same string -- so it travels here, from
-/// the same rows, read once.
+/// A declaration's `@ntsJvm` contract, indexed by the checker-selected node.
+/// Retention proofs remain in the semantic metadata; escape analysis currently
+/// treats foreign calls conservatively through [`foreign_keeps`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForeignCall {
     /// `owner.member:descriptor`, the shape [`foreign_key`] builds.
@@ -1860,9 +1859,8 @@ impl ForeignKind {
 ///
 /// Always `None` today, and that is the sound default: an absent entry means
 /// "assume every argument escapes", which is never wrong, only pessimistic.
-/// The entries arrive from two places, neither of which exists yet -- a
-/// bytecode analysis over the callee, and a checked-in overrides file for the
-/// `native` methods that have no bytecode to analyse.
+/// Declaration metadata carries bytecode retention evidence, but this query
+/// does not yet consume it. Native methods without a body remain unknown.
 ///
 /// Separate from [`keeps`] rather than folded into it, because the two have
 /// different lifetimes: that table is a fact about a header this repository

@@ -463,7 +463,7 @@ this section credited it with more and a reader would have gone looking:
 
 - **`nts bind` is a real subcommand now**, as of 2026-09-14, and this bullet
   used to say the opposite. It takes `--jar` or `--classes`, plus `--package`
-  and `--out`, and writes the declarations and the binding table together. The
+  and `--out`, and writes declarations with JVM contracts in JSDoc. The
   example binary and the shell script that stood in for it are deleted rather
   than kept beside it. `nts-jvm-emitter` still has no zip dependency — `--jar`
   shells out to `unzip`, and says so if it is missing.
@@ -958,10 +958,11 @@ anywhere, and the compiler still knows exactly what to emit — the ABI is a fac
 about the *declaration*, and a declaration already has a table row.
 
 This is the JVM lane's architecture, which we should copy rather than reinvent:
-a `.d.ts` for the checker and a `.bind` for the machine facts, with
-`foreign_key` joining them. The key insight there was that a fact needed by the
+one `.d.ts` for the checker, with declaration-local `@ntsJvm` JSDoc for the
+machine facts. The compiler indexes those attributes on the declaration the
+checker selected. The key insight there was that a fact needed by the
 backend does not have to live in the *type* — and the invoke kind travelling in
-the table rather than in the key is the same decision one level down.
+the declaration metadata rather than in the key is the same decision one level down.
 
 **What (b) costs**: TypeScript stops warning that `3.7` is not an `int`. But C
 does not warn either — it truncates — so (b) is *faithful* to the target rather

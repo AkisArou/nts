@@ -9,22 +9,39 @@
 declare module "java:com.example.ui" {
   /** com.example.ui.Drawable */
   export abstract class Drawable {
+    /** @ntsJvm special com/example/ui/Drawable.<init>:()V
+     */
     constructor();
+    /** @ntsJvm virtual com/example/ui/Drawable.alpha:()I
+     * @ntsJvmKeeps none
+     */
     alpha(): number;
+    /** @ntsJvm virtual com/example/ui/Drawable.draw:(Lcom/example/ui/Rect;)V
+     */
     draw(a0: Rect): void;
   }
 
   /** com.example.ui.Loader Final: cannot be extended. */
   export class Loader {
+    /** @ntsJvm special com/example/ui/Loader.<init>:()V
+     */
     constructor();
-    /** Throws java.lang.InterruptedException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet. */
+    /** Throws java.lang.InterruptedException. Propagates as the Java exception itself, terminating the program; not catchable by a TypeScript `try` yet.
+     * @ntsJvm static com/example/ui/Loader.awaitReturned:()V
+     * @ntsJvmKeeps none
+     */
     static awaitReturned(): void;
+    /** @ntsJvm static com/example/ui/Loader.load:(Ljava/lang/String;Lcom/example/ui/Loader$OnBytes;)V
+     * @ntsJvmKeeps 0 1
+     */
     static load(a0: string, a1: Loader.OnBytes | ((a0: Uint8Array) => void)): void;
   }
 
   export namespace Loader {
     /** com.example.ui.Loader$OnBytes */
     export interface OnBytes {
+      /** @ntsJvm interface com/example/ui/Loader$OnBytes.onBytes:([B)V
+       */
       onBytes(a0: Uint8Array): void;
     }
 
@@ -32,57 +49,118 @@ declare module "java:com.example.ui" {
 
   /** com.example.ui.Rect Final: cannot be extended. */
   export class Rect {
+    /** @ntsJvm field com/example/ui/Rect.left:I
+     */
     left: number;
+    /** @ntsJvm field com/example/ui/Rect.top:I
+     */
     top: number;
+    /** @ntsJvm field com/example/ui/Rect.right:I
+     */
     right: number;
+    /** @ntsJvm field com/example/ui/Rect.bottom:I
+     */
     bottom: number;
+    /** @ntsJvm special com/example/ui/Rect.<init>:()V
+     */
     constructor();
+    /** @ntsJvm special com/example/ui/Rect.<init>:(IIII)V
+     */
     constructor(a0: number, a1: number, a2: number, a3: number);
+    /** @ntsJvm virtual com/example/ui/Rect.compareTo:(Lcom/example/ui/Rect;)I
+     * @ntsJvmKeeps 0
+     */
     compareTo(a0: Rect): number;
+    /** @ntsJvm virtual com/example/ui/Rect.width:()I
+     * @ntsJvmKeeps none
+     */
     width(): number;
+    /** @ntsJvm virtual com/example/ui/Rect.height:()I
+     * @ntsJvmKeeps none
+     */
     height(): number;
   }
 
   /** com.example.ui.View */
   export class View {
+    /** @ntsJvm special com/example/ui/View.<init>:()V
+     */
     constructor();
+    /** @ntsJvm virtual com/example/ui/View.setOnTouch:(Lcom/example/ui/View$OnTouch;)V
+     * @ntsJvmKeeps 0
+     */
     setOnTouch(a0: View.OnTouch | ((a0: number, a1: number) => boolean)): void;
+    /** @ntsJvm virtual com/example/ui/View.dispatchTouch:(II)Z
+     * @ntsJvmKeeps none
+     */
     dispatchTouch(a0: number, a1: number): boolean;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm field com/example/ui/View.left:I
+     */
     left: number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm field com/example/ui/View.top:I
+     */
     top: number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm field com/example/ui/View.right:I
+     */
     right: number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm field com/example/ui/View.bottom:I
+     */
     bottom: number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.onMeasure:(II)V
+     */
     onMeasure(a0: number, a1: number): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.onDraw:(Lcom/example/ui/Rect;)V
+     */
     protected onDraw(a0: Rect): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.firstOf:([Ljava/lang/Object;)[Ljava/lang/Object;
+     */
     firstOf<T>(a0: T[]): T[] | null;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.drawingOrder:(I)I
+     */
     drawingOrder(a0: number): number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.drawingOrder:(II)I
+     */
     protected drawingOrder$int$int(a0: number, a1: number): number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.setBounds:(IIII)V
+     */
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm static com/example/ui/View.defaultPadding:()I
+     */
     static defaultPadding(): number;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.setPadding:([I)V
+     */
     setPadding(...a0: number[]): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.press:(Lcom/example/ui/Widget$Pressable;)V
+     */
     press(a0: Widget.Pressable): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.post:(Lcom/example/ui/Widget$Task;)V
+     */
     post(a0: Widget.Task | ((a0: number) => void)): void;
-    /** Inherited. */
+    /** Inherited.
+     * @ntsJvm virtual com/example/ui/View.setBounds:(Lcom/example/ui/Rect;)V
+     */
     setBounds(a0: Rect): void;
   }
 
   export namespace View {
     /** com.example.ui.View$OnTouch */
     export interface OnTouch {
+      /** @ntsJvm interface com/example/ui/View$OnTouch.onTouch:(II)Z
+       */
       onTouch(a0: number, a1: number): boolean;
     }
 
@@ -90,43 +168,99 @@ declare module "java:com.example.ui" {
 
   /** com.example.ui.Widget */
   export class Widget {
+    /** @ntsJvm field com/example/ui/Widget.left:I
+     */
     left: number;
+    /** @ntsJvm field com/example/ui/Widget.top:I
+     */
     top: number;
+    /** @ntsJvm field com/example/ui/Widget.right:I
+     */
     right: number;
+    /** @ntsJvm field com/example/ui/Widget.bottom:I
+     */
     bottom: number;
+    /** @ntsJvm special com/example/ui/Widget.<init>:()V
+     */
     constructor();
+    /** @ntsJvm virtual com/example/ui/Widget.onMeasure:(II)V
+     * @ntsJvmKeeps none
+     */
     onMeasure(a0: number, a1: number): void;
+    /** @ntsJvm virtual com/example/ui/Widget.onDraw:(Lcom/example/ui/Rect;)V
+     * @ntsJvmKeeps none
+     */
     protected onDraw(a0: Rect): void;
+    /** @ntsJvm virtual com/example/ui/Widget.firstOf:([Ljava/lang/Object;)[Ljava/lang/Object;
+     * @ntsJvmKeeps 0
+     */
     firstOf<T>(a0: T[]): T[] | null;
+    /** @ntsJvm virtual com/example/ui/Widget.drawingOrder:(I)I
+     * @ntsJvmKeeps none
+     */
     drawingOrder(a0: number): number;
+    /** @ntsJvm virtual com/example/ui/Widget.drawingOrder:(II)I
+     * @ntsJvmKeeps none
+     */
     protected drawingOrder$int$int(a0: number, a1: number): number;
+    /** @ntsJvm virtual com/example/ui/Widget.setBounds:(IIII)V
+     * @ntsJvmKeeps none
+     */
     setBounds(a0: number, a1: number, a2: number, a3: number): void;
+    /** @ntsJvm static com/example/ui/Widget.defaultPadding:()I
+     * @ntsJvmKeeps none
+     */
     static defaultPadding(): number;
+    /** @ntsJvm virtual com/example/ui/Widget.setPadding:([I)V
+     * @ntsJvmKeeps 0
+     */
     setPadding(...a0: number[]): void;
+    /** @ntsJvm virtual com/example/ui/Widget.press:(Lcom/example/ui/Widget$Pressable;)V
+     * @ntsJvmKeeps 0
+     */
     press(a0: Widget.Pressable): void;
+    /** @ntsJvm virtual com/example/ui/Widget.post:(Lcom/example/ui/Widget$Task;)V
+     * @ntsJvmKeeps 0
+     */
     post(a0: Widget.Task | ((a0: number) => void)): void;
+    /** @ntsJvm virtual com/example/ui/Widget.setBounds:(Lcom/example/ui/Rect;)V
+     * @ntsJvmKeeps none
+     */
     setBounds(a0: Rect): void;
   }
 
   export namespace Widget {
     /** com.example.ui.Widget$Pressable */
     export interface Pressable {
+      /** @ntsJvm interface com/example/ui/Widget$Pressable.press:()V
+       */
       press(): void;
-      /** Inherited. */
+      /** Inherited.
+       * @ntsJvm interface com/example/ui/Widget$Pressable.run:(I)V
+       */
       run(a0: number): void;
     }
     export namespace Pressable {
-        /** Inherited. */
+        /** Inherited.
+         * @ntsJvm staticfield com/example/ui/Widget$Pressable.KIND:Ljava/lang/String;
+         */
         const KIND: string;
     }
 
     /** com.example.ui.Widget$Task */
     export interface Task {
+      /** @ntsJvm interface com/example/ui/Widget$Task.run:(I)V
+       */
       run(a0: number): void;
     }
     export namespace Task {
-        /** Inlined at the call site: the class is never loaded for this. */
+        /** Inlined at the call site: the class is never loaded for this.
+         * @ntsJvm staticfield com/example/ui/Widget$Task.KIND:Ljava/lang/String;
+         */
         const KIND: "task";
+        /** @ntsJvm static com/example/ui/Widget$Task.none:()Lcom/example/ui/Widget$Task;
+         * @ntsJvmKeeps none
+         */
         function none(): Widget.Task | null;
     }
 

@@ -5303,7 +5303,7 @@ pub struct Options<'a> {
     /// graph, which cannot be done correctly and says so.
     pub entry_files: &'a [String],
     /// Bound foreign members, keyed by `(source, span end)`. Loaded by the
-    /// driver from the `.bind` file `nts bind` writes beside each `.d.ts`.
+    /// driver from declaration-local `@ntsJvm` attributes in the snapshot.
     pub foreign: &'a runtime::ForeignTable,
     /// The C ABIs the native code is built for. A value stored into a written
     /// scalar kind must fit it on every one ([`native::Scalar::range_on`]):

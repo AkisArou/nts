@@ -184,7 +184,7 @@ run(nts, [
   "--overrides",
   resolve(provider, "java/overrides.json"),
 ]);
-for (const name of ["nts.intl.d.ts", "nts.intl.bind"]) {
+for (const name of ["nts.intl.d.ts"]) {
   const bytes = readFileSync(resolve(generated, name));
   const committed = resolve(provider, "java/types", name);
   if (process.argv.includes("--regenerate-bindings")) writeFileSync(committed, bytes);

@@ -234,9 +234,9 @@ yours. Here the caching design stands:
 Declaration per package, generation per key, cache shared -- `tooling/config`
 already reserves `build.cache.directory`. Two measured constraints from
 the JVM binder carry over to any generator: it is **deterministic** (byte
-identical across runs, verified), and the `.d.ts` and its binding table are
-**one atomic artefact**, because the table is keyed by byte offsets into the text
-that same run produced.
+identical across runs, verified), and the `.d.ts` carries both types and
+native contracts in declaration JSDoc. The JVM uses `@ntsJvm` and
+`@ntsJvmKeeps`; no positional sidecar needs to track edits to the text.
 
 ### 3a. One mechanism for every platform (proposed 2026-09-26; built for Apple 2026-09-27)
 

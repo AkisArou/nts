@@ -189,8 +189,7 @@ fn the_kotlin_spelling_of_non_null_is_accepted() {
     nts_jvm_emitter::bind::set_nonnull(std::collections::BTreeSet::new());
     let rendered =
         nts_jvm_emitter::bind::declarations(&ours(&out.join("classes"), "com.example.Kt"))
-            .expect("renders")
-            .0;
+            .expect("renders");
 
     assert!(
         rendered.contains("greet(): string;"),
@@ -493,9 +492,7 @@ fn the_generator_produces_declarations_for_the_fixture() {
         return;
     };
     let catalog = ours(&classes, "com.example.Catalog");
-    let body = nts_jvm_emitter::bind::declarations(&catalog)
-        .expect("Catalog should render")
-        .0;
+    let body = nts_jvm_emitter::bind::declarations(&catalog).expect("Catalog should render");
 
     // The decisions, each measured or forced, asserted individually so a
     // failure names which one moved rather than printing a diff of the whole
@@ -536,16 +533,14 @@ fn the_generator_produces_declarations_for_the_fixture() {
 
     // `Object` is `unknown`, never `any`.
     let rendered = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
     assert!(!rendered.contains(": any"), "`any` must never be generated");
 
     // And the module wrapper produces something importable.
     let module = nts_jvm_emitter::bind::module_of(
         "com.example",
-        &[("com/example/Catalog".to_owned(), body, Vec::new())],
-    )
-    .0;
+        &[("com/example/Catalog".to_owned(), body)],
+    );
     assert!(module.contains("declare module \"java:com.example\""));
     assert!(
         module.starts_with("// GENERATED"),
@@ -562,8 +557,7 @@ fn nullability_is_asymmetric_between_returns_and_arguments() {
         return;
     };
     let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
 
     // A RETURN defaults to `| null` when unannotated: the class file does not
     // say, and guessing non-null produces an NPE the types promised could not
@@ -603,7 +597,7 @@ fn show_generated() {
     let Some(classes) = fixture() else { return };
     for class in ["com.example.Catalog", "com.example.Kind"] {
         match nts_jvm_emitter::bind::declarations(&ours(&classes, class)) {
-            Ok((body, _)) => println!("{body}"),
+            Ok(body) => println!("{body}"),
             Err(why) => println!("REFUSED {why}"),
         }
     }
@@ -616,9 +610,8 @@ fn enum_constants_are_not_nullable() {
         eprintln!("SKIP reads: no JDK");
         return;
     };
-    let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Kind"))
-        .expect("renders")
-        .0;
+    let body =
+        nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Kind")).expect("renders");
 
     // `ACC_ENUM` on both the class and the field. The JLS guarantees `<clinit>`
     // creates every constant before any is observable, so `| null` here would
@@ -662,9 +655,7 @@ fn nullability_comes_from_three_places_and_they_disagree() {
 
     // Nothing installed: the class file is the only source.
     nts_jvm_emitter::bind::set_nonnull(std::collections::BTreeSet::new());
-    let plain = nts_jvm_emitter::bind::declarations(&catalog)
-        .expect("renders")
-        .0;
+    let plain = nts_jvm_emitter::bind::declarations(&catalog).expect("renders");
 
     // **Annotated.** `@NonNull` is CLASS-retention and read from the class file.
     assert!(
@@ -701,9 +692,7 @@ fn nullability_comes_from_three_places_and_they_disagree() {
             .into_iter()
             .collect(),
     );
-    let overridden = nts_jvm_emitter::bind::declarations(&catalog)
-        .expect("renders")
-        .0;
+    let overridden = nts_jvm_emitter::bind::declarations(&catalog).expect("renders");
     assert!(
         overridden.contains("name(): string;"),
         "after the override:\n{overridden}"
@@ -724,8 +713,7 @@ fn a_map_parameter_takes_a_typescript_map_only_when_one_would_fit() {
         return;
     };
     let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
 
     // `NtsMap implements java.util.Map`, so a TypeScript `Map` crosses into a
     // Java `Map` parameter as a reference. Both spellings are offered, because
@@ -762,8 +750,7 @@ fn generic_signatures_are_rendered() {
         return;
     };
     let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
     let expect = |needle: &str| assert!(body.contains(needle), "expected `{needle}` in:\n{body}");
 
     // A parameterised return: the descriptor says `Ljava/util/List;` and only
@@ -832,9 +819,7 @@ fn inherited_members_are_surfaced_through_a_resolver() {
     let kind = ours(&classes, "com.example.Kind");
 
     // Without a resolver, nothing inherited appears -- the single-class case.
-    let alone = nts_jvm_emitter::bind::declarations(&kind)
-        .expect("renders")
-        .0;
+    let alone = nts_jvm_emitter::bind::declarations(&kind).expect("renders");
     assert!(
         !alone.contains("ordinal()"),
         "no resolver means no inherited members:\n{alone}"
@@ -846,8 +831,7 @@ fn inherited_members_are_surfaced_through_a_resolver() {
     // the flag.
     let only_fixture =
         nts_jvm_emitter::bind::declarations_with(&kind, &FromDirectory(classes.clone()))
-            .expect("renders")
-            .0;
+            .expect("renders");
     assert!(
         !only_fixture.contains("ordinal()"),
         "java.lang.Enum is not in the fixture, so this should still find nothing:\n{only_fixture}"
@@ -871,19 +855,16 @@ fn inherited_members_are_surfaced_through_a_resolver() {
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
 
-    let without = nts_jvm_emitter::bind::declarations(&view)
-        .expect("renders")
-        .0;
+    let without = nts_jvm_emitter::bind::declarations(&view).expect("renders");
     assert!(
         !without.contains("setBounds"),
         "`setBounds` is declared on Widget, not View, so it must be absent without a resolver:\n{without}"
     );
 
-    let with = nts_jvm_emitter::bind::declarations_with(&view, &FromDirectory(ui))
-        .expect("renders")
-        .0;
+    let with =
+        nts_jvm_emitter::bind::declarations_with(&view, &FromDirectory(ui)).expect("renders");
     assert!(
-        with.contains("setBounds") && with.contains("/** Inherited. */"),
+        with.contains("setBounds") && with.contains("/** Inherited."),
         "with a resolver, Widget's members appear on View:\n{with}"
     );
     // **Inherited FIELDS, which the first version of this walk missed
@@ -1281,9 +1262,7 @@ fn a_java_interface_is_emitted_as_an_interface() {
     };
     let bytes = std::fs::read(ui.join("com/example/ui/View$OnTouch.class")).expect("the interface");
     let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
-    let body = nts_jvm_emitter::bind::declarations(&class)
-        .expect("renders")
-        .0;
+    let body = nts_jvm_emitter::bind::declarations(&class).expect("renders");
 
     assert!(
         body.contains("export interface OnTouch {"),
@@ -1305,9 +1284,7 @@ fn a_java_interface_is_emitted_as_an_interface() {
     // every type.
     let rect = std::fs::read(ui.join("com/example/ui/Rect.class")).expect("Rect");
     let rect = nts_jvm_emitter::read::class_file(&rect).expect("parses");
-    let rendered = nts_jvm_emitter::bind::declarations(&rect)
-        .expect("renders")
-        .0;
+    let rendered = nts_jvm_emitter::bind::declarations(&rect).expect("renders");
     assert!(rendered.contains("export class Rect {"), "{rendered}");
     assert!(
         rendered.contains("constructor("),
@@ -1445,8 +1422,7 @@ fn both_renderers_agree_about_a_primitive_array() {
         return;
     };
     let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
 
     // The plain renderer, on `()[I`.
     assert!(body.contains("counts(): Int32Array | null;"), "{body}");
@@ -1486,17 +1462,16 @@ fn an_inherited_method_renders_exactly_as_its_declared_form() {
     let resolve = FromDirectory(ui.clone());
 
     let base = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
-        .expect("Widget renders")
-        .0;
+        .expect("Widget renders");
     let derived = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/View"), &resolve)
-        .expect("View renders")
-        .0;
+        .expect("View renders");
 
     // Every member `Widget` declares, as `Widget` renders it, must appear in
     // `View`'s inherited section character for character.
     let mut checked = 0usize;
     for line in base.lines().map(str::trim) {
         if !line.ends_with(';')
+            || line.starts_with(['/', '*'])
             || line.starts_with("constructor")
             || line.contains(':') && !line.contains('(')
         {
@@ -1550,8 +1525,7 @@ fn a_superinterface_is_inherited_and_counted() {
         &read("com/example/ui/Widget$Pressable"),
         &resolve,
     )
-    .expect("renders")
-    .0;
+    .expect("renders");
     assert!(
         pressable.contains("press(): void;"),
         "its own method:\n{pressable}"
@@ -1563,8 +1537,7 @@ fn a_superinterface_is_inherited_and_counted() {
 
     // The SAM consequence, asserted as a pair so neither half can pass alone.
     let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
-        .expect("renders")
-        .0;
+        .expect("renders");
     assert!(
         widget.contains("post(a0: Widget.Task | ((a0: number) => void)): void;"),
         "one abstract method: a closure is offered:\n{widget}"
@@ -1602,8 +1575,7 @@ fn an_interface_constant_becomes_a_merged_namespace() {
     let resolve = FromDirectory(ui.clone());
     let task =
         nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Task"), &resolve)
-            .expect("renders")
-            .0;
+            .expect("renders");
 
     assert!(
         task.contains("export namespace Task {"),
@@ -1631,8 +1603,7 @@ fn an_interface_constant_becomes_a_merged_namespace() {
     // and is the spelling the interface may not use. A fix that emitted `const`
     // everywhere would pass every assertion above.
     let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
-        .expect("renders")
-        .0;
+        .expect("renders");
     assert!(
         !widget.contains("export namespace Widget {"),
         "a class needs no namespace for its statics:\n{widget}"
@@ -1670,8 +1641,7 @@ fn an_interface_inherits_constants_but_not_static_methods() {
         &read("com/example/ui/Widget$Pressable"),
         &resolve,
     )
-    .expect("renders")
-    .0;
+    .expect("renders");
 
     // The field is inherited -- `javac` accepts `Pressable.KIND`.
     assert!(
@@ -1691,8 +1661,7 @@ fn an_interface_inherits_constants_but_not_static_methods() {
     // namespace function -- `Task.none()` is legal Java.
     let task =
         nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget$Task"), &resolve)
-            .expect("renders")
-            .0;
+            .expect("renders");
     assert!(
         task.contains("function none()"),
         "the declarer still offers it:\n{task}"
@@ -1749,9 +1718,7 @@ fn a_bridge_method_is_not_part_of_the_api() {
     );
 
     // And only one reaches the declaration.
-    let body = nts_jvm_emitter::bind::declarations(&rect)
-        .expect("renders")
-        .0;
+    let body = nts_jvm_emitter::bind::declarations(&rect).expect("renders");
     assert!(
         body.contains("compareTo(a0: Rect): number;"),
         "the real one:\n{body}"
@@ -1778,13 +1745,12 @@ fn a_deprecated_member_says_so() {
         return;
     };
     let body = nts_jvm_emitter::bind::declarations(&ours(&classes, "com.example.Catalog"))
-        .expect("renders")
-        .0;
+        .expect("renders");
 
     let marked = |name: &str| {
-        body.lines()
-            .zip(body.lines().skip(1))
-            .any(|(before, line)| line.trim().starts_with(name) && before.contains("@deprecated"))
+        let at = body.find(&format!("    {name}(")).expect("member exists");
+        let doc = body[..at].rfind("/**").expect("JSDoc");
+        body[doc..at].contains("@deprecated")
     };
     assert!(
         marked("legacyFind"),
@@ -1826,9 +1792,7 @@ fn a_final_class_says_it_cannot_be_extended() {
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
 
-    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect"))
-        .expect("renders")
-        .0;
+    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect")).expect("renders");
     assert!(
         rect.contains("Final: cannot be extended."),
         "Rect is final:\n{rect}"
@@ -1836,9 +1800,8 @@ fn a_final_class_says_it_cannot_be_extended() {
 
     // The control: `Widget` is extended by `View` in this very fixture, so a
     // rule that marked everything would contradict a class file two lines away.
-    let widget = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Widget"))
-        .expect("renders")
-        .0;
+    let widget =
+        nts_jvm_emitter::bind::declarations(&read("com/example/ui/Widget")).expect("renders");
     assert!(
         !widget.contains("Final:"),
         "Widget is extended by View:\n{widget}"
@@ -1870,9 +1833,8 @@ fn abstract_is_enforced_where_final_is_only_described() {
         nts_jvm_emitter::read::class_file(&bytes).expect("parses")
     };
 
-    let drawable = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Drawable"))
-        .expect("renders")
-        .0;
+    let drawable =
+        nts_jvm_emitter::bind::declarations(&read("com/example/ui/Drawable")).expect("renders");
     assert!(
         drawable.contains("export abstract class Drawable {"),
         "{drawable}"
@@ -1886,9 +1848,7 @@ fn abstract_is_enforced_where_final_is_only_described() {
 
     // The control: an ordinary class is not abstract, or the modifier would be
     // noise and `new Rect()` would stop compiling.
-    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect"))
-        .expect("renders")
-        .0;
+    let rect = nts_jvm_emitter::bind::declarations(&read("com/example/ui/Rect")).expect("renders");
     assert!(rect.contains("export class Rect {"), "{rect}");
     assert!(
         !rect.contains("abstract class Rect"),
@@ -1921,8 +1881,7 @@ fn protected_is_surfaced_and_travels_with_inheritance() {
     let resolve = FromDirectory(ui.clone());
 
     let widget = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/Widget"), &resolve)
-        .expect("renders")
-        .0;
+        .expect("renders");
     assert!(
         widget.contains("protected onDraw(a0: Rect): void;"),
         "declared:\n{widget}"
@@ -1932,8 +1891,7 @@ fn protected_is_surfaced_and_travels_with_inheritance() {
     // as a public one -- widening the visibility of something Java keeps to the
     // hierarchy, which is the same class of error as emitting a bridge.
     let view = nts_jvm_emitter::bind::declarations_with(&read("com/example/ui/View"), &resolve)
-        .expect("renders")
-        .0;
+        .expect("renders");
     assert!(
         view.contains("protected onDraw(a0: Rect): void;"),
         "inherited:\n{view}"
@@ -1951,232 +1909,96 @@ fn protected_is_surfaced_and_travels_with_inheritance() {
     );
 }
 
-/// Every binding-table row names the declaration that is actually on its line.
-///
-/// The table is the half of `nts bind` the *compiler* reads: a `.d.ts` tells the
-/// checker that `canvas.drawText` takes a string and says nothing about which of
-/// four overloads the JVM should invoke, and this table answers that. It is
-/// keyed by position because the checker has already done the overload
-/// resolution -- `lower` walks to the declaration TypeScript picked, and the
-/// declaration's line selects the row. Nothing upstream needs to know what a JVM
-/// descriptor is, which is the point.
-///
-/// Keyed by **line**: `lower`'s `location` reports a node's *end*, measured --
-/// five refusals in `com.example.d.ts` came back at columns 18, 29, 66, 44 and
-/// 33 against lines of length 17, 28, 65, 43 and 32. A table keyed by a
-/// declaration's start column would miss every lookup, and would look exactly
-/// like the foreign call still being refused. The column is asserted here so the
-/// generator cannot quietly start emitting two declarations on one line, which
-/// is what makes the line sufficient.
+/// Each invocation kind uses the descriptor grammar, and retention evidence
+/// preserves the distinction between unknown, proved empty and known indices.
 #[test]
-fn every_bound_row_names_the_declaration_on_its_line() {
-    let Some(ui) = android_shape() else {
-        eprintln!("SKIP reads: the android-shape fixture did not build");
-        return;
-    };
-    let resolve = FromDirectory(ui.clone());
-    let names = [
-        "com/example/ui/Rect",
-        "com/example/ui/Drawable",
-        "com/example/ui/Widget",
-        "com/example/ui/View",
-        "com/example/ui/Loader",
-        "com/example/ui/View$OnTouch",
-        "com/example/ui/Loader$OnBytes",
-        "com/example/ui/Widget$Task",
-        "com/example/ui/Widget$Pressable",
-    ];
-    let mut bodies = Vec::new();
-    for name in names {
-        let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
-        let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
-        let (body, rows) =
-            nts_jvm_emitter::bind::declarations_with(&class, &resolve).expect("renders");
-        bodies.push((name.to_owned(), body, rows));
+fn declaration_contracts_validate_descriptors_and_retention() {
+    use nts_jvm_emitter::bind::{Call, read_binding};
+    use nts_semantic_schema::JvmAttributes;
+    for (kind, key, expected) in [
+        ("static", "p/C.s:(I)J", Call::Static),
+        ("virtual", "p/C.v:([I)D", Call::Virtual),
+        ("interface", "p/I.m:()V", Call::Interface),
+        ("special", "p/C.<init>:(Ljava/lang/String;)V", Call::Special),
+        ("field", "p/C.x:I", Call::Field),
+        ("staticfield", "p/C.X:Ljava/lang/String;", Call::StaticField),
+    ] {
+        let binding = read_binding(&JvmAttributes {
+            binding: format!("{kind} {key}"),
+            keeps: None,
+        })
+        .expect("valid contract");
+        assert_eq!(binding.call, expected);
+        assert_eq!(binding.key, key);
+        assert_eq!(binding.keeps, None);
     }
-    let (module, bound) = nts_jvm_emitter::bind::module_of("com.example.ui", &bodies);
-    let lines: Vec<&str> = module.lines().collect();
-    assert!(
-        !bound.is_empty(),
-        "the fixture must produce rows, or this test asserts nothing"
-    );
-
-    // The checker, factored out so the control below runs the *same* one. A
-    // control that ran a different check would only prove the control wrong.
-    let names_its_line = |row: &nts_jvm_emitter::bind::Bound, offset: usize| -> bool {
-        let Some(text) = lines.get(row.line - 1 + offset) else {
-            return false;
+    for keeps in [None, Some(vec![]), Some(vec![0, 2])] {
+        let attributes = JvmAttributes {
+            binding: "virtual p/C.m:(LX;I[LY;)V".to_owned(),
+            keeps: keeps.clone(),
         };
-        let trimmed = text.trim_start();
-        let member = row.key.rsplit_once(':').map_or("", |(head, _)| head);
-        let member = member.rsplit_once('.').map_or(member, |(_, name)| name);
-        let member = if member == "<init>" {
-            "constructor"
-        } else {
-            member
-        };
-        let bare = trimmed
-            .trim_start_matches("protected ")
-            .trim_start_matches("static ")
-            .trim_start_matches("readonly ")
-            .trim_start_matches("const ")
-            .trim_start_matches("function ");
-        bare.starts_with(member)
-            && bare[member.len()..].starts_with(['(', ':', '<', '$'])
-            // One declaration per line is what makes the line sufficient.
-            && text.len() - trimmed.len() + 1 == row.column
-    };
-
-    let missed: Vec<&nts_jvm_emitter::bind::Bound> =
-        bound.iter().filter(|row| !names_its_line(row, 0)).collect();
-    assert!(
-        missed.is_empty(),
-        "{} of {} rows do not name the declaration on their line; first: {:?}",
-        missed.len(),
-        bound.len(),
-        missed.first()
-    );
-
-    // **No two rows share a line.** Without this the line would not select a
-    // row, and the lookup would return whichever it found first -- an overload
-    // picked by iteration order.
-    let mut seen = std::collections::BTreeSet::new();
-    for row in &bound {
+        assert_eq!(read_binding(&attributes).expect("valid proof").keeps, keeps);
+    }
+    for bad in [
+        "virtual p/C.m:(I)",
+        "field p/C.x:V",
+        "static p/C.m:(L;)V",
+        "virtual p/C.m:()VIII",
+        "special p/C.m:()V",
+        "virtual p/C.<init>:()V",
+        "static p/C.m:([V)V",
+        "static p/C.m:()V trailing",
+    ] {
         assert!(
-            row.line > 0 && seen.insert(row.line),
-            "two rows on line {}",
-            row.line
+            read_binding(&JvmAttributes {
+                binding: bad.to_owned(),
+                keeps: None
+            })
+            .is_err(),
+            "{bad}"
         );
     }
-
-    // **The byte offset is what a consumer actually matches on**, so it gets
-    // the same treatment as the line. `SourceFile` carries no text, so the
-    // lowering cannot convert an offset to a line -- keying this table by line
-    // alone would have been unusable by the only caller it has.
-    //
-    // Verified against the real thing rather than against itself: running
-    // `emit-jvm` over `java-from-ts` with a probe at the refusal site printed
-    // 26 spans in the generated file, and all 26 equalled a row's `end`. The
-    // nine others were `java.d.ts`, which is hand-written and has no table.
-    for row in &bound {
-        assert!(row.end > 0, "every row needs a byte offset: {row:?}");
-        let text = lines[row.line - 1];
+    for keeps in [vec![1], vec![0, 0]] {
         assert!(
-            module[..row.end].ends_with(text),
-            "row {:?} ends at {} but that offset is not the end of its line",
-            row.key,
-            row.end
-        );
-        // One past the last character, not one past the newline -- `span.end`
-        // for a declaration is the offset after its `;`.
-        assert_eq!(
-            module.as_bytes()[row.end],
-            b'\n',
-            "offset {} is not at a line end",
-            row.end
+            read_binding(&JvmAttributes {
+                binding: "static p/C.m:(I)V".to_owned(),
+                keeps: Some(keeps)
+            })
+            .is_err()
         );
     }
-
-    // **The control.** Shift every row by one line and the same check must
-    // fail; otherwise it is a check whose answer does not depend on its input.
-    // Measured on `android.graphics`: a one-line shift takes 910 matches to 166.
-    let still_matching = bound.iter().filter(|row| names_its_line(row, 1)).count();
-    assert!(
-        still_matching * 4 < bound.len(),
-        "a one-line shift left {still_matching} of {} rows matching -- this check does not \
-         discriminate",
-        bound.len()
-    );
 }
 
-/// The table survives a round trip, and a malformed one is refused by name.
-///
-/// Two directions of one format, asserted rather than trusted. They live in the
-/// same file for the reason the class-file reader lives beside the writer -- a
-/// disagreement about field order between two crates is found by a wrong answer
-/// at run time, and between two functions by this test.
 #[test]
-fn a_binding_table_round_trips() {
-    let Some(ui) = android_shape() else {
-        eprintln!("SKIP reads: the android-shape fixture did not build");
-        return;
-    };
+fn generated_members_carry_their_jvm_contracts() {
+    let ui = android_shape().expect("android-shape fixture builds");
     let resolve = FromDirectory(ui.clone());
     let mut bodies = Vec::new();
     for name in [
         "com/example/ui/Rect",
         "com/example/ui/Widget",
         "com/example/ui/View",
+        "com/example/ui/View$OnTouch",
     ] {
         let bytes = std::fs::read(ui.join(format!("{name}.class"))).expect(name);
         let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
-        let (body, rows) =
-            nts_jvm_emitter::bind::declarations_with(&class, &resolve).expect("renders");
-        bodies.push((name.to_owned(), body, rows));
+        let body = nts_jvm_emitter::bind::declarations_with(&class, &resolve).expect("renders");
+        bodies.push((name.to_owned(), body));
     }
-    let (_, bound) = nts_jvm_emitter::bind::module_of("com.example.ui", &bodies);
-    assert!(
-        !bound.is_empty(),
-        "the fixture must produce rows, or this asserts nothing"
-    );
-
-    let text = nts_jvm_emitter::bind::write_table("com.example.ui", &bound);
-    let back = nts_jvm_emitter::bind::read_table(&text).expect("reads what it wrote");
-    assert_eq!(back, bound, "a table did not survive a round trip");
-
-    // Every call kind must round trip, not just whichever the fixture happens
-    // to use -- otherwise a mis-spelled arm in one direction is invisible until
-    // a jar uses it. This asserts the fixture covers them rather than assuming.
-    let kinds: std::collections::BTreeSet<_> = bound.iter().map(|row| row.call).collect();
-    assert!(
-        kinds.len() >= 4,
-        "the fixture exercises only {} call kinds, so the round trip says little about the \
-         others: {kinds:?}",
-        kinds.len()
-    );
-
-    // **Refused by name, not skipped.** Silently dropping a bad row makes the
-    // call it described fall back to "refused", which is indistinguishable from
-    // the feature not being built.
-    let bad = "# fine\n12 3 5 wobbly - com/example/ui/Rect.left:I\n";
-    let why = nts_jvm_emitter::bind::read_table(bad).expect_err("an unknown call kind is refused");
-    assert!(why.contains("wobbly") && why.contains("line 2"), "{why}");
-
-    let short = "1 2 3\n";
-    assert!(
-        nts_jvm_emitter::bind::read_table(short).is_err(),
-        "a truncated row is refused"
-    );
-
-    // The control: the *well-formed* version of the same row must parse, or the
-    // two assertions above would pass on a function that refuses everything.
-    let good = "# fine\n12 3 5 field - com/example/ui/Rect.left:I\n";
+    let module = nts_jvm_emitter::bind::module_of("com.example.ui", &bodies);
+    for expected in [
+        "@ntsJvm special com/example/ui/Rect.<init>:",
+        "@ntsJvm field com/example/ui/Rect.left:I",
+        "@ntsJvm virtual com/example/ui/Widget.",
+        "@ntsJvm interface com/example/ui/View$OnTouch.",
+        "@ntsJvmKeeps none",
+    ] {
+        assert!(module.contains(expected), "missing {expected}:\n{module}");
+    }
+    let prelude = nts_jvm_emitter::bind::namespace_of("com.example.ui", &bodies);
     assert_eq!(
-        nts_jvm_emitter::bind::read_table(good)
-            .expect("parses")
-            .len(),
-        1
-    );
-
-    // **`-` and `.` are opposite claims and must not collapse.** `-` is "the
-    // analysis could not read this method", which means assume everything
-    // escapes; `.` is "proved: nothing escapes". Reading one as the other turns
-    // ignorance into permission, which is the failure `escapes::table` already
-    // refuses to make and which this file must not undo on the way out.
-    let absent = nts_jvm_emitter::bind::read_table("9 1 5 virtual - a/B.c:()V\n").expect("parses");
-    assert_eq!(absent[0].keeps, None, "`-` is not analysed");
-    let proved = nts_jvm_emitter::bind::read_table("9 1 5 virtual . a/B.c:()V\n").expect("parses");
-    assert_eq!(
-        proved[0].keeps,
-        Some(Vec::new()),
-        "`.` is proved-nothing-escapes"
-    );
-    let some = nts_jvm_emitter::bind::read_table("9 1 5 virtual 0,2 a/B.c:(LX;LY;LZ;)V\n")
-        .expect("parses");
-    assert_eq!(some[0].keeps, Some(vec![0, 2]));
-    assert!(
-        nts_jvm_emitter::bind::read_table("9 1 5 virtual 0,x a/B.c:()V\n").is_err(),
-        "a non-numeric parameter index is refused rather than dropped"
+        module.matches("@ntsJvm ").count(),
+        prelude.matches("@ntsJvm ").count()
     );
 }
 
@@ -2288,7 +2110,7 @@ fn an_overload_set_of_mixed_visibility_stays_compilable() {
     };
     let bytes = std::fs::read(ui.join("com/example/ui/Widget.class")).expect("Widget");
     let class = nts_jvm_emitter::read::class_file(&bytes).expect("parses");
-    let (body, rows) =
+    let body =
         nts_jvm_emitter::bind::declarations_with(&class, &FromDirectory(ui)).expect("renders");
 
     // The public one keeps the plain name: it is what an outside caller writes.
@@ -2304,15 +2126,8 @@ fn an_overload_set_of_mixed_visibility_stays_compilable() {
         "the protected arity must be renamed and stay protected:\n{body}"
     );
 
-    // **The control that makes the rename safe.** A renamed member is only
-    // sound because the table still names the real one; without this the
-    // assertions above would pass on a binding that had invented a method.
-    let real = rows
-        .iter()
-        .find(|row| row.key.ends_with("drawingOrder:(II)I"));
     assert!(
-        real.is_some(),
-        "the table must still carry the Java member the renamed declaration stands for: {:?}",
-        rows.iter().map(|r| r.key.as_str()).collect::<Vec<_>>()
+        body.contains("@ntsJvm virtual com/example/ui/Widget.drawingOrder:(II)I"),
+        "a renamed declaration must still name the real Java member:\n{body}"
     );
 }

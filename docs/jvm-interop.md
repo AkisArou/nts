@@ -36,7 +36,7 @@ declarations, [`escapes`] answers which parameters a method retains.
 the projects' `build.sh` -- because the CLI lives in `tooling/cli`, which this
 lane does not own. The CLI is `check`, `emit-c`, `emit-jvm`, `hir`, `layouts`,
 `version`.~~ **Corrected 2026-09-15.** `nts bind` is a subcommand, with
-`--jar`/`--classes`, `--package`, `--out`, `--prelude`, `--keeps`,
+`--jar`/`--classes`, `--package`, `--out`, `--prelude`,
 `--self-contained`, `--members` and `--overrides`; `compiler/jvm-emitter/examples/bind.rs` is gone;
 and the ownership sentence was the load-bearing error, because it is why nobody
 looked. The CLI has seventeen commands, not six:
@@ -60,6 +60,31 @@ thirty lines when that lane edited the file. The quote was accurate; the
 coordinate was not. A line number into a file you do not own is a citation with
 an expiry date, and `grep` finds the phrase after any edit that does not delete
 it.
+
+## Declaration-local JVM contracts
+
+`nts bind` writes one `.d.ts` per package. Each callable or field carries its
+exact JVM contract in JSDoc, including overloads whose TypeScript types match:
+
+```ts
+/** @ntsJvm virtual com/example/Catalog.find:(I)Ljava/lang/String;
+ * @ntsJvmKeeps none
+ */
+find(index: number): string | null;
+```
+
+The invocation kinds are `static`, `virtual`, `interface`, `special` (a
+constructor), `field` and `staticfield`. The key is
+`owner/binary/Name.member:descriptor`. TypeScript selects the declaration;
+the compiler reads that declaration's metadata. Editing whitespace or comments
+does not require regenerating a second file.
+
+`@ntsJvmKeeps` is optional: no tag means unknown retention; `none` means the
+bytecode analysis proved that no parameter is retained; a space-separated list
+of zero-based parameter indices names retained parameters, excluding `this`.
+The compiler currently treats foreign calls conservatively for escape analysis.
+Malformed or duplicate tags fail the frontend; invalid JVM descriptors fail
+binding validation. There are no positional sidecars or separate keeps reports.
 
 ## A `try` around a bound call: was a wrong answer, now a refusal
 
@@ -1768,8 +1793,8 @@ retained. The comment above the `nts_presence_` arm records what saying so was
 worth -- two memory cases went **from 17 allocations to 0**, because without it
 "every object with an optional property somebody asks about moved to the heap".
 
-A foreign binding supplies the same answer. The binding table carries a `keeps`
-column, defaulting to `None` (everything escapes, which is always sound),
+A foreign binding supplies the same answer through `@ntsJvmKeeps`, defaulting
+to absent metadata (everything escapes, which is always sound),
 populated three ways, cheapest first:
 
 1. **From the class file, by analysis.** We have the callee's bytecode -- it is
@@ -3141,7 +3166,12 @@ directions.
 So `$` is no longer awkward, because it is no longer the API: it is a synthetic
 name marked synthetic, which is what the JVM convention is for.
 
-## The binding table, and the key I chose after being wrong about the first one
+## The original positional binding table (historical)
+
+**Superseded 2026-10-18:** the sidecar, its offsets and its parser are deleted.
+The sections below record the original design and measurements. The current
+format is declaration-local JSDoc, described in "Declaration-local JVM
+contracts" above; there is no compatibility reader for the old format.
 
 A `.d.ts` erases. It tells the checker that `canvas.drawText` takes a string and
 says nothing about which of four `drawText` overloads the JVM should invoke.

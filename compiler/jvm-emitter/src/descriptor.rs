@@ -99,7 +99,7 @@ fn field_length(bytes: &[u8]) -> Option<(usize, bool)> {
         b'J' | b'D' => Some((1, true)),
         b'L' => {
             let end = bytes.iter().position(|&b| b == b';')?;
-            Some((end + 1, false))
+            (end > 1).then_some((end + 1, false))
         }
         b'[' => {
             // An array is one word whatever it holds, so the element's own
@@ -109,6 +109,12 @@ fn field_length(bytes: &[u8]) -> Option<(usize, bool)> {
         }
         _ => None,
     }
+}
+
+/// Whether a string is exactly one non-void field descriptor.
+#[must_use]
+pub fn is_field(descriptor: &str) -> bool {
+    field_length(descriptor.as_bytes()).is_some_and(|(length, _)| length == descriptor.len())
 }
 
 /// The descriptor of an array of `element`.

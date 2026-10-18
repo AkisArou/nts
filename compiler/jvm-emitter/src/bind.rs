@@ -153,12 +153,12 @@ thread_local! {
     /// **A prelude is a vocabulary, not a jar.** `java.lang.Integer` has fifty
     /// methods and a caller wants three; binding the class wholesale gives a
     /// file nobody reads and a surface nobody asked for. Naming the members is
-    /// how a person curates one -- and the byte offsets its table needs are
-    /// generated from the same run that renders the text, which is the half a
-    /// hand-written prelude cannot have.
+    /// how a person curates one. Each selected declaration carries its JVM contract.
     static MEMBERS: std::cell::RefCell<Option<std::collections::BTreeSet<String>>> =
         const { std::cell::RefCell::new(None) };
     static PRUNED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RETENTION: std::cell::RefCell<std::collections::BTreeMap<String, Vec<usize>>> =
+        const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
     static PACKAGE: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
     /// The class being rendered, dotted, so a per-member override can be keyed
     /// by it. Set beside `PACKAGE` and for the same reason.
@@ -948,7 +948,7 @@ fn emitted_name(
     //
     // So the protected ones take a mangled name, which is the machinery already
     // here for overloads that erase alike. The name is a *surface* name: the
-    // binding table row carries `getChildDrawingOrder:(II)I`, so an override
+    // annotation carries `getChildDrawingOrder:(II)I`, so an override
     // still emits the member Java declared. That is the same contract
     // `find$int` has had since brands were removed.
     //
@@ -1009,8 +1009,6 @@ fn render_fields_into(
     out: &mut String,
     constants: &mut String,
     class: &ClassFile,
-    table: &mut Vec<Bound>,
-    constants_table: &mut Vec<Bound>,
 ) -> Result<(), String> {
     let is_enum_class = class.access & access::ENUM != 0;
     // **A field and a method may share a name in Java and may not in
@@ -1021,7 +1019,7 @@ fn render_fields_into(
     //
     // The field yields, because a call site is the common case and a protected
     // field is the rarer one. Same contract as a renamed overload: the binding
-    // table row still carries `mark:I`, so a read still reaches the field Java
+    // annotation still carries `mark:I`, so a read still reaches the field Java
     // declared.
     let shadowed: std::collections::BTreeSet<&str> = class
         .methods
@@ -1090,14 +1088,8 @@ fn render_fields_into(
             &mut *out
         };
         into.push_str(note);
-        mark(
-            if interface {
-                &mut *constants_table
-            } else {
-                &mut *table
-            },
+        annotate(
             into,
-            5,
             &class.binary_name,
             &field.name,
             &field.descriptor,
@@ -1155,40 +1147,12 @@ fn render_fields_into(
 }
 
 // ---------------------------------------------------------------------------
-// The binding table
+// Declaration-local JVM contracts
 // ---------------------------------------------------------------------------
 //
-// The second output `nts bind` produces, and the half that makes a foreign call
-// an *instruction*. A `.d.ts` erases: it tells the checker that `canvas.drawText`
-// takes a string, and says nothing about which of four `drawText` overloads the
-// JVM should invoke. The table answers that, and it is keyed by **position in
-// the generated file**.
-//
-// **Why position rather than a name.** A method name is not unique -- measured,
-// not assumed: `android.graphics.Canvas` renders three same-name `drawText`
-// overload signatures, because TypeScript can tell them apart, and mangles only
-// the fourth, whose parameters erase to a signature already taken. Keying by
-// `(class, name)` would therefore collide on exactly the overload-heavy classes
-// that matter. Mangling *every* overload would make the key unique and is the
-// cheaper change -- and it was rejected, because `drawText$String$float$float$Paint`
-// at every call site is the DX the `$` in a generated name was already a
-// complaint about.
-//
-// Position has a better property than uniqueness: **the checker has already done
-// the overload resolution.** TypeScript picks a signature, `lower` walks to that
-// declaration, and the declaration's position selects the row. Nothing upstream
-// has to know what a JVM descriptor is, which is the point -- `hir` must not
-// grow a second opinion about a type mapping this crate already owns.
-//
-// **Keyed by line, not by line and column**, and that is measured too: `lower`'s
-// `location` reports a node's *end* -- five refusals in `com.example.d.ts` came
-// back at columns 18, 29, 66, 44 and 33 against lines of length 17, 28, 65, 43
-// and 32. A table keyed by a declaration's start column would miss every lookup,
-// and the symptom would be indistinguishable from the foreign call simply still
-// being refused. The column is recorded anyway, so a lookup can *assert* it
-// landed on the row it meant to -- one declaration per line is what makes the
-// line sufficient, and `every_bound_row_is_alone_on_its_line` is what keeps it
-// true.
+// Each overload carries the exact member and invocation kind that the class
+// reader found. The TypeScript checker selects that declaration; whitespace,
+// nesting and Unicode comments cannot move its contract onto another member.
 
 /// How a bound member is invoked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1207,93 +1171,47 @@ pub enum Call {
     StaticField,
 }
 
-/// One row: a declaration's position in the generated file, and the JVM member
-/// it names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Bound {
-    /// Byte offset just past the declaration's last character -- the value
-    /// `lower`'s `location.span.end` carries for this declaration.
-    ///
-    /// **This is what a consumer matches on, and the line is not.** `SourceFile`
-    /// carries `uri`, `digest` and `display_path` and *no text*, so the lowering
-    /// cannot convert a byte offset into a line even if it wanted to. I keyed
-    /// this table by line first and read the struct afterwards.
-    ///
-    /// `end` rather than `start` because tsgo's `pos` includes leading trivia:
-    /// a declaration's `span.start` is the end of the *previous* token, which
-    /// for a declaration on its own line is the previous line. `span.end` is the
-    /// first offset past the `;` and is the same under either convention.
-    pub end: usize,
-    /// 1-based line in the assembled module file. For a person reading the
-    /// table, and for the test that asserts the offset landed on the right
-    /// declaration.
-    pub line: usize,
-    /// 1-based column of the declaration's first character. Recorded so a
-    /// lookup can assert rather than trust; see the note above on why the line
-    /// is what selects the row.
-    pub column: usize,
-    /// `owner.member:descriptor`, the shape `hir::runtime::foreign_key` builds.
-    pub key: String,
-    /// Which instruction this becomes.
-    pub call: Call,
-    /// Which of this member's parameters it **keeps** a reference to past the
-    /// call, by index -- `escapes::table`'s answer for the same key.
-    ///
-    /// **`None` and `Some(vec![])` mean opposite things and the distinction is
-    /// the whole point.** `None` is "the analysis could not read this method",
-    /// which means assume every argument escapes: always sound, only
-    /// pessimistic. `Some(vec![])` is "proved: nothing escapes", which is a
-    /// claim, and writing it for a method nobody analysed would turn ignorance
-    /// into permission. `escapes::table` already refuses to record the second
-    /// for the first, and this carries that distinction through the file rather
-    /// than flattening it on the way out.
-    pub keeps: Option<Vec<usize>>,
-}
-
-/// Record a row against the buffer it was just written into.
-///
-/// **The line comes from the text itself** rather than from a counter kept
-/// beside it. A counter is a second derivation of the same fact and would drift
-/// the first time a render path wrote two lines where the counter assumed one --
-/// which is exactly what the `/** Inherited. */` prefix and the `@deprecated`
-/// line both do. Counting the newlines already in the buffer cannot disagree
-/// with the buffer.
-fn mark(
-    table: &mut Vec<Bound>,
-    buf: &str,
-    column: usize,
-    owner: &str,
-    member: &str,
-    descriptor: &str,
-    call: Call,
-) {
-    table.push(Bound {
-        // Filled in by `module_of`, from the assembled text. A row's offset is
-        // derived from the file it points into, so it cannot disagree with it.
-        end: 0,
-        // Filled in by `declarations_with`, which has the class the analysis
-        // needs to read. `mark` has only a name.
-        keeps: None,
-        line: buf.bytes().filter(|byte| *byte == b'\n').count() + 1,
-        column,
-        key: format!("{owner}.{member}:{descriptor}"),
-        call,
-    });
-}
-
-/// Move a table by the offset its text was moved by when it was merged into a
-/// larger buffer. Called from the same loop that does the merging, so the two
-/// cannot disagree.
-fn shift(table: &mut [Bound], lines: usize, columns: usize) {
-    for row in table {
-        row.line += lines;
-        row.column += columns;
+impl Call {
+    /// The annotation spelling shared by rendering and validation.
+    #[must_use]
+    pub const fn spelling(self) -> &'static str {
+        match self {
+            Self::Static => "static",
+            Self::Virtual => "virtual",
+            Self::Interface => "interface",
+            Self::Special => "special",
+            Self::Field => "field",
+            Self::StaticField => "staticfield",
+        }
     }
 }
 
-/// The number of lines already in a buffer, for use as a merge offset.
-fn lines_in(buf: &str) -> usize {
-    buf.bytes().filter(|byte| *byte == b'\n').count()
+/// Write ABI facts beside the declaration they describe. Retention evidence
+/// comes from the same class's bytecode; an absent analysis stays absent.
+fn annotate(out: &mut String, owner: &str, member: &str, descriptor: &str, call: Call) {
+    let key = format!("{owner}.{member}:{descriptor}");
+    // Keep existing editor-facing documentation (notably @deprecated) in the
+    // nearest JSDoc block, alongside the machine contract.
+    if out.ends_with(" */\n") {
+        out.truncate(out.len() - 4);
+        let _ = writeln!(out, "\n     * @ntsJvm {} {key}", call.spelling());
+    } else {
+        let _ = writeln!(out, "    /** @ntsJvm {} {key}", call.spelling());
+    }
+    RETENTION.with(|known| {
+        if let Some(kept) = known.borrow().get(&key) {
+            let indices = if kept.is_empty() {
+                "none".to_owned()
+            } else {
+                kept.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            };
+            let _ = writeln!(out, "     * @ntsJvmKeeps {indices}");
+        }
+    });
+    out.push_str("     */\n");
 }
 
 /// Render one class as a `declare class` body.
@@ -1303,7 +1221,7 @@ fn lines_in(buf: &str) -> usize {
 /// Returns the member's name when a descriptor cannot be rendered, rather than
 /// emitting a declaration with a hole in it. **Refuse by name, never
 /// half-emit**: a `.d.ts` that silently drops a method is one a caller trusts.
-pub fn declarations(class: &ClassFile) -> Result<(String, Vec<Bound>), String> {
+pub fn declarations(class: &ClassFile) -> Result<String, String> {
     declarations_with(class, &Alone)
 }
 
@@ -1392,12 +1310,7 @@ fn member_within(descriptor: &str, signature: Option<&str>) -> bool {
 /// # Errors
 ///
 /// As [`declarations`].
-pub fn declarations_with(
-    class: &ClassFile,
-    resolve: &dyn Resolve,
-) -> Result<(String, Vec<Bound>), String> {
-    let mut table: Vec<Bound> = Vec::new();
-    let mut constants_table: Vec<Bound> = Vec::new();
+pub fn declarations_with(class: &ClassFile, resolve: &dyn Resolve) -> Result<String, String> {
     // The package this class lives in, so its siblings render unqualified.
     let package = class
         .binary_name
@@ -1405,6 +1318,7 @@ pub fn declarations_with(
         .map_or_else(String::new, |(package, _)| package.replace('/', "."));
     PACKAGE.with(|it| it.replace(package));
     CLASS.with(|it| it.replace(class.binary_name.replace(['/', '$'], ".")));
+    RETENTION.with(|it| *it.borrow_mut() = crate::escapes::table(class).into_iter().collect());
 
     let mut out = String::new();
     let name = simple_name(&class.binary_name);
@@ -1476,23 +1390,8 @@ pub fn declarations_with(
     let _ = writeln!(out, "  export {kind} {name}{parameters} {{");
 
     let mut out_constants = String::new();
-    render_fields_into(
-        &mut out,
-        &mut out_constants,
-        class,
-        &mut table,
-        &mut constants_table,
-    )?;
+    render_fields_into(&mut out, &mut out_constants, class)?;
 
-    // Which methods collapse onto one TypeScript signature. Computed before
-    // rendering, because the decision is about the *set*: a name is only
-    // ambiguous relative to its siblings.
-    // What each member keeps, read from its own bytecode. Keyed by the same
-    // `owner.member:descriptor` the rows are, so the two cannot disagree about
-    // which member an answer belongs to -- `the_escape_table_builds_the_same_key`
-    // is what holds that.
-    let escaping: std::collections::BTreeMap<String, Vec<usize>> =
-        crate::escapes::table(class).into_iter().collect();
     // One derivation, shared with the inherited path -- see `collapsed_of`.
     let collapsed = collapsed_of(class);
     // Names this class inherits as public, so a protected member it *declares*
@@ -1504,43 +1403,27 @@ pub fn declarations_with(
         .collect();
 
     render_methods_into(
-        (&mut out, &mut table),
-        (&mut out_constants, &mut constants_table),
+        &mut out,
+        &mut out_constants,
         class,
         resolve,
         &collapsed,
         &public_inherited,
     )?;
 
-    render_inherited(
-        &mut out,
-        class,
-        resolve,
-        &mut out_constants,
-        &mut table,
-        &mut constants_table,
-    );
+    render_inherited(&mut out, class, resolve, &mut out_constants);
 
     out.push_str("  }\n");
     if !out_constants.is_empty() {
         // Declaration merging: `interface Task` and `namespace Task` are one
         // type to TypeScript, so `Task.KIND` resolves as it does in Java.
         let _ = writeln!(out, "  export namespace {name} {{");
-        // The offset is taken here, in the loop that does the moving, and the
-        // `  ` prefix below is the same two columns the shift adds.
-        shift(&mut constants_table, lines_in(&out), 2);
         for line in out_constants.lines() {
             let _ = writeln!(out, "  {line}");
         }
         out.push_str("  }\n");
-        table.append(&mut constants_table);
     }
-    // Attach what the bytecode analysis found, now that every row exists.
-    // Absent stays absent: a member the analysis could not read keeps `None`.
-    for row in &mut table {
-        row.keeps = escaping.get(&row.key).cloned();
-    }
-    Ok((out, table))
+    Ok(out)
 }
 
 /// Render this class's own methods, into the class body or the merged namespace.
@@ -1551,18 +1434,13 @@ pub fn declarations_with(
 /// has its own reason for choosing a buffer.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn render_methods_into(
-    into: (&mut String, &mut Vec<Bound>),
-    constants: (&mut String, &mut Vec<Bound>),
+    out: &mut String,
+    out_constants: &mut String,
     class: &ClassFile,
     resolve: &dyn Resolve,
     collapsed: &[(String, String)],
     public_inherited: &std::collections::BTreeSet<String>,
 ) -> Result<(), String> {
-    // A buffer and the table that indexes it travel together -- they are one
-    // destination, and passing them as four arguments was what pushed this over
-    // the limit. Nothing else changes.
-    let (out, table) = into;
-    let (out_constants, constants_table) = constants;
     let is_interface = class.access & access::INTERFACE != 0;
     for method in class
         .methods
@@ -1595,10 +1473,8 @@ fn render_methods_into(
 
         if method.name == "<init>" {
             if !is_interface {
-                mark(
-                    &mut *table,
+                annotate(
                     out,
-                    5,
                     &class.binary_name,
                     "<init>",
                     &method.descriptor,
@@ -1640,10 +1516,8 @@ fn render_methods_into(
         // fix for those did not cover. In a namespace it is a `function`.
         let is_static = method.access & access::STATIC != 0;
         if is_interface && is_static {
-            mark(
-                &mut *constants_table,
+            annotate(
                 out_constants,
-                5,
                 &class.binary_name,
                 &method.name,
                 &method.descriptor,
@@ -1662,10 +1536,8 @@ fn render_methods_into(
             );
             continue;
         }
-        mark(
-            &mut *table,
+        annotate(
             out,
-            5,
             &class.binary_name,
             &method.name,
             &method.descriptor,
@@ -2007,8 +1879,6 @@ fn render_inherited(
     class: &ClassFile,
     resolve: &dyn Resolve,
     constants: &mut String,
-    table: &mut Vec<Bound>,
-    constants_table: &mut Vec<Bound>,
 ) {
     let (shadowed, public_names) = visible_method_names(class, resolve);
     for field in inherited_fields(class, resolve) {
@@ -2032,14 +1902,8 @@ fn render_inherited(
         // `getfield` names the static type the call site had, and the JVM walks
         // the hierarchy -- which is what `javac` emits and is why an inherited
         // member needs no separate resolution step here.
-        mark(
-            if is_interface {
-                &mut *constants_table
-            } else {
-                &mut *table
-            },
+        annotate(
             into,
-            5,
             &class.binary_name,
             &field.name,
             &field.descriptor,
@@ -2114,10 +1978,8 @@ fn render_inherited(
         };
         let rendered_arguments = arguments(&method, &parameters, resolve);
         out.push_str("    /** Inherited. */\n");
-        mark(
-            table,
+        annotate(
             out,
-            5,
             &class.binary_name,
             &method.name,
             &method.descriptor,
@@ -2209,17 +2071,12 @@ fn render_inherited(
 /// come from two paths rendering the same thing and drifting.
 fn emit_tree(
     out: &mut String,
-    bound: &mut Vec<Bound>,
-    classes: &[(String, String, Vec<Bound>)],
+    classes: &[(String, String)],
     binary: &str,
     body: &str,
-    rows: &[Bound],
     depth: usize,
 ) {
     let pad = "  ".repeat(depth);
-    let mut mine = rows.to_vec();
-    shift(&mut mine, lines_in(out), depth * 2);
-    bound.append(&mut mine);
     for line in body.lines() {
         if line.is_empty() {
             out.push('\n');
@@ -2227,31 +2084,18 @@ fn emit_tree(
             let _ = writeln!(out, "{pad}{line}");
         }
     }
-
     let prefix = format!("{binary}$");
-    let children: Vec<&(String, String, Vec<Bound>)> = classes
+    let children: Vec<_> = classes
         .iter()
-        .filter(|(inner, _, _)| inner.starts_with(&prefix) && !inner[prefix.len()..].contains('$'))
+        .filter(|(inner, _)| inner.starts_with(&prefix) && !inner[prefix.len()..].contains('$'))
         .collect();
-    if children.is_empty() {
-        out.push('\n');
-        return;
+    if !children.is_empty() {
+        let _ = writeln!(out, "\n{pad}  export namespace {} {{", simple_name(binary));
+        for (inner, inner_body) in children {
+            emit_tree(out, classes, inner, inner_body, depth + 1);
+        }
+        let _ = writeln!(out, "{pad}  }}");
     }
-    // Declaration merging: the class above and this namespace are one name to
-    // TypeScript, which is what makes `Outer.Inner` read as it does in Java.
-    let _ = writeln!(out, "\n{pad}  export namespace {} {{", simple_name(binary));
-    for (inner, inner_body, inner_rows) in children {
-        emit_tree(
-            out,
-            bound,
-            classes,
-            inner,
-            inner_body,
-            inner_rows,
-            depth + 1,
-        );
-    }
-    let _ = writeln!(out, "{pad}  }}");
     out.push('\n');
 }
 
@@ -2275,10 +2119,7 @@ fn emit_tree(
 /// `java.util.concurrent` are separate calls and separate declarations, which
 /// TypeScript merges because a namespace is open.
 #[must_use]
-pub fn namespace_of(
-    package: &str,
-    classes: &[(String, String, Vec<Bound>)],
-) -> (String, Vec<Bound>) {
+pub fn namespace_of(package: &str, classes: &[(String, String)]) -> String {
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
     out.push_str("// The prelude, as a **global namespace**: no top-level import anywhere in\n");
@@ -2300,33 +2141,16 @@ pub fn namespace_of(
         );
     }
 
-    let mut bound: Vec<Bound> = Vec::new();
-    for (binary, body, rows) in classes
-        .iter()
-        .filter(|(binary, _, _)| !binary.contains('$'))
-    {
-        emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
+    for (binary, body) in classes.iter().filter(|(binary, _)| !binary.contains('$')) {
+        emit_tree(&mut out, classes, binary, body, 0);
     }
     out.push_str("}\n");
 
-    let mut starts = vec![0usize];
-    for (at, byte) in out.bytes().enumerate() {
-        if byte == b'\n' {
-            starts.push(at + 1);
-        }
-    }
-    for row in &mut bound {
-        if row.line == 0 || row.line > starts.len() {
-            continue;
-        }
-        row.end = starts.get(row.line).map_or(out.len(), |next| next - 1);
-    }
-    (out, bound)
+    out
 }
 
 #[must_use]
-pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (String, Vec<Bound>) {
-    let mut bound: Vec<Bound> = Vec::new();
+pub fn module_of(package: &str, classes: &[(String, String)]) -> String {
     let mut out = String::new();
     out.push_str("// GENERATED by `nts bind`. Do not edit.\n//\n");
     out.push_str(
@@ -2394,37 +2218,13 @@ pub fn module_of(package: &str, classes: &[(String, String, Vec<Bound>)]) -> (St
     // Outer classes first, each followed by a namespace holding whatever nests
     // inside it -- TypeScript wants the class before the namespace that merges
     // with it.
-    for (binary, body, rows) in classes
-        .iter()
-        .filter(|(binary, _, _)| !binary.contains('$'))
-    {
-        emit_tree(&mut out, &mut bound, classes, binary, body, rows, 0);
+    for (binary, body) in classes.iter().filter(|(binary, _)| !binary.contains('$')) {
+        emit_tree(&mut out, classes, binary, body, 0);
     }
 
     out.push_str("}\n");
 
-    // **The byte offsets, resolved from the assembled file itself.** Not
-    // tracked through the merges beside the line numbers: re-indenting a nested
-    // body adds two bytes to *every* line, so an offset carried along would
-    // have to be shifted by a per-line amount, and the arithmetic is exactly
-    // the kind that is wrong once and silent afterwards. Reading them back out
-    // of the finished text is one derivation and cannot disagree with it.
-    let mut starts = vec![0usize];
-    for (at, byte) in out.bytes().enumerate() {
-        if byte == b'\n' {
-            starts.push(at + 1);
-        }
-    }
-    for row in &mut bound {
-        if row.line == 0 || row.line > starts.len() {
-            continue;
-        }
-        // `starts[line]` is where the NEXT line begins, so one before it is the
-        // newline that ends this one -- which is the first offset past the
-        // declaration's `;`, and what `span.end` carries.
-        row.end = starts.get(row.line).map_or(out.len(), |next| next - 1);
-    }
-    (out, bound)
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -2664,144 +2464,86 @@ fn generic_signature(signature: &str) -> Option<(Vec<String>, String)> {
 }
 
 // ---------------------------------------------------------------------------
-// Reading a table back
+// Reading declaration metadata
 // ---------------------------------------------------------------------------
-//
-// The inverse of what `module_of` emits, and it lives here rather than in the
-// consumer for the reason the class-file reader lives beside the writer: a
-// format with one implementation of each direction, in one file, cannot have
-// them disagree about a field order. `round_trips` asserts it instead of
-// trusting it.
-//
-// **Why the consumer gets a `Vec` rather than a map.** Whoever loads this
-// decides how to index it -- by `SourceId` once the snapshot has resolved
-// paths, which is a fact this crate does not have. Returning the rows and
-// stopping is the boundary: the parsing is a fact about the format, and the
-// indexing is a fact about the program being compiled.
 
-/// Parse a table emitted beside a `.d.ts`.
-///
-/// # Errors
-///
-/// The line number and what was wrong with it. A malformed table is worth
-/// refusing by name: silently skipping a bad row would make a foreign call fall
-/// back to "refused", which is indistinguishable from the feature not being
-/// built.
-pub fn read_table(text: &str) -> Result<Vec<Bound>, String> {
-    let mut rows = Vec::new();
-    for (at, line) in text.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let mut parts = line.splitn(6, ' ');
-        let mut next = |what: &str| {
-            parts
-                .next()
-                .ok_or_else(|| format!("line {}: no {what}", at + 1))
-                .map(str::to_owned)
-        };
-        let end = next("end offset")?;
-        let line_no = next("line")?;
-        let column = next("column")?;
-        let call = next("call kind")?;
-        // **Before the key, because the key is the rest of the line.** A
-        // descriptor contains no space, but putting a field after it would
-        // still need the split widened every time one is added, and the reader
-        // and the writer would have to agree about which. The last field being
-        // the only unbounded one is a rule that does not need re-deciding.
-        let keeps = next("keeps")?;
-        let key = next("member key")?;
-        let number = |text: &str, what: &str| {
-            text.parse::<usize>()
-                .map_err(|_| format!("line {}: {what} is not a number: {text}", at + 1))
-        };
-        rows.push(Bound {
-            end: number(&end, "the end offset")?,
-            line: number(&line_no, "the line")?,
-            column: number(&column, "the column")?,
-            call: match call.as_str() {
-                "static" => Call::Static,
-                "virtual" => Call::Virtual,
-                "interface" => Call::Interface,
-                "special" => Call::Special,
-                "field" => Call::Field,
-                "staticfield" => Call::StaticField,
-                other => return Err(format!("line {}: unknown call kind `{other}`", at + 1)),
-            },
-            key,
-            // `-` is "not analysed", which is not the same as "nothing
-            // escapes" -- see `Bound::keeps`.
-            keeps: if keeps == "-" {
-                None
-            } else if keeps.is_empty() || keeps == "." {
-                Some(Vec::new())
-            } else {
-                Some(
-                    keeps
-                        .split(',')
-                        .map(|it| {
-                            it.parse::<usize>().map_err(|_| {
-                                format!("line {}: `{it}` is not a parameter index", at + 1)
-                            })
-                        })
-                        .collect::<Result<Vec<usize>, String>>()?,
-                )
-            },
-        });
-    }
-    Ok(rows)
+/// A validated declaration annotation, ready for the compiler's foreign table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    pub key: String,
+    pub call: Call,
+    pub keeps: Option<Vec<u32>>,
 }
 
-/// Render rows as the table `read_table` reads.
+/// Interpret ABI metadata without guessing from the declaration's TS types.
 ///
-/// The emitter used to live in `examples/bind.rs`, which meant the two
-/// directions were in different crates and only one of them was tested.
-#[must_use]
-pub fn write_table(package: &str, rows: &[Bound]) -> String {
-    let mut out = String::new();
-    let _ = writeln!(
-        out,
-        "# GENERATED by `nts bind`. The binding table for java:{package}."
-    );
-    out.push_str("# Keyed by the byte offset of a declaration's end, which is what\n");
-    out.push_str("# `location.span.end` carries: the checker picks the overload, and the\n");
-    out.push_str("# declaration it picked selects the row.\n");
-    out.push_str("# <end-byte> <line> <column> <call> <keeps> <owner.member:descriptor>\n");
-    out.push_str("# <keeps> is `-` when the analysis could not read the method, `.` when it\n");
-    out.push_str("# proved nothing escapes, and a comma-separated parameter list otherwise.\n");
-    for row in rows {
-        let call = match row.call {
-            Call::Static => "static",
-            Call::Virtual => "virtual",
-            Call::Interface => "interface",
-            Call::Special => "special",
-            Call::Field => "field",
-            Call::StaticField => "staticfield",
-        };
-        let keeps = match &row.keeps {
-            None => "-".to_owned(),
-            Some(indices) if indices.is_empty() => ".".to_owned(),
-            Some(indices) => indices
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(","),
-        };
-        let _ = writeln!(
-            out,
-            "{} {} {} {call} {keeps} {}",
-            row.end, row.line, row.column, row.key
-        );
+/// # Errors
+/// Names the malformed annotation or descriptor; callers attach its source declaration.
+pub fn read_binding(attributes: &nts_semantic_schema::JvmAttributes) -> Result<Binding, String> {
+    let mut parts = attributes.binding.split_whitespace();
+    let kind = parts.next().ok_or("empty @ntsJvm")?;
+    let key = parts.next().ok_or("@ntsJvm has no member key")?;
+    if parts.next().is_some() {
+        return Err("@ntsJvm has trailing contract text".to_owned());
     }
-    out
+    let call = match kind {
+        "static" => Call::Static,
+        "virtual" => Call::Virtual,
+        "interface" => Call::Interface,
+        "special" => Call::Special,
+        "field" => Call::Field,
+        "staticfield" => Call::StaticField,
+        _ => return Err(format!("unknown @ntsJvm invocation kind `{kind}`")),
+    };
+    let (owner, member, descriptor) =
+        split_key(key).ok_or("@ntsJvm needs owner.member:descriptor")?;
+    if owner.contains('.') || owner.split('/').any(str::is_empty) || member.contains(['/', ':']) {
+        return Err(format!("invalid @ntsJvm binary member `{key}`"));
+    }
+    let field = matches!(call, Call::Field | Call::StaticField);
+    let arity = if field {
+        if !crate::descriptor::is_field(descriptor) {
+            return Err(format!("invalid @ntsJvm field descriptor `{descriptor}`"));
+        }
+        0
+    } else {
+        crate::descriptor::call_effect(descriptor)
+            .ok_or_else(|| format!("invalid @ntsJvm method descriptor `{descriptor}`"))?;
+        crate::descriptor::parameters(descriptor)
+            .ok_or("@ntsJvm has no parameter list")?
+            .len()
+    };
+    if (member == "<init>") != (call == Call::Special)
+        || (call == Call::Special && !descriptor.ends_with(")V"))
+        || member == "<clinit>"
+    {
+        return Err(format!(
+            "@ntsJvm constructor contract disagrees with `{key}`"
+        ));
+    }
+    if let Some(kept) = &attributes.keeps {
+        let mut seen = std::collections::BTreeSet::new();
+        for index in kept {
+            if usize::try_from(*index).map_or(true, |index| index >= arity) || !seen.insert(*index)
+            {
+                return Err(format!(
+                    "invalid @ntsJvmKeeps parameter {index} for `{key}`"
+                ));
+            }
+        }
+    }
+    Ok(Binding {
+        key: key.to_owned(),
+        call,
+        keeps: attributes.keeps.clone(),
+    })
 }
 
 /// Split a foreign key into the three parts an invoke instruction needs.
 ///
 /// The inverse of `hir::runtime::foreign_key`, which builds
 /// `owner.member:descriptor`. Lives here beside the writer for the reason
-/// `read_table` does: one file, both directions, no chance of two crates
+/// the annotation reader does: one file, both directions, no chance of two crates
 /// disagreeing about where the separators go.
 ///
 /// **Both splits are unambiguous on a well-formed key, and I wrote a paragraph
@@ -2843,7 +2585,7 @@ pub fn split_key(key: &str) -> Option<(&str, &str, &str)> {
 /// An instance call arrives with the receiver as its first argument -- the
 /// shape every runtime helper already has -- so `args == parameters + 1` says
 /// instance and `args == parameters` says static. **A caller must still take
-/// the kind from the table rather than from this**: the count cannot tell
+/// the kind from the annotation rather than from this**: the count cannot tell
 /// `invokevirtual` from `invokeinterface`, and getting that wrong is an
 /// `IncompatibleClassChangeError` at link time in the user's program rather
 /// than a verifier error in ours. This is the cross-check, not the answer.

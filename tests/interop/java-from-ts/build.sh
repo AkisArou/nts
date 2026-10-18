@@ -40,29 +40,15 @@ NTS_TSGO="${NTS_TSGO:-$root/target/tsgo}" "$nts" build "$here/tsconfig.json" \
   --out "$out/build" > "$out/build.log" 2>&1 || { cat "$out/build.log"; exit 1; }
 built="$out/build/api/java-8"
 
-# The declarations and the binding table, from the class files rather than from
-# the source. That is the point: this reads `android.jar`, where there is no
-# source.
-#
-# **One invocation, two files.** The `.d.ts` tells the checker what `index()`
-# returns; the `.bind` says which instruction the call becomes, keyed by the
-# byte offset of each declaration's end. Those offsets number the text the same
-# run produced, so generating the two separately would be two derivations of
-# one fact -- and the failure is silent, an offset landing one declaration over
-# and resolving a call to the wrong overload rather than to none.
+# One declaration file contains both TypeScript types and JVM contracts.
 generated="$out/com.example.d.ts"
-table="$out/com.example.bind"
-( cd "$root" && CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target-jvm}" cargo run --release -q \
-    -p nts-cli -- bind --classes "$built" --package com.example --out "$out" \
-    --overrides "$here/bind.overrides.json" )
+"$nts" bind --classes "$built" --package com.example --out "$out" \
+  --overrides "$here/bind.overrides.json"
 
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$generated" "$here/types/com.example.d.ts"
-  cp "$table" "$here/types/com.example.bind"
-  echo "regenerated types/com.example.d.ts and types/com.example.bind"
-elif ! diff -u "$here/types/com.example.d.ts" "$generated" \
-  || ! diff -u "$here/types/com.example.bind" "$table"; then
-  echo
+  echo "regenerated types/com.example.d.ts"
+elif ! diff -u "$here/types/com.example.d.ts" "$generated"; then
   echo "the generated declarations changed. If that was intended:"
   echo "  NTS_REGENERATE=1 $0"
   exit 1
