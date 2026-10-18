@@ -126,6 +126,55 @@ export function control(): number {{ return CONTROL; }}
 }
 
 #[test]
+fn zero_pointer_constants_require_declared_null() {
+    let Some(snapshot) = snapshot(
+        "zero-pointer-contract",
+        r#"
+import type { Ptr } from "c:types";
+/** @ntsConstant 0 */
+declare const BAD: Ptr<c_int>;
+/** @ntsConstant 0 */
+declare const GOOD: Ptr<c_int> | null;
+/** @ntsConstant 0 */
+declare const UNDEFINED: Ptr<c_int> | undefined;
+export function nonnull(): Ptr<c_int> { return BAD; }
+export function nullable(): Ptr<c_int> | null { return GOOD; }
+export function undefinedOnly(): Ptr<c_int> | undefined { return UNDEFINED; }
+"#,
+    ) else {
+        return;
+    };
+    let lowered = hir::lower::lower(&snapshot);
+    assert_eq!(
+        lowered
+            .diagnostics
+            .iter()
+            .filter(|d| d.code == "NTS1001"
+                && d.message
+                    .contains("a zero pointer constant on a type that excludes null"))
+            .count(),
+        2,
+        "{:?}",
+        lowered.diagnostics
+    );
+    let nullable = lowered
+        .program
+        .funcs
+        .iter()
+        .find(|f| f.name == "nullable")
+        .unwrap();
+    assert!(nullable.values.iter().any(|op| {
+        matches!(op.kind, hir::OpKind::ConstNull) && matches!(op.ty, HirType::NativePointer(_))
+    }));
+    assert!(
+        !nullable
+            .values
+            .iter()
+            .any(|op| matches!(op.kind, hir::OpKind::ConstHandle(_)))
+    );
+}
+
+#[test]
 fn pointer_constant_verification_requires_a_native_pointer_result() {
     let Some(snapshot) = snapshot(
         "pointer-constant-type",

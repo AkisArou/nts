@@ -24,7 +24,7 @@ export function numberControl(): number { return NUMBER_CONTROL; }
 export function resource(): Ptr<Uint16> { return RESOURCE; }
 export function readonlyPointer(): ConstPtr<c_int> { return READONLY; }
 export function voidPointer(): Ptr<unknown> { return VOID_POINTER; }
-export function zero(): Sentinel { return ZERO; }
+export function zero(): Sentinel | null { return ZERO; }
 export function failed(): Sentinel { return FAILED; }
 export function negativeTwo(): Sentinel { return NEGATIVE_TWO; }
 export function negativeThree(): Sentinel { return NEGATIVE_THREE; }
