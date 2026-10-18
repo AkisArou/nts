@@ -371,4 +371,6 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// again once the JVM lane mapped it: `NtsRuntime.arrayAtElement` on a bare
 /// array and `NtsArrayL.atElement` on a growable one, both reading a null slot
 /// through `NtsValue.held` as `arrayElement` does.
-const REFUSED_FLOOR: usize = 124;
+/// 125 for `nts_hresult_clear`, which discards undefined native output bytes
+/// after a failed HRESULT: the JVM never executes the native call or slot.
+const REFUSED_FLOOR: usize = 125;

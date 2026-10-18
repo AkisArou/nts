@@ -1216,6 +1216,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_hresult_clear",
+        returns: "void",
+        params: &["i32", "ptr", "i64"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_in_callback",
         returns: "zeroext i1",
         params: &[],

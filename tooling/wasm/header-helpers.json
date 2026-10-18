@@ -187,6 +187,7 @@
     "nts_has_pending_work",
     "nts_host_checkpoint_end",
     "nts_host_install",
+    "nts_hresult_clear",
     "nts_in_callback",
     "nts_index_fn",
     "nts_is_array",

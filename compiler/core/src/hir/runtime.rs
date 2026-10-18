@@ -624,6 +624,21 @@ static SIGNATURES: &[Declared] = &[
     ),
     ("nts_has_pending_work", &[], Some(HirType::Bool)),
     (
+        "nts_hresult_clear",
+        &[
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+        ],
+        None,
+    ),
+    (
         "nts_hresult_message",
         &[Some(HirType::Int {
             bits: 32,
@@ -1913,7 +1928,10 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // never-free program and does nothing under counting: read, not held.
         // `nts_winrt_reference` copies the value it is handed into the
         // reference it makes, and keeps nothing of the caller's storage.
-        "nts_com_take"
+        // `nts_hresult_clear` writes the output storage but never retains its
+        // address. It is deliberately not reads-only or stores-nothing.
+        "nts_hresult_clear"
+        | "nts_com_take"
         | "nts_com_query"
         | "nts_com_query_array"
         | "nts_com_release_array"

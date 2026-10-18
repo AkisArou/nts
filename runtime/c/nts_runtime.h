@@ -2148,6 +2148,11 @@ NTS_ALLOCATES_OR_NULL char *nts_string_to_owned_cstring(const NtsString *s);
  * naming the index, as it does there. */
 const uint16_t *nts_string_to_utf16(const NtsString *s);
 void nts_utf16_release(const NtsString *s, const uint16_t *units);
+/* An HRESULT failure gives no ownership of its output values, even if the
+ * callee wrote them. Restore the caller's empty storage before any take/copy.
+ * This writes `size` bytes through `slot` on failure, retains nothing, and
+ * leaves every byte intact for a nonnegative status (including S_FALSE). */
+void nts_hresult_clear(int32_t status, void *slot, size_t size);
 #if defined(_WIN32)
 /* The Windows Runtime at the boundary (`nts_winrt.c`, compiled into a Windows
  * program only). A `string` as an HSTRING for one call and back; a COM

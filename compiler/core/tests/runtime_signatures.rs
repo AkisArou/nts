@@ -310,6 +310,13 @@ fn table_entry_readers_only_retain_their_result() {
     }
 }
 
+#[test]
+fn clearing_a_failed_output_writes_but_does_not_keep_the_slot() {
+    assert_eq!(runtime::keeps("nts_hresult_clear"), Some(&[][..]));
+    assert!(!runtime::reads_only("nts_hresult_clear"));
+    assert!(!runtime::stores_nothing("nts_hresult_clear"));
+}
+
 /// `runtime::READS_ONLY` names exactly the helpers the header marks.
 ///
 /// Two lists again, and the failure this prevents is the quiet one: a helper

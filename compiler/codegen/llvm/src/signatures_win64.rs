@@ -1343,6 +1343,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_hresult_clear",
+        returns: "void",
+        params: &["i32", "ptr", "i64"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_hresult_message",
         returns: "ptr",
         params: &["i32"],

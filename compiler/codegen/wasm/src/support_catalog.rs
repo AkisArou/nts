@@ -535,6 +535,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("async/scheduler/host lifecycle (M5)"),
     ),
     (
+        "nts_hresult_clear",
+        Support::Decline("foreign/native ABI or ownership"),
+    ),
+    (
         "nts_hresult_message",
         Support::Decline("foreign/native ABI or ownership"),
     ),

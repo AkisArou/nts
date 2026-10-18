@@ -595,3 +595,11 @@ fn utf8_decoding_agrees_with_textdecoder() {
     let out = run_suite("utf8_decode", &[]);
     assert!(out.contains("428 of 428 rows agree"), "{out}");
 }
+
+#[test]
+fn failed_hresult_clears_the_slot_and_success_preserves_it() {
+    for provider in [&[][..], &["-DNTS_PROVIDER_RC"][..]] {
+        let report = run_suite("hresult", provider);
+        assert!(report.contains("20 HRESULT slot checks passed"), "{report}");
+    }
+}

@@ -30,6 +30,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+void nts_hresult_clear(int32_t status, void *slot, size_t size) {
+  if (status < 0) {
+    memset(slot, 0, size);
+  }
+}
+
 /* Double to decimal, which is a specification rather than a `printf`.
  *
  * Included rather than compiled beside, and that is deliberate: several places

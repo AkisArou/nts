@@ -1,7 +1,6 @@
-//! Recorded defect: `finish_hresult_call` takes the result before the failure
-//! branch. A failed COM call must leave its undefined output alone. The canary
-//! below makes an incorrect AddRef/Release observable without invalid memory.
-//! When this record flips, turn its poison assertions into correctness guards.
+//! A failed COM call grants no ownership of its output. The canary makes an
+//! incorrect take/AddRef/Release observable without invalid memory. Successful
+//! `S_OK`/`S_FALSE` controls must still adopt and release their returned object.
 //!
 //! Unproven hypothesis: windows-winrt's async nogc C teardown access violation
 //! followed `again=HRESULT 0x80000018` and `missing=HRESULT 0x80070002`. An output
@@ -84,7 +83,7 @@ static int32_t fail(void *self, int32_t poison, void **output) {
   (void)self;
   ++fail_calls;
   *output = poison ? &canary : NULL;
-  return (int32_t)UINT32_C(0x80004005); /* E_FAIL in both cases. */
+  return poison < 2 ? (int32_t)UINT32_C(0x80004005) : poison - 2;
 }
 static const Table table = { NULL, addref, release, fail };
 static int32_t value(void *self) { (void)self; ++value_calls; return 13; }
@@ -244,23 +243,23 @@ fn build(provider: hir::Provider) -> Option<ScratchDir> {
 }
 
 #[test]
-fn recorded_defect_finish_hresult_call_takes_result_before_failure_branch() {
+fn only_successful_hresult_outputs_are_taken_and_released() {
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let Some(dir) = build(provider) else {
             eprintln!("skipped: no tsgo");
             return;
         };
-        for poison in [false, true] {
+        for mode in 0..4 {
             let output = Command::new(dir.join("caller"))
-                .arg(if poison { "1" } else { "0" })
+                .arg(mode.to_string())
                 .output()
                 .unwrap();
             assert!(
                 output.status.success(),
-                "{provider:?} poison={poison}: {output:?}"
+                "{provider:?} mode={mode}: {output:?}"
             );
             let text = String::from_utf8(output.stdout).unwrap();
-            eprintln!("{provider:?} poison={poison}: {text}");
+            eprintln!("{provider:?} mode={mode}: {text}");
             let counters: std::collections::BTreeMap<_, _> = text
                 .split_ascii_whitespace()
                 .map(|field| {
@@ -268,33 +267,20 @@ fn recorded_defect_finish_hresult_call_takes_result_before_failure_branch() {
                     (name, value.parse::<u32>().unwrap())
                 })
                 .collect();
-            assert_eq!(counters["result"], 7, "{text}");
+            let success = mode >= 2;
+            assert_eq!(counters["result"], if success { 13 } else { 7 }, "{text}");
             assert_eq!(counters["fail-calls"], 1, "{text}");
-            for name in [
-                "receiver-addrefs",
-                "receiver-releases",
-                "poison-addrefs",
-                "value-calls",
-            ] {
+            for name in ["receiver-addrefs", "receiver-releases", "poison-addrefs"] {
                 assert_eq!(counters[name], 0, "{name}: {text}");
             }
-            if poison {
-                // RECORDED DEFECT, not desired behavior: taking the failed
-                // output adopts an undefined pointer, and RC releases it.
-                // A fix must flip this record and convert it into a guard.
-                assert_eq!(counters["poison-takes"], 1, "{text}");
-                assert_eq!(counters["takes"], 1, "{text}");
-                assert_eq!(
-                    counters["poison-releases"],
-                    u32::from(provider == hir::Provider::ReferenceCounting),
-                    "{text}"
-                );
-            } else {
-                // Ordinary correctness control: NULL must never reach either
-                // canary reference-count operation or its value method.
-                assert_eq!(counters["poison-takes"], 0, "{text}");
-                assert_eq!(counters["poison-releases"], 0, "{text}");
-            }
+            assert_eq!(counters["takes"], 1, "{text}");
+            assert_eq!(counters["poison-takes"], u32::from(success), "{text}");
+            assert_eq!(counters["value-calls"], u32::from(success), "{text}");
+            assert_eq!(
+                counters["poison-releases"],
+                u32::from(success && provider == hir::Provider::ReferenceCounting),
+                "{text}"
+            );
         }
     }
 }

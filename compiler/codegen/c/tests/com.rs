@@ -298,6 +298,32 @@ fn a_com_binding_that_cannot_be_right_is_refused_by_name() {
 /// `TryParse`, less the function line.
 const OUT_TAGS: &str = "  /**\n   * @ntsVtable 7 TryParse\n   * @ntsHresult out\n   * @ntsFactory Windows.Data.Json.JsonValue 5F6B544A-2F53-48E1-91A3-F78B50A6345C\n   */\n";
 
+#[test]
+fn hresult_outputs_remain_local_inside_a_suspending_loop() {
+    let source = r#"import type { IJsonValue } from "winrt:Windows.Data.Json";
+export async function later(value: IJsonValue): Promise<number> {
+  await 0;
+  let total = 0;
+  for (let i = 0; i < 2; i++) {
+    try { total += value.GetNumber(); } catch { total += 7; }
+  }
+  return total;
+}
+"#;
+    let Some((dir, prepared)) = prepare("hresult-async-loop", &binding("", ""), source) else {
+        panic!("NTS_TSGO is required for this guard");
+    };
+    assert!(
+        prepared.diagnostics.is_empty(),
+        "{:?}",
+        prepared.diagnostics
+    );
+    let emitted = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LLP64);
+    assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+    assert!(emitted.writer.text().contains("nts_hresult_clear("));
+    windows_syntax(&dir, &emitted);
+}
+
 /// `[out]` parameters are the result's fields: one slot of the compiler's per
 /// field, in C's order after the declared arguments, each read as a result is
 /// -- the object `nts_com_take`n, the `boolean` a byte compared with zero --

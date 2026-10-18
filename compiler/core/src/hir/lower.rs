@@ -66358,13 +66358,12 @@ impl<'a> FuncBuilder<'a> {
                 signed: true,
             }),
         )?;
-        // **Every slot is read here, in the call's own block, before the
-        // branch** -- so each is a local used in one block, which the storage
-        // check accepts inside a loop, and neither path below touches it. A
-        // failed call left its slots zeroed: the result reads as null, 0 or
-        // the empty string, and the failing path drops it unread. Read after
-        // the branch, the slot was used in two blocks, and every Windows
-        // Runtime call in a loop was refused.
+        // Failed calls need not leave outputs empty and grant no ownership of
+        // what they wrote. Clear every output, including counts and composable
+        // inner objects, before any read can take, copy or delete its value.
+        // Keep the slots in the call's block: moving their reads past the
+        // status branch violates the local-storage contract in loops/async.
+        self.clear_failed_results(id, status, &lent, &origin)?;
         // A count slot is the one its received array's slot follows.
         let mut count = None;
         let written: Vec<_> = lent
@@ -66451,6 +66450,36 @@ impl<'a> FuncBuilder<'a> {
             self.field_set(object, index, read, &origin);
         }
         Ok(object)
+    }
+
+    fn clear_failed_results(
+        &mut self,
+        id: NodeId,
+        status: ValueId,
+        lent: &[Lent],
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        for lent in lent {
+            let (Lent::Result { slot, .. } | Lent::Count { slot } | Lent::Inner { slot }) = lent
+            else {
+                continue;
+            };
+            let HirType::NativePointer(storage) = self.values[slot.0 as usize].ty.clone() else {
+                return Err(self.unsupported(id, "an HRESULT output without native storage"));
+            };
+            let bytes = self.push(
+                OpKind::NativeSizeOf(storage),
+                HirType::NUMBER,
+                origin.clone(),
+            );
+            self.runtime_call(
+                "nts_hresult_clear",
+                vec![status, *slot, bytes],
+                HirType::Void,
+                origin.clone(),
+            );
+        }
+        Ok(())
     }
 
     /// The type of `field` of an `@ntsHresult out` call's value, which a
