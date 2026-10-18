@@ -1365,6 +1365,151 @@ fn a_const_view_reads_and_does_not_write() {
     }
 }
 
+/// A void view admits typed storage in C's direction, without granting access
+/// to an element or dropping a const qualifier. Each rejected arm differs from
+/// its admitted control in one pointer type or the attempted index operation.
+#[test]
+fn void_pointer_assignability_is_the_c_conversion() {
+    let header = "import type { Ptr, ConstPtr, Opaque } from \"c:types\";\n\
+        import type { Uint8 } from \"@nts/scalars\";\n";
+    for (name, body, errors) in [
+        (
+            "typed-to-void",
+            "export function go(p: Ptr<Uint8>): Ptr<void> { return p; }",
+            false,
+        ),
+        (
+            "typed-control",
+            "export function go(p: Ptr<Uint8>): Ptr<Uint8> { return p; }",
+            false,
+        ),
+        (
+            "void-to-typed",
+            "export function go(p: Ptr<void>): Ptr<Uint8> { return p; }",
+            true,
+        ),
+        (
+            "mutable-to-const-void",
+            "export function go(p: Ptr<Uint8>): ConstPtr<void> { return p; }",
+            false,
+        ),
+        (
+            "const-to-const-void",
+            "export function go(p: ConstPtr<Uint8>): ConstPtr<void> { return p; }",
+            false,
+        ),
+        (
+            "const-to-mutable-void",
+            "export function go(p: ConstPtr<Uint8>): Ptr<void> { return p; }",
+            true,
+        ),
+        (
+            "const-void-to-mutable",
+            "export function go(p: ConstPtr<void>): Ptr<void> { return p; }",
+            true,
+        ),
+        (
+            "mutable-void-control",
+            "export function go(p: Ptr<void>): Ptr<void> { return p; }",
+            false,
+        ),
+        (
+            "handle-to-void",
+            "export function go(p: Opaque<\"H\">): Ptr<void> { return p; }",
+            true,
+        ),
+        (
+            "handle-control",
+            "export function go(p: Opaque<\"H\">): Opaque<\"H\"> { return p; }",
+            false,
+        ),
+    ] {
+        let Some((snapshot, actual)) = snapshot_allowing_errors(name, &format!("{header}{body}"))
+        else {
+            return;
+        };
+        assert_eq!(actual, errors, "{name}: {:?}", snapshot.diagnostics);
+        if !actual {
+            let prepared = hir::prepare(&snapshot).unwrap();
+            assert!(
+                prepared.diagnostics.is_empty(),
+                "{name}: {:?}",
+                prepared.diagnostics
+            );
+        }
+    }
+}
+
+#[test]
+fn void_pointer_has_no_element_projection() {
+    let header = "import type { Ptr, ConstPtr } from \"c:types\";\n\
+        import type { Uint8 } from \"@nts/scalars\";\n";
+    for (name, body, errors) in [
+        (
+            "void-read",
+            "export function go(p: Ptr<void>): unknown { return p[0]; }",
+            true,
+        ),
+        (
+            "typed-read-control",
+            "export function go(p: Ptr<Uint8>): unknown { return p[0]; }",
+            false,
+        ),
+        (
+            "void-write",
+            "export function go(p: Ptr<void>): void { p[0] = undefined; }",
+            true,
+        ),
+        (
+            "typed-write-control",
+            "export function go(p: Ptr<Uint8>): void { p[0] = 1; }",
+            false,
+        ),
+        (
+            "const-void-read",
+            "export function go(p: ConstPtr<void>): unknown { return p[0]; }",
+            true,
+        ),
+        (
+            "const-typed-read-control",
+            "export function go(p: ConstPtr<Uint8>): unknown { return p[0]; }",
+            false,
+        ),
+    ] {
+        let Some((snapshot, actual)) = snapshot_allowing_errors(name, &format!("{header}{body}"))
+        else {
+            return;
+        };
+        assert_eq!(actual, errors, "{name}: {:?}", snapshot.diagnostics);
+    }
+}
+
+/// Selecting the void projection must not turn any/undefined/never into the
+/// unknown marker that native/schema interprets as a C void pointer.
+#[test]
+fn only_void_selects_the_void_pointer_projection() {
+    let header = "import type { Ptr } from \"c:types\";\n\
+        type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;\n\
+        type Assert<T extends true> = T;\n";
+    for (element, expected) in [
+        ("void", "unknown"),
+        ("any", "any"),
+        ("undefined", "undefined"),
+        ("never", "never"),
+    ] {
+        let body = format!(
+            "type Check = Assert<Equal<Ptr<{element}>[\"__c_pointer\"], {expected}>>; export function go(): number {{ return 1; }}"
+        );
+        let Some((snapshot, errors)) = snapshot_allowing_errors(
+            &format!("void-projection-{element}"),
+            &format!("{header}{body}"),
+        ) else {
+            return;
+        };
+        assert!(!errors, "{element}: {:?}", snapshot.diagnostics);
+    }
+}
+
 /// A `declare`d C function contributes what its declaration says to escape
 /// analysis, instead of being treated as reaching anything at all.
 ///

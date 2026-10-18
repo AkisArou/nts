@@ -28,6 +28,7 @@
     "native-inet/nts.config.ts",
     "native-open/nts.config.ts",
     "native-pointer-constants/nts.config.ts",
+    "native-void-pointer/nts.config.ts",
     "native-poll/nts.config.ts",
     "native-promise/nts.config.ts",
     "native-rusage/nts.config.ts",
