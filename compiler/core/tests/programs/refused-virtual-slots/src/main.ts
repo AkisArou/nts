@@ -57,3 +57,13 @@ export function interfaceControl(n: number): number {
   return throughFace(new Supplier(), n);
 }
 export function direct(n: number): number { return refusedDirect(n); }
+
+// Both constructors refuse; only the control has a surviving source member.
+export class PublicationRefused extends Base {
+  constructor() { super(); eval("0"); }
+  override value(n: number): number { return n + eval("7"); }
+}
+export class PublicationControl extends Base {
+  constructor() { super(); eval("0"); }
+  override value(n: number): number { return n + 7; }
+}

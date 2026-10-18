@@ -30,6 +30,49 @@ fn stops(func: &hir::Func) -> Vec<&str> {
 }
 
 #[test]
+fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
+    let tsgo =
+        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/refused-virtual-slots/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    let before = hir::lower::lower(&snapshot).program;
+    let published = |program: &hir::Program| {
+        let mut names = program
+            .published_classes()
+            .map(|class| class.emitted.to_owned())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    let original = published(&before);
+    assert_eq!(original, ["PublicationControl"]);
+    for provider in [
+        Provider::NoGc,
+        Provider::ReferenceCounting,
+        Provider::HostGc,
+    ] {
+        let prepared = hir::prepare_unverified(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        );
+        assert_eq!(published(&prepared.program), original, "{provider:?}");
+        assert!(
+            prepared
+                .program
+                .funcs
+                .iter()
+                .any(|func| !stops(func).is_empty()),
+            "the publication guard must actually exercise stop entries"
+        );
+    }
+}
+
+#[test]
 fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies() {
     let tsgo =
         nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
