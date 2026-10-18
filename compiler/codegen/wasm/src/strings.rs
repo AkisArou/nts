@@ -276,7 +276,10 @@ pub(crate) fn unit(
     {
         return checked_unit(b, result, string, index);
     }
-    if !checked {
+    // HIR already proved this index inside the string. The builtin traps if
+    // that proof is ever wrong; no repeated length/range test is needed.
+    // Keep the old spelling only as a same-binary measurement diagnostic.
+    if !checked && b.m.recheck_string_units {
         unit_index_contract(b, string, index)?;
     }
     let index_type = if checked { HirType::NUMBER } else { UINT };

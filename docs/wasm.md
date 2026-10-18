@@ -1825,6 +1825,16 @@ returns NaN; `charAt` returns the empty string; `at` can return undefined.
 Bounds-proven internal accesses may use stricter builtins only when HIR proves
 that the call will not trap.
 
+`StringUnitAt { checked: false }` spends that proof: after the receiver's null
+contract and index conversion, it calls the code-unit builtin directly, without
+a second length/range test. A false HIR proof traps in the builtin rather than
+reading an arbitrary value; the Wasm regression deliberately tests that failure.
+Checked reads retain index normalization, bounds and their NaN result. The
+affix helpers check both lengths once before reading their code units.
+`NTS_WASM_STRING_UNIT_RECHECK=1` restores the old redundant checks at emission
+for same-binary A/B measurement. It is a retained developer diagnostic, like
+`NTS_WASM_ARRAY_PREFIX`, not a product option or a run-time setting.
+
 On JS, use strings directly as extern references and
 [JS String Builtins](https://github.com/WebAssembly/js-string-builtins/blob/main/proposals/js-string-builtins/Overview.md)
 for supported primitives. Missing builtin operations use narrow captured JS

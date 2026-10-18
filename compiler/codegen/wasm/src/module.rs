@@ -303,6 +303,8 @@ pub(crate) struct Builder<'p> {
     /// Whether any body records a raise, so a host entry's return must check
     /// for one still pending. A module that only throws uncaught does not.
     pub(crate) raises: bool,
+    /// Diagnostic only: retain the old string-unit bounds checks for A/B.
+    pub(crate) recheck_string_units: bool,
 }
 
 pub(crate) fn index(i: usize) -> u32 {
@@ -333,6 +335,8 @@ impl<'p> Builder<'p> {
             host_entries: BTreeSet::new(),
             raising,
             raises: raising,
+            recheck_string_units: std::env::var_os("NTS_WASM_STRING_UNIT_RECHECK").as_deref()
+                == Some(std::ffi::OsStr::new("1")),
         }
     }
 
