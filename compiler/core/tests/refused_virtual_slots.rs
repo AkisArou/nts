@@ -30,6 +30,58 @@ fn stops(func: &hir::Func) -> Vec<&str> {
 }
 
 #[test]
+fn a_refused_override_uses_its_nearest_ancestors_slot_contract() {
+    let tsgo =
+        nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");
+    let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/programs/refused-virtual-slot-arity/tsconfig.json");
+    let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    for provider in [
+        Provider::NoGc,
+        Provider::ReferenceCounting,
+        Provider::HostGc,
+    ] {
+        let prepared = hir::prepare_unverified(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        );
+        let program = &prepared.program;
+        let narrow = program.layouts.iter().find(|l| l.name == "Narrow").unwrap();
+        let slot = narrow
+            .methods
+            .iter()
+            .position(|n| n.as_deref() == Some("Narrow#read"))
+            .unwrap();
+        let refused = program
+            .layouts
+            .iter()
+            .find(|l| l.name == "RefusedNarrow")
+            .unwrap();
+        let name = refused.methods[slot]
+            .as_deref()
+            .expect("refused override needs a stop");
+        let entry = program.funcs.iter().find(|f| f.name == name).unwrap();
+        assert!(!stops(entry).is_empty(), "the subject must reach a refusal");
+        assert_eq!(
+            entry.params.len(),
+            1,
+            "{provider:?}: Narrow#read takes only its receiver, even though Root#read takes a number"
+        );
+        let live = program
+            .layouts
+            .iter()
+            .find(|l| l.name == "LiveNarrow")
+            .unwrap();
+        assert_eq!(live.methods[slot].as_deref(), Some("LiveNarrow#read"));
+        hir::verify::verify(program).unwrap();
+    }
+}
+
+#[test]
 fn a_synthetic_stop_does_not_publish_a_class_with_no_surviving_source_member() {
     let tsgo =
         nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard needs the frontend");

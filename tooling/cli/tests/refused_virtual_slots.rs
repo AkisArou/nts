@@ -5,6 +5,37 @@ use std::path::Path;
 use std::process::Command;
 
 #[test]
+fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
+    nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json");
+    let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+        .arg("check")
+        .arg(fixture)
+        .env("NTS_BACKEND", "jvm")
+        .env_remove("NTS_RC")
+        .env_remove("NTS_KEEP_TEMP")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(!result.status.success(), "a refused input must stop");
+    assert!(
+        stdout.contains("checked 57 of 58 cases"),
+        "{stdout}\n{stderr}"
+    );
+    assert!(
+        stdout.contains("`RefusedNarrow#read` was refused:"),
+        "{stdout}\n{stderr}"
+    );
+    assert!(stderr.contains("aborted 1 time(s)"), "{stdout}\n{stderr}");
+    assert!(
+        !stdout.contains("  nts  ") && !stdout.contains("  node "),
+        "{stdout}\n{stderr}"
+    );
+}
+
+#[test]
 fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
     nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
