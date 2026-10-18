@@ -16,6 +16,7 @@ use super::{BinOp, Func, HirType, OpKind, ValueId};
 
 /// Replace pure operations of known result with constants, and report how many.
 pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
+    let hole_reads = super::holes::read_observations(func);
     let mut folded = 0;
     for index in 0..func.values.len() {
         let id = ValueId(u32::try_from(index).unwrap_or(0));
@@ -37,9 +38,9 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         ) {
             continue;
         }
-        // A read that may stop the program is not its value: an all-zero array
-        // read at an unproven index is `0` only when it returns.
-        if super::may_stop(&func.values[index]) {
+        // Bounds and initialization are separate obligations. A read that
+        // may stop is its value only after the corresponding check returns.
+        if super::may_stop(&func.values[index]) || hole_reads.contains(&id) {
             continue;
         }
         // Two string constants joined are a string constant. Values come in

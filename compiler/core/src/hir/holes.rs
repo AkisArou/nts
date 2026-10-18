@@ -29,7 +29,7 @@
 use super::{
     ArrayFill, BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeSet;
 
 /// What is proven written of one allocation that is not yet complete.
@@ -242,6 +242,31 @@ fn exits(func: &Func, from: BlockId, edge: &Edge<'_>, length: Length, written: &
             || (length.constant.is_some() && constant(func, rhs) == length.constant))
 }
 
+/// Backend refusal observations keep the original local proof: passing an
+/// incomplete allocation on is itself an observation. Optimizer effects also
+/// follow that allocation into array block parameters, so a bounds proof cannot
+/// erase the read before a backend's runtime initialization contract sees it.
+#[derive(Clone, Copy)]
+enum Purpose {
+    Refusals,
+    ReadEffects,
+}
+
+impl Purpose {
+    fn carries_arrays(self) -> bool {
+        matches!(self, Self::ReadEffects)
+    }
+}
+
+/// An escaped allocation's array parameter may join different lengths. Its
+/// written-slot facts still hold, but no constant allocation length is known.
+fn length_of(lengths: &FxHashMap<ValueId, Length>, array: ValueId) -> Length {
+    lengths.get(&array).copied().unwrap_or(Length {
+        value: array,
+        constant: None,
+    })
+}
+
 /// The facts `out` gives the block `edge` enters: none for an allocation the
 /// edge completes, and to each parameter its argument's.
 fn along(
@@ -250,11 +275,12 @@ fn along(
     edge: &Edge<'_>,
     lengths: &FxHashMap<ValueId, Length>,
     out: &Pending,
+    purpose: Purpose,
 ) -> Pending {
     let params = &func.blocks[edge.target.0 as usize].params;
     let mut next = Pending::default();
     for (&allocation, written) in out {
-        if exits(func, from, edge, lengths[&allocation], written) {
+        if exits(func, from, edge, length_of(lengths, allocation), written) {
             continue;
         }
         let mut gained = Written::default();
@@ -277,7 +303,18 @@ fn along(
         written.below.extend(gained.below);
         written.through.extend(gained.through);
         written.at.extend(gained.at);
-        next.insert(allocation, written);
+        if purpose.carries_arrays() {
+            for (&param, &arg) in params.iter().zip(edge.args) {
+                if arg == allocation {
+                    next.insert(param, written.clone());
+                }
+            }
+        }
+        // A target parameter is assigned by this edge. Do not retain facts
+        // about its previous iteration when the new argument is dense.
+        if !purpose.carries_arrays() || !params.contains(&allocation) {
+            next.insert(allocation, written);
+        }
     }
     next
 }
@@ -342,6 +379,7 @@ fn transfer(
     lengths: &FxHashMap<ValueId, Length>,
     pending: &mut Pending,
     mut observed: Option<&mut Vec<ValueId>>,
+    purpose: Purpose,
 ) {
     let body = &func.blocks[block.0 as usize];
     for &id in &body.ops {
@@ -350,12 +388,20 @@ fn transfer(
             let Some(written) = pending.get_mut(&allocation) else {
                 continue;
             };
-            match apply(func, kind, allocation, lengths[&allocation], written) {
+            match apply(
+                func,
+                kind,
+                allocation,
+                length_of(lengths, allocation),
+                written,
+            ) {
                 Use::Completes => {
                     pending.remove(&allocation);
                 }
                 Use::Refused => {
-                    if let Some(observed) = observed.as_deref_mut() {
+                    if (!purpose.carries_arrays() || matches!(kind, OpKind::ArrayGet { .. }))
+                        && let Some(observed) = observed.as_deref_mut()
+                    {
                         observed.push(id);
                     }
                 }
@@ -364,6 +410,12 @@ fn transfer(
         }
         for written in pending.values_mut() {
             written.forget(id);
+        }
+        if purpose.carries_arrays()
+            && let OpKind::Length(array) = kind
+            && let Some(written) = pending.get_mut(array)
+        {
+            written.length = Some(id);
         }
         // `i + 1` after `[0, i]` is written: `[0, i + 1)`.
         if let OpKind::Binary {
@@ -390,7 +442,9 @@ fn transfer(
             pending.insert(id, written);
         }
     }
-    if let Some(observed) = observed {
+    if !purpose.carries_arrays()
+        && let Some(observed) = observed
+    {
         // A block argument or a returned value hands the array on whole: the
         // allocation stands for the use.
         observed.extend(
@@ -409,6 +463,24 @@ fn transfer(
 /// each block's ops, then its terminator. Empty where every observation is proven.
 #[must_use]
 pub fn observations(func: &Func) -> Vec<ValueId> {
+    observations_for(func, Purpose::Refusals)
+}
+
+/// Reads that must reach the backend's initialization check even when their
+/// result is folded away and their index is proven in bounds. This is the same
+/// must-proof as [`observations`], carrying incomplete allocations through CFG
+/// array arguments. A fill or proven written slot admits the read; dense arrays
+/// never enter the pending set. Backend refusal observations stay unchanged.
+///
+/// Build once per optimizer pass, not once per read.
+pub(crate) fn read_observations(func: &Func) -> FxHashSet<ValueId> {
+    observations_for(func, Purpose::ReadEffects)
+        .into_iter()
+        .filter(|id| func.value(*id).ty != HirType::Void)
+        .collect()
+}
+
+fn observations_for(func: &Func, purpose: Purpose) -> Vec<ValueId> {
     let lengths = allocations(func);
     if lengths.is_empty() {
         return Vec::new();
@@ -427,7 +499,14 @@ pub fn observations(func: &Func) -> Vec<ValueId> {
     let entry = |outs: &[Option<Pending>], block: BlockId| {
         meet(incoming[block.0 as usize].iter().filter_map(|&(from, at)| {
             let out = outs[from.0 as usize].as_ref()?;
-            Some(along(func, from, &all[from.0 as usize][at], &lengths, out))
+            Some(along(
+                func,
+                from,
+                &all[from.0 as usize][at],
+                &lengths,
+                out,
+                purpose,
+            ))
         }))
     };
     // To a fixed point: facts only shrink, so a loop settles in a few passes.
@@ -435,7 +514,7 @@ pub fn observations(func: &Func) -> Vec<ValueId> {
         let mut changed = false;
         for &block in &order {
             let mut pending = entry(&outs, block);
-            transfer(func, block, &lengths, &mut pending, None);
+            transfer(func, block, &lengths, &mut pending, None, purpose);
             if outs[block.0 as usize].as_ref() != Some(&pending) {
                 outs[block.0 as usize] = Some(pending);
                 changed = true;
@@ -448,7 +527,14 @@ pub fn observations(func: &Func) -> Vec<ValueId> {
     let mut observed = Vec::new();
     for &block in &order {
         let mut pending = entry(&outs, block);
-        transfer(func, block, &lengths, &mut pending, Some(&mut observed));
+        transfer(
+            func,
+            block,
+            &lengths,
+            &mut pending,
+            Some(&mut observed),
+            purpose,
+        );
     }
     observed
 }
@@ -818,5 +904,64 @@ mod tests {
         let read = b.get(array, zero);
         b.end(&[], Terminator::Return(Some(read)));
         assert!(!b.observed());
+    }
+
+    /// The array value crosses a CFG edge before the read. Refusal observations
+    /// keep naming the escaped allocation; effect observations must reach the
+    /// read, and a subsequent fill must still prove it safe.
+    #[test]
+    fn read_effects_follow_array_arguments_and_respect_fill() {
+        for filled in [false, true] {
+            let mut b = Build::new(1);
+            let length = b.int(2);
+            let zero = b.int(0);
+            let array_ty = HirType::Managed(ManagedType::Array(Box::new(F64)));
+            let joined = b.value(OpKind::BlockParam(0), array_ty.clone());
+            b.end(&[], branch(ValueId(0), 1, 2));
+            let left = b.allocation(length);
+            b.end(&[], jump(3, vec![left]));
+            let right = b.allocation(length);
+            b.end(&[], jump(3, vec![right]));
+            if filled {
+                let stored = b.op(OpKind::ConstFloat(17.0), F64);
+                b.op(
+                    OpKind::Call {
+                        callee: super::Callee::External("nts_array_fill".to_owned()),
+                        args: vec![joined, stored],
+                        frame: None,
+                    },
+                    array_ty,
+                );
+            }
+            let read = b.get(joined, zero);
+            let OpKind::ArrayGet { checked, .. } = &mut b.func.values[read.0 as usize].kind else {
+                unreachable!();
+            };
+            *checked = false;
+            b.end(&[joined], Terminator::Return(Some(zero)));
+            let mut refused = observations(&b.func);
+            refused.sort_unstable();
+            assert_eq!(
+                refused,
+                vec![left, right],
+                "backend refusal observations stay unchanged"
+            );
+            assert_eq!(super::read_observations(&b.func).contains(&read), !filled);
+            super::super::dce::eliminate(&mut b.func);
+            assert_eq!(b.func.blocks[3].ops.contains(&read), !filled);
+        }
+    }
+
+    #[test]
+    fn a_written_slot_needs_no_initialization_effect() {
+        let mut b = Build::new(0);
+        let length = b.int(2);
+        let array = b.allocation(length);
+        let zero = b.int(0);
+        let stored = b.op(OpKind::ConstFloat(17.0), F64);
+        b.set(array, zero, stored);
+        let read = b.get(array, zero);
+        b.end(&[], Terminator::Return(Some(read)));
+        assert!(super::read_observations(&b.func).is_empty());
     }
 }

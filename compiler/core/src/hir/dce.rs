@@ -19,6 +19,7 @@ use super::{BlockId, Func, Op, OpKind, Terminator, ValueId};
 
 /// Drop operations whose results nothing reads, and report how many.
 pub fn eliminate(func: &mut Func) -> usize {
+    let hole_reads = super::holes::read_observations(func);
     let mut live: FxHashSet<ValueId> = FxHashSet::default();
 
     // Seeds: anything a terminator reads, and every call. A call's result may
@@ -28,7 +29,7 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            if has_effects(&func.values[value.0 as usize]) {
+            if hole_reads.contains(value) || has_effects(&func.values[value.0 as usize]) {
                 live.insert(*value);
             }
         }
@@ -116,7 +117,8 @@ fn has_effects(op: &Op) -> bool {
     match &op.kind {
         // A checked read may stop the program out of range, which is the whole
         // of what stands for that path once a consumer has been folded away
-        // (`super::may_stop`). A bounds proof makes it unchecked and removable.
+        // (`super::may_stop`). A bounds proof removes that stop; the separate
+        // `hole_reads` set above keeps an initialization check observable.
         OpKind::ArrayGet { .. } => super::may_stop(op),
         // A copy writes memory, which is the whole of what it does: nothing
         // reads its result, so without this it would be dropped as unused.

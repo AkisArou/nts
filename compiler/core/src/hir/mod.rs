@@ -5184,7 +5184,9 @@ fn reconcile(program: &mut Program) -> usize {
 /// and when it returns, its value is an element. So its value facts are the
 /// element's, and the read itself is what stands for the out-of-range path: a
 /// fold may drop its consumer (`xs[i] * 0`) but not the read, and dead-code
-/// removal keeps it. A bounds proof clears `checked`, and with it this.
+/// removal keeps it. A bounds proof clears `checked`, and with it this bounds
+/// stop. An in-bounds slot may still be a hole: [`holes::read_observations`]
+/// separately keeps those initialization observations through folding and DCE.
 ///
 /// Marking the read's *value* as maybe-`NaN` instead kept the fold sound and
 /// cost every integer read its integer arithmetic: `total + xs[k]` added in
