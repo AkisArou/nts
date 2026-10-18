@@ -154,8 +154,8 @@ for (const mode of ["ok", "install-fails", "app-fails", "boot-fails"] as const) 
         mode === "install-fails" ? ["bootstatus", "install"] : ["bootstatus", "install", "launch"]);
       assert.equal(p.stdout, mode === "ok" || mode === "app-fails" ? "golden application output\n" : "");
       if (mode === "ok" || mode === "app-fails") {
-        assert.match(p.stderr, /run-ios: install begin[\s\S]*real [0-9]/);
-        assert.match(p.stderr, /run-ios: launch-and-app begin[\s\S]*real [0-9]/);
+        assert.match(p.stderr, /run-ios: install exit 0 after [0-9]+s/);
+        assert.match(p.stderr, /run-ios: launch-and-app exit [07] after [0-9]+s/);
         assert.match(p.stderr, /application diagnostic/);
       }
     } finally { f.clean(); }

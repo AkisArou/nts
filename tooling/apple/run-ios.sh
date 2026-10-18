@@ -45,12 +45,12 @@ reachable() {
 }
 
 stage_time() {
-  local stage_name=$1 stage_status
+  local stage_name=$1 stage_status stage_started=$SECONDS
   shift
   printf 'run-ios: %s begin\n' "$stage_name" >&2
-  /usr/bin/time -p "$@"
+  "$@"
   stage_status=$?
-  printf 'run-ios: %s exit %s\n' "$stage_name" "$stage_status" >&2
+  printf 'run-ios: %s exit %s after %ss\n' "$stage_name" "$stage_status" "$((SECONDS - stage_started))" >&2
   return "$stage_status"
 }
 
