@@ -1630,14 +1630,14 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # every function is still compiled, so a body Wasm declines fails its program
 # as a C decline does (`tests/wasm/check-compiles-every-body`).
 #
-# **552 of 552, exact**, measured by the official Wasm step on the clean
-# rebased fb49b733d7c5 corpus and pin (2026-10-16). Evidence:
-# ~/.cache/nts-handover/compiler-helper/numeric-args-rebased-wasm.log.
+# **614 of 614, exact**, measured by the official Wasm step on the clean
+# 92c28eecd8e4 corpus and pin (2026-10-18; nts sha256 0403dfad8c16f2da).
+# Evidence: ~/.cache/nts-scratch/wasm/array-written-prefix-main968-20261018/wasm-gate.log.
 # Ten programs compare only part of their cases: a case Wasm refuses by name
 # where node answers. The partial ceiling tracks those remaining parity gaps;
 # the program floor tracks the measured corpus, including prior main changes.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 552 "through the Wasm backend" exact 10 ); }
+  backend_examples 614 "through the Wasm backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
