@@ -182,10 +182,19 @@ fn com_declarations(shell: &str, com: &str, refused: &str) {
             "Explicit void** results remain raw Ptr<void>; no COM ownership is inferred."
         )
     );
-    assert!(!shell.contains("export function SHGetDesktopFolder("));
-    assert!(refused.lines().any(
-        |line| line.starts_with("SHGetDesktopFolder\t") && line.contains("ownership contract")
+    assert!(shell.contains(
+        "EnumObjects(this: IShellFolder, hwnd: HWND, grfFlags: c_ulong32): IEnumIDList | null;"
     ));
+    assert!(shell.contains("Clone(this: IEnumIDList): IEnumIDList | null;"));
+    assert!(shell.contains("Adopts its +1 reference without AddRef."));
+    assert!(!shell.contains("Owned<"));
+    assert!(!shell.contains("export function SHGetDesktopFolder("));
+    assert!(
+        refused
+            .lines()
+            .any(|line| line.starts_with("SHGetDesktopFolder\t")
+                && line.contains("direct-C HRESULT status"))
+    );
     assert!(com.contains(
         "export type IUnknown = ComClass<\"IUnknown\"> & IUnknownMethods & IUnknownMembers;"
     ));

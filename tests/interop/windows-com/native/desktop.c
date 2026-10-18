@@ -1,4 +1,5 @@
 #include "desktop.h"
+#include "nts_runtime.h"
 
 unsigned with_desktop(void (*callback)(IShellFolder *, void *), void *context) {
   HRESULT initialized = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
@@ -15,3 +16,5 @@ unsigned with_desktop(void (*callback)(IShellFolder *, void *), void *context) {
   CoUninitialize();
   return 1;
 }
+
+unsigned desktop_release_count(void) { return nts_com_releases(); }

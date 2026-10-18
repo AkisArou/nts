@@ -1,0 +1,7 @@
+owned value add=0 release=0 live=1 calls=1 invalid=0
+nullable null add=0 release=0 live=0 calls=0 invalid=0
+failed-canary failed add=0 release=0 live=1 calls=0 invalid=0
+s-false value add=0 release=0 live=1 calls=1 invalid=0
+failed-null failed add=0 release=0 live=0 calls=0 invalid=0
+copy-escape true source-add=0 result-live=1
+borrow-escape true source-add=0 result-live=0

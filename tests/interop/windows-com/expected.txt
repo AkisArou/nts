@@ -1,1 +1,1 @@
-folder=true released=1
+folder=true released=1 owned=true rc-releases=0

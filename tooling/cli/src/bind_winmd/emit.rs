@@ -8,7 +8,7 @@ use std::fmt::Write;
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 
-use super::map::{Binding, ComMethod, TypeDecl};
+use super::map::{Binding, ComMethod, ComOutput, TypeDecl};
 
 /// Every name of the C vocabulary a binding may use: `c:types`' and the
 /// scalars of `@nts/scalars`, each imported from its own module.
@@ -103,7 +103,10 @@ fn com_method(method: &ComMethod, interface: &str, via: Option<(&str, &str)>) ->
         let _ = writeln!(out, "     * {page}");
     }
     let _ = writeln!(out, "     * @ntsVtable {} {}", method.slot, signature.name);
-    if method.hresult {
+    if let Some(output) = &signature.com_output {
+        out.push_str(&com_ownership(output, "     "));
+    }
+    if signature.hresult {
         out.push_str("     * @ntsHresult\n");
     }
     if let Some((iid, tag)) = via {
@@ -131,6 +134,17 @@ fn com_method(method: &ComMethod, interface: &str, via: Option<(&str, &str)>) ->
         signature.result
     );
     out
+}
+
+fn com_ownership(output: &ComOutput, indent: &str) -> String {
+    format!(
+        "{indent}* Projects required COM out parameter `{}` as an owned interface result.\n\
+        {indent}* Adopts its +1 reference without AddRef. RC releases it; nogc never releases it.\n\
+        {indent}* Success may return null; slot optionality does not promise a non-null value.\n\
+        {indent}* Metadata RetVal: {}.\n",
+        output.parameter,
+        if output.retval { "present" } else { "absent" }
+    )
 }
 
 /// The header a documentation page names: `.../api/winuser/nf-winuser-...`.
@@ -244,6 +258,12 @@ pub(crate) fn render(
     }
     for function in &binding.functions {
         body.push_str("  /**\n");
+        if let Some(output) = &function.com_output {
+            body.push_str(&com_ownership(output, "   "));
+        }
+        if function.hresult {
+            body.push_str("   * @ntsHresult\n");
+        }
         if let Some(page) = &function.documentation {
             let _ = writeln!(body, "   * {page}");
         }

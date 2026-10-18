@@ -78,6 +78,9 @@ pub(crate) struct Function {
     /// `(name, TypeScript)`.
     pub(crate) parameters: Vec<(String, String)>,
     pub(crate) result: String,
+    /// A checked HRESULT call whose trailing typed slot is compiler-owned.
+    pub(crate) hresult: bool,
+    pub(crate) com_output: Option<ComOutput>,
     /// The C function type nts will emit a call through, for the check.
     pub(crate) c_type: String,
     /// Parameters the callee reads or writes during the call only.
@@ -92,7 +95,13 @@ pub(crate) struct Function {
 pub(crate) struct ComMethod {
     pub(crate) signature: Function,
     pub(crate) slot: u32,
-    pub(crate) hresult: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ComOutput {
+    pub(crate) parameter: String,
+    /// Preserve the metadata fact; projecting pure Out does not invent it.
+    pub(crate) retval: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -705,21 +714,135 @@ impl Mapper<'_> {
             library: String::new(),
             documentation: method.documentation.clone(),
             parameters: method.parameters.clone(),
+            attributes: method.attributes.clone(),
             result: method.result.clone(),
         };
         let mut signature =
             map_signature(self, &function, &result, parameters, variadic, Some(this))?;
-        let hresult = matches!(&method.result, Type::ValueName(n) | Type::ClassName(n) if n.namespace == "Windows.Win32.Foundation" && n.name == "HRESULT");
+        let hresult = is_hresult(&method.result);
         if hresult {
-            signature.result = "void".into();
+            signature.hresult = true;
+            if signature.com_output.is_none() {
+                signature.result = "void".into();
+            }
         }
         // IUnknown is owned by the compiler. Do not bind, rename or project
         // its three methods as user methods (including raw void** QueryInterface).
-        Ok(ComMethod {
-            signature,
-            slot,
-            hresult,
-        })
+        Ok(ComMethod { signature, slot })
+    }
+
+    fn interface_slot<'b>(&self, ty: &'b Type) -> Option<(&'b Type, usize)> {
+        let (Type::PtrMut(inner, depth) | Type::PtrConst(inner, depth)) = ty else {
+            return None;
+        };
+        let (Type::ClassName(name) | Type::ValueName(name)) = &**inner else {
+            return None;
+        };
+        matches!(
+            self.model
+                .types
+                .get(&super::read::name_of(name))
+                .map(|info| &info.kind),
+            Some(Kind::Interface(_))
+        )
+        .then_some((inner.as_ref(), *depth))
+    }
+
+    /// The only typed writable interface slot this slice projects. Everything
+    /// else still goes through `spell()`, which refuses explicit typed storage.
+    fn com_output(
+        &mut self,
+        function: &super::read::Function,
+        parameters: &[CType],
+    ) -> Result<Option<(usize, Spelled, ComOutput)>, String> {
+        let slots: Vec<_> = function
+            .parameters
+            .iter()
+            .enumerate()
+            .filter_map(|(at, parameter)| {
+                self.interface_slot(&parameter.ty)
+                    .map(|(inner, depth)| (at, parameter, inner, depth))
+            })
+            .collect();
+        let Some(&(at, parameter, inner, depth)) = slots.first() else {
+            return Ok(None);
+        };
+        if slots.len() != 1 || function.parameters.iter().filter(|p| p.output).count() > 1 {
+            return Err("typed COM projection requires exactly one output slot".into());
+        }
+        if !parameter.output {
+            return Err("typed COM projection requires an output-only slot".into());
+        }
+        if parameter.optional {
+            return Err("typed COM projection requires a required slot; optional caller storage remains refused".into());
+        }
+        if at + 1 != function.parameters.len() {
+            return Err("typed COM projection requires the trailing parameter".into());
+        }
+        if parameter.constant {
+            return Err("typed COM output is const in metadata".into());
+        }
+        if depth != 1 || !matches!(parameter.ty, Type::PtrMut(..)) {
+            return Err(
+                "typed COM projection requires one mutable pointer to the interface pointer".into(),
+            );
+        }
+        // ComOutPtr is an optional extra fact. Pure COM [out] already
+        // transfers +1; failed output is cleared generically before adoption.
+        marker(&parameter.attributes, "ComOutPtrAttribute")?;
+
+        for unsupported in [
+            "DoNotReleaseAttribute",
+            "IgnoreIfReturnAttribute",
+            "NativeArrayInfoAttribute",
+            "MemorySizeAttribute",
+            "FreeWithAttribute",
+            "RAIIFreeAttribute",
+            "RetainedAttribute",
+            "ReservedAttribute",
+        ] {
+            if parameter.attributes.contains_key(unsupported) {
+                return Err(format!("typed COM output has unsupported {unsupported}"));
+            }
+        }
+        if function
+            .attributes
+            .contains_key("CanReturnErrorsAsSuccessAttribute")
+        {
+            return Err("typed COM output has CanReturnErrorsAsSuccessAttribute".into());
+        }
+        if !is_hresult(&function.result) {
+            return Err("typed COM projection requires an HRESULT result".into());
+        }
+        let retval = marker(&parameter.attributes, "RetValAttribute")?;
+        let CType::Pointer {
+            to,
+            constant: false,
+        } = &parameters[at]
+        else {
+            return Err("typed COM output is not writable pointer storage in the header".into());
+        };
+        // Nullability of the returned value is distinct from the required slot.
+        // The metadata carries no non-null postcondition, so never promise one.
+        let result = self
+            .spell(
+                inner,
+                to,
+                Use {
+                    optional: true,
+                    direct: true,
+                    ..Use::default()
+                },
+            )
+            .map_err(|why| format!("typed COM output/header: {why}"))?;
+        Ok(Some((
+            at,
+            result,
+            ComOutput {
+                parameter: parameter.name.clone(),
+                retval,
+            },
+        )))
     }
 
     /// `System.Guid`, which the metadata names and no `.winmd` defines:
@@ -1460,6 +1583,20 @@ fn map_function(mapper: &mut Mapper, function: &super::read::Function) -> Result
     map_signature(mapper, function, &result, &parameters, variadic, None)
 }
 
+fn marker(attributes: &super::read::Attributes, name: &str) -> Result<bool, String> {
+    let Some(values) = attributes.get(name) else {
+        return Ok(false);
+    };
+    if values.len() != 1 || !values[0].is_empty() {
+        return Err(format!("malformed {name} marker"));
+    }
+    Ok(true)
+}
+
+fn is_hresult(ty: &Type) -> bool {
+    matches!(ty, Type::ValueName(n) | Type::ClassName(n) if n.namespace == "Windows.Win32.Foundation" && n.name == "HRESULT")
+}
+
 fn map_signature(
     mapper: &mut Mapper,
     function: &super::read::Function,
@@ -1478,11 +1615,28 @@ fn map_signature(
             parameters.len()
         ));
     }
+    let mut projected = None;
     let mut typescript = Vec::new();
     let mut c_list: Vec<_> = receiver.into_iter().map(CType::spelled).collect();
     let mut uses = BTreeSet::new();
     let mut no_escape = Vec::new();
-    for (parameter, c) in function.parameters.iter().zip(parameters) {
+    for (at, (parameter, c)) in function.parameters.iter().zip(parameters).enumerate() {
+        // Keep the existing traversal: even a later refusal must not erase
+        // independent input declarations already reached by earlier parameters.
+        if mapper.interface_slot(&parameter.ty).is_some() {
+            projected = mapper.com_output(function, parameters)?;
+            if receiver.is_none() && projected.is_some() {
+                return Err("direct-C HRESULT status C spelling awaits compiler support (recorded in com_status.rs); typed output remains refused".into());
+            }
+        }
+
+        if let Some((index, result, _)) = &projected
+            && at == *index
+        {
+            uses.extend(result.uses.clone());
+            c_list.push(format!("{} *", result.c));
+            continue;
+        }
         let how = Use {
             optional: parameter.optional,
             constant: parameter.constant,
@@ -1529,7 +1683,11 @@ fn map_signature(
         library: function.library.clone(),
         documentation: function.documentation.clone(),
         parameters: typescript,
-        result: returned.ts,
+        result: projected
+            .as_ref()
+            .map_or(returned.ts, |(_, result, _)| result.ts.clone()),
+        hresult: projected.is_some(),
+        com_output: projected.map(|(_, _, output)| output),
         c_type,
         no_escape,
         uses,
@@ -1685,12 +1843,14 @@ mod tests {
             optional,
             constant,
             output,
+            attributes: std::collections::BTreeMap::new(),
         };
         let method = |name: &str, parameters, result| Method {
             name: name.into(),
             parameters,
             result,
             documentation: None,
+            attributes: std::collections::BTreeMap::new(),
         };
         let hresult = || named("Windows.Win32.Foundation", "HRESULT");
         let guid = || Type::PtrConst(Box::new(named("System", "Guid")), 1);
@@ -1831,11 +1991,6 @@ mod tests {
         use super::super::{check, emit};
         use super::TypeDecl;
         let binding = bound.iter().find(|b| b.namespace == VALUES).unwrap();
-        assert!(
-            binding.refused.iter().any(
-                |(name, why)| name == "IDerived.TypedOut" && why.contains("ownership contract")
-            )
-        );
         let owners = bound
             .iter()
             .flat_map(|b| {
@@ -1998,6 +2153,247 @@ mod tests {
         assert_eq!(number(&Value::F64(0.1)).as_deref(), Some("0.1"));
         assert_eq!(number(&Value::F32(f32::INFINITY)), None);
     }
+
+    /// Each refusal changes one ownership/header fact from the successful
+    /// control; optional slots and mutable typed storage remain explicit gaps.
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "One-difference COM projection matrix"
+    )]
+    fn com_output_projection_requires_one_proven_trailing_owned_interface() {
+        use super::super::{check, emit, read};
+        use windows_metadata::{Type, TypeName, Value};
+        let dir = std::env::temp_dir().join(format!("nts-winmd-owned-out-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("interfaces.h");
+        let headers = vec![vec![path.to_str().unwrap().to_owned()]];
+        for target in ["x86_64-w64-windows-gnu", "aarch64-w64-windows-gnu"] {
+            let args = vec![format!("--target={target}")];
+            for change in [
+                "control",
+                "without-marker",
+                "retval",
+                "malformed-retval",
+                "malformed-owner",
+                "borrowed",
+                "conditional",
+                "optional",
+                "inout",
+                "const",
+                "non-hresult",
+                "not-last",
+                "multiple",
+                "depth",
+                "header",
+                "iid",
+                "errors-as-success",
+                "array",
+            ] {
+                let mut model = com_model();
+                let read::Kind::Interface(interface) = &mut model
+                    .types
+                    .get_mut(&(VALUES.into(), "IDerived".into()))
+                    .unwrap()
+                    .kind
+                else {
+                    unreachable!()
+                };
+                let method = &mut interface.methods[2];
+                let output = &mut method.parameters[0];
+                output
+                    .attributes
+                    .insert("ComOutPtrAttribute".into(), vec![vec![]]);
+                let mut header = com_header() + "HRESULT Make(IBase **);\n";
+                let expected = match change {
+                    "without-marker" => {
+                        output.attributes.clear();
+                        "ComOutPtr"
+                    }
+                    "retval" => {
+                        output
+                            .attributes
+                            .insert("RetValAttribute".into(), vec![vec![]]);
+                        ""
+                    }
+                    "malformed-retval" => {
+                        output.attributes.insert(
+                            "RetValAttribute".into(),
+                            vec![vec![(String::new(), Value::I32(1))]],
+                        );
+                        "RetValAttribute"
+                    }
+                    "malformed-owner" => {
+                        output.attributes.insert(
+                            "ComOutPtrAttribute".into(),
+                            vec![vec![(String::new(), Value::I32(1))]],
+                        );
+                        "ComOutPtr"
+                    }
+                    "borrowed" => {
+                        output
+                            .attributes
+                            .insert("DoNotReleaseAttribute".into(), vec![vec![]]);
+                        "DoNotRelease"
+                    }
+                    "conditional" => {
+                        output.attributes.insert(
+                            "IgnoreIfReturnAttribute".into(),
+                            vec![vec![(String::new(), Value::Utf8("S_FALSE".into()))]],
+                        );
+                        "IgnoreIfReturn"
+                    }
+                    "optional" => {
+                        output.optional = true;
+                        "required"
+                    }
+                    "inout" => {
+                        output.output = false;
+                        "output-only"
+                    }
+                    "const" => {
+                        output.constant = true;
+                        "const"
+                    }
+                    "non-hresult" => {
+                        method.result = Type::U32;
+                        header = header
+                            .replace("HRESULT (*TypedOut)", "unsigned (*TypedOut)")
+                            .replace("HRESULT Make", "unsigned Make");
+                        "HRESULT"
+                    }
+                    "not-last" | "multiple" => {
+                        method.parameters.push(read::Parameter {
+                            name: "other".into(),
+                            ty: Type::PtrMut(Box::new(Type::U32), 1),
+                            optional: false,
+                            constant: false,
+                            output: change == "multiple",
+                            attributes: std::collections::BTreeMap::new(),
+                        });
+                        header = header.replace("IBase **);", "IBase **,unsigned *);");
+                        if change == "multiple" {
+                            "one output"
+                        } else {
+                            "trailing"
+                        }
+                    }
+                    "depth" => {
+                        output.ty = Type::PtrMut(
+                            Box::new(Type::ClassName(TypeName::named(VALUES, "IBase"))),
+                            2,
+                        );
+                        header = header.replace("IBase **);", "IBase ***);");
+                        "pointer"
+                    }
+                    "header" => {
+                        header = header.replace("IBase **);", "const IBase **);");
+                        "header"
+                    }
+                    "errors-as-success" => {
+                        method
+                            .attributes
+                            .insert("CanReturnErrorsAsSuccessAttribute".into(), vec![vec![]]);
+                        "CanReturnErrorsAsSuccess"
+                    }
+                    "array" => {
+                        output
+                            .attributes
+                            .insert("NativeArrayInfoAttribute".into(), vec![vec![]]);
+                        "NativeArrayInfo"
+                    }
+                    _ => "",
+                };
+                model.functions.push(read::Function {
+                    namespace: VALUES.into(),
+                    name: "Make".into(),
+                    library: "fixture.dll".into(),
+                    parameters: method.parameters.clone(),
+                    result: method.result.clone(),
+                    documentation: None,
+                    attributes: method.attributes.clone(),
+                });
+                if change == "iid" {
+                    let read::Kind::Interface(result) = &mut model
+                        .types
+                        .get_mut(&(VALUES.into(), "IBase".into()))
+                        .unwrap()
+                        .kind
+                    else {
+                        unreachable!()
+                    };
+                    result.iid = None;
+                }
+                std::fs::write(&path, header).unwrap();
+                let facts = super::ask(&model, &headers, &args).unwrap();
+                let mut bindings = super::bindings(&model, &facts);
+                check::against_headers(&mut bindings, &headers, &args).unwrap();
+                let owners = bindings
+                    .iter()
+                    .flat_map(|b| {
+                        b.types
+                            .iter()
+                            .map(|t| (t.name().to_owned(), b.namespace.clone()))
+                    })
+                    .collect();
+                let binding = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+                let text = emit::render(binding, "test", &owners).declarations;
+                if matches!(change, "control" | "without-marker" | "retval") {
+                    assert!(
+                        text.contains("TypedOut(this: IDerived): IBase | null;"),
+                        "{target} {text}"
+                    );
+                    assert!(!text.contains("function Make("), "{text}");
+                    assert!(
+                        binding
+                            .refused
+                            .iter()
+                            .any(|(name, why)| name == "Make"
+                                && why.contains("direct-C HRESULT status")),
+                        "{:?}",
+                        binding.refused
+                    );
+                    assert!(text.contains(if change == "retval" {
+                        "Metadata RetVal: present."
+                    } else {
+                        "Metadata RetVal: absent."
+                    }));
+                    assert!(text.contains("@ntsHresult"));
+                    assert!(!text.contains("Owned<"));
+                    assert!(text.contains("Open(this: IDerived, iid: ConstPtr<Guid>, out: Ptr<Ptr<void> | null>): void;"));
+                } else {
+                    assert!(!text.contains("TypedOut("), "{target} {change}: {text}");
+                    if change != "iid" {
+                        assert!(
+                            binding
+                                .refused
+                                .iter()
+                                .any(|(name, why)| name == "IDerived.TypedOut"
+                                    && why.contains(expected)),
+                            "{target} {change}: {:?}",
+                            binding.refused
+                        );
+                    }
+                    assert!(
+                        !text.contains("function Make("),
+                        "{target} {change}: {text}"
+                    );
+                    assert!(
+                        binding.refused.iter().any(|(n, w)| n == "Make"
+                            && w.contains(if change == "iid" {
+                                "GuidAttribute"
+                            } else {
+                                expected
+                            })),
+                        "{target} {change}: {:?}",
+                        binding.refused
+                    );
+                }
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     fn layout_model(namespace: &str, union: bool) -> super::Model {
         use super::super::read::{Function, Kind, Model, Parameter, TypeInfo};
         use windows_metadata::{Type, TypeName};
@@ -2019,9 +2415,11 @@ mod tests {
                 optional: false,
                 constant: false,
                 output: false,
+                attributes: std::collections::BTreeMap::new(),
             }],
             result: Type::I32,
             documentation: None,
+            attributes: std::collections::BTreeMap::new(),
         };
         Model {
             functions: vec![

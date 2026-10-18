@@ -16,6 +16,10 @@ pub(crate) fn name_of(type_name: &TypeName) -> Name {
     (type_name.namespace.clone(), type_name.name.clone())
 }
 
+/// Raw custom attributes, including repeated values. Projection policy must
+/// distinguish a missing marker from malformed or conditional metadata.
+pub(crate) type Attributes = BTreeMap<String, Vec<Vec<(String, Value)>>>;
+
 #[derive(Debug, Clone)]
 pub(crate) struct Parameter {
     pub(crate) name: String,
@@ -26,6 +30,7 @@ pub(crate) struct Parameter {
     pub(crate) constant: bool,
     /// `[Out]` without `[In]`: the callee writes the storage.
     pub(crate) output: bool,
+    pub(crate) attributes: Attributes,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +43,7 @@ pub(crate) struct Function {
     pub(crate) result: Type,
     /// The documentation page, whose path names the header.
     pub(crate) documentation: Option<String>,
+    pub(crate) attributes: Attributes,
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +62,7 @@ pub(crate) struct Method {
     pub(crate) parameters: Vec<Parameter>,
     pub(crate) result: Type,
     pub(crate) documentation: Option<String>,
+    pub(crate) attributes: Attributes,
 }
 
 #[derive(Debug, Clone)]
@@ -107,6 +114,17 @@ pub(crate) struct Model {
     pub(crate) types: BTreeMap<Name, TypeInfo>,
 }
 
+fn attributes(row: &impl HasAttributes<'static>) -> Attributes {
+    let mut result = Attributes::new();
+    for attribute in row.attributes() {
+        result
+            .entry(attribute.name().to_owned())
+            .or_default()
+            .push(attribute.value());
+    }
+    result
+}
+
 fn documentation(row: &impl HasAttributes<'static>) -> Option<String> {
     row.find_attribute("DocumentationAttribute")
         .and_then(|attribute| {
@@ -138,6 +156,7 @@ fn parameters(method: MethodDef<'static>, types: &[Type]) -> Vec<Parameter> {
                 ty: ty.clone(),
                 optional: row.is_some_and(MethodParam::is_optional),
                 constant: row.is_some_and(|row| row.has_attribute("ConstAttribute")),
+                attributes: row.map_or_else(Attributes::new, attributes),
                 output: row.is_some_and(|row| {
                     let flags = row.flags();
                     flags.contains(windows_metadata::ParamAttributes::Out)
@@ -179,6 +198,7 @@ pub(crate) fn read(index: &'static Index, namespaces: &[String]) -> Model {
                     parameters,
                     result: signature.return_type.clone(),
                     documentation: documentation(&method),
+                    attributes: attributes(&method),
                 });
             }
             for field in apis.fields() {
@@ -327,6 +347,7 @@ fn interface(def: TypeDef<'static>, wanted: &mut Vec<Name>) -> Interface {
                 parameters: parameters(method, &signature.types),
                 result: signature.return_type,
                 documentation: documentation(&method),
+                attributes: attributes(&method),
             }
         })
         .collect();
@@ -439,7 +460,7 @@ mod tests {
         types: Vec<Type>,
         rows: &[ParamRow],
     ) {
-        file.MethodDef(
+        let def = file.MethodDef(
             name,
             &Signature {
                 return_type: result,
@@ -449,10 +470,35 @@ mod tests {
             MethodAttributes::Public | MethodAttributes::Virtual | MethodAttributes::Abstract,
             MethodImplAttributes(0),
         );
+        if name == "Use" {
+            attribute(
+                file,
+                HasAttribute::MethodDef(def),
+                "CanReturnErrorsAsSuccessAttribute",
+                Vec::new(),
+            );
+        }
         for (name, sequence, flags, constant) in rows {
             let row = file.Param(name, *sequence, *flags);
             if *constant {
                 attribute(file, HasAttribute::Param(row), "ConstAttribute", Vec::new());
+            }
+            if *name == "output" {
+                for marker in [
+                    "ComOutPtrAttribute",
+                    "RetValAttribute",
+                    "DoNotReleaseAttribute",
+                ] {
+                    attribute(file, HasAttribute::Param(row), marker, Vec::new());
+                }
+                for value in ["S_FALSE", "E_FAIL"] {
+                    attribute(
+                        file,
+                        HasAttribute::Param(row),
+                        "IgnoreIfReturnAttribute",
+                        vec![Value::Utf8(value.into())],
+                    );
+                }
             }
         }
     }
@@ -633,6 +679,36 @@ mod tests {
         assert_eq!(parameters[2].name, "inout");
         assert!(!parameters[2].output, "In|Out is not an output-only slot");
         assert_eq!(parameters[1].ty, Type::PtrMut(Box::new(named("IOut")), 2));
+    }
+
+    #[test]
+    fn output_ownership_facts_remain_raw_and_do_not_invent_retval() {
+        let model = model();
+        let method = &com(&model, "IBase").methods[0];
+        let output = &method.parameters[1];
+        for marker in [
+            "ComOutPtrAttribute",
+            "RetValAttribute",
+            "DoNotReleaseAttribute",
+        ] {
+            assert_eq!(output.attributes[marker].len(), 1);
+            assert!(output.attributes[marker][0].is_empty());
+            assert!(!method.parameters[0].attributes.contains_key(marker));
+        }
+        let ignored = &output.attributes["IgnoreIfReturnAttribute"];
+        assert_eq!(ignored.len(), 2);
+        assert!(matches!(&ignored[0][0].1, Value::Utf8(value) if value == "S_FALSE"));
+        assert!(matches!(&ignored[1][0].1, Value::Utf8(value) if value == "E_FAIL"));
+        assert!(
+            method
+                .attributes
+                .contains_key("CanReturnErrorsAsSuccessAttribute")
+        );
+        assert!(
+            !com(&model, "IDerived").methods[0].parameters[1]
+                .attributes
+                .contains_key("RetValAttribute")
+        );
     }
 
     #[test]

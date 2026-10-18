@@ -205,6 +205,7 @@ mod tests {
             documentation: Some(format!(
                 "https://learn.microsoft.com/windows/win32/api/{header}/nf-{header}-{name}"
             )),
+            attributes: std::collections::BTreeMap::new(),
         };
         let model = Model {
             types: [(
