@@ -4765,6 +4765,7 @@ const DEMO_HEADER: &str = "#ifndef DEMO_H\n#define DEMO_H\n#include <stddef.h>\n
          int demo_count_args(int argc, char **argv);\n\
          char **demo_split(const char *text);\n\
          int demo_checksum(const uint8_t *data, size_t length);\n\
+         int demo_sum(const int *values, int length);\n\
          typedef struct _DemoWidget { int size; } DemoWidget;\n\
          typedef struct _DemoWidgetClass { long (*wrong)(DemoWidget *widget); int (*measure)(DemoWidget *widget, int for_size); } DemoWidgetClass;\n\
          unsigned long demo_widget_get_type(void);\n\
@@ -4785,6 +4786,7 @@ const DEMO_SOURCE: &str = "#include <demo.h>\n#include <stdlib.h>\n#include <str
          int demo_count_args(int argc, char **argv) { return argv == NULL ? -1 : argc; }\n\
          char **demo_split(const char *text) { (void)text; return NULL; }\n\
          int demo_checksum(const uint8_t *data, size_t length) { int sum = 0; for (size_t i = 0; i < length; i++) sum += data[i]; return sum; }\n\
+         int demo_sum(const int *values, int length) { int sum = 0; for (int i = 0; i < length; i++) sum += values[i]; return sum; }\n\
          unsigned long demo_widget_get_type(void) { return 1; }\n";
 
 /// A class with a class struct, for [`demo_gir`]: two virtual functions, one
@@ -4894,6 +4896,15 @@ fn demo_gir(high: &str) -> String {
           <array length="1" zero-terminated="0" c:type="const guint8*"><type name="guint8"/></array>
         </parameter>
         <parameter name="length" transfer-ownership="none"><type name="gsize" c:type="gsize"/></parameter>
+      </parameters>
+    </function>
+    <function name="sum" c:identifier="demo_sum">
+      <return-value><type name="gint" c:type="int"/></return-value>
+      <parameters>
+        <parameter name="values" transfer-ownership="none">
+          <array length="1" zero-terminated="0" c:type="const int*"><type name="gint"/></array>
+        </parameter>
+        <parameter name="length" transfer-ownership="none"><type name="gint" c:type="int"/></parameter>
       </parameters>
     </function>
     <function name="wrong" c:identifier="demo_wrong">
@@ -5007,6 +5018,9 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
         // Bytes borrowed in place, their length after them and hidden.
         "   * @ntsNoEscape data\n   */\n  \
          export function demo_checksum(data: Counted<CBytes<\"const uint8_t\">, AsNumber<c_size_t>, \"after\">): c_int;",
+        // Scalar elements borrowed in place as a typed array, counted.
+        "   * @ntsNoEscape values\n   */\n  \
+         export function demo_sum(values: Counted<CElements<Int32Array, \"const int32_t\">, c_int, \"after\">): c_int;",
         // A returned `gchar **` the caller frees.
         "   * @ntsFree g_strfreev\n   */\n  export function demo_split(text: string): string[];",
         // `argc` before `argv`: hidden, and filled from the array.

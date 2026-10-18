@@ -353,6 +353,9 @@ pub(crate) enum Reason {
     /// says which shape, so the refusal ledger separates a missing
     /// length from an ownership the compiler has no form for.
     Array(&'static str),
+    /// The same, where the ledger needs a name read from GIR (the
+    /// element type) rather than one this file states.
+    ArrayShape(String),
     Varargs,
     Gpointer,
     RecordByValue,
@@ -404,6 +407,7 @@ impl fmt::Display for Reason {
                 write!(f, "an out parameter whose storage the caller allocates")
             }
             Self::Array(why) => write!(f, "an array: {why}"),
+            Self::ArrayShape(why) => write!(f, "an array: {why}"),
             Self::Varargs => write!(f, "variadic"),
             Self::Gpointer => write!(f, "a `gpointer`"),
             Self::RecordByValue => write!(f, "a record passed by value"),
@@ -2065,8 +2069,11 @@ impl<'a> Mapper<'a> {
             return self.caller_allocated(param);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
-            return Err(if matches!(param.ty, TypeRef::Array(_)) {
-                Reason::Array("an out array written through no slot here")
+            return Err(if let TypeRef::Array(array) = &param.ty {
+                Reason::ArrayShape(format!(
+                    "an out array (`{}`) written through no slot here",
+                    array.element.as_deref().unwrap_or("?")
+                ))
             } else {
                 Reason::OutParameter
             });
@@ -2271,7 +2278,10 @@ impl<'a> Mapper<'a> {
                     "Uint8Array".to_owned(),
                 )
             }
-            _ if length.is_some() => self.handles_parameter(param, element, &spelling)?,
+            _ if length.is_some() => match self.elements_parameter(element, &spelling) {
+                Some(mapped) => mapped,
+                None => self.handles_parameter(param, element, &spelling)?,
+            },
             _ => return Err(Reason::Array("with no length beside it")),
         };
         let mut ts = ts;
@@ -2292,6 +2302,55 @@ impl<'a> Mapper<'a> {
         })
     }
 
+    /// An array of scalars C borrows for the call, with its length beside
+    /// it -- `const gint *priorities` -- as `CElements<A, Q>` over the
+    /// program's typed array, lent in place as `CBytes` is. Only the
+    /// widths `CElements` names today; `gint64`/`guint64` (a
+    /// `BigInt64Array`), `gboolean` and the `long`/`size_t` widths stay
+    /// refused as not-a-class below, for the compiler to extend.
+    /// `None` where the element is none of these.
+    fn elements_parameter(
+        &mut self,
+        element: &str,
+        spelling: &str,
+    ) -> Option<(String, Type, String)> {
+        let name = element.rsplit('.').next().unwrap_or(element);
+        // GIR names the type `GLib.Quark`; the scalar table by its C name.
+        let name = if name == "Quark" { "GQuark" } else { name };
+        if name == "gboolean" {
+            return None;
+        }
+        let scalar = SCALARS
+            .iter()
+            .find(|(gir, ..)| *gir == name)
+            .map(|(_, _, scalar)| *scalar)?;
+        let (typed_array, spelling_q) = match scalar {
+            Scalar::Int8 => ("Int8Array", "int8_t"),
+            Scalar::Int16 => ("Int16Array", "int16_t"),
+            Scalar::UInt16 => ("Uint16Array", "uint16_t"),
+            Scalar::Int | Scalar::Int32 => ("Int32Array", "int32_t"),
+            Scalar::UInt | Scalar::UInt32 => ("Uint32Array", "uint32_t"),
+            Scalar::Float => ("Float32Array", "float"),
+            Scalar::Double => ("Float64Array", "double"),
+            _ => return None,
+        };
+        let constant = spelling.starts_with("const");
+        let (qualifier, pointee) = if constant {
+            (
+                format!("const {spelling_q}"),
+                Pointee::Const(Box::new(Pointee::Scalar(scalar))),
+            )
+        } else {
+            (spelling_q.to_owned(), Pointee::Scalar(scalar))
+        };
+        self.binding.brands.insert("CElements");
+        Some((
+            format!("CElements<{typed_array}, \"{qualifier}\">"),
+            Type::Pointer(pointee),
+            typed_array.to_owned(),
+        ))
+    }
+
     /// An array of objects C borrows for the call -- `GFile **files`, or
     /// `gpointer *additions` with GIR's element type -- as `CHandles<H, Q>`
     /// over the program's `readonly H[]`, whose element block already holds
@@ -2310,7 +2369,9 @@ impl<'a> Mapper<'a> {
             return Err(Reason::Array("GIR does not state its transfer"));
         }
         let Some(Resolved::Class(_, class)) = self.resolve(&self.qualify(element)) else {
-            return Err(Reason::Array("its element is not a class"));
+            return Err(Reason::ArrayShape(format!(
+                "its element is not a class (`{element}`)"
+            )));
         };
         let c_type = class
             .c_type
@@ -2378,7 +2439,19 @@ impl<'a> Mapper<'a> {
             || !array.zero_terminated
             || array.length.is_some()
         {
-            return Err(Reason::Array("returned, and not NULL-terminated strings"));
+            return Err(Reason::ArrayShape(format!(
+                "returned (`{element}`, {}, {})",
+                if array.zero_terminated {
+                    "NULL-terminated"
+                } else {
+                    "not NULL-terminated"
+                },
+                if array.length.is_some() {
+                    "with a length"
+                } else {
+                    "with no length"
+                },
+            )));
         }
         let spelling: String = array
             .c_type
