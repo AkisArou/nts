@@ -833,16 +833,10 @@ fn pointer_body(
             Pointee::Const(Box::new(pointee))
         }
     };
-    // `Ptr<unknown>` is C's `void *`. Only `unknown`: `Ptr<any>` stays refused,
-    // because `any` is what a program ends up with by accident and `unknown` is
-    // what someone writes on purpose. `TypeKind::Unsupported` is a third thing
-    // again -- the checker telling us it rendered something we do not model --
-    // and reading that as `void *` would turn every unmodelled type into a
-    // pointer nobody declared.
-    //
-    // `Ptr<void>` is the same pointer, spelled the way C and every generated
-    // binding spell it (`LPVOID`, `void *`). Like `unknown`, `void` reaches
-    // here only by being written: nothing infers it as a pointee.
+    // `Ptr<void>` / `ConstPtr<void>` project an unknown marker, so typed
+    // pointers satisfy them without granting an element access. Also accept
+    // a written void marker. Neither any nor Unsupported proves a void
+    // pointer: an unchecked or unmodelled type must not become a native address.
     if matches!(
         snapshot.types.get(element.0 as usize)?.kind,
         TypeKind::Unknown | TypeKind::Void

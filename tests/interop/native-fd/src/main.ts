@@ -3,7 +3,7 @@ import { local } from "c:memory";
 import type { c_uint, Uint8 } from "@nts/scalars";
 
 // `read` takes `void *`. `Ptr<Uint8>` converts to it the way C converts at
-// the call, and the reverse does not typecheck -- `Ptr<unknown>` is not
+// the call, and the reverse does not typecheck -- `Ptr<void>` is not
 // assignable to `Ptr<Uint8>`, which is the direction mistakes live in.
 const CAPACITY = 64;
 

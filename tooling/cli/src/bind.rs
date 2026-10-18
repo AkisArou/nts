@@ -90,7 +90,7 @@ enum Shape {
     Scalar(&'static str),
     /// `T *`, with whether the pointee is `const`.
     Pointer(Box<Shape>, bool),
-    /// `void *`, which the surface spells `Ptr<unknown>`.
+    /// `void *`, which the surface spells `Ptr<void>`.
     VoidPointer(bool),
     /// `T[N]` stored inline.
     Array(Box<Shape>, u64),
@@ -1702,8 +1702,8 @@ impl Shape {
     fn spell(&self, aliases: &BTreeMap<String, String>) -> String {
         match self {
             Self::Scalar(brand) => (*brand).to_owned(),
-            Self::VoidPointer(true) => "ConstPtr<unknown>".to_owned(),
-            Self::VoidPointer(false) => "Ptr<unknown>".to_owned(),
+            Self::VoidPointer(true) => "ConstPtr<void>".to_owned(),
+            Self::VoidPointer(false) => "Ptr<void>".to_owned(),
             Self::Pointer(inner, true) => format!("ConstPtr<{}>", inner.spell(aliases)),
             Self::Pointer(inner, false) => format!("Ptr<{}>", inner.spell(aliases)),
             Self::Array(element, count) => format!("CArray<{}, {count}>", element.spell(aliases)),
@@ -2221,7 +2221,7 @@ mod tests {
             !silent.contains("@ntsNoEscape"),
             "a header states no lifetime, so nothing here may claim one:\n{silent}"
         );
-        assert!(silent.contains("ConstPtr<unknown>"), "{silent}");
+        assert!(silent.contains("ConstPtr<void>"), "{silent}");
 
         let authored = binding.render(&request(vec![("keeps_it".to_owned(), "a".to_owned())]));
         assert!(authored.contains("@ntsNoEscape a"), "{authored}");

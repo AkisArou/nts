@@ -34,6 +34,6 @@ declare module "c:fcntl" {
    * it with `conflicting types for 'write'`, which is the entire reason the
    * prototype is re-declared beside the real one.
    * @ntsNoEscape buf */
-  export function write(fd: Fd, buf: ConstPtr<unknown>, count: c_size_t): c_ptrdiff_t;
+  export function write(fd: Fd, buf: ConstPtr<void>, count: c_size_t): c_ptrdiff_t;
   export function unlink(path: ConstPtr<c_char>): c_int;
 }

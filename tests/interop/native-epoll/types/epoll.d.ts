@@ -31,8 +31,8 @@ declare module "c:sys/epoll" {
   /** The four spellings of one word the kernel hands back untouched. It never
    * reads this; only the program that set it does. */
   export type EpollData = Union<{
-    // `Ptr<unknown>` is C's `void *`.
-    ptr: Ptr<unknown>;
+    // `Ptr<void>` is C's `void *`.
+    ptr: Ptr<void>;
     fd: c_int;
     u32: Uint32;
     u64: BigUint64;

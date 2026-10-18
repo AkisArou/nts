@@ -16,7 +16,7 @@
 // expect-ir: c llvm: no release in constOutput
 import type { ConstPtr, Ptr } from "c:types";
 import type { c_int, Uint8 } from "@nts/scalars";
-import { local } from "c:memory";
+import { bytesFrom, local } from "c:memory";
 import { vp_address, vp_bytes, vp_const_address, vp_const_fill, vp_fill } from "c:void-pointer";
 
 type Input = Ptr<void>;
@@ -36,3 +36,6 @@ export function constOutput(present: c_int): ConstPtr<void> | null {
   return slot[0];
 }
 export function isNull(present: c_int): boolean { return vp_address(present) === null; }
+function forward<T>(p: T): T { return p; }
+export function genericVoid(): Ptr<void> | null { return forward<Ptr<void> | null>(vp_address(1 as c_int)); }
+export function copiedByte(): number { return bytesFrom(vp_const_address(1 as c_int), 2)[1]; }

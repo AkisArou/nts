@@ -27643,7 +27643,7 @@ impl<'a> FuncBuilder<'a> {
         // call and the only pointer conversion it does without being asked. One
         // direction: `void *` back to a typed pointer is where the mistakes
         // live, and it stays refused here. TypeScript refuses it too, since
-        // `Ptr<unknown>` is not assignable to `Ptr<Uint8>` -- this is the
+        // `Ptr<void>` is not assignable to `Ptr<Uint8>` -- this is the
         // second of the two, not the only one.
         //
         // A `Convert` rather than a relabel: the address is unchanged, but the

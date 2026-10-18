@@ -22,11 +22,11 @@ declare module "c:unistd" {
    * kept, which is what lets TS pass storage it owns.
    * @ntsNoEscape buf
    */
-  export function read(fd: Fd, buf: Ptr<unknown>, count: Count): Transferred;
+  export function read(fd: Fd, buf: Ptr<void>, count: Count): Transferred;
   /** `const void *`: the call reads through this view and does not write
    * through it. A `Ptr<T>` satisfies it, so the caller passes its own storage
    * unchanged; a `ConstPtr` cannot be passed to `read`, which needs to write.
    * @ntsNoEscape buf
    */
-  export function write(fd: Fd, buf: ConstPtr<unknown>, count: Count): Transferred;
+  export function write(fd: Fd, buf: ConstPtr<void>, count: Count): Transferred;
 }

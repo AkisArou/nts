@@ -2997,7 +2997,7 @@ impl<'a> Model<'a> {
                 "char *" | "const char *" | "const char *const"
             ) {
                 self.import("c:types", "Ptr");
-                return Ok(or_null("Ptr<unknown>".to_owned()));
+                return Ok(or_null("Ptr<void>".to_owned()));
             }
         }
         // Swift's `UnsafeMutablePointer<ObjCBool>`: a `BOOL *`, like
@@ -3051,7 +3051,7 @@ impl<'a> Model<'a> {
         // passes, or is handed, and does not read as any type.
         if pointee.trim_start_matches("const ") == "void" && position != Position::Block {
             self.import("c:types", "Ptr");
-            return Ok(or_null("Ptr<unknown>".to_owned()));
+            return Ok(or_null("Ptr<void>".to_owned()));
         }
         // `struct CGColor *`, the pointer a Core Foundation class's `Ref`
         // typedef names: a class Swift imports, which this binding binds

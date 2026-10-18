@@ -1595,7 +1595,7 @@ impl<'a> Mapper<'a> {
         }
         let builder = Mapped {
             shape: Shape::Other,
-            ts: "Ptr<unknown>".to_owned(),
+            ts: "Ptr<void>".to_owned(),
             c: Type::Pointer(Pointee::Void),
         };
         let mut own = Vec::new();
@@ -3012,7 +3012,7 @@ impl<'a> Mapper<'a> {
         let callback = Mapped {
             shape: Shape::Other,
             ts: format!(
-                "ErasedClosure<(this_: {object} | null) => string | null, (data: Ptr<unknown>, closure: {gclosure}) => void>"
+                "ErasedClosure<(this_: {object} | null) => string | null, (data: Ptr<void>, closure: {gclosure}) => void>"
             ),
             c: erased.clone(),
         };
@@ -3170,7 +3170,7 @@ impl<'a> Mapper<'a> {
                     Mapped {
                         shape: Shape::Other,
                         ts: format!(
-                            "ErasedClosure<({}) => {}, (data: Ptr<unknown>, closure: {gclosure}) => void>",
+                            "ErasedClosure<({}) => {}, (data: Ptr<void>, closure: {gclosure}) => void>",
                             ts_parameters.join(", "),
                             result.ts
                         ),

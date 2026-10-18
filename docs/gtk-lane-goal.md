@@ -131,7 +131,7 @@ view of `g_signal_connect_data` per class and signal:
 ```ts
 /** @ntsSymbol g_signal_connect_data */
 export function gtk_button_connect_clicked(instance: Erased<GtkButton>, detailed_signal: "clicked",
-  handler: ErasedClosure<(self: GtkButton) => void, (data: Ptr<unknown>, closure: GClosure) => void>,
+  handler: ErasedClosure<(self: GtkButton) => void, (data: Ptr<void>, closure: GClosure) => void>,
   connect_flags: c_uint): c_ulong;
 ```
 

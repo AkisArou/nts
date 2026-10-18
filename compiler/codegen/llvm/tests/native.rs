@@ -3300,7 +3300,7 @@ import type { Class, Erased, ErasedClosure, Ptr } from "c:types";
 import type { c_int, c_uint, c_ulong } from "@nts/scalars";
 type Obj = Class<"_Obj">;
 type GClosure = Class<"_GClosure">;
-type Notify = (data: Ptr<unknown>, closure: GClosure) => void;
+type Notify = (data: Ptr<void>, closure: GClosure) => void;
 /** @ntsSymbol sig_connect_data */
 declare function obj_connect_poke(instance: Erased<Obj>, signal: "poke", handler: ErasedClosure<(self: Obj, n: c_int) => void, Notify>, flags: c_uint): c_ulong;
 /** @ntsSymbol sig_connect_data */
@@ -6409,7 +6409,7 @@ interface GObjectMethods {
      * @ntsSymbol nts_gobject_connect
      * @ntsDefault connect_flags=0
      */
-    connect(this: Erased<GObject>, detailed_signal: "notify", handler: ErasedClosure<(self: GObject, pspec: GParamSpec) => void, (data: Ptr<unknown>, closure: GClosure) => void>, connect_flags?: c_uint): c_ulong;
+    connect(this: Erased<GObject>, detailed_signal: "notify", handler: ErasedClosure<(self: GObject, pspec: GParamSpec) => void, (data: Ptr<void>, closure: GClosure) => void>, connect_flags?: c_uint): c_ulong;
 }
 type GObject = GObjectClass<"_GObject"> & GObjectMethods;
 declare function made(): Owned<GObject>;

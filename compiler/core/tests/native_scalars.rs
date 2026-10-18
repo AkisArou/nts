@@ -1310,7 +1310,7 @@ fn a_const_view_reads_and_does_not_write() {
     let header = "import type { ConstPtr, Ptr } from \"c:types\"; import type { Uint8, c_size_t } from \"@nts/scalars\";\n\
          import { addrOf, local } from \"c:memory\";\n\
          /** @ntsNoEscape p */\n\
-         declare function wantsConst(p: ConstPtr<unknown>, n: c_size_t): void;\n\
+         declare function wantsConst(p: ConstPtr<void>, n: c_size_t): void;\n\
          /** @ntsNoEscape p */\n\
          declare function wantsMutable(p: Ptr<Uint8>, n: c_size_t): void;\n";
     for (name, body, expected) in [
@@ -1507,6 +1507,27 @@ fn only_void_selects_the_void_pointer_projection() {
             return;
         };
         assert!(!errors, "{element}: {:?}", snapshot.diagnostics);
+    }
+}
+
+#[test]
+fn an_any_pointer_does_not_become_a_native_void_parameter() {
+    for (element, refused) in [("any", true), ("void", false)] {
+        let source = format!(
+            "import type {{ Ptr }} from \"c:types\";\n\
+             declare function accept(p: Ptr<{element}>): void;\n\
+             export function go(p: Ptr<{element}>): void {{ accept(p); }}"
+        );
+        let Some(snapshot) = snapshot(&format!("native-pointer-{element}"), &source) else {
+            return;
+        };
+        let prepared = hir::prepare(&snapshot).unwrap();
+        assert_eq!(
+            !prepared.diagnostics.is_empty(),
+            refused,
+            "{element}: {:?}",
+            prepared.diagnostics
+        );
     }
 }
 

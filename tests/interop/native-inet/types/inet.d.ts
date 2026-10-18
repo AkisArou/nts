@@ -36,12 +36,12 @@ declare module "c:arpa/inet" {
 
   /** Parses `src` into `dst`. Reads one and writes the other, keeping neither.
    *
-   * `dst` is `Ptr<unknown>` -- C's `void *` -- and the first version of this
+   * `dst` is `Ptr<void>` -- C's `void *` -- and the first version of this
    * file said `Ptr<In6Addr>`, which is what the function is *used* for and not
    * what it declares. It typechecked, it lowered, and the witness refused it:
    * `conflicting types for 'inet_pton'` against the real <arpa/inet.h>. That
    * is the entire reason the prototype is re-declared beside the real one.
    *
    * @ntsNoEscape src dst */
-  export function inet_pton(family: c_int, src: ConstPtr<c_char>, dst: Ptr<unknown>): c_int;
+  export function inet_pton(family: c_int, src: ConstPtr<c_char>, dst: Ptr<void>): c_int;
 }

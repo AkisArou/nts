@@ -11,3 +11,7 @@ they guard the existing representation while the TypeScript surface changes.
 `compiler/core/tests/native_scalars.rs` checks the matching type controls:
 the permitted direction, constness, handle separation, absence of an element
 projection, and exact void selection excluding any, undefined and never.
+
+The consumer also executes a generic void-pointer forwarding instantiation and
+bytesFrom on returned const void storage, covering the existing untyped-memory
+overload as the pointer surface changes.

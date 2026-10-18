@@ -244,7 +244,7 @@ declare module "c:shapes" {
   export type Cc = Struct<{ a: c_char; b: c_char }, "cc">;
   export type Iii = Struct<{ a: c_int; b: c_int; c: c_int }, "iii">;
   export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
-  export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
+  export type Pi = Struct<{ p: Ptr<void>; n: c_int }, "pi">;
   export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;
   export type C1 = Struct<{ a: c_char }, "c1">;
   export type F1 = Struct<{ a: Float32 }, "f1">;
@@ -579,7 +579,7 @@ declare module "c:shapes" {
   export type Rect = Struct<{ origin: Pd; size: Pd }, "rect">;
   export type Ci = Struct<{ a: c_int; b: Float64 }, "ci">;
   export type Ic = Struct<{ a: c_int; b: c_char }, "ic">;
-  export type Pi = Struct<{ p: Ptr<unknown>; n: c_int }, "pi">;
+  export type Pi = Struct<{ p: Ptr<void>; n: c_int }, "pi">;
   export type C3 = Struct<{ a: c_char; b: c_char; c: c_char }, "c3">;
   export type Tf = Struct<{ a: Float32; b: Float32; c: Float32 }, "tf">;
   export type Big = Struct<{ a: c_long; b: c_long; c: c_long }, "big">;

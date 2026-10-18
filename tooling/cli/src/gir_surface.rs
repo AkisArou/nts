@@ -488,10 +488,10 @@ mod tests {
             .unwrap();
         for present in [
             "@ntsConstruct GThemedIcon_construct g_themed_icon_get_type with name use_default_fallbacks\n",
-            "export function GThemedIcon_builder(object_type: c_size_t): Ptr<unknown>;",
-            "export function GThemedIcon_with_name(builder: Ptr<unknown>, value: string): void;",
-            "export function GThemedIcon_with_use_default_fallbacks(builder: Ptr<unknown>, value: CBool<c_int>): void;",
-            "export function GThemedIcon_build(builder: Ptr<unknown>): Owned<Declared<GThemedIcon, GObject>>;",
+            "export function GThemedIcon_builder(object_type: c_size_t): Ptr<void>;",
+            "export function GThemedIcon_with_name(builder: Ptr<void>, value: string): void;",
+            "export function GThemedIcon_with_use_default_fallbacks(builder: Ptr<void>, value: CBool<c_int>): void;",
+            "export function GThemedIcon_build(builder: Ptr<void>): Owned<Declared<GThemedIcon, GObject>>;",
         ] {
             assert!(gio.declarations.contains(present), "missing: {present}");
         }

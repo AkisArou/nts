@@ -12,12 +12,12 @@ const got = read(fd as Fd, buf, max as Count);
 ## What this example is for
 
 `read` takes `void *`, and that is the point. `Ptr<Uint8>` converts to
-`Ptr<unknown>` because TypeScript's own variance says every `Ptr<T>` is a
-`Ptr<unknown>` — which is exactly the conversion C performs at the call. The
+`Ptr<void>` because TypeScript's own variance says every `Ptr<T>` is a
+`Ptr<void>` — which is exactly the conversion C performs at the call. The
 reverse does not typecheck, and that is the direction mistakes live in: turning
 an address of unstated type back into a typed pointer is a claim nobody checked.
 
-`void` has no element type, so `p[i]` on a `Ptr<unknown>` is refused. A `void *`
+`void` has no element type, so `p[i]` on a `Ptr<void>` is refused. A `void *`
 is an address to hand onward, not storage this program may read through.
 
 ## The witness

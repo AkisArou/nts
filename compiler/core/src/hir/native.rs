@@ -1211,11 +1211,9 @@ pub enum Pointee {
     /// this program merely cannot see into. `void` names no type at all, so
     /// two `void *` say nothing about pointing at the same kind of thing.
     ///
-    /// Spelled `Ptr<unknown>`, which is not a workaround: every `Ptr<T>` is
-    /// already assignable to it under TypeScript's own variance, which is
-    /// exactly the conversion C performs at the call. `any` is deliberately not
-    /// accepted -- it would make an unchecked type into a pointer silently,
-    /// where `unknown` is the one a person writes on purpose.
+    /// Spelled `Ptr<void>`. Its unknown marker admits typed storage through
+    /// TypeScript's own variance, without an element projection. `Ptr<any>`
+    /// retains its any marker and is deliberately not a native pointer.
     Void,
     /// `const T`, as the pointee of a `const T *`.
     ///

@@ -16,7 +16,7 @@ declare module "c:pointer-constants" {
   /** @ntsConstant 3 */
   export const READONLY: ConstPtr<c_int>;
   /** @ntsConstant 7 */
-  export const VOID_POINTER: Ptr<unknown>;
+  export const VOID_POINTER: Ptr<void>;
   /** @ntsConstant 0 */
   export const ZERO: Sentinel | null;
   /** @ntsConstant -1 */

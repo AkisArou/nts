@@ -7,6 +7,8 @@
 int main(void) {
   assert(typedToVoid() == vp_bytes());
   assert(typedControl() == vp_bytes());
+  assert(genericVoid() == vp_address(1));
+  assert(copiedByte() == vp_bytes()[1]);
   for (int present = 0; present <= 1; ++present) {
     assert(returned(present) == vp_address(present));
     assert(constReturned(present) == vp_const_address(present));

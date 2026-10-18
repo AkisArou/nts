@@ -952,7 +952,7 @@ correctness does not depend on arm64 running by luck.
      - Core Foundation's create rule: a function named `Create` or `Copy`
        returns `Owned<T>`. Swift's optionality decides a result's `| null`,
        since the API notes tighten the header (`CGColorSpaceCreateDeviceRGB`
-       is not optional). `void *` is `Ptr<unknown>`, Swift's
+       is not optional). `void *` is `Ptr<void>`, Swift's
        `UnsafeMutableRawPointer`. `--function` binds a free function.
      - A module of C frameworks alone names their headers (`@ntsHeader
        <CoreGraphics/CoreGraphics.h>`), so the native witness compares every

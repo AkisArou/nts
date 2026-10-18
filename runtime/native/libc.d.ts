@@ -61,7 +61,7 @@ declare module "c:types" {
   // past the first are ignored, which is GLib's own `(GClosureNotify) g_free`.
   export type ErasedClosure<
     F extends (...args: never[]) => unknown,
-    N extends (context: Ptr<unknown>, ...rest: never[]) => void,
+    N extends (context: Ptr<void>, ...rest: never[]) => void,
   > = F & { readonly __c_closure?: "erased"; readonly __c_notify?: N };
   export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
   // A closure C calls exactly once, some time after the call that registered
@@ -299,7 +299,7 @@ declare module "c:types" {
     connect<S extends ClassChain, K extends keyof Sig & string>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
@@ -309,7 +309,7 @@ declare module "c:types" {
     connect_after<S extends ClassChain, K extends keyof Sig & string>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     // Lowered as a call of a thunk the compiler defines per signal, which
@@ -441,7 +441,7 @@ declare module "c:types" {
     connect<S extends ClassChain, K extends SignalKeys<Self>>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
@@ -451,7 +451,7 @@ declare module "c:types" {
     connectAfter<S extends ClassChain, K extends SignalKeys<Self>>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<unknown>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
@@ -610,7 +610,15 @@ declare module "c:types" {
   export type Flexible<T> = {
     readonly __c_flexible: T;
   };
-  export type Ptr<T> = { readonly __c_pointer: T; readonly __c_writable: true } & ([T] extends [
+  // Only void selects the untyped view. In particular, any must retain its
+  // marker so native lowering refuses it; undefined and never are not void.
+  type IsVoid<T> = 0 extends (1 & T) ? false
+    : [T] extends [void] ? ([void] extends [T] ? true : false) : false;
+  // C's void* accepts typed storage, but offers no element to dereference.
+  // unknown makes the pointer marker covariant without an index signature.
+  export type Ptr<T> = IsVoid<T> extends true
+    ? { readonly __c_pointer: unknown; readonly __c_writable: true }
+    : { readonly __c_pointer: T; readonly __c_writable: true } & ([T] extends [
     | Struct<infer Fields, string>
     | Union<infer Fields, string>]
     // In brackets, so a union element is one pointer and not a union of
@@ -638,7 +646,9 @@ declare module "c:types" {
   // is not a claim that the storage is immutable or unaliased, and nothing here
   // promises otherwise. Writing through one is `TS2542`, "only permits
   // reading", before the compiler is reached.
-  export type ConstPtr<T> = { readonly __c_pointer: T } & ([T] extends [
+  export type ConstPtr<T> = IsVoid<T> extends true
+    ? { readonly __c_pointer: unknown }
+    : { readonly __c_pointer: T } & ([T] extends [
     | Struct<infer Fields, string>
     | Union<infer Fields, string>]
     // In brackets for the reason `Ptr`'s are.
