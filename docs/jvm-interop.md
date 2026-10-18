@@ -67,10 +67,10 @@ it.
 exact JVM contract in JSDoc, including overloads whose TypeScript types match:
 
 ```ts
-/** @ntsJvm virtual com/example/Catalog.find:(I)Ljava/lang/String;
+/** @ntsJvm virtual com/example/Catalog.find:(I)I
  * @ntsJvmKeeps none
  */
-find(index: number): string | null;
+find$int(index: number): number;
 ```
 
 The invocation kinds are `static`, `virtual`, `interface`, `special` (a
