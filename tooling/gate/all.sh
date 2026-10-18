@@ -1622,7 +1622,11 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # 552 -> 610, 2026-10-17: the official JVM step on clean 3b57b85ad42a
   # measured 610 of 610, with the same ten partials and twelve empty programs.
   # Evidence: ~/.cache/nts-jvm-codex/erased-arguments-3b57-review-20261017T155356Z/gate-jvm.log.
-  backend_examples 610 "through the JVM backend" exact 10 ); }
+  # 610 -> 616, 2026-10-18: gate 3002a73aec75 already measured 614;
+  # clean bind pin 789f271d7207 adds the regression and its control, with
+  # the same ten partials and twelve projects without scalar comparisons.
+  # Evidence: ~/.cache/nts-jvm-codex/bind-extra-20261018/jvm.log.
+  backend_examples 616 "through the JVM backend" exact 10 ); }
 # The programs through the WebAssembly backend, by the same `nts check` as
 # every other backend: the module the WasmGC backend emits, run by node through
 # its generated glue, against node running the source -- one pool, one order,
