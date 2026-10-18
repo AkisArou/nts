@@ -8579,6 +8579,18 @@ fn settle_by_binding(
                 return true;
             }
             match parse_handle_constant(text) {
+                Some(0)
+                    if !probe
+                        .children(id)
+                        .first()
+                        .and_then(|name| probe.absences_of(*name))
+                        .is_some_and(|absences| absences.contains(&super::tags::NULL)) =>
+                {
+                    scope.unsupported.insert(
+                        symbol.0,
+                        "a zero pointer constant on a type that excludes null".to_owned(),
+                    );
+                }
                 Some(bits) => drop(scope.native_constants.insert(symbol.0, (bits, ty.clone()))),
                 None => drop(scope.unsupported.insert(
                     symbol.0,
@@ -80452,7 +80464,14 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(id);
         if let Some((bits, ty)) = self.module.native_constants.get(&symbol.0).cloned() {
-            return Ok(self.push(OpKind::ConstHandle(bits), ty, origin));
+            // Admission proved the declaration includes null for zero. Keep
+            // that absence as the existing typed null, with no integer form.
+            let constant = if bits == 0 {
+                OpKind::ConstNull
+            } else {
+                OpKind::ConstHandle(bits)
+            };
+            return Ok(self.push(constant, ty, origin));
         }
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
             // **At the name's own representation, and it was always a float.**
