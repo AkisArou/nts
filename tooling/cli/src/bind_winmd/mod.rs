@@ -233,4 +233,51 @@ mod tests {
             ]
         );
     }
+    #[test]
+    fn real_header_record_layouts_cover_packed_and_unrepresentable_records() {
+        let winmd = super::default_winmd();
+        let Some(zig) = crate::zig_lib_dir().filter(|_| winmd.is_file()) else {
+            eprintln!("skipping: needs zig and Win32 metadata");
+            return;
+        };
+        let index = windows_metadata::reader::Index::read(&winmd)
+            .expect("metadata")
+            .leak();
+        let model = super::read::read(
+            index,
+            &[
+                "Windows.Win32.UI.Shell".into(),
+                "Windows.Win32.UI.WindowsAndMessaging".into(),
+            ],
+        );
+        for arch in ["x86_64", "aarch64"] {
+            let facts = super::map::ask(
+                &model,
+                &super::probe_headers(&model),
+                &crate::windows_compile_flags(arch, &zig),
+            )
+            .expect("header facts");
+            for (record, size, align, natural_size, natural_align, packed) in [
+                ("AUTO_SCROLL_DATA", 48, 1, 48, 4, true),
+                ("SHChangeNotifyEntry", 12, 1, 16, 8, true),
+                ("SHITEMID", 3, 1, 4, 2, true),
+                ("ITEMIDLIST", 3, 1, 3, 1, true),
+                ("DLGTEMPLATE", 18, 2, 20, 4, false),
+            ] {
+                let layout = &facts.records[record];
+                eprintln!("{arch} {record}: {layout:?}");
+                assert_eq!(
+                    (
+                        layout.size,
+                        layout.align,
+                        layout.natural_size,
+                        layout.natural_align,
+                        layout.packed_matches
+                    ),
+                    (size, align, natural_size, natural_align, packed),
+                    "{arch} {record}"
+                );
+            }
+        }
+    }
 }

@@ -10,6 +10,14 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn winmd() -> Option<PathBuf> {
+    if !Command::new("zig")
+        .arg("version")
+        .output()
+        .is_ok_and(|o| o.status.success())
+    {
+        return None;
+    }
+
     if let Some(path) = std::env::var_os("NTS_WIN32_WINMD") {
         return Some(PathBuf::from(path));
     }
@@ -23,13 +31,25 @@ fn winmd() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+fn generate_bindings(out: &std::path::Path, winmd: &std::path::Path) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_nts"))
+        .args([
+            "bind-winmd",
+            "Windows.Win32.UI.WindowsAndMessaging",
+            "Windows.Win32.System.LibraryLoader",
+            "Windows.Win32.UI.Shell",
+            "--out",
+        ])
+        .arg(out)
+        .arg("--winmd")
+        .arg(winmd)
+        .output()
+        .unwrap()
+}
+
 #[test]
 fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
-    let zig = Command::new("zig")
-        .arg("version")
-        .output()
-        .is_ok_and(|o| o.status.success());
-    let Some(winmd) = winmd().filter(|_| zig) else {
+    let Some(winmd) = winmd() else {
         eprintln!(
             "skipping: needs zig and the Win32 metadata (tooling/windows/fetch-win32metadata.sh)"
         );
@@ -37,18 +57,7 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
     };
     let out = std::env::temp_dir().join(format!("nts-bind-winmd-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&out);
-    let run = Command::new(env!("CARGO_BIN_EXE_nts"))
-        .args([
-            "bind-winmd",
-            "Windows.Win32.UI.WindowsAndMessaging",
-            "Windows.Win32.System.LibraryLoader",
-            "--out",
-        ])
-        .arg(&out)
-        .arg("--winmd")
-        .arg(&winmd)
-        .output()
-        .unwrap();
+    let run = generate_bindings(&out, &winmd);
     assert!(
         run.status.success(),
         "{}",
@@ -144,12 +153,31 @@ fn win32_bindings_carry_the_metadata_meaning_and_the_header_types() {
             .any(|line| line == "SM_CMETRICS\tits value disagrees with the header"),
         "SM_CMETRICS's refusal is not reported"
     );
+    record_layout_declarations(
+        &read("Windows.Win32.UI.Shell.d.ts"),
+        &read("Windows.Win32.UI.Shell.Common.d.ts"),
+        &messaging,
+        &refused,
+    );
     let functions = messaging.matches("export function ").count();
     assert!(
         functions >= 250,
         "only {functions} functions bound from WindowsAndMessaging"
     );
     let _ = std::fs::remove_dir_all(&out);
+}
+
+fn record_layout_declarations(shell: &str, common: &str, messaging: &str, refused: &str) {
+    // Header packing is part of a record's ABI, including a nested packed
+    // record's effect on its container. pack(2) is currently unrepresentable.
+    assert!(common.contains("export type SHITEMID = Packed<Struct<{ cb: Uint16; abID: CArray<Uint8, 1> }, \"_SHITEMID\">>;"));
+    assert!(shell.contains("export type AUTO_SCROLL_DATA = Packed<Typedef<Struct<"));
+    assert!(shell.contains("export type SHChangeNotifyEntry = Packed<Struct<"));
+    assert!(!messaging.contains("export type DLGTEMPLATE ="));
+    assert!(!messaging.contains("export function CreateDialogIndirectParamW("));
+    assert!(!messaging.contains("export function DialogBoxIndirectParamW("));
+    assert!(refused.lines().any(|line| line.starts_with("DLGTEMPLATE\t")
+        && line.contains("size 18/alignment 2 is not expressible")));
 }
 
 /// A constant the metadata types by a scalar typedef (`HRESULT` over

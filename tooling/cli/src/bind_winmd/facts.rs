@@ -16,9 +16,31 @@ use super::ctype::{self, CType};
 
 const PREFIX: &str = "ntswinmd_";
 
+/// Header layout beside two C declarations of the same fields. Let clang
+/// lay them out: duplicating a target ABI's layout rules here would turn the
+/// witness into a second layout engine. Matches include every field offset.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RecordLayout {
+    pub(crate) size: u32,
+    pub(crate) align: u32,
+    pub(crate) natural_size: u32,
+    pub(crate) natural_align: u32,
+    pub(crate) packed_size: u32,
+    pub(crate) packed_align: u32,
+    pub(crate) natural_matches: bool,
+    pub(crate) packed_matches: bool,
+}
+
+pub(crate) struct RecordQuestion<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) union: bool,
+    pub(crate) fields: Vec<&'a str>,
+}
+
 /// The C types the headers gave, resolved.
 #[derive(Debug, Default)]
 pub(crate) struct Facts {
+    pub(crate) records: BTreeMap<String, RecordLayout>,
     /// Function name to its C function type.
     pub(crate) functions: BTreeMap<String, CType>,
     /// `(struct, field)` to the field's C type.
@@ -36,6 +58,7 @@ pub(crate) struct Facts {
 /// What to ask.
 #[derive(Default)]
 pub(crate) struct Questions<'a> {
+    pub(crate) records: Vec<RecordQuestion<'a>>,
     pub(crate) functions: Vec<&'a str>,
     pub(crate) fields: Vec<(&'a str, &'a str)>,
     /// Function-pointer fields whose vtable slot the caller also needs.
@@ -175,6 +198,45 @@ fn declarations(questions: &Questions) -> String {
              {offset} % sizeof(void *) == 0) ? {offset} / sizeof(void *) : -1 }};"
         );
     }
+    // Reset any enclosing pragma while declaring comparison shapes; nested
+    // field types keep their own header layouts (including packing).
+    probes.push_str("#pragma pack(push)\n#pragma pack()\n");
+    for (at, record) in questions.records.iter().enumerate() {
+        let keyword = if record.union { "union" } else { "struct" };
+        let name = record.name;
+        for packing in ["natural", "packed"] {
+            let attr = if packing == "packed" {
+                "__attribute__((packed)) "
+            } else {
+                ""
+            };
+            let shape = format!("{PREFIX}shape_{at}_{packing}");
+            let _ = writeln!(probes, "typedef {keyword} {attr}{{");
+            for field in &record.fields {
+                let _ = writeln!(probes, "__typeof__((({name} *)0)->{field}) {field};");
+            }
+            let _ = writeln!(probes, "}} {shape};");
+            // A record's sizeof is valid even with a flexible tail. Each
+            // field must itself be complete and addressable: neither a
+            // flexible array nor a bitfield can become an ordinary Struct.
+            let mut offsets = String::new();
+            for field in &record.fields {
+                let _ = write!(
+                    offsets,
+                    " && sizeof((({name} *)0)->{field}) == sizeof((({shape} *)0)->{field}) && __builtin_offsetof({name}, {field}) == __builtin_offsetof({shape}, {field})"
+                );
+            }
+            let _ = writeln!(
+                probes,
+                "enum {{ {PREFIX}layout_{at}_{packing}_size = sizeof({shape}), {PREFIX}layout_{at}_{packing}_align = _Alignof({shape}), {PREFIX}layout_{at}_{packing}_matches = sizeof({name}) == sizeof({shape}) && _Alignof({name}) == _Alignof({shape}){offsets} }};"
+            );
+        }
+        let _ = writeln!(
+            probes,
+            "enum {{ {PREFIX}layout_{at}_size = sizeof({name}), {PREFIX}layout_{at}_align = _Alignof({name}) }};"
+        );
+    }
+    probes.push_str("#pragma pack(pop)\n");
     probes
 }
 
@@ -188,9 +250,16 @@ pub(crate) fn resolve(
     let mut function_text: BTreeMap<String, String> = BTreeMap::new();
     let mut field_text: BTreeMap<usize, String> = BTreeMap::new();
     let mut slots: BTreeMap<usize, u32> = BTreeMap::new();
+    let mut layouts = BTreeMap::new();
     // `__typeof__(F)` is what the probe says; the type it stands for is one
     // desugaring away.
     for answer in ask(headers, clang_args, &declarations(questions))? {
+        if let Some(key) = answer.name.strip_prefix(&format!("{PREFIX}layout_"))
+            && let Some(value) = answer.value
+        {
+            layouts.insert(key.to_owned(), value);
+            continue;
+        }
         let spelled = answer.desugared.unwrap_or(answer.qual);
         if let Some(function) = answer.name.strip_prefix(&format!("{PREFIX}fn_")) {
             function_text.insert(function.to_owned(), spelled);
@@ -243,6 +312,7 @@ pub(crate) fn resolve(
         pending = next;
     }
     let mut facts = Facts::default();
+    resolve_records(&mut facts, questions, &layouts);
     for (name, text) in function_text {
         match ctype::parse(&text, &spellings) {
             Ok(ty) => {
@@ -262,6 +332,32 @@ pub(crate) fn resolve(
         }
     }
     Ok(facts)
+}
+
+fn resolve_records(facts: &mut Facts, questions: &Questions, layouts: &BTreeMap<String, u32>) {
+    for (at, record) in questions.records.iter().enumerate() {
+        let value = |key: &str| layouts.get(&format!("{at}_{key}")).copied();
+        let layout = || {
+            Some(RecordLayout {
+                size: value("size")?,
+                align: value("align")?,
+                natural_size: value("natural_size")?,
+                natural_align: value("natural_align")?,
+                packed_size: value("packed_size")?,
+                packed_align: value("packed_align")?,
+                natural_matches: value("natural_matches")? == 1,
+                packed_matches: value("packed_matches")? == 1,
+            })
+        };
+        if let Some(layout) = layout() {
+            facts.records.insert(record.name.to_owned(), layout);
+        } else {
+            facts.unanswered.insert(
+                record.name.to_owned(),
+                "the headers did not answer the record's complete layout".into(),
+            );
+        }
+    }
 }
 
 /// Ordinary fields and C vtable entries share the same C type resolution.

@@ -20,6 +20,7 @@ const BRANDS: &[&str] = &[
     "ConstPtr",
     "Erased",
     "Opaque",
+    "Packed",
     "Ptr",
     "Struct",
     "Typedef",

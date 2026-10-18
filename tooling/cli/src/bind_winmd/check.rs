@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
 
-use super::map::Binding;
+use super::map::{Binding, TypeDecl};
 use super::read::Name;
 
 enum Line {
@@ -73,6 +73,20 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
             ),
             Some(Line::Function(function.name.clone())),
         );
+    }
+    for decl in &binding.types {
+        if let TypeDecl::Record {
+            name, c, layout, ..
+        } = decl
+        {
+            probe.line(
+                &format!(
+                    "_Static_assert(sizeof({c}) == {} && _Alignof({c}) == {}, \"{name} layout\");",
+                    layout.size, layout.align
+                ),
+                Some(Line::Field(name.clone())),
+            );
+        }
     }
     for (record, record_c, field, field_c) in &binding.field_checks {
         let assertion = match field_c.strip_suffix(']').and_then(|s| s.rsplit_once('[')) {

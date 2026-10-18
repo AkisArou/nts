@@ -30,6 +30,7 @@ pub(crate) enum TypeDecl {
         name: String,
         ts: String,
         c: String,
+        layout: facts::RecordLayout,
         fields: Vec<(String, String)>,
         uses: BTreeSet<Name>,
     },
@@ -107,6 +108,7 @@ pub(crate) fn ask(
 ) -> anyhow::Result<Facts> {
     let mut fields = Vec::new();
     let mut typedefs = Vec::new();
+    let mut records = Vec::new();
     // CINTERFACE exposes each interface's full inherited vtable as an ordinary
     // C struct. Its fields use the same type resolver as every other record.
     let vtables: Vec<_> = model
@@ -130,9 +132,15 @@ pub(crate) fn ask(
         match &info.kind {
             Kind::Struct {
                 fields: members,
+                union,
                 nested: false,
                 ..
             } => {
+                records.push(facts::RecordQuestion {
+                    name,
+                    union: *union,
+                    fields: members.iter().map(|(field, _)| field.as_str()).collect(),
+                });
                 typedefs.push(name.as_str());
                 for (field, _) in members {
                     fields.push((name.as_str(), field.as_str()));
@@ -143,6 +151,7 @@ pub(crate) fn ask(
         }
     }
     let questions = Questions {
+        records,
         functions: model
             .functions
             .iter()
@@ -179,6 +188,7 @@ struct Mapper<'a> {
     /// The declarations each type became, by namespace, as they are needed.
     declared: BTreeMap<Name, Option<TypeDecl>>,
     brands: BTreeSet<&'static str>,
+    record_refusals: BTreeMap<Name, String>,
 }
 
 /// The TypeScript and emitted-C spellings of a type.
@@ -636,6 +646,37 @@ impl Mapper<'_> {
         })
     }
 
+    fn record_layout(
+        &self,
+        simple: &str,
+        union: bool,
+    ) -> Result<(facts::RecordLayout, bool), String> {
+        let layout = *self
+            .facts
+            .records
+            .get(simple)
+            .ok_or_else(|| format!("`{simple}`, no complete record layout from the headers"))?;
+        let packed = !layout.natural_matches;
+        if packed && (!layout.packed_matches || union) {
+            let why = format!(
+                "`{simple}`, header layout size {}/alignment {} is not expressible: natural ({}/{}), Packed ({}/{}){}",
+                layout.size,
+                layout.align,
+                layout.natural_size,
+                layout.natural_align,
+                layout.packed_size,
+                layout.packed_align,
+                if union {
+                    "; Packed applies to structs only"
+                } else {
+                    ""
+                }
+            );
+            return Err(why);
+        }
+        Ok((layout, packed))
+    }
+
     /// A struct or union, through a pointer or as a member, or by value as a
     /// function's own argument or result (`WindowFromPoint(POINT)`):
     /// `ByValue<POINT>`, whose calling convention is the backend's to follow.
@@ -651,6 +692,9 @@ impl Mapper<'_> {
         if !how.stored && !how.direct {
             return Err(format!("`{simple}` passed by value to or from a callback"));
         }
+        let (layout, packed) = self.record_layout(simple, union).inspect_err(|why| {
+            self.record_refusals.insert(name.clone(), why.clone());
+        })?;
         // A tag the header wrote (`struct tagMSG`), or the typedef's own name
         // where the struct is anonymous: clang prints `typedef struct { ... }
         // FLASHWINFO` as `struct FLASHWINFO`, a tag no header declares, so a
@@ -701,8 +745,7 @@ impl Mapper<'_> {
                     }
                 }
             }
-            let shape = if union { "Union" } else { "Struct" };
-            self.brands.insert(shape);
+            let shape = self.brand(if union { "Union" } else { "Struct" });
             let body = members
                 .iter()
                 .map(|(field, ts, _)| format!("{field}: {ts}"))
@@ -713,6 +756,12 @@ impl Mapper<'_> {
             } else {
                 self.brands.insert("Typedef");
                 format!("Typedef<{shape}<{{ {body} }}, \"{simple}\">>")
+            };
+            let ts = if packed {
+                self.brands.insert("Packed");
+                format!("Packed<{ts}>")
+            } else {
+                ts
             };
             uses.extend(member_uses.iter().cloned());
             member_uses.remove(name);
@@ -726,6 +775,7 @@ impl Mapper<'_> {
                     name: simple.into(),
                     ts,
                     c: c_spelled.clone(),
+                    layout,
                     fields,
                     uses: member_uses,
                 }),
@@ -965,6 +1015,7 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
         facts,
         declared: BTreeMap::new(),
         brands: BTreeSet::new(),
+        record_refusals: BTreeMap::new(),
     };
     let mut by_namespace: BTreeMap<String, Binding> = BTreeMap::new();
     let entry = |by: &mut BTreeMap<String, Binding>, namespace: &str| {
@@ -1016,6 +1067,14 @@ pub(crate) fn bindings(model: &Model, facts: &Facts) -> Vec<Binding> {
                 ),
             ));
         }
+    }
+    for ((namespace, name), why) in std::mem::take(&mut mapper.record_refusals) {
+        entry(&mut by_namespace, &namespace);
+        by_namespace
+            .get_mut(&namespace)
+            .expect("inserted")
+            .refused
+            .push((name, why));
     }
     // Each type declared where the metadata puts it.
     for (name, decl) in std::mem::take(&mut mapper.declared) {
@@ -1302,6 +1361,7 @@ mod tests {
                 facts: &facts,
                 declared: BTreeMap::new(),
                 brands: BTreeSet::new(),
+                record_refusals: BTreeMap::new(),
             };
             let Err(reason) = mapper.named(&name, &CType::Void, Use::default()) else {
                 panic!("classic COM must stay refused until header facts and emission are ready")
@@ -1327,5 +1387,197 @@ mod tests {
         );
         assert_eq!(number(&Value::F64(0.1)).as_deref(), Some("0.1"));
         assert_eq!(number(&Value::F32(f32::INFINITY)), None);
+    }
+    fn layout_model(namespace: &str, union: bool) -> super::Model {
+        use super::super::read::{Function, Kind, Model, Parameter, TypeInfo};
+        use windows_metadata::{Type, TypeName};
+        let named = |name| Type::ValueName(TypeName::named(namespace, name));
+        let record = |fields, union| TypeInfo {
+            kind: Kind::Struct {
+                fields,
+                union,
+                nested: false,
+            },
+        };
+        let function = |name: &str, ty| Function {
+            namespace: namespace.into(),
+            name: name.into(),
+            library: "fixture.dll".into(),
+            parameters: vec![Parameter {
+                name: "value".into(),
+                ty: Type::PtrMut(Box::new(ty), 1),
+                optional: false,
+                constant: false,
+                output: false,
+            }],
+            result: Type::I32,
+            documentation: None,
+        };
+        Model {
+            functions: vec![
+                function("inspect", named("packet")),
+                function("inspect_envelope", named("envelope")),
+            ],
+            types: [
+                (
+                    (namespace.into(), "packet".into()),
+                    record(
+                        vec![("byte".into(), Type::U8), ("word".into(), Type::U32)],
+                        union,
+                    ),
+                ),
+                (
+                    (namespace.into(), "envelope".into()),
+                    record(
+                        vec![("body".into(), named("packet")), ("tail".into(), Type::U8)],
+                        false,
+                    ),
+                ),
+            ]
+            .into(),
+            ..Model::default()
+        }
+    }
+
+    /// Only the pragma changes. Nested fields retain their header layout;
+    /// pack(2) and packed unions are refused because Packed cannot express
+    /// them through the shared native record layout contract.
+    #[test]
+    fn header_layout_selects_packed_without_changing_an_unpacked_control() {
+        use super::super::{check, emit};
+        let namespace = "Windows.Win32.LayoutTest";
+        let dir = std::env::temp_dir().join(format!("nts-winmd-layout-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("layout.h");
+        let headers = vec![vec![path.to_str().unwrap().to_owned()]];
+        for target in ["x86_64-w64-windows-gnu", "aarch64-w64-windows-gnu"] {
+            for (packing, union) in [(0, false), (1, false), (2, false), (1, true)] {
+                let keyword = if union { "union" } else { "struct" };
+                let pragma = if packing == 0 {
+                    String::new()
+                } else {
+                    format!("#pragma pack(push,{packing})\n")
+                };
+                let pop = if packing == 0 {
+                    ""
+                } else {
+                    "#pragma pack(pop)\n"
+                };
+                std::fs::write(&path, format!("{pragma}typedef {keyword} tag_packet {{ unsigned char byte; unsigned word; }} packet;\n{pop}typedef struct tag_envelope {{ packet body; unsigned char tail; }} envelope;\nint inspect(packet *); int inspect_envelope(envelope *);\n")).unwrap();
+                let model = layout_model(namespace, union);
+                let args = vec![format!("--target={target}")];
+                let facts = super::ask(&model, &headers, &args).unwrap();
+                let layout = &facts.records["packet"];
+                let mut bindings = super::bindings(&model, &facts);
+                check::against_headers(&mut bindings, &headers, &args).unwrap();
+                let binding = &bindings[0];
+                if packing == 2 || union {
+                    assert!(binding.types.is_empty());
+                    assert!(binding.functions.is_empty());
+                    assert!(
+                        binding
+                            .refused
+                            .iter()
+                            .any(|(n, w)| n == "inspect"
+                                && w.contains("`packet`, header layout size"))
+                    );
+                } else {
+                    let text = emit::render(
+                        binding,
+                        "test",
+                        &[
+                            ("packet".into(), namespace.into()),
+                            ("envelope".into(), namespace.into()),
+                        ]
+                        .into(),
+                    )
+                    .declarations;
+                    let expected = "Struct<{ byte: Uint8; word: c_uint }, \"tag_packet\">";
+                    let expected = if packing == 1 {
+                        format!("Packed<{expected}>")
+                    } else {
+                        expected.into()
+                    };
+                    assert!(
+                        text.contains(&format!("export type packet = {expected};")),
+                        "{text}"
+                    );
+                    assert!(text.contains("export type envelope = Struct<{ body: packet; tail: Uint8 }, \"tag_envelope\">;"));
+                    assert_eq!(binding.functions.len(), 2);
+                    assert_eq!(
+                        (layout.size, layout.align),
+                        if packing == 1 { (5, 1) } else { (8, 4) }
+                    );
+                    assert_eq!((layout.natural_size, layout.natural_align), (8, 4));
+                    assert_eq!((layout.packed_size, layout.packed_align), (5, 1));
+                    assert_eq!(layout.natural_matches, packing == 0);
+                }
+            }
+        }
+        // Equal size/alignment alone does not prove layout: permuting fields
+        // preserves both while changing every member's offset.
+        std::fs::write(&path, "typedef struct tag_packet { unsigned word; unsigned char byte; } packet; int inspect(packet *);\n").unwrap();
+        let model = layout_model(namespace, false);
+        let facts = super::ask(&model, &headers, &[]).unwrap();
+        let layout = &facts.records["packet"];
+        assert_eq!(
+            (layout.size, layout.align),
+            (layout.natural_size, layout.natural_align)
+        );
+        assert!(!layout.natural_matches);
+        let bindings = super::bindings(&model, &facts);
+        assert!(
+            bindings[0]
+                .refused
+                .iter()
+                .any(|(name, why)| name == "packet" && why.contains("is not expressible"))
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn incomplete_or_bitfield_records_have_named_refusals_without_layout_fallback() {
+        let namespace = "Windows.Win32.LayoutTest";
+        let dir = std::env::temp_dir().join(format!(
+            "nts-winmd-layout-incomplete-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("layout.h");
+        let headers = vec![vec![path.to_str().unwrap().to_owned()]];
+        for target in ["x86_64-w64-windows-gnu", "aarch64-w64-windows-gnu"] {
+            for field in ["unsigned word;", "unsigned word : 3;", "unsigned word[];"] {
+                std::fs::write(&path, format!("typedef struct tag_packet {{ unsigned char byte; {field} }} packet; typedef struct tag_envelope {{ packet body; unsigned char tail; }} envelope; int inspect(packet *); int inspect_envelope(envelope *);\n")).unwrap();
+                let model = layout_model(namespace, false);
+                let facts = super::ask(&model, &headers, &[format!("--target={target}")]).unwrap();
+                let bindings = super::bindings(&model, &facts);
+                let binding = &bindings[0];
+                if field == "unsigned word;" {
+                    assert!(facts.records.contains_key("packet"));
+                    assert!(binding.types.iter().any(|decl| decl.name() == "packet"));
+                    assert!(binding.refused.is_empty());
+                } else {
+                    assert!(
+                        !facts.records.contains_key("packet"),
+                        "{target} {field}: {:?}",
+                        facts.records
+                    );
+                    assert!(facts.unanswered.contains_key("packet"));
+                    assert!(!binding.types.iter().any(|decl| decl.name() == "packet"));
+                    assert!(
+                        !binding
+                            .functions
+                            .iter()
+                            .any(|function| function.name == "inspect")
+                    );
+                    assert!(
+                        binding.refused.iter().any(|(name, why)| name == "packet"
+                            && why.contains("no complete record layout")),
+                        "{:?}",
+                        binding.refused
+                    );
+                }
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
