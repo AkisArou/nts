@@ -138,8 +138,6 @@ fn compile(namespace: &str, text: &str, clang_args: &[String]) -> Result<String>
     compile_with_ready(namespace, text, clang_args, || {})
 }
 
-static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 /// `ready` lets the concurrency guard keep both probes live before clang reads
 /// either. Production takes exactly the same path with a no-op callback.
 fn compile_with_ready(
@@ -148,12 +146,7 @@ fn compile_with_ready(
     clang_args: &[String],
     ready: impl FnOnce(),
 ) -> Result<String> {
-    let dir = std::env::temp_dir().join(format!(
-        "nts-bind-winmd-check-{}-{}",
-        std::process::id(),
-        CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let dir = crate::bind_scratch::directory("bind-winmd-check")?;
     let probe = dir.join(format!("{}.c", namespace.replace('.', "_")));
     std::fs::write(&probe, text).with_context(|| format!("writing {}", probe.display()))?;
     ready();

@@ -36,6 +36,7 @@ use crate::bind_winmd::{self, winrt};
 /// packages change when it does, and only then. `every_generator_file_is_hashed`
 /// keeps the list whole.
 const GENERATOR: u64 = fnv(&[
+    include_bytes!("bind_scratch.rs"),
     include_bytes!("windows_surface.rs"),
     include_bytes!("bind_winmd/check.rs"),
     include_bytes!("bind_winmd/ctype.rs"),

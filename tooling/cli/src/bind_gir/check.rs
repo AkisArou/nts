@@ -29,8 +29,6 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
     against_headers_with_ready(binding, cflags, || {})
 }
 
-static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 /// Synchronizing after probe writes lets the regression force overlapping
 /// checks without depending on thread scheduling or compiler speed.
 fn against_headers_with_ready(
@@ -40,13 +38,7 @@ fn against_headers_with_ready(
 ) -> Result<()> {
     // Namespace checks run concurrently, and sanitizing a module name is
     // lossy. Every call owns its directory even when labels sanitize alike.
-    let dir = std::env::temp_dir().join(format!(
-        "nts-bind-gir-{}-{}-{}",
-        std::process::id(),
-        binding.module.replace([':', '.', '-'], "_"),
-        CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let dir = crate::bind_scratch::directory("bind-gir-check")?;
     let probe = dir.join(format!(
         "{}.c",
         binding.module.replace([':', '.', '-'], "_")
@@ -270,12 +262,7 @@ mod tests {
 
     #[test]
     fn concurrent_module_checks_keep_their_own_probe() {
-        let dir = std::env::temp_dir().join(format!(
-            "nts-gir-concurrent-check-{}-{}",
-            std::process::id(),
-            super::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::bind_scratch::directory("gir-concurrent-check").unwrap();
         let clean = dir.join("clean.h");
         let error = dir.join("error.h");
         std::fs::write(&clean, "int valid_probe;\n").unwrap();
