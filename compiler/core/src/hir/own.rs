@@ -3823,6 +3823,200 @@ mod tests {
         assert_eq!(ownership.of(super::ValueId(0)), super::Ownership::Unowned);
     }
 
+    fn summary_receiver(id: u32) -> super::HirType {
+        super::HirType::Managed(super::ManagedType::Object(crate::hir::TypeId(id)))
+    }
+
+    fn summary_reader(
+        name: &str,
+        receiver: u32,
+        values: Vec<(super::OpKind, super::HirType)>,
+    ) -> super::Func {
+        let mut func = stopped_summary_program().funcs.remove(0);
+        func.name = name.to_owned();
+        func.params[0].ty = summary_receiver(receiver);
+        func.return_type = super::HirType::NUMBER;
+        func.values = values
+            .into_iter()
+            .map(|(kind, ty)| crate::hir::Op {
+                kind,
+                ty,
+                origin: func.origin.clone(),
+            })
+            .collect();
+        let ops: Vec<_> = (0..func.values.len())
+            .map(|at| super::ValueId(u32::try_from(at).expect("small summary fixture")))
+            .collect();
+        let result = *ops.last().expect("the summary fixture has a result");
+        func.blocks = vec![crate::hir::Block {
+            params: Vec::new(),
+            ops,
+            terminator: crate::hir::Terminator::Return(Some(result)),
+        }];
+        func
+    }
+
+    fn interface_stop_layouts() -> Vec<crate::hir::Layout> {
+        use crate::hir::{Field, Layout, TypeId};
+
+        let field = |name: &str, ty| Field {
+            name: name.to_owned(),
+            ty,
+            readonly: false,
+            declared_by: None,
+            written: None,
+        };
+        let layout = |id, name: &str, fields, methods, interfaces| Layout {
+            types: vec![TypeId(id)],
+            name: name.to_owned(),
+            fields,
+            methods,
+            interfaces,
+            base: None,
+        };
+        vec![
+            layout(
+                1,
+                "Face",
+                vec![field("level", super::HirType::NUMBER)],
+                vec![],
+                vec![],
+            ),
+            layout(
+                2,
+                "Misfit",
+                vec![
+                    field("extra", super::HirType::NUMBER),
+                    field("level", super::HirType::NUMBER),
+                ],
+                vec![],
+                vec![TypeId(1)],
+            ),
+            layout(
+                3,
+                "Reader",
+                vec![field("face", summary_receiver(1))],
+                vec![Some("read".to_owned()), Some("write".to_owned())],
+                vec![],
+            ),
+            layout(
+                4,
+                "Holder",
+                vec![field("subject", summary_receiver(3))],
+                vec![],
+                vec![],
+            ),
+        ]
+    }
+
+    fn interface_stop_borrow_program() -> super::Program {
+        use crate::hir::{Callee, OpKind, ValueId};
+
+        let get = |object, field| OpKind::FieldGet {
+            object: ValueId(object),
+            field,
+        };
+        let read = summary_reader(
+            "read",
+            3,
+            vec![
+                (OpKind::Param(0), summary_receiver(3)),
+                (get(0, 0), summary_receiver(1)),
+                (get(1, 0), super::HirType::NUMBER),
+            ],
+        );
+        let mut write = read.clone();
+        write.name = "write".to_owned();
+        write.values.push(crate::hir::Op {
+            kind: OpKind::ConstFloat(7.0),
+            ty: super::HirType::NUMBER,
+            origin: write.origin.clone(),
+        });
+        write.values.push(crate::hir::Op {
+            kind: OpKind::FieldSet {
+                object: ValueId(1),
+                field: 0,
+                value: ValueId(3),
+            },
+            ty: super::HirType::Void,
+            origin: write.origin.clone(),
+        });
+        write.blocks[0].ops.extend([ValueId(3), ValueId(4)]);
+        let caller = |name, callee| {
+            summary_reader(
+                name,
+                4,
+                vec![
+                    (OpKind::Param(0), summary_receiver(4)),
+                    (get(0, 0), summary_receiver(3)),
+                    (
+                        OpKind::Call {
+                            callee,
+                            args: vec![ValueId(1)],
+                            frame: None,
+                        },
+                        super::HirType::NUMBER,
+                    ),
+                ],
+            )
+        };
+        let mut funcs = vec![read, write];
+        for (name, callee) in [
+            ("borrow_direct", Callee::Direct("read".to_owned())),
+            ("keep_direct", Callee::Direct("write".to_owned())),
+            (
+                "borrow_virtual",
+                Callee::Virtual {
+                    slot: 0,
+                    declared: "read".to_owned(),
+                },
+            ),
+            (
+                "keep_virtual",
+                Callee::Virtual {
+                    slot: 1,
+                    declared: "write".to_owned(),
+                },
+            ),
+        ] {
+            funcs.push(caller(name, callee));
+        }
+        super::Program {
+            funcs,
+            layouts: interface_stop_layouts(),
+            ..super::Program::default()
+        }
+    }
+
+    #[test]
+    fn an_interface_field_stop_keeps_direct_and_virtual_receivers_borrowed() {
+        let mut program = interface_stop_borrow_program();
+        crate::hir::verify::verify(&program).expect("the controls start as valid HIR");
+        // One guarded read in each callee, and the control's additional store.
+        assert_eq!(crate::hir::interface_fields::guard(&mut program), 3);
+        crate::hir::verify::verify(&program).expect("the real interface guards verify");
+        let summaries = super::summarize(&program, &program.layouts);
+        assert!(summaries.mutates.contains("write"));
+        assert!(summaries.mutating_slots.contains(&1));
+        for (name, want) in [
+            ("keep_direct", super::Ownership::Copied),
+            ("keep_virtual", super::Ownership::Copied),
+            ("borrow_direct", super::Ownership::Borrowed),
+            ("borrow_virtual", super::Ownership::Borrowed),
+        ] {
+            let func = program
+                .funcs
+                .iter()
+                .find(|func| func.name == name)
+                .expect("a caller in the summary fixture");
+            let mut live = super::liveness::analyze(func);
+            let ownership = super::analyze(func, &program.layouts, &summaries, &mut live);
+            assert_eq!(ownership.of(super::ValueId(1)), want, "{name}");
+        }
+        assert!(!summaries.mutates.contains("read"));
+        assert!(!summaries.mutating_slots.contains(&0));
+    }
+
     /// Helpers that return a parameter and are rightly not in
     /// [`super::RUNTIME_HANDS_BACK`], each for its reason.
     const NOT_HANDED_BACK: &[(&str, &str)] = &[
