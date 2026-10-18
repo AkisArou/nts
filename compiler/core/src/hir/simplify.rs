@@ -316,6 +316,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
+        | OpKind::ConstHandle(_)
         | OpKind::ConstFloat(_)
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)

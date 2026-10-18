@@ -1050,6 +1050,10 @@ impl ArrayFill {
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
+    /// An integer-valued native data-pointer constant, in its declared pointer
+    /// type. These bits carry neither allocation nor ownership, and never pass
+    /// through a JavaScript number. All supported native ABIs have 64-bit pointers.
+    ConstHandle(u64),
     /// Access native storage. The pointer's pointee is the memory type;
     /// conversions to/from source values are separate HIR operations.
     /// Indices count elements and must be signed native-width integers.

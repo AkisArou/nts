@@ -30,6 +30,7 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
                 | OpKind::BlockParam(_)
                 | OpKind::Call { .. }
                 | OpKind::ConstInt(_)
+                | OpKind::ConstHandle(_)
                 | OpKind::ConstFloat(_)
                 | OpKind::DispatchSlot(_)
                 | OpKind::ConstBool(_)

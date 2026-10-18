@@ -117,6 +117,7 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::ObjcClass { .. }
         | OpKind::ObjcSelector { .. }
         | OpKind::NativeSizeOf(_)
+        | OpKind::ConstHandle(_)
         | OpKind::NativeMalloc { .. }
         | OpKind::NativeFree { .. }
         | OpKind::NativeIndexAddress { .. }

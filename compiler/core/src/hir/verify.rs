@@ -1344,6 +1344,10 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
         .flat_map(|b| b.ops.iter().map(|v| func.value(*v)))
     {
         let valid = match &op.kind {
+            OpKind::ConstHandle(_) => matches!(
+                &op.ty,
+                HirType::NativePointer(pointee) if pointee.admits_constant_handle()
+            ),
             OpKind::NativeLocal { count } => {
                 *count > 0
                     && matches!(&op.ty, HirType::NativePointer(p) if super::layout::native_shape(p, super::native::NativeAbi::BOUND).is_some())
@@ -2258,6 +2262,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Param(_)
         | OpKind::BlockParam(_)
         | OpKind::ConstInt(_)
+        | OpKind::ConstHandle(_)
         | OpKind::ConstFloat(_)
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)

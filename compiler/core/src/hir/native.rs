@@ -1554,6 +1554,19 @@ pub fn gobject_root() -> Pointee {
 }
 
 impl Pointee {
+    /// Integer-valued sentinel addresses belong to uncounted data pointers.
+    /// A pointer to storage may hold any element type; a function itself and
+    /// an object whose family owns its lifetime require other contracts.
+    #[must_use]
+    pub fn admits_constant_handle(&self) -> bool {
+        match self {
+            Self::Opaque(handle) => handle.family == Family::C,
+            Self::Const(inner) | Self::Unaligned(inner) => inner.admits_constant_handle(),
+            Self::FnPointer(_) => false,
+            _ => true,
+        }
+    }
+
     /// The family of the handle this is, through a `const` view.
     #[must_use]
     pub fn family(&self) -> Option<Family> {

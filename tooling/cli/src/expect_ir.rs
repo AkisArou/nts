@@ -184,6 +184,7 @@ pub(crate) fn op_word(kind: &OpKind) -> &'static str {
         OpKind::ObjcClass { .. } => "objc.class",
         OpKind::ObjcSelector { .. } => "objc.selector",
         OpKind::NativeSizeOf(_) => "native.sizeof",
+        OpKind::ConstHandle(_) => "const.handle",
         OpKind::NativeMalloc { .. } => "native.malloc",
         OpKind::NativeFree { .. } => "native.free",
         OpKind::NativeIndexAddress { .. } => "native.index.addr",

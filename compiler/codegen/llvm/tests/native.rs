@@ -13,6 +13,9 @@ use std::{fmt::Write, process::Command};
 #[path = "native/dispatch.rs"]
 mod dispatch;
 
+#[path = "native/constants.rs"]
+mod constants;
+
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};

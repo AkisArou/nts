@@ -1,13 +1,12 @@
 // Independent C reference: integer-to-pointer constants are never dereferenced.
+#include "constants.h"
+#include "program.h"
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/mman.h>
-#include "constants.h"
-#include "program.h"
 
 int main(void) {
-  module__init();
   assert((uintptr_t)broadcast() == (uintptr_t)65535);
   assert(numberControl() == 65535.0);
   assert((uintptr_t)resource() == (uintptr_t)32512);
@@ -25,6 +24,7 @@ int main(void) {
   assert(!returnedEquals(0));
   assert((uintptr_t)localAlias() == UINT64_C(9007199254740993));
   assert((uintptr_t)shorthand() == UINT64_C(9007199254740993));
-  puts("native pointer constants: exact bits, typed calls and equality agree with C");
+  puts("native pointer constants: exact bits, typed calls and equality agree "
+       "with C");
   return 0;
 }

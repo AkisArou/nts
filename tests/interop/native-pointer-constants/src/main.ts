@@ -1,6 +1,14 @@
 // The same integer annotation has a number control beside its native handle.
-// Clean f03 refuses every native constant read with NTS1001, while numberControl
-// compiles. The C consumer checks bits and ABI, rather than dereferencing them.
+// Clean f03 compiles numberControl, but loses the native constant's pointer type:
+// returns/arguments refuse with NTS1001, and equality emits invalid C. The C
+// consumer checks bits and ABI, rather than dereferencing these sentinels.
+// expect-ir: c llvm: count const.handle in broadcast == 1
+// expect-ir: c llvm: no convert in broadcast
+// expect-ir: c llvm: no retain in broadcast
+// expect-ir: c llvm: no release in broadcast
+// expect-ir: c llvm: count const.handle in resource == 1
+// expect-ir: c llvm: count const.handle in wide == 1
+// expect-ir: c llvm: count const.handle in returnedEquals == 1
 import {
   ALL_BITS, BROADCAST, FAILED, HIGH_BIT, NEGATIVE_THREE, NEGATIVE_TWO,
   NUMBER_CONTROL, READONLY, RESOURCE, VOID_POINTER, WIDE, ZERO,
@@ -26,4 +34,7 @@ export function nativeArgument(): boolean { return sentinel_is_broadcast(BROADCA
 // MAP_FAILED's shape: the returned pointer can match or differ from the sentinel.
 export function returnedEquals(fail: c_int): boolean { return sentinel_from(fail) === FAILED; }
 export function localAlias(): Sentinel { const value = WIDE; return value; }
-export function shorthand(): Sentinel { return ({ WIDE }).WIDE; }
+export function shorthand(): Sentinel {
+  const box: { WIDE: Sentinel } = { WIDE };
+  return box.WIDE;
+}

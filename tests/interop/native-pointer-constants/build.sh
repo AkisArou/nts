@@ -7,6 +7,8 @@ cc=${CC:-clang}
 nts=${NTS_BIN:-"$root/target/release/nts"}
 source="$root/tests/interop/native-pointer-constants"
 mkdir -p "$out"
+"$nts" expect-ir "$source/tsconfig.json"
+"$nts" expect-ir "$source/tsconfig.json" --rc
 "$nts" build "$source/tsconfig.json" --out "$out"
 for backend in c llvm; do
   built="$out/$backend/linux-gnu-x86_64"

@@ -3227,6 +3227,7 @@ fn render_arms(arms: &[nts_core::hir::FieldArm]) -> String {
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
+        OpKind::ConstHandle(bits) => format!("%{index} = const.handle {bits} : {ty}"),
         OpKind::NativeLoad {
             pointer,
             index: offset,

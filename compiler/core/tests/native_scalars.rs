@@ -69,6 +69,103 @@ fn snapshot(name: &str, source: &str) -> Option<nts_semantic_schema::SemanticSna
     Some(snapshot)
 }
 
+#[test]
+fn pointer_constant_tags_refuse_overflow_and_non_data_handles() {
+    for (label, tag, ty, reason) in [
+        ("fraction", "1.5", "Opaque<\"Test\">", "integer fitting"),
+        (
+            "overflow",
+            "18446744073709551616",
+            "Ptr<c_int>",
+            "integer fitting",
+        ),
+        (
+            "negative-overflow",
+            "-9223372036854775809",
+            "ConstPtr<c_int>",
+            "integer fitting",
+        ),
+        ("counted", "1", "GObjectClass<\"Test\">", "counted handle"),
+        ("callback", "1", "() => number", "neither a scalar"),
+        ("string", "1", "string", "neither a scalar"),
+    ] {
+        let Some(snapshot) = snapshot(
+            label,
+            &format!(
+                r#"
+import type {{ Opaque, Ptr, ConstPtr, GObjectClass }} from "c:types";
+/** @ntsConstant {tag} */
+declare const BAD: {ty};
+export function refused(): {ty} {{ return BAD; }}
+/** @ntsConstant 7 */
+declare const CONTROL: number;
+export function control(): number {{ return CONTROL; }}
+"#
+            ),
+        ) else {
+            return;
+        };
+        let lowered = hir::lower::lower(&snapshot);
+        assert!(
+            lowered
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "NTS1001" && d.message.contains(reason)),
+            "{label}: {:?}",
+            lowered.diagnostics
+        );
+        assert!(
+            lowered.program.funcs.iter().any(|f| f.name == "control"),
+            "{label}"
+        );
+        assert!(
+            !lowered.program.funcs.iter().any(|f| f.name == "refused"),
+            "{label}"
+        );
+    }
+}
+
+#[test]
+fn pointer_constant_verification_requires_a_native_pointer_result() {
+    let Some(snapshot) = snapshot(
+        "pointer-constant-type",
+        r#"
+import type { Ptr } from "c:types";
+/** @ntsConstant 7 */
+declare const VALUE: Ptr<c_int>;
+export function read(): Ptr<c_int> { return VALUE; }
+"#,
+    ) else {
+        return;
+    };
+    let mut lowered = hir::lower::lower(&snapshot);
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    let func = lowered
+        .program
+        .funcs
+        .iter_mut()
+        .find(|f| f.name == "read")
+        .unwrap();
+    let constant = func
+        .values
+        .iter_mut()
+        .find(|op| matches!(op.kind, hir::OpKind::ConstHandle(7)))
+        .unwrap();
+    constant.ty = HirType::NUMBER;
+    func.return_type = HirType::NUMBER;
+    let problems = hir::verify::verify(&lowered.program).unwrap_err();
+    assert!(
+        problems.iter().any(|p| matches!(
+            p,
+            hir::verify::Invalid::OperandType {
+                op: "native storage",
+                ..
+            }
+        )),
+        "{problems:?}"
+    );
+}
+
 /// The brands a `number` can carry, in both signature positions.
 ///
 /// This used to name every brand, which recorded a policy rather than a fact:

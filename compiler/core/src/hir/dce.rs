@@ -194,6 +194,7 @@ fn has_effects(op: &Op) -> bool {
         | OpKind::BlockParam(_)
         | OpKind::Return(_)
         | OpKind::ConstInt(_)
+        | OpKind::ConstHandle(_)
         | OpKind::ConstFloat(_)
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)

@@ -1538,6 +1538,7 @@ fn runs_elsewhere(kind: &OpKind) -> bool {
         OpKind::Param(_)
             | OpKind::BlockParam(_)
             | OpKind::ConstInt(_)
+            | OpKind::ConstHandle(_)
             | OpKind::ConstFloat(_)
             | OpKind::ConstBool(_)
             | OpKind::ConstString(_)

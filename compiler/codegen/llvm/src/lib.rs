@@ -3476,10 +3476,8 @@ fn operation(
                 float_literal(f64::from(shape.size))
             )
         }
-        OpKind::ConstInt(number) => {
-            let ty = ty_of(&op.ty, func)?;
-            format!("{out} = add {ty} 0, {number}")
-        }
+        OpKind::ConstInt(number) => format!("{out} = add {} 0, {number}", ty_of(&op.ty, func)?),
+        OpKind::ConstHandle(bits) => format!("{out} = inttoptr i64 {bits} to ptr"),
         // The address of the static storage, which is what a string value is.
         OpKind::ConstString(text) => {
             let index = literal_table(program)

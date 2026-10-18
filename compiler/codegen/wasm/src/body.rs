@@ -654,6 +654,7 @@ impl<'b, 'p> Body<'b, 'p> {
                 return Err(format!("host-managed provider mismatch: {:?}", op.kind).into());
             }
             OpKind::NativeLoad { .. }
+            | OpKind::ConstHandle(_)
             | OpKind::NativeStore { .. }
             | OpKind::NativeLocal { .. }
             | OpKind::ObjcClass { .. }

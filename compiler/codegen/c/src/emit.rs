@@ -5664,6 +5664,10 @@ fn emit_op(
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
         OpKind::ConstInt(v) => format!("{name} = {};", integer_literal(*v)),
+        OpKind::ConstHandle(bits) => {
+            let ty = c_type_of(context.program, &op.ty, &op.origin)?;
+            format!("{name} = ({ty})(uintptr_t)UINT64_C({bits});")
+        }
         // A concrete value becomes an erased one, and reading one back. Both
         // are one line and both can fail, so they live together in
         // `erased_conversion` rather than growing this match by twenty.

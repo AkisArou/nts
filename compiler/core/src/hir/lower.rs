@@ -339,6 +339,9 @@ struct ModuleScope {
     initialized: rustc_hash::FxHashMap<u32, u32>,
     /// Symbol to value, for a `const` this could evaluate.
     constants: rustc_hash::FxHashMap<u32, f64>,
+    /// A binding's native pointer constants, lossless bits beside their type.
+    /// Kept out of `constant_value`, which computes JavaScript arithmetic.
+    native_constants: rustc_hash::FxHashMap<u32, (u64, HirType)>,
     /// Symbol to the foreign function a read of it calls, for a global the
     /// program does not own and a binding implements: lib.dom.d.ts's `declare
     /// var document`, `@ntsBoundBy "nts:dom" document`, is a call of
@@ -8542,8 +8545,9 @@ fn global_object(probe: &FuncBuilder) -> Option<(NodeId, String)> {
 /// - **A binding's constant is the value its tag gives** (`/** @ntsConstant
 ///   1 */ export const WM_CREATE: c_uint;`, as Win32's are declared): folded
 ///   wherever it is read, like a folded `const` of the program's, and never a
-///   global -- it is the platform's, not an export of this program's. A tag
-///   that is not a number is refused.
+///   global -- it is the platform's, not an export of this program's. A native
+///   data pointer keeps its integer bits and declared type separately, never
+///   entering JavaScript's numeric constant evaluator.
 /// - A `valueless` scalar `const` with no binding tag at all is refused
 ///   ([`VALUELESS_DECLARED_CONST`]).
 fn settle_by_binding(
@@ -8566,6 +8570,29 @@ fn settle_by_binding(
         return true;
     }
     if let Some(text) = native.and_then(|native| native.constant.as_deref()) {
+        if let HirType::NativePointer(pointee) = ty {
+            if !pointee.admits_constant_handle() {
+                scope.unsupported.insert(
+                    symbol.0,
+                    format!("`@ntsConstant {text}` on a counted handle or a function pointer"),
+                );
+                return true;
+            }
+            match parse_handle_constant(text) {
+                Some(bits) => drop(scope.native_constants.insert(symbol.0, (bits, ty.clone()))),
+                None => drop(scope.unsupported.insert(
+                    symbol.0,
+                    format!("`@ntsConstant {text}`, which needs an integer fitting a 64-bit uncounted data pointer"),
+                )),
+            }
+            return true;
+        }
+        if !is_scalar(ty) && !matches!(ty, HirType::BigInt | HirType::Erased) {
+            scope.unsupported.insert(symbol.0, format!(
+                "`@ntsConstant {text}`, whose declared type is neither a scalar nor an uncounted native data pointer"
+            ));
+            return true;
+        }
         match text
             .trim()
             .parse::<f64>()
@@ -8591,6 +8618,37 @@ fn settle_by_binding(
         return true;
     }
     false
+}
+
+/// The integer spelling of a pointer sentinel, without a floating-point step.
+/// Negative values use their signed 64-bit representation; positive values may
+/// use every bit. No arithmetic, exponent, fraction or `BigInt` suffix is a tag.
+fn parse_handle_constant(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let (negative, digits) = text
+        .strip_prefix('-')
+        .map_or((false, text.strip_prefix('+').unwrap_or(text)), |digits| {
+            (true, digits)
+        });
+    let (radix, digits) = digits
+        .strip_prefix("0x")
+        .or_else(|| digits.strip_prefix("0X"))
+        .map_or((10, digits), |digits| (16, digits));
+    if !digits.bytes().all(|byte| {
+        if radix == 16 {
+            byte.is_ascii_hexdigit()
+        } else {
+            byte.is_ascii_digit()
+        }
+    }) {
+        return None;
+    }
+    let magnitude = u64::from_str_radix(digits, radix).ok()?;
+    if negative {
+        (magnitude <= 1 << 63).then(|| 0_u64.wrapping_sub(magnitude))
+    } else {
+        Some(magnitude)
+    }
 }
 
 /// **A declared number or boolean nothing gives a value** -- a `const` with
@@ -48053,7 +48111,9 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(Place::Global(global));
         }
-        if self.module.constants.contains_key(&symbol.0) {
+        if self.module.constants.contains_key(&symbol.0)
+            || self.module.native_constants.contains_key(&symbol.0)
+        {
             return Err(self.unsupported(target, "assigning to a `const`"));
         }
         if self.module.bound.contains_key(&symbol.0) {
@@ -80292,6 +80352,7 @@ impl<'a> FuncBuilder<'a> {
             .module
             .constants
             .keys()
+            .chain(self.module.native_constants.keys())
             .chain(self.module.variables.keys())
             .chain(self.module.unsupported.keys())
             .chain(self.module.deferred.keys())
@@ -80390,6 +80451,9 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         let origin = self.origin(id);
+        if let Some((bits, ty)) = self.module.native_constants.get(&symbol.0).cloned() {
+            return Ok(self.push(OpKind::ConstHandle(bits), ty, origin));
+        }
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
             // **At the name's own representation, and it was always a float.**
             // `constant_value` folds `true` to `1.0` -- correct, since "a
@@ -84070,7 +84134,40 @@ mod tests {
         assert!(!super::nominal_name("Point"));
     }
 
-    use super::{closure_type, parse_bigint, parse_number};
+    use super::{closure_type, parse_bigint, parse_handle_constant, parse_number};
+
+    #[test]
+    fn native_pointer_constant_bits_are_lossless_and_bounded() {
+        for (text, want) in [
+            ("65535", 65535),
+            ("+32512", 32512),
+            ("0x3", 3),
+            ("-0", 0),
+            ("-1", u64::MAX),
+            ("-0x3", u64::MAX - 2),
+            ("9007199254740993", 9_007_199_254_740_993),
+            ("0x8000000000000000", 1 << 63),
+            ("-9223372036854775808", 1 << 63),
+            ("18446744073709551615", u64::MAX),
+        ] {
+            assert_eq!(parse_handle_constant(text), Some(want), "{text}");
+        }
+        for text in [
+            "",
+            "0x",
+            "1.5",
+            "1e3",
+            "NaN",
+            "1n",
+            "++1",
+            "-+1",
+            "1_000",
+            "18446744073709551616",
+            "-9223372036854775809",
+        ] {
+            assert_eq!(parse_handle_constant(text), None, "{text}");
+        }
+    }
 
     #[test]
     fn bigint_literal_and_guard_spellings_are_exact() {
