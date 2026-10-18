@@ -2089,11 +2089,16 @@ pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
     "nts_map_value_at",
 ];
 
-/// Whether a borrow survives a call to `name`: it stores nothing a borrow
-/// depends on ([`READS_ONLY`] or [`RETAINS_ONLY_ITS_RESULT`]).
+/// Whether a call overwrites no program storage a borrow depends on.
+///
+/// This is not purity: diagnostics and stopping are observable effects.
+/// `nts_refused` prints and aborts without storing into the program or calling
+/// its code, so it cannot invalidate a borrow. It must stay out of
+/// [`READS_ONLY`], whose calls may be deleted. A body that stores before this
+/// stop still mutates through that store.
 #[must_use]
 pub fn stores_nothing(name: &str) -> bool {
-    reads_only(name) || RETAINS_ONLY_ITS_RESULT.contains(&name)
+    reads_only(name) || RETAINS_ONLY_ITS_RESULT.contains(&name) || name == "nts_refused"
 }
 
 #[cfg(test)]
