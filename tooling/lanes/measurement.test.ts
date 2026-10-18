@@ -1,11 +1,11 @@
 // These gate helpers are exercised by all.sh's existing lanes/*.test.ts glob.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cpuList, formatCpus, gateCpus, inheritedCpus } from "../gate/affinity.ts";
+import { cpuList, defaultCpus, formatCpus, gateCpus, inheritedCpus } from "../gate/affinity.ts";
 import { coreIsQuiet, coreTicks, waitForQuiet } from "../gate/measurement.ts";
 
 const WITH_LOCK = new URL("../gate/with-lock.sh", import.meta.url).pathname;
@@ -22,6 +22,46 @@ test("gate CPU sets are intersections, and an empty intersection is refused", ()
   assert.throws(() => gateCpus("4-5"), /no CPUs/);
   for (const invalid of ["", "4-x", "9-2", "-1", "1,,2"]) assert.throws(() => cpuList(invalid));
   assert.equal(formatCpus([4, 2, 3, 2, 7]), "2-4,7");
+  assert.equal(defaultCpus("0-15", "0-3,6-31"), "0-3,6-15");
+  assert.equal(defaultCpus("8-15", "8"), "8");
+  assert.throws(() => defaultCpus("8-15", "16-31"), /no intersection/);
+});
+
+test("counted.sh's default perf child inherits the restriction, with an explicit override kept", { skip: process.platform !== "linux" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "nts-counted-affinity-test-"));
+  try {
+    for (const path of ["tooling/bench", "tooling/gate", "target/bench/probe.jvm/nts", "bin"]) mkdirSync(join(dir, path), { recursive: true });
+    const counted = join(dir, "tooling/bench/counted.sh");
+    copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
+    copyFileSync(new URL("../gate/affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));
+    writeFileSync(join(dir, "target/bench/probe.jvm/Case.java"), "return nts.gen.Program.work(in0);\nprivate static volatile double in0 = 1;\n");
+    writeFileSync(join(dir, "bin/javac"), "#!/bin/sh\nexit 0\n");
+    writeFileSync(join(dir, "bin/perf"), `#!/bin/sh
+awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status >> "$TEST_MASK_LOG"
+echo "100,,cpu_core/$4/" >&2
+`);
+    for (const binary of ["javac", "perf"]) chmodSync(join(dir, `bin/${binary}`), 0o755);
+    const log = join(dir, "masks");
+    const env = { ...process.env, PATH: `${dir}/bin:${process.env.PATH}`, TEST_MASK_LOG: log, NTS_COUNTED_N: "1", NTS_COUNTED_EVENTS: "instructions" };
+    delete env.NTS_CORES;
+    for (const inherited of ["0-3,6-31", "8"]) {
+      writeFileSync(log, "");
+      const result = spawnSync("taskset", ["-c", inherited, "sh", counted, "probe", "1"], { env, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      const masks = readFileSync(log, "utf8").trim().split("\n");
+      assert.deepEqual(masks, Array(2).fill(defaultCpus("8-15", inherited)));
+    }
+    writeFileSync(log, "");
+    const empty = spawnSync("taskset", ["-c", "16-31", "sh", counted, "probe", "1"], { env, encoding: "utf8" });
+    assert.notEqual(empty.status, 0);
+    assert.match(empty.stderr, /no intersection/);
+    assert.equal(readFileSync(log, "utf8"), "", "an empty intersection must never start perf");
+    const explicit = spawnSync("taskset", ["-c", "16-31", "sh", counted, "probe", "1"], { env: { ...env, NTS_CORES: "8" }, encoding: "utf8" });
+    assert.equal(explicit.status, 0, explicit.stderr);
+    assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), ["8", "8"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("quiet admission ignores other busy cores and rejects either busy sibling", async () => {

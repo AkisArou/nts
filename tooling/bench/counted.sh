@@ -45,6 +45,12 @@ set -eu
 case=${1:?usage: counted.sh <case> [reps]}
 reps=${2:-3}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+# A default is a preference inside the inherited mask, never permission to
+# escape it. NTS_CORES is an explicit override for an intentional measurement.
+counted_cpus=${NTS_CORES:-}
+if [ -z "$counted_cpus" ]; then
+  counted_cpus=$(node "$root/tooling/gate/affinity.ts" --default-cpus 8-15 "$$")
+fi
 work=${TMPDIR:-/tmp}/nts-counted.$$
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work"
@@ -103,7 +109,7 @@ if [ -f "$root/benchmarks/cases/$case/ref.java" ]; then
 fi
 
 count() { # classpath, event, n
-  taskset -c "${NTS_CORES:-8-15}" perf stat -x, -e "$2" java -cp "$1" Count "$3" 2>&1 >/dev/null |
+  taskset -c "$counted_cpus" perf stat -x, -e "$2" java -cp "$1" Count "$3" 2>&1 >/dev/null |
     awk -F, -v e="$2" '$0 ~ ("cpu_core/" e) {print $1}'
 }
 

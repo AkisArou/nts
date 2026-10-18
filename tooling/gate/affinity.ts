@@ -33,6 +33,14 @@ export function gateCpus(inherited: string): string {
   return formatCpus(cpus);
 }
 
+/** A tool's preferred default cannot escape the caller's restriction. */
+export function defaultCpus(preferred: string, inherited: string): string {
+  const allowed = new Set(cpuList(inherited));
+  const cpus = cpuList(preferred).filter((cpu) => allowed.has(cpu));
+  if (cpus.length === 0) throw new Error(`default CPUs ${preferred} have no intersection with inherited CPUs ${inherited}`);
+  return formatCpus(cpus);
+}
+
 export function inheritedCpus(pid: number = process.pid): string {
   const status = readFileSync(`/proc/${pid}/status`, "utf8");
   const list = /^Cpus_allowed_list:\s*(.+)$/m.exec(status)?.[1];
@@ -49,6 +57,12 @@ export function gateCommand(command: string, args: string[]): { command: string;
 // pinned.sh changes its own mask before starting any build, so every child
 // inherits the reservation, including a hand-started full run.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv[2] !== "--gate-cpus") throw new Error("usage: affinity.ts --gate-cpus <pid>");
-  if (process.platform === "linux") console.log(gateCpus(inheritedCpus(Number(process.argv[3]))));
+  if (process.argv[2] === "--gate-cpus") {
+    if (process.platform === "linux") console.log(gateCpus(inheritedCpus(Number(process.argv[3]))));
+  } else if (process.argv[2] === "--default-cpus") {
+    const preferred = process.argv[3];
+    console.log(process.platform === "linux" ? defaultCpus(preferred, inheritedCpus(Number(process.argv[4]))) : preferred);
+  } else {
+    throw new Error("usage: affinity.ts --gate-cpus <pid> | --default-cpus <preferred> <pid>");
+  }
 }

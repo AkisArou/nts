@@ -3202,29 +3202,60 @@ const RUNS: usize = 5;
 ///
 /// Pinning both arms to E-cores would also make the ratio meaningful, and would
 /// measure a machine nobody ships on. The P-cores are what a benchmark is
-/// about. The session contract already assigns cores 8-15 to this lane for
-/// isolation between sessions -- a different concern, and those happen to be
-/// P-cores, which is why the numbers were usually right.
+/// about. The measurement wrapper explicitly selects CPU 4 with sibling 5
+/// idle; a default used outside it must also respect its caller's affinity.
 ///
-/// `NTS_BENCH_CPUS` overrides the set, and `NTS_BENCH_CPUS=off` disables
-/// pinning for anyone who wants the old behaviour back to compare against.
-fn timed_cpus() -> Option<String> {
+/// A default is intersected with the caller's allowed set: `taskset` can
+/// otherwise widen back onto the physical core reserved from a gate.
+/// `NTS_BENCH_CPUS` explicitly overrides the set; `off` disables pinning.
+fn timed_cpus() -> Result<Option<String>> {
     match std::env::var("NTS_BENCH_CPUS") {
-        Ok(value) if value == "off" => return None,
-        Ok(value) if !value.is_empty() => return Some(value),
+        Ok(value) if value == "off" => return Ok(None),
+        Ok(value) if !value.is_empty() => return Ok(Some(value)),
         _ => {}
     }
     // The kernel names the performance cores on a hybrid part. A machine that
     // is not hybrid has no such file and needs no pinning: every core is the
     // same core, which is the assumption the rest of this harness was written
     // under.
-    let cpus = std::fs::read_to_string("/sys/devices/cpu_core/cpus").ok()?;
-    let cpus = cpus.trim();
-    if cpus.is_empty() {
-        None
-    } else {
-        Some(cpus.to_owned())
+    let Ok(cpus) = std::fs::read_to_string("/sys/devices/cpu_core/cpus") else {
+        return Ok(None);
+    };
+    let status = std::fs::read_to_string("/proc/self/status")
+        .context("reading inherited affinity for the benchmark's default CPUs")?;
+    let allowed = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .context("/proc/self/status names no inherited CPU set")?;
+    Ok(Some(default_timed_cpus(cpus.trim(), allowed.trim())?))
+}
+
+fn default_timed_cpus(preferred: &str, inherited: &str) -> Result<String> {
+    fn list(value: &str) -> Result<std::collections::BTreeSet<u32>> {
+        let mut cpus = std::collections::BTreeSet::new();
+        for part in value.split(',') {
+            let (first, last) = part.split_once('-').unwrap_or((part, part));
+            let first: u32 = first.parse().context("invalid CPU list")?;
+            let last: u32 = last.parse().context("invalid CPU list")?;
+            if last < first || last > 1_048_575 {
+                bail!("invalid CPU range: {part}");
+            }
+            cpus.extend(first..=last);
+        }
+        Ok(cpus)
     }
+    let preferred_set = list(preferred)?;
+    let inherited_set = list(inherited)?;
+    let cpus: Vec<_> = preferred_set
+        .intersection(&inherited_set)
+        .map(u32::to_string)
+        .collect();
+    if cpus.is_empty() {
+        bail!(
+            "default CPUs {preferred} have no intersection with inherited CPUs {inherited}; use NTS_BENCH_CPUS for an explicit measurement affinity"
+        );
+    }
+    Ok(cpus.join(","))
 }
 
 /// The same command, confined to `cpus`.
@@ -3254,7 +3285,7 @@ fn confine(command: &std::process::Command, cpus: &str) -> std::process::Command
 }
 
 fn measure(command: &mut std::process::Command) -> Result<Measured> {
-    let confined = timed_cpus().map(|cpus| confine(command, &cpus));
+    let confined = timed_cpus()?.map(|cpus| confine(command, &cpus));
     let mut owned;
     let command: &mut std::process::Command = match confined {
         Some(pinned) => {
@@ -3604,7 +3635,80 @@ mod tests {
         REFUSES_TODAY, Row, driver_entries, idle_reference, lost_case_decline, missing_entry,
         refusal_drift,
     };
+    use anyhow::Context;
     use camino::Utf8PathBuf;
+
+    #[test]
+    fn default_measurement_cpus_never_widen_the_inherited_set() {
+        assert_eq!(
+            super::default_timed_cpus("0-15", "0-3,6-31").expect("intersection"),
+            "0,1,2,3,6,7,8,9,10,11,12,13,14,15"
+        );
+        assert_eq!(
+            super::default_timed_cpus("0-15", "8").expect("one CPU"),
+            "8"
+        );
+        let error = super::default_timed_cpus("0-15", "16-31")
+            .expect_err("an E-core caller needs an explicit measurement override");
+        assert!(error.to_string().contains("no intersection"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_default_timed_child_keeps_the_gate_cpu_reservation() -> anyhow::Result<()> {
+        if !std::path::Path::new("/sys/devices/cpu_core/cpus").exists() {
+            return Ok(());
+        }
+        if std::env::var_os("NTS_BENCH_AFFINITY_CHILD").is_some() {
+            let cpus = super::timed_cpus()?.context("a hybrid host has preferred CPUs")?;
+            let mut command = std::process::Command::new("sh");
+            command.args([
+                "-c",
+                "awk '/^Cpus_allowed_list:/ {print $2}' /proc/self/status",
+            ]);
+            let child = super::confine(&command, &cpus).output()?;
+            assert!(child.status.success());
+            let actual = String::from_utf8(child.stdout)?;
+            let expected = super::default_timed_cpus("0-15", "0-3,6-31")?;
+            assert_eq!(super::default_timed_cpus("0-31", actual.trim())?, expected);
+            // An explicit measurement request remains distinct from a default.
+            // Check its spelling without occupying the reserved core in a test.
+            let explicit = std::process::Command::new(std::env::current_exe()?)
+                .args(["--exact", "tests::an_explicit_measurement_cpu_is_kept"])
+                .env("NTS_BENCH_CPUS", "4")
+                .status()?;
+            assert!(explicit.success());
+            return Ok(());
+        }
+        let child = std::process::Command::new("taskset")
+            .args(["-c", "0-3,6-31"])
+            .arg(std::env::current_exe()?)
+            .args([
+                "--exact",
+                "tests::a_default_timed_child_keeps_the_gate_cpu_reservation",
+                "--nocapture",
+            ])
+            .env_remove("NTS_BENCH_CPUS")
+            .env("NTS_BENCH_AFFINITY_CHILD", "1")
+            .output()?;
+        assert!(
+            child.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn an_explicit_measurement_cpu_is_kept() {
+        if std::env::var("NTS_BENCH_CPUS").as_deref() == Ok("4") {
+            assert_eq!(
+                super::timed_cpus().expect("explicit CPU"),
+                Some("4".to_owned())
+            );
+        }
+    }
 
     fn row(case: &str) -> Row {
         Row {
