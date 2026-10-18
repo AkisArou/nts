@@ -4811,8 +4811,21 @@ const DEMO_WIDGET_GIR: &str = r#"    <class name="Widget" c:type="DemoWidget" gl
 
 /// The Demo library's GIR, for [`gir_library`]: `high` is the flags' high
 /// member as GIR writes it.
+/// A scalar-element array with its length after it, for [`demo_gir`].
+const DEMO_SUM_GIR: &str = r#"    <function name="sum" c:identifier="demo_sum">
+      <return-value><type name="gint" c:type="int"/></return-value>
+      <parameters>
+        <parameter name="values" transfer-ownership="none">
+          <array length="1" zero-terminated="0" c:type="const int*"><type name="gint"/></array>
+        </parameter>
+        <parameter name="length" transfer-ownership="none"><type name="gint" c:type="int"/></parameter>
+      </parameters>
+    </function>
+"#;
+
 fn demo_gir(high: &str) -> String {
     let widget = DEMO_WIDGET_GIR;
+    let sum = DEMO_SUM_GIR;
     format!(
         r#"<?xml version="1.0"?>
 <repository version="1.2" xmlns="http://www.gtk.org/introspection/core/1.0"
@@ -4898,16 +4911,7 @@ fn demo_gir(high: &str) -> String {
         <parameter name="length" transfer-ownership="none"><type name="gsize" c:type="gsize"/></parameter>
       </parameters>
     </function>
-    <function name="sum" c:identifier="demo_sum">
-      <return-value><type name="gint" c:type="int"/></return-value>
-      <parameters>
-        <parameter name="values" transfer-ownership="none">
-          <array length="1" zero-terminated="0" c:type="const int*"><type name="gint"/></array>
-        </parameter>
-        <parameter name="length" transfer-ownership="none"><type name="gint" c:type="int"/></parameter>
-      </parameters>
-    </function>
-    <function name="wrong" c:identifier="demo_wrong">
+{sum}    <function name="wrong" c:identifier="demo_wrong">
       <return-value><type name="gint" c:type="gint"/></return-value>
       <parameters><parameter name="x"><type name="gint" c:type="int"/></parameter></parameters>
     </function>
