@@ -79,6 +79,7 @@ mod native_storage;
 pub mod own;
 pub mod rc;
 pub mod reachable;
+mod refused;
 pub mod runtime;
 pub mod scalarize;
 pub mod signatures;
@@ -6489,6 +6490,7 @@ impl Doom {
 fn doomed_values(
     func: &Func,
     present: &rustc_hash::FxHashSet<String>,
+    refused: &rustc_hash::FxHashSet<String>,
     uncallable: &rustc_hash::FxHashMap<TypeId, String>,
     (unwritten, fields): (
         &rustc_hash::FxHashSet<u32>,
@@ -6520,10 +6522,11 @@ fn doomed_values(
         // allocation intact, and the next round found it again. `nts check
         // runtime/node` ran for ten minutes at 100% and never finished.
         let absent = match &op.kind {
-            OpKind::Call {
-                callee: Callee::Direct(name),
-                ..
-            } if !present.contains(name.as_str()) => Some(name.clone()),
+            OpKind::Call { callee, .. }
+                if refused::missing_callee(callee, present, refused).is_some() =>
+            {
+                refused::missing_callee(callee, present, refused).map(str::to_owned)
+            }
             OpKind::ClosureStatic | OpKind::ObjectNew { .. } => match &op.ty {
                 HirType::Managed(ManagedType::Object(ty)) => uncallable.get(ty).cloned(),
                 _ => None,
@@ -6775,6 +6778,12 @@ fn excise_from_initializer(
         .program
         .interface_access
         .unavailable(&lowered.program, &named);
+    let refused = lowered
+        .program
+        .uncompiled
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect();
     let Program {
         funcs,
         interface_access,
@@ -6794,6 +6803,7 @@ fn excise_from_initializer(
     let doomed = doomed_values(
         func,
         present,
+        &refused,
         uncallable,
         (unwritten, (interface_access, &unavailable)),
         &global_names,
@@ -7005,6 +7015,12 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
         let owned: rustc_hash::FxHashSet<String> =
             present.iter().map(|name| (*name).to_owned()).collect();
         let uncallable = uncallable_closures(lowered, &owned);
+        let refused_names = lowered
+            .program
+            .uncompiled
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
         let unavailable_fields = lowered
             .program
             .interface_access
@@ -7024,11 +7040,12 @@ fn drop_callers_of_refused(lowered: &mut lower::Lowered) {
                 .find_map(|value| {
                     let op = &func.values[value.0 as usize];
                     match &op.kind {
-                        OpKind::Call {
-                            callee: Callee::Direct(name),
-                            ..
-                        } if !present.contains(name.as_str()) => {
-                            Some((name.clone(), op.origin.clone()))
+                        OpKind::Call { callee, .. }
+                            if refused::missing_callee(callee, &owned, &refused_names)
+                                .is_some() =>
+                        {
+                            refused::missing_callee(callee, &owned, &refused_names)
+                                .map(|name| (name.to_owned(), op.origin.clone()))
                         }
                         // Holding a closure whose method was refused is as
                         // fatal as calling the function directly, and quieter:
@@ -7492,6 +7509,10 @@ fn prepare_lowered(
     settle(&mut lowered);
     settle_host_handles(&mut lowered, options.provider);
     let mut program = lowered.program;
+
+    // Before prune clears absent method names: a refused override is not an
+    // unreachable slot when a kept base method can still dispatch through it.
+    refused::guard_slots(&mut program);
 
     // First, before anything expensive. Everything that survives here gets
     // analyzed interprocedurally, specialized, proven and emitted, and a

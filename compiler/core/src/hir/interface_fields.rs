@@ -32,8 +32,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::fields::{LayoutIndex, shares_storage};
 use super::{
-    Absent, Block, BlockId, Callee, Func, HirType, Layout, ManagedType, Op, OpKind, Program,
-    Terminator, TypeId, ValueId,
+    Absent, Block, BlockId, Func, HirType, Layout, ManagedType, Op, OpKind, Program, Terminator,
+    TypeId, ValueId,
 };
 
 /// The classes that hold an interface's field somewhere other than the
@@ -222,18 +222,7 @@ fn guard_func(
             },
             HirType::Bool,
         );
-        let what = push(
-            OpKind::ConstString(message),
-            HirType::Managed(ManagedType::String),
-        );
-        let stop = push(
-            OpKind::Call {
-                callee: Callee::External("nts_refused".to_owned()),
-                args: vec![what],
-                frame: None,
-            },
-            HirType::Void,
-        );
+        let stopped = super::refused::stop(func, message, &origin);
         let rest = BlockId(u32::try_from(func.blocks.len()).unwrap_or(u32::MAX));
         let refused = BlockId(rest.0 + 1);
         let block = &mut func.blocks[at];
@@ -254,11 +243,7 @@ fn guard_func(
             ops: after,
             terminator,
         });
-        func.blocks.push(Block {
-            params: Vec::new(),
-            ops: vec![what, stop],
-            terminator: Terminator::Unreachable,
-        });
+        func.blocks.push(stopped);
     }
     tested.len()
 }
