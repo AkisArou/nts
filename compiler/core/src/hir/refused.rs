@@ -123,6 +123,10 @@ pub(super) fn guard_slots(program: &mut Program) {
                 continue;
             }
             let Some(contract) = contracts.get(&slot).map(|at| &program.funcs[*at]) else {
+                // No live virtual call declares this slot and no layout has a
+                // surviving signature/body for it. Calls naming its refused
+                // declaration have already cascaded, so nothing can enter it.
+                // Prune removes the missing name as it did before.
                 continue;
             };
             if contract.params.is_empty() {

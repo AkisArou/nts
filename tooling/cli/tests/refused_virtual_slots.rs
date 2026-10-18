@@ -9,28 +9,86 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
     nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../compiler/core/tests/programs/refused-virtual-slots/runtime.json");
+    let scratch = std::env::temp_dir().join(format!("nts-refused-slot-{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).unwrap();
     for backend in ["c", "llvm", "jvm", "wasm"] {
-        let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
+        command
             .arg("check")
             .arg(&fixture)
             .env("NTS_BACKEND", backend)
             .env_remove("NTS_RC")
-            .output()
-            .unwrap();
+            .env_remove("NTS_KEEP_TEMP");
+        if backend == "wasm" {
+            command.env("TMPDIR", &scratch).env("NTS_KEEP_TEMP", "1");
+        }
+        let result = command.output().unwrap();
         let stdout = String::from_utf8_lossy(&result.stdout);
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(result.status.success(), "{backend}: {stdout}\n{stderr}");
         assert!(
             stdout.contains("3 case(s) the compiled program declined"),
             "{backend}: {stdout}\n{stderr}"
         );
         assert!(
-            stdout.contains("checked 116 cases across 4 function(s)"),
+            stdout.contains("checked 113 of 116 cases"),
+            "{backend}: {stdout}\n{stderr}"
+        );
+        if backend == "wasm" {
+            // The Wasm differential currently classifies every NTS5001 as an
+            // input refusal and drops its message. Ask the artifact directly:
+            // agreement over the 113 other inputs cannot prove a named stop.
+            assert!(result.status.success(), "{stdout}\n{stderr}");
+            assert_wasm_stops(&scratch);
+            continue;
+        }
+        assert!(
+            !result.status.success(),
+            "{backend}: a missing feature must stop: {stdout}\n{stderr}"
+        );
+        assert!(
+            stderr.contains("aborted 3 time(s)"),
             "{backend}: {stdout}\n{stderr}"
         );
         assert!(
-            stdout.contains("agreed on every case"),
-            "{backend}: {stdout}\n{stderr}"
+            !stdout.contains("  nts  ") && !stdout.contains("  node "),
+            "{backend}: controls must agree: {stdout}\n{stderr}"
         );
+        assert_eq!(stdout.matches("the compiled program aborted: nts: refused at run time: `Refused#value` was refused: `eval`, a builtin this compiler does not provide is not supported by this lowering yet").count(), 3, "{backend}: {stdout}\n{stderr}");
     }
+    std::fs::remove_dir_all(scratch).unwrap();
+}
+
+fn assert_wasm_stops(scratch: &Path) {
+    let artifact = std::fs::read_dir(scratch)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let script = r#"
+        import assert from 'node:assert/strict';
+        import {pathToFileURL} from 'node:url';
+        const {instantiate} = await import(pathToFileURL(process.argv[1] + '/wasm/program.instance.mjs'));
+        const m = instantiate();
+        const reason = '`eval`, a builtin this compiler does not provide is not supported by this lowering yet';
+        for (const name of ['oneRefused', 'oneInherited', 'oneMixed']) {
+            assert.throws(() => m[name](1), error => error.code === 'NTS5001'
+                && error.message.includes('Refused#value') && error.message.includes(reason));
+        }
+        assert.equal(m.oneRefused(2), 9);
+        assert.equal(m.oneInherited(2), 9);
+        assert.equal(m.oneMixed(2), 6);
+        assert.equal(m.validDispatch(2), 30);
+    "#;
+    let result = Command::new("node")
+        .args(["--input-type=module", "--eval", script])
+        .arg(artifact)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
 }

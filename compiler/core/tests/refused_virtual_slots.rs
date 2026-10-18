@@ -166,8 +166,7 @@ fn assert_refused_entries(
         assert!(
             stops(body)
                 .iter()
-                .any(|message| message.contains("Refused#value")
-                    && message.contains(reason.as_str())),
+                .any(|message| message.contains("Refused#value") && message.contains(reason)),
             "the stop must retain the original method and refusal: {body:?}"
         );
     }
