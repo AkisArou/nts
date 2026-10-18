@@ -26,11 +26,25 @@ use super::map::{Binding, Reason};
 
 /// Remove from `binding` every function the headers disagree with.
 pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Result<()> {
-    // One directory per module, since namespaces are checked at once.
+    against_headers_with_ready(binding, cflags, || {})
+}
+
+static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Synchronizing after probe writes lets the regression force overlapping
+/// checks without depending on thread scheduling or compiler speed.
+fn against_headers_with_ready(
+    binding: &mut Binding,
+    cflags: &[String],
+    ready: impl FnOnce(),
+) -> Result<()> {
+    // Namespace checks run concurrently, and sanitizing a module name is
+    // lossy. Every call owns its directory even when labels sanitize alike.
     let dir = std::env::temp_dir().join(format!(
-        "nts-bind-gir-{}-{}",
+        "nts-bind-gir-{}-{}-{}",
         std::process::id(),
-        binding.module.replace([':', '.', '-'], "_")
+        binding.module.replace([':', '.', '-'], "_"),
+        CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let probe = dir.join(format!(
@@ -57,6 +71,7 @@ pub(crate) fn against_headers(binding: &mut Binding, cflags: &[String]) -> Resul
         let header = dir.join(name);
         std::fs::write(&header, text).with_context(|| format!("writing {}", header.display()))?;
     }
+    ready();
     let output =
         std::process::Command::new(std::env::var("CC").unwrap_or_else(|_| "clang".to_owned()))
             .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
@@ -244,5 +259,62 @@ fn collect_pointee(pointee: &Pointee, into: &mut BTreeSet<String>) {
         }
         Pointee::Const(inner) | Pointee::Pointer(inner) => collect_pointee(inner, into),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::Binding;
+
+    #[test]
+    fn concurrent_module_checks_keep_their_own_probe() {
+        let dir = std::env::temp_dir().join(format!(
+            "nts-gir-concurrent-check-{}-{}",
+            std::process::id(),
+            super::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let clean = dir.join("clean.h");
+        let error = dir.join("error.h");
+        std::fs::write(&clean, "int valid_probe;\n").unwrap();
+        std::fs::write(&error, "#error expected_second_probe\n").unwrap();
+        let make = |module: &str, header: &std::path::Path| Binding {
+            module: module.into(),
+            headers: vec![header.to_str().unwrap().into()],
+            ..Binding::default()
+        };
+        // Distinct accepted namespace labels collide after sanitization.
+        let good_module = "c:Probe.A-1.0";
+        let bad_module = "c:Probe_A-1.0";
+        assert_ne!(good_module, bad_module);
+        assert_eq!(
+            good_module.replace([':', '.', '-'], "_"),
+            bad_module.replace([':', '.', '-'], "_")
+        );
+        // Serial controls differ only in scheduling from the pair below.
+        super::against_headers(&mut make(good_module, &clean), &[]).unwrap();
+        let bad = super::against_headers(&mut make(bad_module, &error), &[]).unwrap_err();
+        assert!(bad.to_string().contains("expected_second_probe"));
+
+        let ready = std::sync::Barrier::new(2);
+        let (good, bad) = std::thread::scope(|scope| {
+            let good = scope.spawn(|| {
+                super::against_headers_with_ready(&mut make(good_module, &clean), &[], || {
+                    ready.wait();
+                })
+            });
+            let bad = scope.spawn(|| {
+                super::against_headers_with_ready(&mut make(bad_module, &error), &[], || {
+                    ready.wait();
+                })
+            });
+            (good.join().unwrap(), bad.join().unwrap())
+        });
+        good.unwrap();
+        let bad = bad.unwrap_err();
+        assert!(bad.to_string().contains("expected_second_probe"), "{bad:#}");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

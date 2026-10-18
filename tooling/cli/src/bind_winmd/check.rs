@@ -135,10 +135,28 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
 /// `NTS_BIND_WINMD_KEEP=1` keeps the probe and clang's answer beside it, which
 /// is where a refusal's reason is read in full.
 fn compile(namespace: &str, text: &str, clang_args: &[String]) -> Result<String> {
-    let dir = std::env::temp_dir().join(format!("nts-bind-winmd-check-{}", std::process::id()));
+    compile_with_ready(namespace, text, clang_args, || {})
+}
+
+static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// `ready` lets the concurrency guard keep both probes live before clang reads
+/// either. Production takes exactly the same path with a no-op callback.
+fn compile_with_ready(
+    namespace: &str,
+    text: &str,
+    clang_args: &[String],
+    ready: impl FnOnce(),
+) -> Result<String> {
+    let dir = std::env::temp_dir().join(format!(
+        "nts-bind-winmd-check-{}-{}",
+        std::process::id(),
+        CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
     let probe = dir.join(format!("{}.c", namespace.replace('.', "_")));
     std::fs::write(&probe, text).with_context(|| format!("writing {}", probe.display()))?;
+    ready();
     let output = std::process::Command::new("clang")
         .args(clang_args)
         .args(["-std=c11", "-fsyntax-only", "-ferror-limit=0", "-w"])
@@ -311,6 +329,46 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::super::map::{Binding, Constant};
+
+    #[test]
+    fn concurrent_header_checks_keep_their_own_probe() {
+        const NAMESPACE: &str = "Concurrent.Probe";
+        const GOOD: &str = "int valid_probe;\n";
+        const BAD: &str = "#error expected_second_probe\n";
+        // The serial control differs only in scheduling. Both inputs must
+        // already produce the expected independent clang answers.
+        assert!(super::compile(NAMESPACE, GOOD, &[]).unwrap().is_empty());
+        assert!(
+            super::compile(NAMESPACE, BAD, &[])
+                .unwrap()
+                .contains("expected_second_probe")
+        );
+
+        let ready = std::sync::Barrier::new(2);
+        let (good, bad) = std::thread::scope(|scope| {
+            let good = scope.spawn(|| {
+                super::compile_with_ready(NAMESPACE, GOOD, &[], || {
+                    ready.wait();
+                })
+            });
+            let bad = scope.spawn(|| {
+                super::compile_with_ready(NAMESPACE, BAD, &[], || {
+                    ready.wait();
+                })
+            });
+            (good.join().unwrap().unwrap(), bad.join().unwrap().unwrap())
+        });
+        // Both files exist before either compiler starts. With a PID-only
+        // directory one input overwrites the other, or one cleanup removes it.
+        assert!(
+            good.is_empty(),
+            "clean probe read another call's input: {good}"
+        );
+        assert!(
+            bad.contains("expected_second_probe"),
+            "error probe lost its own input: {bad}"
+        );
+    }
 
     #[test]
     fn header_values_distinguish_sign_extension_from_zero_extension() {
