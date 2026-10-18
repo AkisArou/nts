@@ -51,7 +51,7 @@ fn null_read() -> Func {
 }
 
 #[test]
-fn an_unchecked_read_has_no_length_import_and_a_false_proof_traps() {
+fn an_unchecked_read_has_no_length_import_and_a_false_bound_traps() {
     let unchecked = nts_codegen_wasm::emit(&program(vec![read(false), null_read()])).unwrap();
     assert!(
         !unchecked
@@ -73,7 +73,7 @@ fn an_unchecked_read_has_no_length_import_and_a_false_proof_traps() {
         &[&checked_path],
     );
     assert_eq!(report["badProofTraps"], 7, "{report}");
-    assert_eq!(report["ranges"], 126, "{report}");
+    assert_eq!(report["ranges"], 133, "{report}");
     assert_eq!(report["nullFloor"], true, "{report}");
     if common::retained().is_none() {
         std::fs::remove_dir_all(checked_path).unwrap();

@@ -16,11 +16,4 @@ for (const [name, args] of [
     && error.code === 'NTS5001' && error.message.includes(name) && !(error instanceof WebAssembly.RuntimeError));
   named_declines++;
 }
-for (const index of [-1, 0.5, NaN, Infinity, -Infinity, 1, 2 ** 32]) {
-  assert.throws(() => wasm.unit('a', index), error => error instanceof WasmInputDecline
-    && error.message.includes('unit'));
-  named_declines++;
-}
-assert.equal(wasm.unit('😀', 0), 0xd83d);
-assert.equal(wasm.unit('😀', 1), 0xde00);
-console.log(JSON.stringify({ named_declines, valid_units: 2, raw_traps: 0 }));
+console.log(JSON.stringify({ named_declines, raw_traps: 0 }));

@@ -1825,10 +1825,14 @@ returns NaN; `charAt` returns the empty string; `at` can return undefined.
 Bounds-proven internal accesses may use stricter builtins only when HIR proves
 that the call will not trap.
 
-`StringUnitAt { checked: false }` spends that proof: after the receiver's null
-contract and index conversion, it calls the code-unit builtin directly, without
-a second length/range test. A false HIR proof traps in the builtin rather than
-reading an arbitrary value; the Wasm regression deliberately tests that failure.
+`StringUnitAt { checked: false }` means HIR proved the index integral and in
+range. After the receiver's null contract and index conversion, it calls the
+code-unit builtin directly, without a second length/range test. Violating the
+proof is a compiler bug. An out-of-range converted integer traps in the builtin;
+the regression deliberately tests that failure. The retained total conversion
+can normalize invalid HIR inputs instead: NaN and negative numbers become zero,
+and fractions truncate, potentially reading an in-range unit. That behaviour is
+outside the internal contract, not a source-level bounds guarantee.
 Checked reads retain index normalization, bounds and their NaN result. The
 affix helpers check both lengths once before reading their code units.
 `NTS_WASM_STRING_UNIT_RECHECK=1` restores the old redundant checks at emission

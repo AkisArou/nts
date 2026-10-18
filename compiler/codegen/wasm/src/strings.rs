@@ -276,8 +276,9 @@ pub(crate) fn unit(
     {
         return checked_unit(b, result, string, index);
     }
-    // HIR already proved this index inside the string. The builtin traps if
-    // that proof is ever wrong; no repeated length/range test is needed.
+    // checked=false means HIR proved the index integral and inside the string.
+    // This is a compiler invariant. A converted out-of-range integer traps in
+    // the builtin; total index conversion does not validate a false proof.
     // Keep the old spelling only as a same-binary measurement diagnostic.
     if !checked && b.m.recheck_string_units {
         unit_index_contract(b, string, index)?;

@@ -71,7 +71,7 @@ fn receiver(name: &str, undefined: bool, helper: Option<&str>) -> Func {
 #[test]
 fn invalid_typed_contracts_are_named_refusals_not_traps_or_source_throws() {
     let string = HirType::Managed(ManagedType::String);
-    let mut funcs = vec![
+    let funcs = vec![
         cast("numberFromString", string.clone(), F64, None),
         cast("booleanFromNumber", F64, HirType::Bool, None),
         cast("stringFromBoolean", HirType::Bool, string, None),
@@ -91,25 +91,10 @@ fn invalid_typed_contracts_are_named_refusals_not_traps_or_source_throws() {
         receiver("undefinedLength", true, None),
         receiver("nullCharAt", false, Some("nts_str_char_at")),
     ];
-    let string = HirType::Managed(ManagedType::String);
-    let mut unit = function("unit", &[string.clone(), F64], U32);
-    let s = value(&mut unit, OpKind::Param(0), string);
-    let index = value(&mut unit, OpKind::Param(1), F64);
-    let read = value(
-        &mut unit,
-        OpKind::StringUnitAt {
-            string: s,
-            index,
-            checked: false,
-        },
-        U32,
-    );
-    unit.blocks.push(block(
-        &[],
-        &[s, index, read],
-        Terminator::Return(Some(read)),
-    ));
-    funcs.push(unit);
+    // Unchecked string reads require HIR's integral/in-range proof, so an
+    // arbitrary f64 parameter cannot exercise a valid typed contract here.
+    // string_units.rs covers proof-bearing reads, false bounds and checked
+    // source inputs (including fractional and nonfinite indices) separately.
     let emitted = nts_codegen_wasm::emit(&program(funcs)).unwrap();
     let report = common::run(
         "contracts",
@@ -117,6 +102,6 @@ fn invalid_typed_contracts_are_named_refusals_not_traps_or_source_throws() {
         "tooling/wasm/check-contracts.mjs",
         &[],
     );
-    assert_eq!(report["named_declines"], 15);
+    assert_eq!(report["named_declines"], 8);
     assert_eq!(report["raw_traps"], 0);
 }
