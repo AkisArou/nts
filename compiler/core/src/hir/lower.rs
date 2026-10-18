@@ -66472,6 +66472,10 @@ impl<'a> FuncBuilder<'a> {
                 HirType::NUMBER,
                 origin.clone(),
             );
+            // NativeSizeOf is a number by the op's contract; the external
+            // helper takes size_t. State that conversion before the call,
+            // rather than relying on runtime-signature specialization.
+            let bytes = self.coerce(bytes, &super::native::Scalar::Size.representation(), id)?;
             self.runtime_call(
                 "nts_hresult_clear",
                 vec![status, *slot, bytes],
