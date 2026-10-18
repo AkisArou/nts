@@ -267,6 +267,7 @@ fn vocabulary() -> Vec<&'static str> {
         "param",
         "blockparam",
         "const",
+        "const.handle",
         "erase",
         "tagof",
         "unerase",
@@ -762,6 +763,10 @@ mod tests {
     #[test]
     fn every_fact_form_parses() {
         let parsed = |text: &str| parse(text).unwrap_or_else(|why| panic!("{text}: {why}"));
+        assert!(matches!(
+            parsed("c llvm: count const.handle in broadcast == 1").1,
+            Fact::Count { n: 1, .. }
+        ));
         assert_eq!(
             parsed("all: no erase in sum"),
             (
