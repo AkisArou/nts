@@ -1057,7 +1057,7 @@ fn nonnull_overrides(path: &Utf8Path) -> Result<std::collections::BTreeSet<Strin
 }
 
 /// `nts bind` -- a jar or a directory of class files in, TypeScript
-/// declarations with JVM contracts in JSDoc out.
+/// declarations with JVM contracts in `JSDoc` out.
 ///
 /// ```text
 /// nts bind --jar app.jar     --package com.example --out types/

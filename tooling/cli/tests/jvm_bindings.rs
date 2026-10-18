@@ -41,6 +41,33 @@ fn emit(root: &Path, directory: &str) -> Output {
     )
 }
 
+const DECLARATIONS: &str = r#"
+declare module "java:foreign" {
+  export class Probe {
+    /** @ntsJvm special foreign/Probe.<init>:(I)V */
+    constructor(x: number);
+    /** @ntsJvm field foreign/Probe.x:I */
+    x: number;
+    /** @ntsJvm staticfield foreign/Probe.INSTANCE:Lforeign/Probe; */
+    static readonly INSTANCE: Probe;
+    /** @ntsJvm virtual foreign/Probe.choose:(I)I */
+    choose(n: number): number;
+    /** @ntsJvm virtual foreign/Probe.choose:(Ljava/lang/String;)I */
+    choose(s: string): number;
+    /** @ntsJvm static foreign/Probe.score:(I)I
+     * @ntsJvmKeeps none
+     */
+    static score(n: number): number;
+    /** @ntsJvm static foreign/Probe.callback:()Lforeign/Probe$Fn; */
+    static callback(): Fn;
+  }
+  export interface Fn {
+    /** @ntsJvm interface foreign/Probe$Fn.apply:(I)I */
+    apply(n: number): number;
+  }
+}
+"#;
+
 #[test]
 fn annotations_select_overloads_after_unicode_and_formatting_edits() {
     let Some(root) = project("jvm-annotated-overloads") else {
@@ -86,32 +113,7 @@ public final class Probe {
     let generated_text = std::fs::read_to_string(generated.join("foreign.d.ts")).expect("bindings");
     assert!(generated_text.contains("@ntsJvm virtual foreign/Probe.choose:(I)I"));
     assert!(generated_text.contains("@ntsJvm virtual foreign/Probe.choose:(Ljava/lang/String;)I"));
-    let declarations = r#"
-declare module "java:foreign" {
-  export class Probe {
-    /** @ntsJvm special foreign/Probe.<init>:(I)V */
-    constructor(x: number);
-    /** @ntsJvm field foreign/Probe.x:I */
-    x: number;
-    /** @ntsJvm staticfield foreign/Probe.INSTANCE:Lforeign/Probe; */
-    static readonly INSTANCE: Probe;
-    /** @ntsJvm virtual foreign/Probe.choose:(I)I */
-    choose(n: number): number;
-    /** @ntsJvm virtual foreign/Probe.choose:(Ljava/lang/String;)I */
-    choose(s: string): number;
-    /** @ntsJvm static foreign/Probe.score:(I)I
-     * @ntsJvmKeeps none
-     */
-    static score(n: number): number;
-    /** @ntsJvm static foreign/Probe.callback:()Lforeign/Probe$Fn; */
-    static callback(): Fn;
-  }
-  export interface Fn {
-    /** @ntsJvm interface foreign/Probe$Fn.apply:(I)I */
-    apply(n: number): number;
-  }
-}
-"#;
+
     std::fs::write(
         root.join("main.ts"),
         r#"
@@ -128,12 +130,12 @@ export function run(): string {
     // No sidecar exists. A second run moves every declaration and changes byte
     // offsets with non-ASCII text; the checker must still select the same ABI.
     for (directory, text) in [
-        ("first", declarations.to_owned()),
+        ("first", DECLARATIONS.to_owned()),
         (
             "edited",
             format!(
                 "// λ 🦀 binding edits\n\n{}",
-                declarations.replace("    ", "\t\t")
+                DECLARATIONS.replace("    ", "\t\t")
             ),
         ),
     ] {

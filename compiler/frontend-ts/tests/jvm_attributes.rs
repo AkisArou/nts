@@ -71,7 +71,7 @@ declare module "java:p" {
 fn malformed_binding_docs_fail_even_when_skip_lib_check_is_enabled() {
     let Some(snapshot) = snapshot(
         "errors",
-        r#"
+        r"
 /** @ntsJvm sideways p/C.first:()V */
 declare function first(): void;
 /**
@@ -85,7 +85,7 @@ declare function second(): void;
  * @ntsJvmKeeps 0
  */
 declare function third(): void;
-"#,
+",
     ) else {
         return;
     };
