@@ -1030,6 +1030,11 @@ fn notes(
     if let Some(free) = &function.free {
         notes.push(format!("@ntsFree {free}"));
     }
+    if function.raw_result_owned {
+        notes.push(
+            "Caller owns the raw pointer result; this binding names no deallocator.".to_owned(),
+        );
+    }
     for name in &function.no_escape {
         notes.push(format!("@ntsNoEscape {name}"));
     }
@@ -1563,6 +1568,7 @@ mod tests {
             c_parameters: Vec::new(),
             deprecated: false,
             free: None,
+            raw_result_owned: false,
             no_escape: Vec::new(),
             returns: None,
             method: None,

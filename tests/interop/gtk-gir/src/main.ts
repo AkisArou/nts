@@ -112,6 +112,7 @@ import {
   g_idle_add_full,
   g_key_file_get_integer,
   g_free,
+  g_malloc0,
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
@@ -122,12 +123,12 @@ import {
   type GError,
   g_bytes_new,
 } from "c:GLib-2.0";
-import { G_TYPE_STRING, g_signal_group_new } from "c:GObject-2.0";
+import { G_TYPE_STRING, g_signal_group_new, g_object_set_data, g_object_get_data } from "c:GObject-2.0";
 import { GdkRGBA } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
-import { local, stringFrom } from "c:memory";
+import { local, stringFrom, bytesFrom } from "c:memory";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0;
@@ -326,6 +327,15 @@ function main(): void {
   void learnKind();
   void directories("/tmp/nts-gtk-gir-directory");
   const application = gtk_application_new("dev.nts.GtkGir", ApplicationFlags.NON_UNIQUE);
+  // GObject retains the address: allocate it, remove the data, then free it.
+  // Both GIR-returned gpointers stay raw, with no inferred deallocator.
+  const raw = g_malloc0(1);
+  g_object_set_data(application, "nts-raw-pointer", raw);
+  const roundTrip = g_object_get_data(application, "nts-raw-pointer");
+  const pointerByte = roundTrip === null ? -1 : bytesFrom(roundTrip, 1)[0];
+  console.log("pointer=" + String(roundTrip === raw) + ":" + String(pointerByte));
+  g_object_set_data(application, "nts-raw-pointer", null);
+  g_free(raw);
   let ticks = 0;
   let clicks = 0;
   application.connect("activate", () => {

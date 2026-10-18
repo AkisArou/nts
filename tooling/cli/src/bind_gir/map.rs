@@ -208,6 +208,8 @@ pub(crate) struct Function {
     pub(crate) deprecated: bool,
     /// `@ntsFree`: the function releasing a returned string the caller owns.
     pub(crate) free: Option<String>,
+    /// A full-transfer raw result, which the caller owns without an inferred deallocator.
+    pub(crate) raw_result_owned: bool,
     /// `@ntsNoEscape`: the parameters the callee writes through during the
     /// call and keeps nothing of -- out parameters, which is what lets their
     /// storage be a `local` on the caller's stack.
@@ -840,6 +842,7 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 c_parameters: vec![this.c, value.c],
                 deprecated: false,
                 free: None,
+                raw_result_owned: false,
                 no_escape: Vec::new(),
                 returns: None,
                 method: Some((c_type.clone(), method.clone())),
@@ -882,6 +885,7 @@ fn plain_function(
         result,
         deprecated: false,
         free: None,
+        raw_result_owned: false,
         no_escape: Vec::new(),
         returns: None,
         method: None,
@@ -1033,6 +1037,7 @@ fn get_by_name(
         c_parameters: vec![this.c],
         deprecated: false,
         free,
+        raw_result_owned: false,
         no_escape: Vec::new(),
         returns: None,
         method: Some((c_type.to_owned(), method.clone())),
@@ -1926,6 +1931,9 @@ impl<'a> Mapper<'a> {
             parameters.push((identifier(&param.name), mapped));
         }
         let (result, free) = self.result_or_bytes(callable, owner)?;
+        let raw_result_owned = signature.result.transfer == Transfer::Full
+            && matches!(result.shape, Shape::Other)
+            && matches!(&result.c, Type::Pointer(p) if matches!(p, Pointee::Void) || matches!(p, Pointee::Const(inner) if **inner == Pointee::Void));
         // `GError **error`, which GIR leaves out of the parameter list: the
         // same out parameter as any other, a slot for a nullable handle.
         if signature.throws {
@@ -1953,6 +1961,7 @@ impl<'a> Mapper<'a> {
             c_parameters,
             deprecated: callable.deprecated,
             free,
+            raw_result_owned,
             no_escape,
             returns,
             method,
@@ -2103,9 +2112,6 @@ impl<'a> Mapper<'a> {
                 c: Type::Pointer(Pointee::Pointer(Box::new(char))),
             });
         }
-        if name == "gpointer" || name == "gconstpointer" {
-            return Err(Reason::Gpointer);
-        }
         // The value's own C type, one `*` fewer than the parameter's.
         let Some(value_type) = c_type.as_deref().and_then(|c| c.strip_suffix('*')) else {
             return Err(Reason::OutParameter);
@@ -2119,7 +2125,11 @@ impl<'a> Mapper<'a> {
             nullable: false,
             ..param.clone()
         };
-        let mapped = self.typed(&value)?;
+        let mapped = if name == "gpointer" || name == "gconstpointer" {
+            self.void_pointer(&value)?
+        } else {
+            self.typed(&value)?
+        };
         let (slot, pointee, shape) = match mapped.c {
             Type::Scalar(scalar) => (
                 mapped.ts.clone(),
@@ -2671,6 +2681,36 @@ impl<'a> Mapper<'a> {
         self.typed(param)
     }
 
+    /// A raw address has no element type, handle ownership, or guessed release.
+    /// GIR decides value nullability; the existing out-slot path adds nullable
+    /// storage for the value before C writes it and optionality for the slot.
+    fn void_pointer(&mut self, param: &Param) -> Result<Mapped, Reason> {
+        let TypeRef::Named {
+            c_type: Some(c_type),
+            ..
+        } = &param.ty
+        else {
+            return Err(Reason::Gpointer);
+        };
+        let compact: String = c_type.split_whitespace().collect();
+        let (brand, pointee) = match compact.as_str() {
+            "gpointer" | "void*" => ("Ptr", Pointee::Void),
+            "gconstpointer" | "constvoid*" | "voidconst*" => {
+                ("ConstPtr", Pointee::Const(Box::new(Pointee::Void)))
+            }
+            _ => return Err(Reason::PointerDepth(c_type.clone())),
+        };
+        self.binding.brands.insert(brand);
+        Ok(Mapped {
+            shape: Shape::Other,
+            ts: format!(
+                "{brand}<void>{}",
+                if param.nullable { " | null" } else { "" }
+            ),
+            c: Type::Pointer(pointee),
+        })
+    }
+
     /// A scalar, enum, handle or record pointer -- the shapes that need no
     /// conversion at the call.
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
@@ -2693,9 +2733,7 @@ impl<'a> Mapper<'a> {
         }
         // `gpointer` is C's `void *`: any native pointer, which a binding
         // spells `object` and the compiler checks is not a managed one.
-        // `gconstpointer` would need a const `void *` TypeScript has no
-        // spelling for yet, and a returned `gpointer` says nothing about what
-        // it points at; both stay refused.
+        // Results use exact raw void pointers; input mappings stay as before.
         if name == "gpointer"
             && param.direction == Direction::In
             && c_type != "gconstpointer"
@@ -2713,7 +2751,11 @@ impl<'a> Mapper<'a> {
             });
         }
         if name == "gpointer" || name == "gconstpointer" {
-            return Err(Reason::Gpointer);
+            return if param.direction == Direction::In {
+                Err(Reason::Gpointer)
+            } else {
+                self.void_pointer(param)
+            };
         }
         // C99's `bool`, which GIR's scanner reports as `gboolean` -- an `int`
         // -- although the ABI is one byte. `c:type` says which it is.
@@ -3029,6 +3071,7 @@ impl<'a> Mapper<'a> {
             c_parameters,
             deprecated: callable.deprecated,
             free,
+            raw_result_owned: false,
             no_escape: Vec::new(),
             returns: self.constructed(callable),
             method: None,
@@ -3203,6 +3246,7 @@ impl<'a> Mapper<'a> {
             ],
             deprecated: false,
             free: None,
+            raw_result_owned: false,
             no_escape: Vec::new(),
             returns: None,
             // `button.connect("clicked", handler)`, GJS's spelling: a method
@@ -3532,6 +3576,7 @@ impl<'a> Mapper<'a> {
             result,
             deprecated: false,
             free: None,
+            raw_result_owned: false,
             no_escape: Vec::new(),
             returns: None,
             method: None,
@@ -3881,6 +3926,7 @@ fn get_type_function(get_type: &str) -> Function {
         c_parameters: Vec::new(),
         deprecated: false,
         free: None,
+        raw_result_owned: false,
         no_escape: Vec::new(),
         returns: None,
         method: None,
@@ -3979,6 +4025,7 @@ fn is_bytes(array: &ArrayRef) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
     use super::SCALARS;
     use nts_core::hir::native::Scalar;
 
@@ -3994,5 +4041,155 @@ mod tests {
                 "`{gir}` is written as `{brand}`, which the compiler does not read as {scalar:?}"
             );
         }
+    }
+    fn raw_pointer_fixture() -> (std::path::PathBuf, super::Repository) {
+        use std::fmt::Write as _;
+        let dir = std::env::temp_dir().join(format!("nts-gir-raw-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("fixture directory");
+        std::fs::write(
+            dir.join("raw.h"),
+            r"
+            typedef void *gpointer; typedef const void *gconstpointer;
+            gpointer raw_plain(void); gpointer raw_nullable(void);
+            gconstpointer raw_const(void); gconstpointer raw_legacy(void);
+            gpointer raw_owned(void); void raw_slot(gpointer *slot);
+            void raw_optional(gconstpointer *slot); void raw_inout(gpointer *slot);
+            void raw_bad_header(gconstpointer *slot); void raw_bad_depth(gpointer **slot);
+            void raw_input(gpointer value); void raw_const_input(gconstpointer value);
+        ",
+        )
+        .expect("header");
+        let mut xml = String::from(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="raw.h"/><namespace name="Raw" version="1.0">"#,
+        );
+        for (name, gir, c, flags) in [
+            ("plain", "gpointer", "gpointer", ""),
+            ("nullable", "gpointer", "void *", "nullable=\"1\""),
+            ("const", "gconstpointer", "const void *", ""),
+            (
+                "legacy",
+                "gconstpointer",
+                "gconstpointer",
+                "allow-none=\"1\"",
+            ),
+            (
+                "owned",
+                "gpointer",
+                "gpointer",
+                "transfer-ownership=\"full\"",
+            ),
+        ] {
+            let _ = writeln!(
+                xml,
+                r#"<function name="{name}" c:identifier="raw_{name}">
+                <return-value {flags}><type name="{gir}" c:type="{c}"/></return-value>
+                </function>"#
+            );
+        }
+        for (name, gir, c, flags) in [
+            ("slot", "gpointer", "gpointer*", "direction=\"out\""),
+            (
+                "optional",
+                "gconstpointer",
+                "gconstpointer*",
+                "direction=\"out\" optional=\"1\"",
+            ),
+            ("inout", "gpointer", "void**", "direction=\"inout\""),
+            ("bad_header", "gpointer", "gpointer*", "direction=\"out\""),
+            ("bad_depth", "gpointer", "gpointer**", "direction=\"out\""),
+            ("input", "gpointer", "gpointer", ""),
+            ("const_input", "gconstpointer", "gconstpointer", ""),
+        ] {
+            let _ = writeln!(
+                xml,
+                r#"<function name="{name}" c:identifier="raw_{name}">
+                <return-value><type name="none" c:type="void"/></return-value><parameters>
+                <parameter name="slot" {flags}><type name="{gir}" c:type="{c}"/></parameter>
+                </parameters></function>"#
+            );
+        }
+        xml.push_str("</namespace></repository>");
+        std::fs::write(dir.join("Raw-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("Raw-1.0", &[search]).expect("parse GIR");
+        (dir, repository)
+    }
+
+    #[test]
+    fn raw_void_results_and_slots_follow_gir_and_the_header() {
+        use super::super::{check, emit, facts};
+        use super::{Reason, bind};
+        let (dir, repository) = raw_pointer_fixture();
+        let namespace = &repository.namespaces["Raw"];
+        let mut binding = bind(&repository, namespace, &facts::Facts::default());
+        let function = |name: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == name)
+                .expect("bound function")
+        };
+        for (name, expected) in [
+            ("raw_plain", "Ptr<void>"),
+            ("raw_nullable", "Ptr<void> | null"),
+            ("raw_const", "ConstPtr<void>"),
+            ("raw_legacy", "ConstPtr<void> | null"),
+            ("raw_owned", "Ptr<void>"),
+        ] {
+            assert_eq!(function(name).result.ts, expected);
+        }
+        assert!(function("raw_owned").raw_result_owned);
+        assert!(!function("raw_plain").raw_result_owned);
+        assert_eq!(
+            function("raw_slot").parameters[0].1.ts,
+            "Ptr<Ptr<void> | null>"
+        );
+        assert_eq!(
+            function("raw_optional").parameters[0].1.ts,
+            "Ptr<ConstPtr<void> | null> | null"
+        );
+        assert_eq!(
+            function("raw_inout").parameters[0].1.ts,
+            "Ptr<Ptr<void> | null>"
+        );
+        assert_eq!(function("raw_input").parameters[0].1.ts, "object");
+        assert_eq!(function("raw_slot").no_escape, ["slot"]);
+        // One difference: metadata says the same slot, but the header makes
+        // its pointee const. Mapping alone accepts it; the final check refuses.
+        assert_eq!(
+            function("raw_bad_header").parameters[0].1.ts,
+            "Ptr<Ptr<void> | null>"
+        );
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "raw_const_input" && matches!(r, Reason::Gpointer))
+        );
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "raw_bad_depth" && matches!(r, Reason::PointerDepth(_)))
+        );
+        check::against_headers(&mut binding, &[format!("-I{}", dir.display())])
+            .expect("header check");
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "raw_bad_header" && matches!(r, Reason::Header(_)))
+        );
+        let text = emit::declarations(&binding, "test");
+        assert!(
+            text.contains("Caller owns the raw pointer result; this binding names no deallocator.")
+        );
+        assert!(!text.contains("@ntsFree"));
+        assert!(text.contains("raw_optional(slot?: Ptr<ConstPtr<void> | null> | null): void;"));
+        assert!(text.contains("raw_slot(slot: Ptr<Ptr<void> | null>): void;"));
+        std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 }
