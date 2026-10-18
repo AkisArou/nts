@@ -3729,6 +3729,97 @@ pub(super) fn reference_fields(func: &Func, layouts: &[Layout], value: ValueId) 
 
 #[cfg(test)]
 mod tests {
+    fn stopped_summary_program() -> super::Program {
+        use crate::hir::{Absent, Field, Param, ParamShape, refused};
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::{Origin, TypeId};
+
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let receiver = super::HirType::Managed(super::ManagedType::Object(TypeId(1)));
+        let string = super::HirType::Managed(super::ManagedType::String);
+        let mut inert = super::Func {
+            name: "inert".to_owned(),
+            params: vec![Param {
+                name: "this".to_owned(),
+                ty: receiver.clone(),
+                origin: origin.clone(),
+                shape: ParamShape::Ordinary,
+                known: crate::hir::facts::Facts::TOP,
+                written: None,
+            }],
+            return_type: super::HirType::Void,
+            written_return: None,
+            written_return_elements: Vec::new(),
+            result_absent: Absent::Impossible,
+            values: vec![crate::hir::Op {
+                kind: super::OpKind::Param(0),
+                ty: receiver,
+                origin: origin.clone(),
+            }],
+            blocks: Vec::new(),
+            origin: origin.clone(),
+            exported: false,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+            obligations: Vec::new(),
+        };
+        let block = refused::stop(&mut inert, "summary guard".to_owned(), &origin);
+        inert.blocks.push(block);
+        let mut writes = inert.clone();
+        writes.name = "writes".to_owned();
+        let store = super::ValueId(u32::try_from(writes.values.len()).expect("four values"));
+        writes.values.push(crate::hir::Op {
+            kind: super::OpKind::FieldSet {
+                object: super::ValueId(0),
+                field: 0,
+                value: super::ValueId(1),
+            },
+            ty: super::HirType::Void,
+            origin,
+        });
+        writes.blocks[0].ops.insert(1, store);
+        super::Program {
+            funcs: vec![inert, writes],
+            layouts: vec![super::Layout {
+                types: vec![TypeId(1)],
+                name: "Receiver".to_owned(),
+                fields: vec![Field {
+                    name: "value".to_owned(),
+                    ty: string,
+                    readonly: false,
+                    declared_by: None,
+                    written: None,
+                }],
+                methods: vec![Some("inert".to_owned()), Some("writes".to_owned())],
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..super::Program::default()
+        }
+    }
+
+    #[test]
+    fn an_inert_stop_borrows_but_a_store_before_a_stop_still_mutates() {
+        let program = stopped_summary_program();
+        crate::hir::verify::verify(&program).expect("the summary controls are valid HIR");
+        let summaries = super::summarize(&program, &program.layouts);
+        assert!(summaries.mutates.contains("writes"));
+        assert!(summaries.mutating_slots.contains(&1));
+        assert!(!summaries.mutates.contains("inert"));
+        assert!(!summaries.mutating_slots.contains(&0));
+        assert!(summaries.consumes("inert").is_none());
+        assert!(!summaries.hands_back("inert"));
+        let inert = &program.funcs[0];
+        let mut live = super::liveness::analyze(inert);
+        let ownership = super::analyze(inert, &program.layouts, &summaries, &mut live);
+        assert_eq!(ownership.of(super::ValueId(0)), super::Ownership::Borrowed);
+    }
+
     /// Helpers that return a parameter and are rightly not in
     /// [`super::RUNTIME_HANDS_BACK`], each for its reason.
     const NOT_HANDED_BACK: &[(&str, &str)] = &[

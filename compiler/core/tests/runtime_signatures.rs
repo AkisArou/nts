@@ -317,6 +317,23 @@ fn clearing_a_failed_output_writes_but_does_not_keep_the_slot() {
     assert!(!runtime::stores_nothing("nts_hresult_clear"));
 }
 
+#[test]
+fn a_diagnostic_stop_stores_nothing_without_becoming_pure() {
+    let header = include_str!("../../../runtime/c/nts_runtime.h");
+    let declaration = header
+        .lines()
+        .find(|line| line.contains("void nts_refused("))
+        .expect("the runtime must still declare the stop");
+    assert!(declaration.starts_with("_Noreturn "));
+    assert!(!declaration.contains("NTS_READS_ONLY"));
+    assert!(!runtime::reads_only("nts_refused"));
+    assert!(!runtime::RETAINS_ONLY_ITS_RESULT.contains(&"nts_refused"));
+    assert!(runtime::stores_nothing("nts_refused"));
+    // Uncaught exceptions can longjmp to a landing after changing program
+    // state: neither an unreachable terminator nor _Noreturn implies this fact.
+    assert!(!runtime::stores_nothing("nts_uncaught"));
+}
+
 /// `runtime::READS_ONLY` names exactly the helpers the header marks.
 ///
 /// Two lists again, and the failure this prevents is the quiet one: a helper
