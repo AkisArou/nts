@@ -61,9 +61,9 @@ pub(super) fn guard_slots(program: &mut Program) {
     for (name, reason) in &program.uncompiled {
         reasons.entry(name.as_str()).or_insert(reason.as_str());
     }
-    // Slots are program-wide (lower::number_slots). The same declared contract
-    // that dispatch::check uses, with source-order fallback for a row no call
-    // currently enters, is enough to type a body that never returns.
+    // Slots are program-wide (lower::number_slots), but a subclass can drop
+    // parameters. Keep a fallback contract for chains with no surviving entry;
+    // prefer each receiver's actual inherited ABI below.
     let mut contracts = FxHashMap::default();
     for func in &program.funcs {
         for op in func
@@ -91,6 +91,8 @@ pub(super) fn guard_slots(program: &mut Program) {
     }
     let mut names: FxHashSet<String> = program.funcs.iter().map(|func| func.name.clone()).collect();
     names.extend(program.uncompiled.iter().map(|(name, _)| name.clone()));
+    let layouts = super::fields::LayoutIndex::build(program);
+    let mut chain_contracts = FxHashMap::default();
     let mut added = Vec::new();
     for (owner, layout) in program.layouts.iter().enumerate() {
         // A closure with a refused body is rejected when it is constructed,
@@ -118,7 +120,23 @@ pub(super) fn guard_slots(program: &mut Program) {
             {
                 continue;
             }
-            let Some(contract) = contracts.get(&slot).map(|at| &program.funcs[*at]) else {
+            let inherited = layout
+                .base
+                .and_then(|base| layouts.of_class(base))
+                .and_then(|base| {
+                    contract_in_chain(
+                        program,
+                        &layouts,
+                        &by_name,
+                        &mut chain_contracts,
+                        base,
+                        slot,
+                    )
+                });
+            let Some(contract) = inherited
+                .or_else(|| contracts.get(&slot).copied())
+                .map(|at| &program.funcs[at])
+            else {
                 // No live virtual call declares this slot and no layout has a
                 // surviving signature/body for it. An emitter rejects a call
                 // without its declared ABI before dispatch; keep that existing
@@ -148,6 +166,43 @@ pub(super) fn guard_slots(program: &mut Program) {
         program.layouts[owner].methods[slot] = Some(name);
         program.funcs.push(func);
     }
+}
+
+/// First surviving signature in this inheritance chain. Cache intermediate
+/// rows too: many refused descendants can share the same missing ancestors.
+fn contract_in_chain(
+    program: &Program,
+    layouts: &super::fields::LayoutIndex,
+    by_name: &FxHashMap<&str, usize>,
+    contracts: &mut FxHashMap<(usize, usize), Option<usize>>,
+    start: usize,
+    slot: usize,
+) -> Option<usize> {
+    let mut at = Some(start);
+    let mut path = Vec::new();
+    let answer = loop {
+        let Some(owner) = at else { break None };
+        if let Some(answer) = contracts.get(&(owner, slot)) {
+            break *answer;
+        }
+        // Also terminates a malformed cyclic base chain without recursion.
+        contracts.insert((owner, slot), None);
+        path.push(owner);
+        let layout = &program.layouts[owner];
+        if let Some(at) = layout
+            .methods
+            .get(slot)
+            .and_then(Option::as_deref)
+            .and_then(|name| by_name.get(name))
+        {
+            break Some(*at);
+        }
+        at = layout.base.and_then(|base| layouts.of_class(base));
+    };
+    for owner in path {
+        contracts.insert((owner, slot), answer);
+    }
+    answer
 }
 
 /// Only the signature survives; a refused entry never executes the original body.
