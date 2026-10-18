@@ -31,18 +31,15 @@ pub(super) fn stop(func: &mut Func, message: String, origin: &Origin) -> Block {
     }
 }
 
-/// A virtual call needs its declared ABI even when another receiver supplies
-/// the body. Only a *recorded refusal* makes an absent virtual declaration a
-/// dependency; abstract/interface declarations are not missing direct calls.
-/// Shared by the cascade and initializer excision, so they cannot disagree.
+/// The existing direct-call dependency rule, shared by cascade and initializer
+/// excision. Missing virtual declarations keep their backend refusal: changing
+/// that frontier also changes which callers are pruned.
 pub(super) fn missing_callee<'a>(
     callee: &'a Callee,
     present: &FxHashSet<String>,
-    refused: &FxHashSet<String>,
 ) -> Option<&'a str> {
     let name = match callee {
         Callee::Direct(name) => name,
-        Callee::Virtual { declared, .. } if refused.contains(declared) => declared,
         _ => return None,
     };
     (!present.contains(name)).then_some(name)
@@ -124,9 +121,9 @@ pub(super) fn guard_slots(program: &mut Program) {
             }
             let Some(contract) = contracts.get(&slot).map(|at| &program.funcs[*at]) else {
                 // No live virtual call declares this slot and no layout has a
-                // surviving signature/body for it. Calls naming its refused
-                // declaration have already cascaded, so nothing can enter it.
-                // Prune removes the missing name as it did before.
+                // surviving signature/body for it. An emitter rejects a call
+                // without its declared ABI before dispatch; keep that existing
+                // refusal frontier. Prune removes the missing name as before.
                 continue;
             };
             if contract.params.is_empty() {
