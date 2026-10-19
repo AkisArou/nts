@@ -111,6 +111,7 @@ import { fileURLToPath } from "node:url";
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, HARNESS_HASH, pinCompiler, populationOf } from "./project.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
+import { Admission, createFeed } from "../gate/admission.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -454,9 +455,13 @@ async function runAll(all) {
     process.stderr.write(`  resumed: ${results.size} row(s) kept from ${rowsFile}\n`);
     paths = paths.filter((path) => !results.has(path));
   } else if (rowsFile) writeFileSync(rowsFile, `${JSON.stringify(header)}\n`);
-  let next = 0;
   let done = 0;
   const started = Date.now();
+  // A worker asks for its next path when it has finished the last one, so
+  // holding the feed holds the run case by case: below 12 GB no worker gets a
+  // new case, the ones running finish on their own timeout, and the feed
+  // resumes at 14 GB (`tooling/gate/admission.ts`).
+  const queue = createFeed(paths, new Admission({ report: (message) => process.stderr.write(`  ${message}\n`) }));
   const worker = (index) =>
     new Promise((resolve, reject) => {
       const child = spawn(
@@ -464,10 +469,16 @@ async function runAll(all) {
         [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots"],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
-      const feed = () => {
-        if (next < paths.length) child.stdin.write(`${paths[next++]}\n`);
-        else child.stdin.end();
-      };
+      let exited = false;
+      child.on("exit", () => {
+        exited = true;
+      });
+      const feed = () =>
+        queue.feed({
+          write: (path) => child.stdin.write(`${path}\n`),
+          end: () => child.stdin.end(),
+          exited: () => exited,
+        });
       createInterface({ input: child.stdout }).on("line", (line) => {
         const row = JSON.parse(line);
         results.set(row.path, row);

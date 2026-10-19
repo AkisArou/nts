@@ -2573,10 +2573,11 @@ step "compile-time" compile_time
 # path to (owed.test.mjs, and its --self-test), land.ts's train
 # (land.test.ts), and the test262 runner's case roots and population
 # (tooling/census/project.test.ts, which no step ran until the population
-# guard the backend steps rely on was added there), and Apple's simulator
-# readiness/failure contracts. Seconds.
+# guard the backend steps rely on was added there), Apple's simulator
+# readiness/failure contracts, and the memory admission both runners share
+# (tooling/gate/admission.test.ts). Seconds.
 tooling_tests() {
-  node --test tooling/gate/*.test.mjs tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
+  node --test tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "${TMPDIR:-/tmp}/nts-gate-tooling.$$" 2>&1
   status=$?
   awk '/^(✖|ℹ (tests|pass|fail))/ { print "  " $0 }' "${TMPDIR:-/tmp}/nts-gate-tooling.$$"
   [ $status -eq 0 ] || sed -n '/^✖ failing tests/,$p' "${TMPDIR:-/tmp}/nts-gate-tooling.$$" | head -40

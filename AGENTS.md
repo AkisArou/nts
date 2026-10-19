@@ -146,8 +146,9 @@ then a guard once fixed), `tests/memory/`.
   heavy job of yours at a time, a heavy phase started only when `MemAvailable`
   (`/proc/meminfo`) is at least 14 GB. Below 12 GB, stop starting new cases
   (the conformance feeder and gate-pool tokens); let running cases finish, and
-  resume admission at 14 GB. Until the runners hold admission themselves, an
-  agent holds its own next case or phase by hand. Never SIGSTOP timed work:
+  resume admission at 14 GB. The gate's token pool and the conformance
+  runner's feeder hold it themselves (`tooling/gate/admission.ts`); work of
+  your own outside them holds its next case or phase by hand. Never SIGSTOP timed work:
   its wall-clock timeout keeps running, so suspension fabricates a timeout.
   A gate step's memory pre-check is what a neighbour breaks, and a red gate
   costs its lane a half-hour rerun.

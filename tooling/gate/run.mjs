@@ -76,6 +76,7 @@ import { cpus, totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTokenPool } from "./tokenpool.mjs";
+import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -339,14 +340,8 @@ function git(...args) {
   const r = spawnSync("git", args, { encoding: "utf8" });
   return r.status === 0 ? r.stdout.trim() : null;
 }
-function memAvailableGB() {
-  try {
-    const m = /MemAvailable:\s+(\d+) kB/.exec(readFileSync("/proc/meminfo", "utf8"));
-    return m ? Number(m[1]) / 2 ** 20 : Infinity;
-  } catch {
-    return Infinity;
-  }
-}
+// A machine that does not say counts as unbounded here, as it always has.
+const memAvailableGB = () => readMemAvailable() ?? Infinity;
 
 // ---------------------------------------------------------------------------
 // State.
@@ -568,9 +563,14 @@ function workEstimate(name) {
   return b?.cpu > 0 ? b.cpu : estimate(name) * Math.min(s?.slots ?? 1, SLOTS);
 }
 
+// A token is a case starting, so the pool is where the run stops starting
+// cases when memory runs low: none below 12 GB, again from 14, and the cases
+// already running are never stopped (`./admission.ts`). The recheck below
+// reconsiders a held pool every few seconds.
+const caseAdmission = new Admission({ report: (message) => process.stdout.write(`  ${message}\n`) });
 const tok = createTokenPool({
   // `used()` counts the tokens held in an elastic step's share.
-  free: () => (memAvailableGB() < 1 ? 0 : SLOTS - used().slots - withhold),
+  free: () => (caseAdmission.open() ? SLOTS - used().slots - withhold : 0),
   claim: (step, { held, used: spent, waitedS }) => {
     const left = Math.max(10, workEstimate(step) - spent);
     const c = left / (held + 1) + waitedS;
