@@ -1496,6 +1496,43 @@ struct Chain {
     erased: bool,
 }
 
+/// The bits of an unsigned literal, where it fits its kind: `4294967295`
+/// written as a `Uint32` is `-1` in its slot, the raw bits this backend
+/// crosses every unsigned kind by. `None` outside the kind's range.
+fn unsigned_bits(number: i128, bits: u8) -> Option<u64> {
+    if number < 0 || (bits < 64 && number >= (1i128 << bits)) {
+        return None;
+    }
+    u64::try_from(number).ok()
+}
+
+/// An `int` literal at its type: a signed kind as itself, an unsigned kind
+/// as its bits. `None` where the literal is wider than the slot holds.
+fn int_literal(number: i128, ty: &HirType) -> Option<i32> {
+    if let HirType::Int {
+        bits,
+        signed: false,
+    } = ty
+    {
+        return unsigned_bits(number, *bits)
+            .and_then(|bits| u32::try_from(bits).ok())
+            .map(|bits| i32::from_ne_bytes(bits.to_ne_bytes()));
+    }
+    i32::try_from(number).ok()
+}
+
+/// A `long` literal at its type, as [`int_literal`] at 64 bits.
+fn long_literal(number: i128, ty: &HirType) -> Option<i64> {
+    if let HirType::Int {
+        bits,
+        signed: false,
+    } = ty
+    {
+        return unsigned_bits(number, *bits).map(|bits| i64::from_ne_bytes(bits.to_ne_bytes()));
+    }
+    i64::try_from(number).ok()
+}
+
 impl Emitter<'_> {
     /// One block: its operations, then its terminator.
     pub(crate) fn block(
@@ -5050,13 +5087,13 @@ impl Emitter<'_> {
             }
             OpKind::ConstInt(number) => match types::kind(ty) {
                 Some(Kind::Long) => {
-                    let Ok(narrow) = i64::try_from(*number) else {
+                    let Some(narrow) = long_literal(*number, ty) else {
                         return Err(refuse(self.func, "an integer literal wider than 64 bits"));
                     };
                     code.const_long(origin, pool, narrow);
                 }
                 Some(Kind::Int) => {
-                    let Ok(narrow) = i32::try_from(*number) else {
+                    let Some(narrow) = int_literal(*number, ty) else {
                         return Err(refuse(self.func, "an integer literal wider than its slot"));
                     };
                     code.const_int(origin, pool, narrow);
@@ -8370,5 +8407,60 @@ fn values_array(
             "arrayOfValues",
             "(Ljava/lang/Object;)Ljava/lang/Object;",
         );
+    }
+}
+
+#[cfg(test)]
+mod literal_tests {
+    use super::{int_literal, long_literal};
+    use nts_core::hir::HirType;
+
+    const U32: HirType = HirType::Int {
+        bits: 32,
+        signed: false,
+    };
+    const U8: HirType = HirType::Int {
+        bits: 8,
+        signed: false,
+    };
+    const I32: HirType = HirType::Int {
+        bits: 32,
+        signed: true,
+    };
+    const U64: HirType = HirType::Int {
+        bits: 64,
+        signed: false,
+    };
+    const I64: HirType = HirType::Int {
+        bits: 64,
+        signed: true,
+    };
+
+    #[test]
+    fn an_unsigned_literal_is_its_raw_bits() {
+        assert_eq!(int_literal(4_294_967_295, &U32), Some(-1));
+        assert_eq!(int_literal(2_147_483_648, &U32), Some(i32::MIN));
+        assert_eq!(int_literal(255, &U8), Some(255));
+        assert_eq!(long_literal(18_446_744_073_709_551_615, &U64), Some(-1));
+    }
+
+    #[test]
+    fn a_literal_outside_its_unsigned_kind_has_no_spelling() {
+        assert_eq!(int_literal(256, &U8), None);
+        assert_eq!(int_literal(-1, &U32), None);
+        assert_eq!(int_literal(4_294_967_296, &U32), None);
+        assert_eq!(long_literal(-1, &U64), None);
+    }
+
+    #[test]
+    fn a_signed_literal_is_itself() {
+        assert_eq!(int_literal(-2_147_483_648, &I32), Some(i32::MIN));
+        assert_eq!(int_literal(2_147_483_647, &I32), Some(i32::MAX));
+        assert_eq!(int_literal(2_147_483_648, &I32), None);
+        assert_eq!(
+            long_literal(-9_223_372_036_854_775_808, &I64),
+            Some(i64::MIN)
+        );
+        assert_eq!(long_literal(9_223_372_036_854_775_808, &I64), None);
     }
 }
