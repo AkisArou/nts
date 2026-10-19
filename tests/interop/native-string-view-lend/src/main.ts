@@ -4,14 +4,14 @@
 // and reads the view. Run under reference counting and AddressSanitizer on
 // both backends (build.sh).
 //
-// **Recorded gap (2026-10-19): `subject` reads freed memory.** The load of
-// `holder.s` is a borrow (`own::borrows_safely`): its window ends at the
+// **A guard since 2026-10-19; it was a recorded use-after-free.** The load of
+// `holder.s` was a borrow (`own::borrows_safely`) whose window ended at the
 // view, the last operation that names it, so the call that reads through the
-// view -- and runs the callback -- is outside it. `overwriteS` replaces the
-// field, which releases the only count, and C reads the string after it is
-// freed (heap-use-after-free in `nts_string_view`). The fix counts a reader
-// of a view of a value as a use of it; then `subject` passes too, and
-// build.sh's expectation flips to a guard.
+// view -- and runs the callback -- was outside it. `overwriteS` replaced the
+// field, which released the only count, and C read the string after it was
+// freed (heap-use-after-free in `nts_string_view`, on both backends). The
+// borrow now counts a reader of a view of a value as a use of it, so the
+// call is inside the window and the load takes a count of its own.
 //
 // Control, one difference -- the callback overwrites `holder.t`, not the
 // field that was lent: it passes.

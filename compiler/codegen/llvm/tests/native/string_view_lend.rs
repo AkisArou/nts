@@ -1,7 +1,7 @@
 //! The gated fixture for a `StringView` lent straight out of a field while the
 //! call it is lent for runs a callback: both backends, reference counting and
-//! AddressSanitizer. `control` must pass; `subject` is the recorded gap (see
-//! the fixture's `src/main.ts`) and reads the string after it is freed.
+//! AddressSanitizer. `control` and `subject` must both pass; `subject` was a
+//! recorded use-after-free (see the fixture's `src/main.ts`).
 use super::{Command, clang, hir, prepare_with_files};
 
 const SOURCE: &str =
@@ -14,7 +14,7 @@ const CALLER: &str =
     include_str!("../../../../../tests/interop/native-string-view-lend/consumer/caller.c");
 
 #[test]
-fn recorded_gap_a_view_lent_from_a_field_is_freed_by_a_callback_during_the_call() {
+fn a_view_lent_from_a_field_outlives_a_callback_that_overwrites_it() {
     let Some((dir, prepared)) = prepare_with_files(
         "string-view-lend",
         SOURCE,
@@ -106,11 +106,10 @@ fn recorded_gap_a_view_lent_from_a_field_is_freed_by_a_callback_during_the_call(
             String::from_utf8_lossy(&control.stderr)
         );
         let subject = run("subject");
-        let stderr = String::from_utf8_lossy(&subject.stderr);
         assert!(
-            !subject.status.success() && stderr.contains("heap-use-after-free"),
-            "{backend}: this records the gap; when it fails because `subject` passes, the \
-             borrow counts the view's reader -- flip it to a guard. stderr:\n{stderr}"
+            subject.status.success(),
+            "{backend}: the lent string was freed before C read it: {}",
+            String::from_utf8_lossy(&subject.stderr)
         );
     }
 }

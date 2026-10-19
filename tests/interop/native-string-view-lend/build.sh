@@ -1,8 +1,8 @@
 #!/bin/sh
 # Both native backends under reference counting and AddressSanitizer, each
-# linked to the same host library and consumer. `control` must pass; `subject`
-# is the recorded gap (see src/main.ts) and must fail with the use-after-free
-# until the fix, which flips it to a guard.
+# linked to the same host library and consumer. `control` and `subject` must
+# both pass: `subject` was a recorded use-after-free (see src/main.ts), and is
+# a guard since the borrow counts the view's reader.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/target/interop-native-string-view-lend"}
@@ -22,14 +22,5 @@ for backend in c llvm; do
   "$cc" -fsanitize=address "$out/$backend.o" "$out/nts_runtime.c.o" "$out/host.c.o" \
     "$out/caller.c.o" -lm -lpthread -o "$out/$backend-run"
   ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" control
-  if ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" subject 2> "$out/$backend-subject.err"; then
-    echo "$backend: subject passes -- the recorded gap is fixed; flip build.sh to a guard"
-    exit 1
-  fi
-  if ! grep -q "heap-use-after-free" "$out/$backend-subject.err"; then
-    echo "$backend: subject failed, but not with the recorded use-after-free:"
-    cat "$out/$backend-subject.err"
-    exit 1
-  fi
-  echo "$backend: subject reads the lent string after it is freed (recorded gap)"
+  ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" subject
 done

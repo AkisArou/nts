@@ -3282,10 +3282,26 @@ fn borrows_safely(
         return false;
     }
 
+    // A view of the value reads it: `NativeStringView` holds no count of its
+    // own, so what reads the view -- the native call it was lent for -- reads
+    // the value, and the borrow must cover it. Counting only the value's own
+    // operands ended the window at the view, and a callback the call ran could
+    // overwrite the slot and free the string while C read it
+    // (tests/interop/native-string-view-lend).
+    let mut read = vec![value];
     let mut last = at;
     for (index, other) in original.iter().enumerate().skip(at + 1) {
-        if super::verify::operands(&func.values[other.0 as usize].kind).contains(&value) {
+        let kind = &func.values[other.0 as usize].kind;
+        if super::verify::operands(kind)
+            .iter()
+            .any(|operand| read.contains(operand))
+        {
             last = index;
+        }
+        if let OpKind::NativeStringView { string } = kind
+            && read.contains(string)
+        {
+            read.push(*other);
         }
     }
 
