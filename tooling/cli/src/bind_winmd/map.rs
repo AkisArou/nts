@@ -47,6 +47,13 @@ pub(crate) enum TypeDecl {
     Enum {
         name: String,
         members: Vec<(String, String)>,
+        /// The C spelling nts emits for the integer it crosses as, which
+        /// is the type the check compares member values in.
+        c: String,
+        /// The header gives it as an enum type (`enum TAG`, or a typedef
+        /// of an anonymous enum), so its enumerators are in the header
+        /// for the check to hold each member's value against.
+        header_enum: bool,
     },
 }
 
@@ -1026,7 +1033,8 @@ impl Mapper<'_> {
     }
 
     /// An enum: a `const enum` of its members, crossing as the scalar the
-    /// header gives it.
+    /// header gives it -- plainly spelled, or the one integer a tagged
+    /// `enum TAG` is compatible with, which `facts` asked clang for.
     fn enumeration(
         &mut self,
         name: &Name,
@@ -1034,11 +1042,23 @@ impl Mapper<'_> {
         c: &CType,
     ) -> Result<Spelled, String> {
         let simple = name.1.as_str();
-        let CType::Scalar(scalar_name) = c else {
-            return Err(format!(
-                "`{simple}`, an enum the header spells `{}`",
-                c.spelled()
-            ));
+        let (scalar_name, header_enum) = match c {
+            CType::Scalar(scalar_name) => (scalar_name.as_str(), false),
+            CType::Enum(tag) => match self.facts.enums.get(tag) {
+                Some(scalar_name) => (scalar_name.as_str(), true),
+                None => {
+                    return Err(format!(
+                        "`{simple}`, an enum the header spells `{}`",
+                        c.spelled()
+                    ));
+                }
+            },
+            _ => {
+                return Err(format!(
+                    "`{simple}`, an enum the header spells `{}`",
+                    c.spelled()
+                ));
+            }
         };
         let (brand, emitted) = scalar(scalar_name)
             .ok_or_else(|| format!("`{scalar_name}`, a C scalar this binder does not spell"))?;
@@ -1048,11 +1068,24 @@ impl Mapper<'_> {
             .iter()
             .filter_map(|(member, value)| number(value).map(|v| (member.clone(), v)))
             .collect();
+        // One enum spelling at any use site puts every member's value
+        // under the header check; a plainer spelling elsewhere does not
+        // lift it back out.
+        let header_enum = header_enum
+            || matches!(
+                self.declared.get(name),
+                Some(Some(TypeDecl::Enum {
+                    header_enum: true,
+                    ..
+                }))
+            );
         self.declared.insert(
             name.clone(),
             Some(TypeDecl::Enum {
                 name: simple.into(),
                 members,
+                c: emitted.into(),
+                header_enum,
             }),
         );
         Ok(Spelled {
@@ -1910,6 +1943,94 @@ mod tests {
             assert_eq!(values.refused.len(), 1);
             assert_eq!(values.refused[0].0, "SENTINEL");
         }
+    }
+
+    #[test]
+    fn an_enum_the_header_spells_with_a_tag_crosses_as_its_compatible_integer() {
+        use super::super::read::{Function, Kind, Parameter, TypeInfo};
+        use super::{CType, TypeDecl, bindings};
+        use windows_metadata::{Type, TypeName};
+
+        let model = |facts: super::Facts| {
+            let model = super::Model {
+                functions: vec![Function {
+                    namespace: VALUES.into(),
+                    name: "UseKind".into(),
+                    library: "TEST.dll".into(),
+                    parameters: vec![Parameter {
+                        name: "kind".into(),
+                        ty: Type::ValueName(TypeName::named(VALUES, "TestEnum")),
+                        flags: windows_metadata::ParamAttributes::In,
+                        optional: false,
+                        constant: false,
+                        output: false,
+                        attributes: std::collections::BTreeMap::new(),
+                    }],
+                    result: Type::Void,
+                    documentation: None,
+                    attributes: std::collections::BTreeMap::new(),
+                }],
+                types: [(
+                    (VALUES.into(), "TestEnum".into()),
+                    TypeInfo {
+                        kind: Kind::Enum {
+                            members: vec![
+                                ("KIND_A".into(), Value::I32(0)),
+                                ("KIND_B".into(), Value::I32(1)),
+                            ],
+                        },
+                    },
+                )]
+                .into(),
+                ..super::Model::default()
+            };
+            bindings(
+                &model,
+                &facts,
+                &super::super::resource_params::Policy::default(),
+            )
+        };
+        let facts = |enums: std::collections::BTreeMap<String, String>| super::Facts {
+            functions: [(
+                "UseKind".into(),
+                CType::Function {
+                    result: Box::new(CType::Void),
+                    parameters: vec![CType::Enum("_TestEnum".into())],
+                    variadic: false,
+                },
+            )]
+            .into(),
+            enums,
+            ..super::Facts::default()
+        };
+
+        // With the header's compatible integer known, the function binds and
+        // the enum is declared for the member-value check.
+        let bindings = model(facts([("_TestEnum".into(), "int".into())].into()));
+        let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+        assert!(values.refused.is_empty(), "{:?}", values.refused);
+        assert_eq!(values.functions.len(), 1);
+        assert_eq!(
+            values.functions[0].parameters[0].1,
+            "CEnum<TestEnum, c_int>"
+        );
+        assert!(matches!(
+            values.types.as_slice(),
+            [TypeDecl::Enum {
+                header_enum: true,
+                ..
+            }]
+        ));
+
+        // Without it the same signature keeps the existing refusal.
+        let bindings = model(facts(std::collections::BTreeMap::new()));
+        let values = bindings.iter().find(|b| b.namespace == VALUES).unwrap();
+        assert!(values.functions.is_empty());
+        assert_eq!(values.refused.len(), 1);
+        assert_eq!(
+            values.refused[0].1,
+            "parameter `kind`: `TestEnum`, an enum the header spells `enum _TestEnum`"
+        );
     }
 
     #[test]

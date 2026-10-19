@@ -50,6 +50,10 @@ pub(crate) struct Facts {
     pub(crate) field_slots: BTreeMap<(String, String), u32>,
     /// Typedef name to what it resolves to.
     pub(crate) typedefs: BTreeMap<String, CType>,
+    /// Enum tag to the one integer spelling clang says it is compatible
+    /// with, asked with the checker's own predicate. A tag with zero or
+    /// several answers has no entry and stays refused.
+    pub(crate) enums: BTreeMap<String, String>,
     /// Why a question had no answer, by the name asked about.
     pub(crate) unanswered: BTreeMap<String, String>,
 }
@@ -330,7 +334,126 @@ pub(crate) fn resolve(
             facts.typedefs.insert((*name).to_owned(), ty);
         }
     }
+    resolve_enums(&mut facts, headers, clang_args)?;
     Ok(facts)
+}
+
+/// The integer spellings an enum's compatible type can be, as `ctype`
+/// canonicalises them. Char-sized answers are real answers (a packed enum),
+/// not a reason to guess a wider one.
+const ENUM_INTEGERS: [&str; 11] = [
+    "char",
+    "signed char",
+    "unsigned char",
+    "short",
+    "unsigned short",
+    "int",
+    "unsigned int",
+    "long",
+    "unsigned long",
+    "long long",
+    "unsigned long long",
+];
+
+fn enum_tags(ty: &CType, tags: &mut BTreeSet<String>) {
+    match ty {
+        CType::Enum(tag) => {
+            tags.insert(tag.clone());
+        }
+        CType::Pointer { to, .. } | CType::Array(to, _) => enum_tags(to, tags),
+        CType::Function {
+            result, parameters, ..
+        } => {
+            enum_tags(result, tags);
+            for parameter in parameters {
+                enum_tags(parameter, tags);
+            }
+        }
+        CType::Void | CType::Scalar(_) | CType::Record { .. } => {}
+    }
+}
+
+/// Which integer each resolved enum type crosses as, in one more ask: the
+/// same `__builtin_types_compatible_p` the binding's self-check will hold
+/// every prototype to, so an answer here is a witness there.
+///
+/// Clang spells two header shapes the same way in a resolved type: a real
+/// `enum TAG`, and a typedef of an anonymous enum, whose name it borrows
+/// (`typedef enum { ... } ASSOCSTR;` reads back as `enum ASSOCSTR`).
+/// Writing `enum ASSOCSTR` in a probe would name a fresh incomplete tag,
+/// so both spellings are asked. The tag spelling is the header's own
+/// name for the type and wins; the bare name is only an answer when the
+/// tag spelling has none. An incomplete tag is compatible with nothing,
+/// so the fallback cannot be taken in by the probe's own forward tag.
+fn resolve_enums(facts: &mut Facts, headers: &[Vec<String>], clang_args: &[String]) -> Result<()> {
+    let mut tags = BTreeSet::new();
+    for ty in facts
+        .functions
+        .values()
+        .chain(facts.fields.values())
+        .chain(facts.typedefs.values())
+    {
+        enum_tags(ty, &mut tags);
+    }
+    if tags.is_empty() {
+        return Ok(());
+    }
+    let tags: Vec<String> = tags.into_iter().collect();
+    let mut probes = String::new();
+    for (at, tag) in tags.iter().enumerate() {
+        for (candidate, spelling) in ENUM_INTEGERS.iter().enumerate() {
+            let _ = writeln!(
+                probes,
+                "enum {{ {PREFIX}enum_{at}_{candidate} = \
+                 __builtin_types_compatible_p(enum {tag}, {spelling}) }};"
+            );
+            let _ = writeln!(
+                probes,
+                "enum {{ {PREFIX}enumtype_{at}_{candidate} = \
+                 __builtin_types_compatible_p({tag}, {spelling}) }};"
+            );
+        }
+    }
+    // Compatible spellings by tag, kept apart by which name was asked:
+    // `enum TAG` first, the bare typedef name second.
+    let mut by_tag: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
+    let mut by_name: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
+    for answer in ask(headers, clang_args, &probes)? {
+        let (key, answers) =
+            if let Some(key) = answer.name.strip_prefix(&format!("{PREFIX}enumtype_")) {
+                (key, &mut by_name)
+            } else if let Some(key) = answer.name.strip_prefix(&format!("{PREFIX}enum_")) {
+                (key, &mut by_tag)
+            } else {
+                continue;
+            };
+        let (Some(at), Some(candidate)) = (
+            key.split('_')
+                .next()
+                .and_then(|at| at.parse::<usize>().ok()),
+            key.split('_')
+                .nth(1)
+                .and_then(|at| at.parse::<usize>().ok()),
+        ) else {
+            continue;
+        };
+        if answer.value == Some(1)
+            && let Some(spelling) = ENUM_INTEGERS.get(candidate)
+        {
+            answers.entry(at).or_default().push(spelling);
+        }
+    }
+    for (at, tag) in tags.iter().enumerate() {
+        let answers = match (by_tag.get(&at), by_name.get(&at)) {
+            (Some(answers), _) if !answers.is_empty() => answers,
+            (_, Some(answers)) => answers,
+            _ => continue,
+        };
+        if let [spelling] = answers.as_slice() {
+            facts.enums.insert(tag.clone(), (*spelling).to_owned());
+        }
+    }
+    Ok(())
 }
 
 fn resolve_records(facts: &mut Facts, questions: &Questions, layouts: &BTreeMap<String, u32>) {
@@ -513,6 +636,56 @@ mod tests {
                 function(&facts, "IBaseVtbl", "GetFlags"),
                 parsed("unsigned long (struct IBase *)")
             );
+        }
+    }
+
+    fn function_facts(header: &str, functions: Vec<&str>, arch: &str) -> Facts {
+        let dir = std::env::temp_dir().join(format!(
+            "nts-enum-facts-test-{}-{}",
+            std::process::id(),
+            super::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("enums.h"), header).unwrap();
+        let result = resolve(
+            &[vec!["enums.h".to_owned()]],
+            &[
+                format!("--target={arch}-w64-windows-gnu"),
+                "-std=c11".to_owned(),
+                format!("-I{}", dir.display()),
+            ],
+            &Questions {
+                functions,
+                ..Questions::default()
+            },
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+        result.unwrap()
+    }
+
+    #[test]
+    fn an_enum_tags_compatible_integer_comes_from_the_header() {
+        // One member below zero keeps the first signed; one member past
+        // INT_MAX makes the second unsigned. A binder that guessed `int`
+        // for both would pass the first assertion and fail the second.
+        // The third is a typedef of an anonymous enum: clang reads the
+        // parameter back as `enum Anon`, a tag no header declares, so the
+        // answer has to come from asking about the typedef name itself.
+        let header = "typedef enum _Signed { SIGNED_A = -1, SIGNED_B = 2 } Signed;\n\
+            typedef enum _Unsigned { UNSIGNED_A = 0, UNSIGNED_B = 2147483648u } Unsigned;\n\
+            typedef enum { ANON_A = 0, ANON_B = 1 } Anon;\n\
+            void UseSigned(Signed value);\n\
+            void UseUnsigned(Unsigned value);\n\
+            void UseAnon(Anon value);";
+        for arch in ["x86_64", "aarch64"] {
+            let facts = function_facts(header, vec!["UseSigned", "UseUnsigned", "UseAnon"], arch);
+            assert_eq!(facts.enums["_Signed"], "int", "{arch}");
+            assert_eq!(facts.enums["_Unsigned"], "unsigned int", "{arch}");
+            let CType::Function { parameters, .. } = &facts.functions["UseAnon"] else {
+                panic!("UseAnon is not a function: {:?}", facts.functions);
+            };
+            assert_eq!(parameters, &[CType::Enum("Anon".into())], "{arch}");
+            assert_eq!(facts.enums["Anon"], "unsigned int", "{arch}");
         }
     }
 

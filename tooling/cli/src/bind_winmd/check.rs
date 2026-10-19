@@ -19,6 +19,9 @@ enum Line {
     Field(String),
     Constant(String),
     Method(String, String),
+    /// A tagged enum's member, by (enum, member): its value is the
+    /// header's to confirm, like a constant's.
+    EnumMember(String, String),
 }
 
 /// The check file, and which declaration each assertion line is about.
@@ -114,6 +117,30 @@ fn probe(binding: &Binding, headers: &[Vec<String>]) -> Probe {
             probe.line(&format!("_Static_assert(__builtin_types_compatible_p(__typeof__((({name}Vtbl *)0)->{field}), {}) && offsetof({name}Vtbl, {field}) == {} * sizeof(void *), \"{name}.{field}\");", method.signature.c_type, method.slot), Some(Line::Method(name.clone(), field.clone())));
         }
     }
+    for decl in &binding.types {
+        // A header enum's enumerators are spelled by the headers these
+        // lines already include, so a member absent there errors here and
+        // drops like a wrong value does. A plainer spelling has no header
+        // enumerator to ask, and keeps the metadata's values unchecked.
+        let TypeDecl::Enum {
+            name,
+            members,
+            c,
+            header_enum: true,
+        } = decl
+        else {
+            continue;
+        };
+        for (member, value) in members {
+            // Compared in the integer the binding crosses as, not a wider
+            // one: the metadata can spell a flag's top bit signed where
+            // the header's enum is unsigned, and the bits are the value.
+            probe.line(
+                &format!("_Static_assert(({c})({member}) == ({c})({value}), \"{name}.{member}\");"),
+                Some(Line::EnumMember(name.clone(), member.clone())),
+            );
+        }
+    }
     for constant in &binding.constants {
         // Scalar enumerators may take their value from metadata when no
         // macro exists. Pointer atoms require the actual header value.
@@ -183,6 +210,7 @@ fn drop_rejected(
     let mut records = BTreeSet::new();
     let mut constants = BTreeSet::new();
     let mut methods = BTreeSet::new();
+    let mut enum_members = BTreeSet::new();
     for error in stderr
         .lines()
         .filter(|line| line.contains(": error:") && line.contains(&file))
@@ -201,6 +229,9 @@ fn drop_rejected(
             Some(Line::Method(interface, name)) => {
                 methods.insert((interface.clone(), name.clone()))
             }
+            Some(Line::EnumMember(name, member)) => {
+                enum_members.insert((name.clone(), member.clone()))
+            }
             None => anyhow::bail!("the Windows headers did not compile for the check: {error}"),
         };
     }
@@ -212,6 +243,22 @@ fn drop_rejected(
         ));
     }
     binding.types.retain(|decl| !records.contains(decl.name()));
+    // One member at odds with the header unbinds the whole enum: a
+    // `CEnum` over values the header does not have is a wrong crossing,
+    // not a smaller one.
+    let bad_enums: BTreeSet<&str> = enum_members.iter().map(|(name, _)| name.as_str()).collect();
+    for name in &bad_enums {
+        dropped.insert((binding.namespace.clone(), (*name).to_owned()));
+    }
+    for (name, member) in &enum_members {
+        binding.refused.push((
+            format!("{name}.{member}"),
+            "its value disagrees with the header".into(),
+        ));
+    }
+    binding
+        .types
+        .retain(|decl| !bad_enums.contains(decl.name()));
     let mut refused = Vec::new();
     for decl in &mut binding.types {
         if let TypeDecl::Interface {
@@ -325,7 +372,7 @@ mod tests {
 
     use std::collections::BTreeSet;
 
-    use super::super::map::{Binding, Constant};
+    use super::super::map::{Binding, Constant, TypeDecl};
 
     #[test]
     fn concurrent_header_checks_keep_their_own_probe() {
@@ -417,6 +464,80 @@ mod tests {
             bindings[0].refused,
             [(
                 "ZERO_EXTENDED".into(),
+                "its value disagrees with the header".into()
+            )]
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_tagged_enums_member_values_are_the_headers_to_confirm() {
+        let dir =
+            std::env::temp_dir().join(format!("nts-winmd-enum-values-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let header = dir.join("enums.h");
+        std::fs::write(
+            &header,
+            "enum _Checked { CHECKED_A = 0, CHECKED_B = 1 };\n\
+             enum _Also { ALSO_A = 4 };\n\
+             enum _Top { TOP_FLAG = 0x80000000u };\n",
+        )
+        .unwrap();
+        let enumeration =
+            |name: &str, members: Vec<(&str, &str)>, c: &str, header_enum: bool| -> TypeDecl {
+                TypeDecl::Enum {
+                    name: name.into(),
+                    members: members
+                        .into_iter()
+                        .map(|(member, value)| (member.into(), value.into()))
+                        .collect(),
+                    c: c.into(),
+                    header_enum,
+                }
+            };
+        let mut bindings = [Binding {
+            namespace: "EnumValues".into(),
+            types: vec![
+                // CHECKED_B disagrees with the header and unbinds its enum.
+                enumeration(
+                    "Checked",
+                    vec![("CHECKED_A", "0"), ("CHECKED_B", "2")],
+                    "int",
+                    true,
+                ),
+                enumeration("Also", vec![("ALSO_A", "4")], "int", true),
+                // The metadata spells the top bit signed where the header's
+                // enum is unsigned; the bits agree and it survives.
+                enumeration(
+                    "Top",
+                    vec![("TOP_FLAG", "-2147483648")],
+                    "unsigned int",
+                    true,
+                ),
+                // The plain-scalar control carries a value no header has, and
+                // survives: it has no enumerator to be asked about.
+                enumeration("Plain", vec![("PLAIN_A", "9")], "int", false),
+            ],
+            ..Binding::default()
+        }];
+        super::against_headers(
+            &mut bindings,
+            &[vec![header.to_str().unwrap().to_owned()]],
+            &[],
+        )
+        .unwrap();
+        assert_eq!(
+            bindings[0]
+                .types
+                .iter()
+                .map(TypeDecl::name)
+                .collect::<Vec<_>>(),
+            ["Also", "Top", "Plain"]
+        );
+        assert_eq!(
+            bindings[0].refused,
+            [(
+                "Checked.CHECKED_B".into(),
                 "its value disagrees with the header".into()
             )]
         );

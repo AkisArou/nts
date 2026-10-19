@@ -219,7 +219,7 @@ fn render_type(decl: &TypeDecl, body: &mut String) {
             }
             body.push_str(";\n");
         }
-        TypeDecl::Enum { name, members } => {
+        TypeDecl::Enum { name, members, .. } => {
             let _ = writeln!(body, "  export const enum {name} {{");
             for (member, value) in members {
                 let _ = writeln!(body, "    {member} = {value},");
