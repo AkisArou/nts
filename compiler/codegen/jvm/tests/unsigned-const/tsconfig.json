@@ -1,1 +1,1 @@
-{"extends":"../../../../tsconfig.fixtures.json","files":["src/main.ts","../../../../runtime/native/libc.d.ts"]}
+{"extends":"../../../../../tsconfig.fixtures.json","files":["src/main.ts","../../../../../runtime/native/libc.d.ts"]}
