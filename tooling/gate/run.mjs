@@ -101,6 +101,9 @@ process.chdir(ROOT);
 //   lock   an exclusive resource (cargo's build-directory lock)
 //   host   what the machine must have, named when the step SKIPs
 //   favoured  runs at the runner's own priority; every other step at nice +5
+//   treeOnly  true when it reads only the tree, builds and runs nothing, and
+//          takes seconds: `land.ts --dry-run` runs the owed ones, so a landing
+//          does not spend a gate learning what they say
 //   doc    what it proves, for the summary's reader
 // ---------------------------------------------------------------------------
 const STEPS = [
@@ -109,10 +112,10 @@ const STEPS = [
   // `build` and `tests` on cargo's build-directory lock.
   { name: "clippy", slots: 6, min: 4, mem: 6, lock: "clippy", doc: "lint clean" },
   { name: "format", slots: 1, mem: 0.2, doc: "runtime/c is clang-formatted" },
-  { name: "rustfmt", slots: 1, mem: 0.2, doc: "the Rust tree is cargo-fmt formatted" },
-  { name: "reformat", slots: 1, mem: 0.1, doc: "no whitespace-only diffs" },
-  { name: "records", slots: 1, mem: 0.1, doc: "record numbers unique" },
-  { name: "old-paths", slots: 1, mem: 0.1, doc: "nothing sits or points where the corpora used to be" },
+  { name: "rustfmt", slots: 1, treeOnly: true, mem: 0.2, doc: "the Rust tree is cargo-fmt formatted" },
+  { name: "reformat", slots: 1, treeOnly: true, mem: 0.1, doc: "no whitespace-only diffs" },
+  { name: "records", slots: 1, treeOnly: true, mem: 0.1, doc: "record numbers unique" },
+  { name: "old-paths", slots: 1, treeOnly: true, mem: 0.1, doc: "nothing sits or points where the corpora used to be" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
   { name: "test262-cases", slots: 8, min: 4, mem: 8, nts: true, fe: true, doc: "test/language rows reproduce" },
   { name: "test262-builtins-cases", slots: 4, min: 2, mem: 5, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
@@ -138,12 +141,12 @@ const STEPS = [
   { name: "types", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "snapshot type tables consistent" },
   { name: "jvm-verifies", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "runtime and outcomes JVM output verifies" },
   { name: "tooling", slots: 1, mem: 0.5, doc: "the gate's own tools pass their tests" },
-  { name: "primitives", slots: 1, mem: 0.1, doc: "docs/primitives.md names exist" },
+  { name: "primitives", slots: 1, treeOnly: true, mem: 0.1, doc: "docs/primitives.md names exist" },
   { name: "tests", slots: 8, min: 4, mem: 8, lock: "cargo", after: ["build"], doc: "cargo test --workspace" },
   { name: "corpus", slots: 8, min: 4, mem: 6, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0" },
   { name: "benches", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
   { name: "example-refusals", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "per-example refusal counts match the table" },
-  { name: "config", slots: 1, mem: 1, doc: "nts.config.ts files coherent" },
+  { name: "config", slots: 1, treeOnly: true, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
   { name: "profile", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
   { name: "sweep", slots: 1, mem: 1, nts: true, fe: true, doc: "the value-kind cross-product agrees on C" },
@@ -197,6 +200,7 @@ when every requested step passed.
 
   --help, -h   this text
   --steps      the step names, one per line, with what each checks
+  --tree-only  the steps that read only the tree and take seconds, one per line
 
 Environment (see the header of tooling/gate/run.mjs for the rest):
   NTS_GATE_STEPS        steps to run, space separated (not with step arguments)
@@ -214,6 +218,9 @@ for (const a of process.argv.slice(2)) {
     process.exit(0);
   } else if (a === "--steps") {
     for (const s of STEPS) process.stdout.write(`${s.name.padEnd(24)} ${s.doc ?? ""}\n`);
+    process.exit(0);
+  } else if (a === "--tree-only") {
+    for (const s of STEPS.filter((s) => s.treeOnly)) process.stdout.write(`${s.name}\n`);
     process.exit(0);
   } else if (a.startsWith("-")) {
     process.stderr.write(`run.mjs: unknown option ${a}; nothing ran\n\n${USAGE}`);

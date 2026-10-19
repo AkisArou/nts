@@ -115,6 +115,41 @@ function owedSteps(tree: string, range: string): Owed {
   fail(`owed.mjs named no steps for ${range}:\n${out}`);
 }
 
+/**
+ * The owed steps that read only the tree and take seconds (`treeOnly` in
+ * run.mjs's table), run now from the tree being landed, so a landing does not
+ * spend a gate learning what they say.
+ *
+ * On 2026-10-19 two lanes lost a gate each to one missing line: a new interop
+ * fixture's `nts.config.ts` not enrolled in `tests/interop/tsconfig.configs.json`.
+ * `config` says so in 1.4 s; the trains it refused took half an hour each, and
+ * one carried another lane's landing with it.
+ */
+function treeOnly(tree: string, owed: Owed, short: string): void {
+  const listed = execFileSync("node", ["tooling/gate/run.mjs", "--tree-only"], { cwd: tree, encoding: "utf8" })
+    .split(/\s+/)
+    .filter(Boolean);
+  const steps = owed.steps === "all" ? listed : listed.filter((step) => owed.steps.includes(step));
+  if (steps.length === 0) return;
+  const dir = join(STATE, "tree-only", `${short}-${process.pid}`);
+  const run = spawnSync("sh", ["tooling/gate/all.sh"], {
+    cwd: tree,
+    stdio: "inherit",
+    env: { ...process.env, NTS_GATE_STEPS: steps.join(" "), NTS_GATE_RUN_DIR: dir },
+  });
+  if (run.status !== 0) {
+    // The steps that were not green, by name, from the run's own summary.
+    const summary = join(dir, "summary.json");
+    const red = existsSync(summary)
+      ? (JSON.parse(readFileSync(summary, "utf8")).steps as { name: string; verdict: string }[])
+          .filter((step) => step.verdict !== "PASS")
+          .map((step) => `${step.name} ${step.verdict}`)
+      : [`the run (exit ${run.status})`];
+    fail(`${red.join(", ")} on ${short}: the gate would refuse it (logs in ${dir})`);
+  }
+  say(`${steps.join(" ")} green on ${short}`);
+}
+
 function describe(owed: Owed): string {
   const steps = owed.steps === "all" ? "the full gate" : owed.steps.join(" ");
   return owed.interop ? `${steps} (interop: ${owed.interop})` : steps;
@@ -554,6 +589,7 @@ function main(): void {
     const owed = owedSteps(tree, `${from}..${sha}`);
     const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
     say(`${short} ${where} owes: ${describe(owed)}`);
+    treeOnly(tree, owed, short);
     return;
   }
 
