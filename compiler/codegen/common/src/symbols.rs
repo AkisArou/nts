@@ -588,6 +588,15 @@ fn escaped(c: char) -> String {
     format!("_u{:04x}_", c as u32)
 }
 
+/// A name in `[A-Za-z0-9_]` alone, each other character escaped as
+/// `c_identifier` escapes punctuation: for a symbol only one backend reads,
+/// such as a descriptor's, which no linker or person sees. Replacing each
+/// such character with `_` made `Форма` and `Точка` one LLVM symbol.
+#[must_use]
+pub fn ascii_identifier(name: &str) -> String {
+    name.chars().map(escaped).collect()
+}
+
 /// The C symbol of the bridge from a foreign function pointer to `target`,
 /// the compiled function C calls through it. One spelling for every backend,
 /// since the name is what a native operation and its definition agree on.

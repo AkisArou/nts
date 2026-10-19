@@ -1732,7 +1732,8 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             if want == HirType::Void {
                 let _ = writeln!(
                     out,
-                    "define internal void @{name}({parameters}) nounwind {{"
+                    "define internal void {}({parameters}) nounwind {{",
+                    global(&name)
                 );
                 let _ = writeln!(out, "{enter}");
                 out.push_str(&body);
@@ -1741,7 +1742,8 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                 let want_ty = ty_of(&want, compiled)?;
                 let _ = writeln!(
                     out,
-                    "define internal {want_ty} @{name}({parameters}) nounwind {{"
+                    "define internal {want_ty} {}({parameters}) nounwind {{",
+                    global(&name)
                 );
                 let _ = writeln!(out, "{enter}");
                 out.push_str(&body);
@@ -2485,11 +2487,7 @@ fn identity_suffix(
     sharing: &[&nts_core::hir::ClassIdentity],
     class: &nts_core::hir::ClassIdentity,
 ) -> String {
-    let spelling: String = class
-        .name
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
+    let spelling = nts_codegen_common::symbols::ascii_identifier(&class.name);
     if sharing
         .iter()
         .filter(|other| other.name == class.name)
@@ -2526,11 +2524,7 @@ fn descriptor_for(
 }
 
 fn descriptor_name(layout: &nts_core::hir::Layout) -> String {
-    layout
-        .name
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect()
+    nts_codegen_common::symbols::ascii_identifier(&layout.name)
 }
 
 /// Runtime helpers this backend emits calls to without the program naming them.
@@ -3096,7 +3090,29 @@ fn label(block: BlockId) -> String {
 /// exactly one of them. The rule lives in `nts_codegen_common::symbols` now and
 /// both backends read it.
 fn symbol(raw: &str) -> String {
-    format!("@{}", nts_codegen_common::symbols::c_identifier(raw))
+    global(&nts_codegen_common::symbols::c_identifier(raw))
+}
+
+/// `@name` as LLVM IR spells a global: bare when every character is one an
+/// unquoted name allows (`[-a-zA-Z$._][-a-zA-Z$._0-9]*`), and otherwise quoted
+/// with every other byte as `\XX`. The name that links is the same bytes either
+/// way, so a symbol C spells `сложить` is `@"\D1\81..."` here and links as one.
+fn global(name: &str) -> String {
+    let bare = |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'$' | b'.' | b'_');
+    if name.bytes().all(bare) && !name.starts_with(|c: char| c.is_ascii_digit()) && !name.is_empty()
+    {
+        return format!("@{name}");
+    }
+    let mut quoted = String::from("@\"");
+    for byte in name.bytes() {
+        if bare(byte) {
+            quoted.push(char::from(byte));
+        } else {
+            let _ = write!(quoted, "\\{byte:02X}");
+        }
+    }
+    quoted.push('"');
+    quoted
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
@@ -3816,8 +3832,10 @@ fn allocation(
                 )
             })?;
             format!(
-                "{out} = getelementptr i8, ptr @{}, i64 0",
-                nts_codegen_common::symbols::bridge_name(target, signature, *once, bridging)
+                "{out} = getelementptr i8, ptr {}, i64 0",
+                global(&nts_codegen_common::symbols::bridge_name(
+                    target, signature, *once, bridging
+                ))
             )
         }
         OpKind::NativeBlock {
@@ -6240,10 +6258,7 @@ fn open_chains(program: &Program, platform: Platform) -> String {
 /// The symbol a chain gets, which is its content spelled out.
 fn open_chain_name(arms: &[nts_core::hir::FieldArm], ty: &str, stored: bool) -> String {
     let kind = if stored { "s" } else { "g" };
-    let sanitised: String = ty
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
+    let sanitised = nts_codegen_common::symbols::ascii_identifier(ty);
     let list = arms
         .iter()
         .map(|arm| format!("{}_{}", arm.ty.0, arm.field))
