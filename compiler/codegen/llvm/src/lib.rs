@@ -50,6 +50,8 @@ mod objc;
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
 pub mod signatures_arm64;
+pub mod signatures_arm64_linux;
+pub mod signatures_arm64_windows;
 pub mod signatures_win64;
 
 use std::fmt::Write as _;

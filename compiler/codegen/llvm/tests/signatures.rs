@@ -31,6 +31,8 @@ use std::fmt::Write as _;
 
 use nts_codegen_llvm::signatures::{SIGNATURES, Signature};
 use nts_codegen_llvm::signatures_arm64::SIGNATURES_ARM64;
+use nts_codegen_llvm::signatures_arm64_linux::SIGNATURES_ARM64_LINUX;
+use nts_codegen_llvm::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS;
 use nts_codegen_llvm::signatures_win64::SIGNATURES_WIN64;
 
 /// A generated table: where it lives, and what clang is asked with.
@@ -58,6 +60,18 @@ const ARM64: Table = Table {
     rows: SIGNATURES_ARM64,
 };
 
+const ARM64_LINUX: Table = Table {
+    file: "compiler/codegen/llvm/src/signatures_arm64_linux.rs",
+    open: "pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[\n",
+    rows: SIGNATURES_ARM64_LINUX,
+};
+
+const ARM64_WINDOWS: Table = Table {
+    file: "compiler/codegen/llvm/src/signatures_arm64_windows.rs",
+    open: "pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[\n",
+    rows: SIGNATURES_ARM64_WINDOWS,
+};
+
 /// clang's flags for arm64 macOS: the target and the SDK the Apple lane
 /// builds with (`NTS_APPLE_SDK`, or where `tooling/apple/sync-sdk.sh` puts
 /// it). `None` without it.
@@ -77,9 +91,9 @@ fn arm64_flags() -> Option<Vec<String>> {
     })
 }
 
-/// clang's flags for `x86_64` Windows: the target and zig's mingw headers,
-/// as `nts build` compiles the runtime there. `None` without zig.
-fn win64_flags() -> Option<Vec<String>> {
+/// zig's bundled C library headers, the ones `nts build` compiles the runtime
+/// against for a target that is not the host. `None` without zig.
+fn zig_headers() -> Option<std::path::PathBuf> {
     let env = std::process::Command::new("zig").arg("env").output().ok()?;
     let text = String::from_utf8_lossy(&env.stdout);
     let lib = text.lines().find_map(|line| {
@@ -87,25 +101,57 @@ fn win64_flags() -> Option<Vec<String>> {
             .strip_prefix(".lib_dir = \"")?
             .strip_suffix("\",")
     })?;
-    let headers = std::path::Path::new(lib).join("libc/include");
-    let mut flags = vec![
-        "--target=x86_64-w64-windows-gnu".to_owned(),
-        "-nostdlibinc".to_owned(),
-    ];
-    for directory in [
-        "x86_64-windows-gnu",
-        "generic-mingw",
-        "x86_64-windows-any",
-        "any-windows-any",
-    ] {
+    Some(std::path::Path::new(lib).join("libc/include"))
+}
+
+/// clang's flags for `target` against zig's headers in `directories`, most
+/// specific first.
+fn zig_flags(target: &str, directories: &[String]) -> Option<Vec<String>> {
+    let headers = zig_headers()?;
+    let mut flags = vec![format!("--target={target}"), "-nostdlibinc".to_owned()];
+    for directory in directories {
         flags.push("-isystem".to_owned());
         flags.push(headers.join(directory).to_string_lossy().into_owned());
     }
+    Some(flags)
+}
+
+/// clang's flags for Windows on `arch`: the target and zig's mingw headers,
+/// as `nts build` compiles the runtime there. `None` without zig.
+fn windows_flags(arch: &str) -> Option<Vec<String>> {
+    let mut flags = zig_flags(
+        &format!("{arch}-w64-windows-gnu"),
+        &[
+            format!("{arch}-windows-gnu"),
+            "generic-mingw".to_owned(),
+            format!("{arch}-windows-any"),
+            "any-windows-any".to_owned(),
+        ],
+    )?;
     flags.extend([
         "-D__MSVCRT_VERSION__=0xE00".to_owned(),
         "-D_WIN32_WINNT=0x0a00".to_owned(),
     ]);
     Some(flags)
+}
+
+/// clang's flags for `x86_64` Windows.
+fn win64_flags() -> Option<Vec<String>> {
+    windows_flags("x86_64")
+}
+
+/// clang's flags for arm64 Linux: the target and zig's glibc headers, as
+/// `nts build` compiles the runtime there. `None` without zig.
+fn arm64_linux_flags() -> Option<Vec<String>> {
+    zig_flags(
+        "aarch64-linux-gnu",
+        &[
+            "aarch64-linux-gnu".to_owned(),
+            "generic-glibc".to_owned(),
+            "aarch64-linux-any".to_owned(),
+            "any-linux-any".to_owned(),
+        ],
+    )
 }
 
 struct Declared {
@@ -462,6 +508,28 @@ fn the_arm64_table_still_matches_the_header() {
         return;
     };
     check(&ARM64, &flags);
+}
+
+/// The same for arm64 Linux, whose AAPCS64 is not Apple's convention. Skips
+/// without zig, whose glibc headers are the ones the runtime is compiled
+/// against there.
+#[test]
+fn the_arm64_linux_table_still_matches_the_header() {
+    let Some(flags) = arm64_linux_flags() else {
+        eprintln!("SKIP: no zig, so no glibc headers to ask clang with");
+        return;
+    };
+    check(&ARM64_LINUX, &flags);
+}
+
+/// The same for arm64 Windows. Skips without zig.
+#[test]
+fn the_arm64_windows_table_still_matches_the_header() {
+    let Some(flags) = windows_flags("aarch64") else {
+        eprintln!("SKIP: no zig, so no mingw headers to ask clang with");
+        return;
+    };
+    check(&ARM64_WINDOWS, &flags);
 }
 
 fn check(table: &Table, flags: &[String]) {

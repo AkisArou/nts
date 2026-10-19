@@ -2673,15 +2673,17 @@ pub fn signature_on(name: &str, platform: crate::Platform) -> Option<&'static Si
     find(table(platform), name)
 }
 
-/// The table clang generated for `platform`: its data model and its arch.
+/// The table clang generated for `platform`: its data model, its arch, and on
+/// arm64 whether it is Apple's, whose convention widens what AAPCS64 does not.
 #[must_use]
 pub fn table(platform: crate::Platform) -> &'static [Signature] {
+    use nts_core::hir::native::PlatformConvention::{SysV, Win64};
     match (platform.abi.convention, platform.arch) {
-        (_, crate::Arch::Aarch64) => super::signatures_arm64::SIGNATURES_ARM64,
-        (nts_core::hir::native::PlatformConvention::Win64, crate::Arch::X86_64) => {
-            super::signatures_win64::SIGNATURES_WIN64
-        }
-        (nts_core::hir::native::PlatformConvention::SysV, crate::Arch::X86_64) => SIGNATURES,
+        (_, crate::Arch::Aarch64) if platform.darwin => super::signatures_arm64::SIGNATURES_ARM64,
+        (SysV, crate::Arch::Aarch64) => super::signatures_arm64_linux::SIGNATURES_ARM64_LINUX,
+        (Win64, crate::Arch::Aarch64) => super::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS,
+        (Win64, crate::Arch::X86_64) => super::signatures_win64::SIGNATURES_WIN64,
+        (SysV, crate::Arch::X86_64) => SIGNATURES,
     }
 }
 
