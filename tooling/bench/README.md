@@ -71,6 +71,13 @@ ack, a nonzero child, a moved plan or a checksum that disagrees with node
 each fail the cell loudly, with raw artifacts kept. Nothing retries a failed
 cell invisibly.
 
+Every cell runs in its own process group under a deadline (120 s; 600 s for
+preparation) with its streams filed in the cell's directory. At the deadline
+the group is killed and the cell fails: a perf that dies or hangs mid-cell
+must never keep the coordinator — and with it the measurement lock —
+waiting. A resumed run refuses cells counted under a different plan
+rather than mixing two fixed works into one ratio.
+
 ## Preparation and the A/B overlay
 
 Preparation (same compiler roots and generated call as timed mode) runs as a

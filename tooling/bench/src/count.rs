@@ -226,8 +226,10 @@ struct Machine {
     available_kib: u64,
     swap_in: u64,
     swap_out: u64,
-    /// `(total, idle)` ticks for CPUs 4 and 5.
-    reserved: [(u64, u64); 2],
+    /// `(total, idle)` ticks for CPUs 4 and 5, where the machine has them.
+    /// Conditions only: admission never reads them, so a machine without a
+    /// reserved pair still admits and counts.
+    reserved: Option<[(u64, u64); 2]>,
     load1: f64,
 }
 
@@ -244,30 +246,27 @@ fn machine() -> Result<Machine> {
             })
             .with_context(|| format!("{name} missing from /proc"))
     };
-    let reserved: [Result<(u64, u64)>; 2] = [4usize, 5].map(|cpu| {
+    let ticks_for = |cpu: usize| -> Option<(u64, u64)> {
         let prefix = format!("cpu{cpu} ");
         let ticks: Vec<u64> = stat
             .lines()
-            .find(|line| line.starts_with(&prefix))
-            .with_context(|| format!("/proc/stat names no cpu{cpu}"))?
+            .find(|line| line.starts_with(&prefix))?
             .split_whitespace()
             .skip(1)
             .take(8)
-            .map(str::parse)
-            .collect::<std::result::Result<_, _>>()
-            .context("invalid /proc/stat CPU counters")?;
-        if ticks.len() < 8 {
-            bail!("invalid /proc/stat CPU counters for cpu{cpu}");
-        }
-        Ok((ticks.iter().sum(), ticks[3] + ticks[4]))
-    });
+            .map(|value| value.parse().ok())
+            .collect::<Option<_>>()?;
+        (ticks.len() == 8).then_some((ticks.iter().sum(), ticks[3] + ticks[4]))
+    };
+    let reserved = match (ticks_for(4), ticks_for(5)) {
+        (Some(first), Some(second)) => Some([first, second]),
+        _ => None,
+    };
     Ok(Machine {
         available_kib: field(&meminfo, "MemAvailable:")?,
         swap_in: field(&vmstat, "pswpin ")?,
         swap_out: field(&vmstat, "pswpout ")?,
-        reserved: match reserved {
-            [first, second] => [first?, second?],
-        },
+        reserved,
         load1: loadavg
             .split_whitespace()
             .next()
@@ -282,12 +281,15 @@ fn conditions(start: &Machine, end: &Machine) -> Value {
         clippy::cast_precision_loss,
         reason = "recorded conditions, not verdicts; tick counts fit f64 exactly enough"
     )]
-    let busy = |index: usize| -> f64 {
-        let total = end.reserved[index].0 as f64 - start.reserved[index].0 as f64;
+    let busy = |index: usize| -> Value {
+        let (Some(before), Some(after)) = (start.reserved, end.reserved) else {
+            return Value::Null;
+        };
+        let total = after[index].0 as f64 - before[index].0 as f64;
         if total <= 0.0 {
-            return 1.0;
+            return json!(1.0);
         }
-        1.0 - (end.reserved[index].1 as f64 - start.reserved[index].1 as f64) / total
+        json!(1.0 - (after[index].1 as f64 - before[index].1 as f64) / total)
     };
     json!({
         "availableGiBStart": gib(start.available_kib),
@@ -479,15 +481,61 @@ fn flag_value<'a>(argv: &'a [String], flag: &str) -> Result<Option<&'a str>> {
     }
 }
 
+/// What a counting-capable nts-bench answers to `--count-probe`.
+const PROBE_MARKER: &str = "nts-bench counting mode 1";
+
+/// Ask a binary once whether it speaks counting mode, before any row is
+/// prepared: a baseline that predates the mode must fail here, in one
+/// message, not after running a timed bench per row. The trailing case
+/// name bounds what an old binary does with the unknown flag (it reads it
+/// as a case filter and measures nothing).
+fn probe_counting(binary: &str) -> Result<()> {
+    let output = std::process::Command::new(binary)
+        .arg("--count-probe")
+        .arg("__count_probe__")
+        .output()
+        .with_context(|| format!("probing {binary} for counting mode"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if output.status.success() && stdout.trim() == PROBE_MARKER {
+        return Ok(());
+    }
+    bail!(
+        "{binary} does not speak counting mode (answer to --count-probe: status {}, \
+         stdout {:?}); build the baseline from a tree that has it",
+        output.status,
+        stdout.chars().take(200).collect::<String>()
+    )
+}
+
 /// Counting-mode entry from `main`: `Some` when argv asks for it.
 pub(crate) fn dispatch(root: &Utf8Path, argv: &[String]) -> Option<Result<()>> {
-    if argv.iter().any(|arg| arg == "--count-prepare") {
+    if argv.iter().any(|arg| arg == "--count-probe") {
+        println!("{PROBE_MARKER}");
+        Some(Ok(()))
+    } else if argv.iter().any(|arg| arg == "--count-prepare") {
         Some(prepare(root, argv))
     } else if argv.iter().any(|arg| arg == "--count") {
         Some(run(root, argv))
     } else {
         None
     }
+}
+
+/// Whether a `wasm_prepare` error is the compiler declining this program
+/// (a blank cell with a reason) rather than the world failing around it
+/// (an error the run must surface and retry). Declines speak in their own
+/// spellings: the backend's `declined:`, the custom-driver sentence, or a
+/// rendered diagnostic carrying an NTS code.
+fn is_decline(said: &str) -> bool {
+    said.starts_with("declined:")
+        || said.starts_with("its own driver.mjs")
+        || said
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|word| {
+                word.len() > 3
+                    && word.starts_with("NTS")
+                    && word[3..].chars().all(|c| c.is_ascii_digit())
+            })
 }
 
 /// `--count-prepare <dir> [case...]`: prepare counting artifacts with *this*
@@ -526,16 +574,22 @@ pub(crate) fn prepare(root: &Utf8Path, argv: &[String]) -> Result<()> {
                     }
                     (Some(harness.to_string()), files, None)
                 }
-                Err(error) => (
-                    None,
-                    BTreeMap::new(),
-                    Some(
-                        format!("{error:#}")
-                            .split_whitespace()
-                            .collect::<Vec<_>>()
-                            .join(" "),
-                    ),
-                ),
+                Err(error) => {
+                    let said = format!("{error:#}");
+                    if !is_decline(&said) {
+                        // Not the backend refusing the program: the machine or
+                        // the filesystem failed. That fails preparation (and
+                        // retries on a rerun), never an absent cell.
+                        return Err(error.context(format!(
+                            "preparing {name}'s Wasm artifact (infrastructure, not a decline)"
+                        )));
+                    }
+                    (
+                        None,
+                        BTreeMap::new(),
+                        Some(said.split_whitespace().collect::<Vec<_>>().join(" ")),
+                    )
+                }
             };
         let shown = match provider_for(&case) {
             hir::Provider::ReferenceCounting => format!("{name} (rc)"),
@@ -568,43 +622,97 @@ struct ChildOutcome {
     condition: Value,
 }
 
+/// A counted or calibrated cell gets this long. Its fixed loop targets
+/// ~100 ms; the bound is for process startup, warmup and a sick machine,
+/// not for the work.
+const CELL_DEADLINE: Duration = Duration::from_mins(2);
+/// Preparation compiles a case through the frontend; slower, still bounded.
+const PREPARE_DEADLINE: Duration = Duration::from_mins(10);
+
+/// Run one child with its streams filed in `dir`, under a deadline.
+///
+/// Streams go to files, never pipes this process waits on: a perf that dies
+/// after forking node leaves node holding inherited pipe ends, and a
+/// coordinator waiting on those pipes would hold the measurement lock for
+/// good. The child runs in its own process group; at the deadline the group
+/// is killed (perf and the driver it forked, together) and the cell fails
+/// with its streams kept. `drop_after_spawn` is closed once the child
+/// exists — the perf FIFO ends held only to unblock the opens, so a dead
+/// perf gives the driver's ack read an EOF instead of silence.
 fn run_child(
     dir: &Utf8Path,
     command: &mut std::process::Command,
     admission: &Value,
+    deadline: Duration,
+    drop_after_spawn: Vec<std::fs::File>,
 ) -> Result<ChildOutcome> {
+    use std::os::unix::process::CommandExt as _;
     std::fs::create_dir_all(dir).with_context(|| format!("creating {dir}"))?;
     let program = command.get_program().to_string_lossy().into_owned();
     let args: Vec<String> = command
         .get_args()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
+    let stdout_path = dir.join("stdout");
+    let stderr_path = dir.join("stderr");
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::fs::File::create(&stdout_path)?)
+        .stderr(std::fs::File::create(&stderr_path)?)
+        .process_group(0);
     let start = machine()?;
-    let output = command
-        .output()
+    let began = Instant::now();
+    let mut child = command
+        .spawn()
         .with_context(|| format!("running {program}"))?;
+    let pid = child.id();
+    drop(drop_after_spawn);
+    let mut timed_out = false;
+    let status = loop {
+        if let Some(status) = child.try_wait()? {
+            break status;
+        }
+        if began.elapsed() > deadline {
+            timed_out = true;
+            let _killed = std::process::Command::new("kill")
+                .arg("-KILL")
+                .arg(format!("-{pid}"))
+                .status();
+            break child.wait()?;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
     let end = machine()?;
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    std::fs::write(dir.join("stdout"), &stdout)?;
-    std::fs::write(dir.join("stderr"), &stderr)?;
+    let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+    let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
     let condition = conditions(&start, &end);
     write_atomic(
         &dir.join("PROCESS.json"),
         &(serde_json::to_string_pretty(&json!({
             "program": program,
             "args": args,
-            "exit": output.status.code(),
+            "pid": pid,
+            "exit": status.code(),
+            "timedOut": timed_out,
+            "deadlineSeconds": deadline.as_secs(),
             "condition": condition,
             "admission": admission,
         }))? + "\n"),
     )?;
-    if !output.status.success() {
+    if timed_out {
+        bail!(
+            "{program} exceeded its {}s deadline; killed its process group {pid} \
+             (a hung perf or driver must not hold the measurement lock); \
+             streams kept in {dir}",
+            deadline.as_secs()
+        );
+    }
+    if !status.success() {
         let tail: String = stderr
             .chars()
             .skip(stderr.chars().count().saturating_sub(2000))
             .collect();
-        bail!("{program} exited {}: {tail}", output.status);
+        bail!("{program} exited {status}: {tail}");
     }
     Ok(ChildOutcome { stdout, condition })
 }
@@ -644,7 +752,7 @@ fn calibrate(
     let record = admission.admit(&format!("calibrate {driver}"));
     let mut command = node_command(driver, cpus);
     command.env("NTS_BENCH_COUNT_MODE", "calibrate");
-    let outcome = run_child(dir, &mut command, &record)?;
+    let outcome = run_child(dir, &mut command, &record, CELL_DEADLINE, Vec::new())?;
     json_line(&outcome.stdout, "calibration")
 }
 
@@ -664,7 +772,7 @@ fn count_cell(
     admission: &mut Admission,
 ) -> Result<Value> {
     let record = admission.admit(&format!("count {driver}"));
-    count_cell_admitted(driver, n, warmup, dir, cpus, perf, &record)
+    count_cell_admitted(driver, n, warmup, dir, cpus, perf, &record, CELL_DEADLINE)
 }
 
 /// One counted cell whose admission is already taken. Split from
@@ -682,6 +790,7 @@ fn count_cell_admitted(
     cpus: Option<&str>,
     perf: &str,
     record: &Value,
+    deadline: Duration,
 ) -> Result<Value> {
     let attempt = dir.join(format!("attempt-{}", now_ms()));
     std::fs::create_dir_all(&attempt).with_context(|| format!("creating {attempt}"))?;
@@ -695,9 +804,11 @@ fn count_cell_admitted(
     if !made.status.success() {
         bail!("mkfifo failed: {}", String::from_utf8_lossy(&made.stderr));
     }
-    // Held open read-write so neither perf nor the driver blocks opening its
-    // end before the other exists.
-    let _held = [
+    // Opened read-write so neither perf nor the driver blocks opening its
+    // end before the other exists, and handed to run_child to close as soon
+    // as perf is spawned: holding the ack write end past that would keep a
+    // dead perf's driver waiting on an ack that can never come.
+    let held = vec![
         std::fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -727,7 +838,7 @@ fn count_cell_admitted(
         .env("NTS_BENCH_COUNT_WARMUP", warmup.to_string())
         .env("NTS_BENCH_COUNT_CONTROL", control.as_str())
         .env("NTS_BENCH_COUNT_ACK", ack.as_str());
-    let outcome = run_child(&attempt, &mut command, record)?;
+    let outcome = run_child(&attempt, &mut command, record, deadline, held)?;
     let csv = std::fs::read_to_string(attempt.join("perf.csv"))
         .context("reading perf.csv (a missing file means perf never counted)")?;
     let instructions = parse_instructions(&csv)?;
@@ -830,6 +941,8 @@ struct RunCtx {
     arms: Vec<(String, String)>,
     /// side -> nts-bench binary path.
     binaries: BTreeMap<String, String>,
+    /// side -> that binary's sha256 at run start.
+    binary_hashes: BTreeMap<String, String>,
     baseline_overlay: Vec<(String, String)>,
 }
 
@@ -913,6 +1026,8 @@ fn prepare_sides(
                     .join("preparation"),
                 &mut command,
                 &record,
+                PREPARE_DEADLINE,
+                Vec::new(),
             )?;
         }
         let manifest: Manifest =
@@ -924,6 +1039,18 @@ fn prepare_sides(
                 )
             })?)
             .with_context(|| format!("parsing {manifest_path}"))?;
+        if ctx
+            .binary_hashes
+            .get(side)
+            .is_some_and(|hash| *hash != manifest.binary_sha256)
+        {
+            bail!(
+                "{name}: the {side} artifacts were prepared by binary {} but this run's \
+                 {side} binary is {}; prepare them again into a new --out",
+                manifest.binary_sha256,
+                ctx.binary_hashes[side]
+            );
+        }
         verify_manifest(&manifest)?;
         row["prepared"][side] = json!({
             "binarySha256": manifest.binary_sha256,
@@ -937,6 +1064,32 @@ fn prepare_sides(
     Ok((sides, manifests))
 }
 
+/// A resumed row counts under the plan now in force, or not at all: cells
+/// already counted must show that plan's exact n and warmups, or the run
+/// would mix two fixed works into one ratio and call it a comparison.
+fn check_plan_against_cells(row: &Value, plan: &RowPlan) -> Result<()> {
+    let Some(arms) = row["arms"].as_object() else {
+        return Ok(());
+    };
+    for (label, arm) in arms {
+        for (column, warmup) in [("node", plan.warmup_node), ("wasm", plan.warmup_wasm)] {
+            let cell = &arm[column];
+            if cell.is_null() {
+                continue;
+            }
+            if cell["n"] != json!(plan.n) || cell["warmup"] != json!(warmup) {
+                bail!(
+                    "plan moved: {label}/{column} was counted at n={} warmup={} but the                      plan now in force is n={} warmup={warmup}; a resumed run never mixes                      two fixed works — use a new --out for a new plan",
+                    cell["n"],
+                    cell["warmup"],
+                    plan.n
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 /// The row's frozen plan: the saved one when a plan already froze it, else
 /// calibrated now against node's checksum before any arm runs.
 fn frozen_plan(
@@ -948,6 +1101,14 @@ fn frozen_plan(
     admission: &mut Admission,
 ) -> Result<RowPlan> {
     if let Some(frozen) = plan.rows.get(name).cloned() {
+        if let Some(fixed) = ctx.fixed_n
+            && fixed != frozen.n
+        {
+            bail!(
+                "{name}: --fixed-n {fixed} differs from the frozen plan's n={} for this                  row; a resumed run counts under the plan it started with — use a new                  --out, or --plan with the cells it froze",
+                frozen.n
+            );
+        }
         return Ok(frozen);
     }
     {
@@ -1141,12 +1302,15 @@ fn run_row(
             );
         }
     }
-    let identical = manifests.get("B").is_none_or(|baseline| {
-        baseline.wasm_files.get("program.wasm") == foreground.wasm_files.get("program.wasm")
-    });
+    // The whole artifact set, glue included: a glue-only change is a changed
+    // arm, not instrument noise.
+    let identical = manifests
+        .get("B")
+        .is_none_or(|baseline| baseline.wasm_files == foreground.wasm_files);
     row["artifactEquality"] = json!(if identical { "identical" } else { "changed" });
 
     let row_plan = frozen_plan(ctx, name, base, &mut row, plan, admission)?;
+    check_plan_against_cells(&row, &row_plan)?;
     row["plan"] = serde_json::to_value(&row_plan)?;
     checkpoint(rows, &row, plan)?;
 
@@ -1323,6 +1487,7 @@ fn binaries_and_arms(argv: &[String]) -> Result<ArmSetup> {
             bail!("--against names {baseline}, which does not exist");
         }
         binaries.insert("B".to_owned(), baseline.to_owned());
+        probe_counting(baseline)?;
     }
     let binary_hashes: BTreeMap<String, String> = binaries
         .iter()
@@ -1443,6 +1608,7 @@ pub(crate) fn run(root: &Utf8Path, argv: &[String]) -> Result<()> {
         fixed_n,
         arms: arms.clone(),
         binaries,
+        binary_hashes: binary_hashes.clone(),
         baseline_overlay: match std::env::var(BASELINE_ENV) {
             Ok(raw) => baseline_env(&raw)?,
             Err(_) => Vec::new(),
@@ -1470,14 +1636,30 @@ fn drive(
     let mut admission = Admission::start();
     let mut failed = false;
     for (name, _) in selected {
-        if rows
+        // A complete row resumes only under the plan it was counted with: a
+        // --plan that moved fails it here instead of leaving two fixed
+        // works side by side in one report.
+        let complete = rows
             .get(name)
-            .is_some_and(|row| row["complete"] == json!(true))
-        {
+            .is_some_and(|row| row["complete"] == json!(true));
+        let moved = if complete {
+            match (rows.get(name), plan.rows.get(name)) {
+                (Some(row), Some(frozen)) => check_plan_against_cells(row, frozen),
+                _ => Ok(()),
+            }
+        } else {
+            Ok(())
+        };
+        if complete && moved.is_ok() {
             println!("{name:<24} already complete; resumed past it");
             continue;
         }
-        match run_row(ctx, name, &mut admission, &mut rows, &report, &mut plan) {
+        let outcome = if complete {
+            moved
+        } else {
+            run_row(ctx, name, &mut admission, &mut rows, &report, &mut plan)
+        };
+        match outcome {
             Ok(()) => {}
             Err(error) => {
                 failed = true;
@@ -1643,10 +1825,11 @@ mod tests {
     }
 
     fn scratch(tag: &str) -> Utf8PathBuf {
-        let dir = Utf8PathBuf::from_path_buf(
-            std::env::temp_dir().join(format!("nts-bench-count-{tag}-{}", std::process::id())),
-        )
-        .expect("temp dir is UTF-8");
+        // Under target/, not /tmp: FIFOs and drivers beside the build that
+        // made them, on the big disk.
+        let dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/nts-bench-count-tests")
+            .join(format!("{tag}-{}", std::process::id()));
         let _removed = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("create scratch");
         let bench =
@@ -1674,6 +1857,7 @@ mod tests {
             None,
             perf.as_str(),
             &json!({"phase": "test"}),
+            std::time::Duration::from_secs(30),
         )
         .expect("cell counts");
         assert_eq!(cell["instructions"], json!(1_234_567));
@@ -1695,9 +1879,146 @@ mod tests {
             None,
             perf.as_str(),
             &json!({"phase": "test"}),
+            std::time::Duration::from_secs(30),
         )
         .expect_err("must refuse");
         assert!(error.to_string().contains("not supported"), "{error}");
+        let _removed = std::fs::remove_dir_all(&dir);
+    }
+
+    fn write_fake(dir: &camino::Utf8Path, name: &str, script: &str) -> Utf8PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let path = dir.join(name);
+        std::fs::write(&path, script).expect("write fake");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake executable");
+        path
+    }
+
+    /// The perf side of the protocol up to the first ack, shared by the
+    /// death fakes: spawn the driver, open both FIFOs, ack one command.
+    const FAKE_PRELUDE: &str = "#!/usr/bin/env node\n\
+        import { spawn } from 'node:child_process';\n\
+        import { openSync, readSync, writeSync } from 'node:fs';\n\
+        const argv = process.argv.slice(2);\n\
+        const [ctl, ack] = argv[argv.indexOf('--control') + 1].slice('fifo:'.length).split(',');\n\
+        const command = argv.slice(argv.indexOf('--') + 1);\n\
+        spawn(command[0], command.slice(1), { stdio: 'inherit' });\n\
+        const ctlFd = openSync(ctl, 'r');\n\
+        const ackFd = openSync(ack, 'w');\n";
+
+    #[test]
+    fn a_perf_that_dies_mid_cell_fails_the_cell_not_the_run() {
+        let dir = scratch("dies");
+        // Ack the enable, then die the way an OOM kill would leave it.
+        let perf = write_fake(
+            &dir,
+            "fake-perf-dies.mjs",
+            &format!(
+                "{FAKE_PRELUDE}\
+                 const byte = Buffer.alloc(1); let line = '';\n\
+                 while (!line.endsWith('\\n')) {{ readSync(ctlFd, byte, 0, 1, null); line += byte.toString(); }}\n\
+                 writeSync(ackFd, 'ack\\n\\0');\n\
+                 process.exit(9);\n"
+            ),
+        );
+        let began = std::time::Instant::now();
+        let error = count_cell_admitted(
+            dir.join("driver.mjs").as_str(),
+            1_000_000,
+            10,
+            &dir.join("runs"),
+            None,
+            perf.as_str(),
+            &json!({"phase": "test"}),
+            std::time::Duration::from_secs(30),
+        )
+        .expect_err("a dead perf is a failed cell");
+        assert!(
+            began.elapsed() < std::time::Duration::from_secs(20),
+            "the coordinator hung on a dead perf: {error}"
+        );
+        let _removed = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_perf_that_never_acks_is_killed_at_the_deadline() {
+        let dir = scratch("hangs");
+        let perf = write_fake(
+            &dir,
+            "fake-perf-hangs.mjs",
+            &format!("{FAKE_PRELUDE}setInterval(() => {{}}, 1000);\n"),
+        );
+        let began = std::time::Instant::now();
+        let error = count_cell_admitted(
+            dir.join("driver.mjs").as_str(),
+            1_000,
+            10,
+            &dir.join("runs"),
+            None,
+            perf.as_str(),
+            &json!({"phase": "test"}),
+            std::time::Duration::from_secs(2),
+        )
+        .expect_err("a silent perf hits the deadline");
+        assert!(
+            error.to_string().contains("exceeded its 2s deadline"),
+            "{error}"
+        );
+        assert!(began.elapsed() < std::time::Duration::from_secs(20));
+        let _removed = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_moved_plan_refuses_cells_counted_under_the_old_one() {
+        let plan = super::RowPlan {
+            n: 20,
+            warmup_node: 5,
+            warmup_wasm: 7,
+            checksum: "00".to_owned(),
+            node_ns_per_op: 1.0,
+            wasm_ns_per_op: 1.0,
+        };
+        let row = json!({"arms": {"B1": {
+            "node": {"n": 10, "warmup": 5},
+            "wasm": {"n": 10, "warmup": 7},
+        }}});
+        let error = super::check_plan_against_cells(&row, &plan).expect_err("must refuse");
+        assert!(error.to_string().contains("plan moved"), "{error}");
+        let same = json!({"arms": {"B1": {
+            "node": {"n": 20, "warmup": 5},
+            "wasm": {"n": 20, "warmup": 7},
+        }}});
+        assert!(super::check_plan_against_cells(&same, &plan).is_ok());
+        assert!(super::check_plan_against_cells(&json!({}), &plan).is_ok());
+    }
+
+    #[test]
+    fn declines_are_not_infrastructure_failures() {
+        assert!(super::is_decline("declined: NTS5001 no"));
+        assert!(super::is_decline(
+            "its own driver.mjs imports case.ts, so there is no harness"
+        ));
+        assert!(super::is_decline("error NTS2001: refused somewhere"));
+        assert!(!super::is_decline("reading /x: No space left on device"));
+        assert!(!super::is_decline("cannot allocate memory"));
+    }
+
+    #[test]
+    fn probe_knows_a_counting_binary_from_an_old_one() {
+        let dir = scratch("probe");
+        let good = write_fake(
+            &dir,
+            "new-bench",
+            "#!/bin/sh\necho 'nts-bench counting mode 1'\n",
+        );
+        assert!(super::probe_counting(good.as_str()).is_ok());
+        let old = write_fake(&dir, "old-bench", "#!/bin/sh\necho 'case  C++  nts C'\n");
+        let error = super::probe_counting(old.as_str()).expect_err("must refuse");
+        assert!(
+            error.to_string().contains("does not speak counting mode"),
+            "{error}"
+        );
         let _removed = std::fs::remove_dir_all(&dir);
     }
 }

@@ -6,14 +6,17 @@
 // version of the program to drift.
 //
 // Counting mode (tooling/bench/README.md is the spec) is selected by
-// NTS_BENCH_COUNT_MODE. Unset, this file is exactly the timed harness above.
-// `calibrate` prints the numbers a frozen plan is built from; `count` runs a
-// fixed loop bracketed by perf's control FIFO so only the loop is counted.
+// NTS_BENCH_COUNT_MODE. The timed path below is the original code shape on
+// purpose: its warmup loop lives inside measure() so the whole function is
+// OSR-compiled before the timed loop runs, and node's column — every row's
+// denominator — measures the same thing it always did. Counting branches
+// before it and changes none of it.
 import { closeSync, openSync, readSync, writeSync } from "node:fs";
 
-// The sixty-four bits, not the number's text. See the comment in main.cpp:
-// `%.17g` and JavaScript's shortest round-trip disagree on values like 0.1,
-// and the runner compares checksums as strings.
+// The sixty-four bits, not the number's text: `%.17g` and JavaScript's
+// shortest round-trip disagree on values like 0.1, and the runner compares
+// checksums as strings. (The timed path spells this inline, as it always
+// has; the counting paths share this spelling.)
 function bits(value) {
   const view = new DataView(new ArrayBuffer(8));
   view.setFloat64(0, value);
@@ -37,31 +40,32 @@ function perfCommand(control, acknowledgement, value) {
   }
 }
 
-// Bounded by *time* as well as by count. Twenty thousand iterations is right
-// for a one-microsecond case and absurd for a twenty-millisecond one, where
-// it is eight minutes of warmup for a half-second measurement -- and a
-// benchmark that takes eight minutes to warm up does not get run. A long
-// call tiers up inside itself through on-stack replacement, so it does not
-// need the count anyway. Returns how many iterations actually ran, which
-// counting mode freezes as the plan's warmup.
-function warmup(run) {
-  const until = process.hrtime.bigint() + 300_000_000n;
-  let done = 0;
-  while (done < 20000 && process.hrtime.bigint() < until) {
-    run();
-    done++;
+// The one loop counting mode warms up and counts, spelled once so warmup
+// tiers up the very loop the counter then brackets — a warmup in a different
+// shape would leave the counted loop to be compiled mid-count on a TurboFan
+// worker, and its instructions would move with scheduling.
+function runLoop(run, reps) {
+  let sink = 0;
+  for (let i = 0; i < reps; i++) {
+    sink += run();
   }
-  return done;
+  return sink;
 }
 
 function calibrate(run, checksum) {
-  const warmed = warmup(run);
+  // The timed path's warmup bounds: 20,000 calls or 300 ms.
+  const until = process.hrtime.bigint() + 300_000_000n;
+  let warmed = 0;
+  while (warmed < 20000 && process.hrtime.bigint() < until) {
+    run();
+    warmed++;
+  }
   let reps = 1;
   let elapsed = 0;
   let sink = 0;
   for (;;) {
     const start = process.hrtime.bigint();
-    for (let i = 0; i < reps; i++) sink += run();
+    sink += runLoop(run, reps);
     elapsed = Number(process.hrtime.bigint() - start);
     if (elapsed >= 20_000_000 || reps >= 50_000_000) break;
     reps = Math.min(reps * 2, 50_000_000);
@@ -76,13 +80,13 @@ function count(run, checksum) {
   if (!Number.isSafeInteger(n) || n < 1 || !Number.isSafeInteger(warmed) || warmed < 0) {
     throw new Error("fixed counts are required: NTS_BENCH_COUNT_N and NTS_BENCH_COUNT_WARMUP");
   }
-  for (let i = 0; i < warmed; i++) run();
+  // Warm up the loop being counted, outside the bracket.
+  runLoop(run, warmed);
   const control = openSync(process.env.NTS_BENCH_COUNT_CONTROL, "w");
   const acknowledgement = openSync(process.env.NTS_BENCH_COUNT_ACK, "r");
   perfCommand(control, acknowledgement, "enable");
-  let sink = 0;
   const start = process.hrtime.bigint();
-  for (let i = 0; i < n; i++) sink += run();
+  const sink = runLoop(run, n);
   const elapsed = Number(process.hrtime.bigint() - start);
   perfCommand(control, acknowledgement, "disable");
   closeSync(control);
@@ -108,7 +112,17 @@ export function measure(run) {
 
   // Let the JIT reach steady state. Timing a cold interpreter would flatter us
   // enormously and mean nothing.
-  warmup(run);
+  //
+  // Bounded by *time* as well as by count. Twenty thousand iterations is right
+  // for a one-microsecond case and absurd for a twenty-millisecond one, where
+  // it is eight minutes of warmup for a half-second measurement -- and a
+  // benchmark that takes eight minutes to warm up does not get run. A long
+  // call tiers up inside itself through on-stack replacement, so it does not
+  // need the count anyway.
+  const until = process.hrtime.bigint() + 300_000_000n;
+  for (let i = 0; i < 20000 && process.hrtime.bigint() < until; i++) {
+    run();
+  }
 
   const probe = process.hrtime.bigint();
   run();
@@ -132,5 +146,11 @@ export function measure(run) {
   if (Number.isNaN(sink)) {
     throw new Error("unreachable");
   }
-  process.stdout.write(`${best.toFixed(4)} ${bits(checksum)}\n`);
+  // The sixty-four bits, not the number's text. See the comment in main.cpp:
+  // `%.17g` and JavaScript's shortest round-trip disagree on values like 0.1,
+  // and the runner compares checksums as strings.
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, checksum);
+  const bits = view.getBigUint64(0).toString(16).padStart(16, "0");
+  process.stdout.write(`${best.toFixed(4)} ${bits}\n`);
 }
