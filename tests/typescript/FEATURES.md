@@ -32,6 +32,118 @@ A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
 
+## The families
+
+| family | what it holds |
+| --- | --- |
+| `ambient/` | `declare` forms, which emit nothing and resolve to what the program provides |
+| `async/` | async functions, methods and generators, promises, `for await` (`flags: [async]`) |
+| `bigint/` | bigint arithmetic, conversions, widths, literal types |
+| `classes/` | fields under define semantics, parameter properties, inheritance, abstract, private, static, accessors |
+| `conversions/` | ToPrimitive under each operator, number and string conversions |
+| `enums/` | numeric, string, const, heterogeneous, computed, merged enums and their objects |
+| `errors/` | exceptions typed `unknown`, Error subclasses, finally |
+| `expressions/` | assertions, `satisfies`, non-null, tagged templates and operators, all erased or evaluated as written |
+| `functions/` | parameters, overloads, closures, `this` parameters, `length` and names |
+| `generics/` | a matrix of six positions by eight kinds of type argument, then the facets of type parameters |
+| `interfaces/` | dispatch through interfaces over classes and literals of different layouts, and the interface forms |
+| `iteration/` | the iteration protocols, generators, iterator helpers |
+| `literal-types/` | literal types and the values they admit, `as const`, template literal types |
+| `modules-and-exports/` | module code in one file (`flags: [module]`) |
+| `namespaces/` | namespaces, their objects, merging and aliases |
+| `objects/` | object literals and types, structural assignment, keys, spread, Record |
+| `resource-management/` | `using`, `await using`, DisposableStack |
+| `symbols/` | symbols as keys, unique symbols, well-known symbols |
+| `tuples/` | tuples with optional, rest and labelled elements, readonly, variadic |
+| `type-operators/` | values through keyof, typeof, indexed access, mapped and conditional types |
+| `typed-paths/` | where a static type and the run-time value part ways, and where a number's representation shows |
+| `unions/` | unions and every way TypeScript narrows them |
+
+Each family has one or more `combination-*.ts` cases pairing its concept
+with others.
+
+## Coverage, source by source
+
+### TypeScript's conformance directories
+
+| directory | where |
+| --- | --- |
+| ambient | `ambient/`; `declare const enum` in pending `transform-divergence/` |
+| async, es2017 | `async/` |
+| classes (abstract, classDeclarations, classExpressions, classHeritageSpecification, classStaticBlock, constructorDeclarations, indexMemberDeclarations, members, mixinClassesAndInterfaces, propertyMemberDeclarations) | `classes/`; auto-accessors in pending `accessor-fields/` |
+| constEnums | `enums/` (`const-enum*.ts`); `declare const enum` pending |
+| controlFlow | `unions/`, `functions/never-returning.ts`, `expressions/definite-assignment-let.ts` |
+| decorators, esDecorators | pending `legacy-decorators/`, `decorators/` |
+| dynamicImport, externalModules, importAttributes, importDefer | pending `modules/` and `commonjs-interop/` for dynamic import, elision, `export =` and `import = require`; import attributes and `import defer` need a JSON or a second module the one-file format cannot give, and have no case |
+| enums | `enums/` |
+| es2018 (async iteration), es2020 (bigint), es2021 (logical assignment), es2022 (class fields, private names, static blocks) | `async/`, `bigint/`, `objects/logical-assignment.ts`, `classes/` |
+| es6 (arrowFunction, computedProperties, defaultParameters, destructuring, for-ofStatements, newTarget, restParameters, shorthandPropertyAssignment, spread, Symbols, templates, yieldExpressions) | `functions/`, `objects/`, `iteration/`, `symbols/`, `expressions/`, `classes/new-target.ts` |
+| es7 (exponentiation) | `expressions/exponent-operator.ts` |
+| expressions (asOperator, assignmentOperator, binaryOperators, commaOperator, contextualTyping, elementAccess, functionCalls, newOperator, nullishCoalescingOperator, objectLiterals, optionalChaining, superCalls, superPropertyAccess, thisKeyword, typeAssertions, typeGuards, typeSatisfaction, unaryOperators) | `expressions/`, `conversions/`, `objects/`, `unions/` |
+| functions | `functions/` |
+| generators | `iteration/`, `async/async-generator.ts` |
+| interfaces (declarationMerging, interfaceDeclarations, interfacesExtendingClasses) | `interfaces/` |
+| internalModules (codeGeneration, DeclarationMerging, exportDeclarations, importDeclarations, moduleBody, moduleDeclarations) | `namespaces/`; cross-block unqualified references in pending `transform-divergence/` |
+| jsx | pending `jsx/` |
+| override | `classes/override-*.ts`, `generics/override-generic-method.ts` |
+| statements (tryStatements, labeledStatements, switchStatements, for-in, using declarations) | `errors/`, `iteration/labelled-loops.ts`, `resource-management/` |
+| types (any, conditional, intersection, keyof, literal, mapped, never, nonPrimitive, objectTypeLiteral, primitives, rest, spread, thisType, tuple, typeAliases, typeParameters, typeRelationships, union, uniqueSymbol, unknown) | `type-operators/`, `generics/`, `tuples/`, `unions/`, `literal-types/`, `typed-paths/`, `objects/` |
+| declarationEmit, directives, jsdoc, moduleResolution, node, nonjsExtensions, parser, references, salsa, scanner, typings | no run-time effect on a TypeScript program, or JavaScript-only: no case |
+
+### typescript-eslint's TypeScript-only nodes
+
+| node | where |
+| --- | --- |
+| TSEnumDeclaration, TSEnumMember | `enums/` |
+| TSModuleDeclaration, TSModuleBlock, TSQualifiedName | `namespaces/` (the `module` keyword form is rejected by tsgo 7 and node alike, TS1540, so it has no case) |
+| TSParameterProperty | `classes/parameter-*.ts`, `classes/override-parameter-property.ts` |
+| TSAbstractMethodDefinition, TSAbstractPropertyDefinition, TSAbstractKeyword | `classes/abstract-*.ts` |
+| TSAbstractAccessorProperty, AccessorProperty | pending `accessor-fields/` |
+| Decorator | pending `decorators/`, `legacy-decorators/` |
+| TSAsExpression, TSTypeAssertion | `expressions/as-*.ts`, `expressions/angle-bracket-assertion.ts` |
+| TSSatisfiesExpression | `expressions/satisfies-is-erased.ts`, `literal-types/satisfies-keeps-literals.ts` |
+| TSNonNullExpression | `expressions/non-null-*.ts`, `errors/calling-a-missing-method.ts` |
+| TSInstantiationExpression | `generics/instantiation-expression.ts` |
+| TSImportEqualsDeclaration | `namespaces/import-alias*.ts`, `namespaces/export-import-alias.ts`; the `require` form pending `commonjs-interop/` |
+| TSExternalModuleReference, TSExportAssignment | pending `commonjs-interop/` |
+| TSDeclareFunction, TSEmptyBodyFunctionExpression | `functions/overloads.ts`, `functions/method-overloads.ts`, `classes/constructor-overloads.ts`, `ambient/declare-function.ts` |
+| TSTypePredicate | `unions/user-type-guard.ts`, `unions/this-type-guard.ts`, `unions/assertion-function.ts` |
+| TSIndexSignature | `interfaces/*-index-signature.ts`, `classes/index-signature.ts`, `classes/static-index-signature.ts` |
+| TSTupleType, TSNamedTupleMember, TSOptionalType, TSRestType | `tuples/` |
+| TSMappedType, TSConditionalType, TSInferType, TSIndexedAccessType, TSTypeOperator, TSTypeQuery, TSTemplateLiteralType | `type-operators/`, `literal-types/` |
+| TSCallSignatureDeclaration, TSConstructSignatureDeclaration, TSConstructorType, TSFunctionType | `interfaces/call-signature.ts`, `interfaces/construct-signature.ts`, `classes/abstract-constructor-type.ts`, `generics/constructor-type-parameter.ts` |
+| PropertyDefinition with `declare`, `definite`, `optional`, `readonly`, `override` | `classes/declare-field.ts`, `classes/definite-assignment-field.ts`, `classes/optional-field.ts`, `classes/readonly-is-not-frozen.ts`, `classes/derived-field-redeclared.ts` |
+| `this` parameter | `functions/this-parameter.ts`, `functions/function-length.ts` |
+| TSNamespaceExportDeclaration (`export as namespace`), TSImportType, TSTypeAliasDeclaration, TSInterfaceDeclaration on their own, keyword types | no run-time effect: covered only through values that flow through them |
+
+### Typed paths
+
+| path | where |
+| --- | --- |
+| generics over number, string, boolean, a class, a union, a function, an array and a nested generic, in a function, a class, a method, an interface member, a constraint and a default | `generics/<position>-<kind>.ts`, 48 cases |
+| interfaces: one implementing class, several in different field orders, an object literal | `typed-paths/interface-*.ts`, `interfaces/field-orders-differ.ts`, `interfaces/literals-in-different-orders.ts`, `interfaces/classes-and-literals-mixed.ts` |
+| structural assignment between classes and literals | `objects/class-to-literal-type.ts`, `objects/literal-to-class-type.ts`, `interfaces/class-without-implements.ts` |
+| unions and narrowing: typeof, instanceof, `in`, discriminants, type guards, assertion functions | `unions/` |
+| tuples with optional, rest and labelled elements; readonly arrays and tuples | `tuples/` |
+| index signatures and Record | `interfaces/`, `objects/record-*.ts`, `typed-paths/missing-record-key.ts` |
+| optional, default and rest parameters; overloads | `functions/` |
+| abstract classes, inheritance, `this` types, accessors, statics, `#x` and `private x`, protected | `classes/` |
+| keyof, typeof, indexed access, mapped, conditional and template literal types | `type-operators/`, `literal-types/` |
+| `satisfies`, `as const`, definite assignment, non-null | `expressions/`, `literal-types/`, `tuples/as-const-tuple.ts` |
+| enums of every kind, merging | `enums/` |
+| namespaces with values, nesting, merged with classes, functions and enums | `namespaces/`, `enums/merged-with-namespace.ts` |
+| class fields under `useDefineForClassFields`, parameter properties and their order | `classes/` |
+| `accessor` fields | pending `accessor-fields/` (node v24 cannot parse them) |
+| `using`, `await using` | `resource-management/` (node v24 runs both natively) |
+| async functions, generators, async generators | `async/`, `iteration/` |
+| valueOf and toString under every converting operator | `conversions/`, `typed-paths/value-of-under-plus.ts` |
+| BigInt | `bigint/` |
+| symbols as keys, Symbol.iterator on a class | `symbols/`, `iteration/class-symbol-iterator.ts` |
+| getters and setters on classes and literals | `classes/`, `objects/literal-accessors.ts` |
+| closures over typed locals | `functions/closure*.ts`, `generics/closure-over-type-parameter.ts` |
+| exceptions typed as `unknown` | `errors/`, `async/rejection-caught-as-unknown.ts` |
+| numbers that stop being integers, -0, NaN, int32 operators, reads past the end | `typed-paths/` |
+
 ## Tags
 
 <!-- tags:begin -->
