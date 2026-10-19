@@ -736,6 +736,18 @@ function selfTest() {
   };
   const parsedSlots = readLayouts(slots.layouts).byName.get("Other").methods;
   if (JSON.stringify(parsedSlots) !== JSON.stringify(slotNames)) return `slot names were lost or joined: ${JSON.stringify(parsedSlots)}`;
+  // Count raw rows independently of block boundaries: resetting too early
+  // must not make a dropped table look like a clean, smaller program.
+  const countsAgree = (text) => {
+    const raw = text.split("\npublic api\n", 1)[0];
+    const headers = [...raw.matchAll(/^\S.* \[[\d ]*\]$/gm)].length;
+    const rows = [...raw.matchAll(/^  methods (?!:).+$/gm)].length;
+    const layouts = readLayouts(text).byName;
+    return layouts.size === headers && [...layouts.values()].reduce((n, layout) => n + layout.methods.length, 0) === rows;
+  };
+  if (!countsAgree(slots.layouts)) return "raw layout headers or slots were lost by the reader";
+  const droppedTail = slots.layouts.replace("  methods Other#value\n", "\n  methods Other#value\n");
+  if (countsAgree(droppedTail)) return "the raw-count control missed rows dropped after a premature block end";
   const resolvedSlots = judge(slots);
   if (resolvedSlots.unmeasured || resolvedSlots.violations.length !== 0) return `defined slot targets did not resolve: ${JSON.stringify(resolvedSlots)}`;
   const stopBody = "func nts$refused$Other$1(this: managed<obj#11>) -> void {\n}\n";
@@ -747,6 +759,7 @@ function selfTest() {
   // an export called `methods` is not another slot on that frame.
   for (const gap of ["", "\n"]) {
     const sections = { ...slots, layouts: `${slots.layouts}${gap}public api\n  methods -> methods   (a value)\n` };
+    if (!countsAgree(sections.layouts)) return "raw counts included the public export section";
     if (JSON.stringify(readLayouts(sections.layouts).byName.get("Other").methods) !== JSON.stringify(slotNames)) return "a public export named methods attached to the last layout";
     if (judge(sections).violations?.length !== 0) return "the public export section read as a layout table";
   }
