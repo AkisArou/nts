@@ -1,4 +1,5 @@
-//! A root's written parameters cross at their kinds' widths.
+//! A root's written parameters, and its written return, cross at their
+//! kinds' widths.
 //!
 //! A parameter written as a kind (`n: c_int`) is the kind's range inside its
 //! function ([`super::Param::written`]), because every call in the program
@@ -23,6 +24,15 @@
 //! [`super::guards`] opens with "the one thing an exported signature cannot
 //! say": a written kind is how it says it.
 //!
+//! **A written return the same way** (`answer(): Uint32`): every `return` was
+//! obliged to prove its value fits, so the root answers the kind's width -- a
+//! C host reads `uint32_t`, not a `double` it must convert and trust -- and a
+//! call inside the program widens the answer back to the `number` it computes
+//! with. Only a return the program holds as a `number`: a bigint kind's needs
+//! its host to know it was a bigint, which the width alone does not say. An
+//! `async` function's written kind is its promise's payload, which does not
+//! cross here (`Func::call_kind`).
+//!
 //! Unconditional, unlike the narrowing [`super::signatures`] does from facts:
 //! the boundary has to hold whether or not numbers are specialized, so it
 //! runs in `prepare` before anything reads a signature. The kinds
@@ -35,14 +45,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::native::Targets;
 use super::reachable::Roots;
 use super::simplify::{substitute, substitute_terminator};
-use super::{Callee, Func, HirType, Op, OpKind, Param, Program, ValueId};
+use super::{Callee, Func, HirType, Op, OpKind, Param, Program, Terminator, ValueId};
 
 /// Each root's parameters at the widths they cross at, `None` where a
 /// parameter crosses as it is.
 type Widths = FxHashMap<String, Vec<Option<HirType>>>;
 
-/// Narrow every root's written parameters to their kinds on every target the
-/// program is built for, returning how many roots changed.
+/// Each root whose return crosses narrowed, at the width it crosses at.
+type Returns = FxHashMap<String, HirType>;
+
+/// Narrow every root's written parameters and return to their kinds on every
+/// target the program is built for, returning how many roots changed.
 pub fn narrow(program: &mut Program, roots: Roots<'_>) -> usize {
     let targets = program.targets;
     let roots: FxHashSet<String> = super::reachable::root_names(program, roots)
@@ -50,10 +63,18 @@ pub fn narrow(program: &mut Program, roots: Roots<'_>) -> usize {
         .map(str::to_owned)
         .collect();
     let dispatched: FxHashSet<&str> = program.dispatch_targets().collect();
+    let crossing =
+        |func: &&Func| roots.contains(&func.name) && !dispatched.contains(func.name.as_str());
+    let returns: Returns = program
+        .funcs
+        .iter()
+        .filter(crossing)
+        .filter_map(|func| Some((func.name.clone(), return_width(func, targets)?)))
+        .collect();
     let widths: Widths = program
         .funcs
         .iter()
-        .filter(|func| roots.contains(&func.name) && !dispatched.contains(func.name.as_str()))
+        .filter(crossing)
         .filter_map(|func| {
             let widths: Vec<Option<HirType>> = func
                 .params
@@ -66,16 +87,107 @@ pub fn narrow(program: &mut Program, roots: Roots<'_>) -> usize {
                 .then(|| (func.name.clone(), widths))
         })
         .collect();
-    if widths.is_empty() {
+    if widths.is_empty() && returns.is_empty() {
         return 0;
     }
     for func in &mut program.funcs {
         if let Some(mine) = widths.get(&func.name) {
             widen_at_entry(func, mine);
         }
+        if let Some(width) = returns.get(&func.name) {
+            narrow_returns(func, width);
+        }
         narrow_arguments(func, &widths);
+        widen_results(func, &returns);
     }
-    widths.len()
+    widths
+        .keys()
+        .chain(returns.keys())
+        .collect::<FxHashSet<_>>()
+        .len()
+}
+
+/// The width a root's return crosses at: its written kind's, where that is
+/// narrower than the `number` it answers.
+fn return_width(func: &Func, targets: Targets) -> Option<HirType> {
+    let width = func.call_kind()?.width_on(targets);
+    (func.return_type == HirType::NUMBER && width != HirType::NUMBER).then_some(width)
+}
+
+/// Answer the width: each value returned, which the strict check proved
+/// fits, converted to it where it is returned.
+fn narrow_returns(func: &mut Func, width: &HirType) {
+    func.return_type = width.clone();
+    for at in 0..func.blocks.len() {
+        let mut ops = Vec::with_capacity(func.blocks[at].ops.len() + 1);
+        for op in std::mem::take(&mut func.blocks[at].ops) {
+            if let OpKind::Return(Some(value)) = func.values[op.0 as usize].kind {
+                let converted = convert(func, value, width, op);
+                ops.push(converted);
+                func.values[op.0 as usize].kind = OpKind::Return(Some(converted));
+            }
+            ops.push(op);
+        }
+        if let Terminator::Return(Some(value)) = func.blocks[at].terminator {
+            let converted = convert(func, value, width, value);
+            ops.push(converted);
+            func.blocks[at].terminator = Terminator::Return(Some(converted));
+        }
+        func.blocks[at].ops = ops;
+    }
+}
+
+/// Each call to a root whose return is narrowed answers its width; every use
+/// reads a `number` widened from it, exactly, right after the call.
+fn widen_results(func: &mut Func, returns: &Returns) {
+    let mut widened: FxHashMap<ValueId, ValueId> = FxHashMap::default();
+    for at in 0..func.blocks.len() {
+        let mut ops = Vec::with_capacity(func.blocks[at].ops.len());
+        for op in std::mem::take(&mut func.blocks[at].ops) {
+            ops.push(op);
+            let width = match &func.values[op.0 as usize].kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } => returns.get(name).cloned(),
+                _ => None,
+            };
+            let Some(width) = width else { continue };
+            func.values[op.0 as usize].ty = width;
+            let number = convert(func, op, &HirType::NUMBER, op);
+            ops.push(number);
+            widened.insert(op, number);
+        }
+        func.blocks[at].ops = ops;
+    }
+    if widened.is_empty() {
+        return;
+    }
+    let read = |value: ValueId| widened.get(&value).copied().unwrap_or(value);
+    // Each widening reads the call itself.
+    let widenings: FxHashSet<ValueId> = widened.values().copied().collect();
+    let Func { blocks, values, .. } = func;
+    for block in blocks.iter_mut() {
+        for op in &block.ops {
+            if !widenings.contains(op) {
+                substitute(&mut values[op.0 as usize].kind, read);
+            }
+        }
+        substitute_terminator(&mut block.terminator, read);
+    }
+}
+
+/// `value` converted to `ty`, at `at`'s origin; the caller places it.
+fn convert(func: &mut Func, value: ValueId, ty: &HirType, at: ValueId) -> ValueId {
+    let origin = func.values[at.0 as usize].origin.clone();
+    push(
+        func,
+        Op {
+            kind: OpKind::Convert(value),
+            ty: ty.clone(),
+            origin,
+        },
+    )
 }
 
 /// The width a parameter crosses at: its written kind's, where that is

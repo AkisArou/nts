@@ -1,4 +1,4 @@
 {
   "extends": "../../../tsconfig.fixtures.json",
-  "include": ["src"]
+  "include": ["src", "../../../runtime/native/scalars.d.ts"]
 }

@@ -4,6 +4,8 @@
 // files, `javac` type-checks Java against them, and `expected/Api.javap` is a
 // real artefact rather than a specification.
 
+import type { c_int, Int8, Uint32 } from "@nts/scalars";
+
 export class Session {
   // `#hits` rather than `private hits`: `private` is a checker-only marker and
   // leaves an own enumerable key, where `#` is genuinely inaccessible.
@@ -141,4 +143,25 @@ export function triangle(n: number): number {
     total = total + x;
   });
   return total;
+}
+
+/// Scalar kinds cross at their width, a return as a parameter does
+/// (`written_roots`). Java has no unsigned types, so an unsigned kind crosses
+/// as its raw bits: `answer()` is `int` -1 to Java, which
+/// `Integer.toUnsignedLong` reads as 4294967295, and handing those bits back to
+/// a `Uint32` parameter is the same value again.
+export function answer(): Uint32 {
+  return 4294967295 as Uint32;
+}
+
+export function echoed(n: Uint32): number {
+  return n;
+}
+
+export function below(): Int8 {
+  return -100 as Int8;
+}
+
+export function negated(n: c_int): c_int {
+  return (-n | 0) as c_int;
 }

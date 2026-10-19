@@ -96,6 +96,27 @@ public final class Main {
         //
         //   double peek = s.$hits;
 
+        // **Scalar kinds cross at their width, returns as parameters do.** An
+        // unsigned kind is its raw bits: `answer()` is 4294967295 as a Uint32,
+        // which Java holds as -1 and reads with `Integer.toUnsignedLong`, and
+        // passing the bits back into a `Uint32` parameter round-trips exactly.
+        int answer = nts.gen.Program.answer();
+        if (answer != -1 || Integer.toUnsignedLong(answer) != 4294967295L) {
+            throw new AssertionError("answer() = " + answer);
+        }
+        double echoed = nts.gen.Program.echoed(answer);
+        if (echoed != 4294967295.0) {
+            throw new AssertionError("echoed(answer()) = " + echoed);
+        }
+        int below = nts.gen.Program.below();
+        if (below != -100) {
+            throw new AssertionError("below() = " + below);
+        }
+        int negated = nts.gen.Program.negated(Integer.MIN_VALUE + 1);
+        if (negated != Integer.MAX_VALUE || nts.gen.Program.negated(Integer.MIN_VALUE) != Integer.MIN_VALUE) {
+            throw new AssertionError("negated(MIN + 1) = " + negated);
+        }
+
         System.out.println(greeting + " " + first + " " + second + " " + hits + " " + sum
             + " | " + kind + " " + size + " [" + order.toString().trim() + "]"
             + " live=" + live + " svz=" + byNegativeZero

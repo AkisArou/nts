@@ -782,6 +782,22 @@ optimisation is off the table and only the binding-table route remains.
 The same argument extends to `size_t`, `uint32_t` and the C/LLVM lanes, and the
 same measurement settles all of them at once.
 
+## Scalar kinds on an exported function
+
+What shipped is `@nts/scalars` (`docs/scalar-numbers.md`): an exported
+function's parameter or return written as a `number` kind crosses at the kind's
+width (`written_roots`), so `answer(): Uint32` is `public static int answer()`
+and `negated(n: c_int): c_int` is `(I)I`, where an unwritten `number` is
+`double`. Parameters and returns follow the same rule.
+
+**Java has no unsigned types, so an unsigned kind crosses as its raw bits.**
+`answer()` returning 4294967295 arrives as `int` -1; read it with
+`Integer.toUnsignedLong(answer())`, and a `Uint8` or `Uint16` with
+`Byte.toUnsignedInt` or `Short.toUnsignedInt`. The bits go back the same way:
+passing that `-1` to a `Uint32` parameter is 4294967295 again
+(`tests/interop/ts-from-java` checks the round trip). A `bigint` kind still
+crosses as `NtsBigInt`.
+
 ## The reverse direction: shipping a Java library
 
 Already works; what is missing is packaging, and these are decisions rather than

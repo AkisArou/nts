@@ -157,6 +157,33 @@ fn source_branching_array_literals_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A root's written number-kind return crosses at the kind's width -- `answer`
+/// is a u32 slot, `below` an i8 one -- and a JavaScript host sees the numbers
+/// node does: unsigned through `>>> 0`, signed as they are. `roundTrip` calls
+/// `answer` inside the program: the call answers the narrowed u32, the program
+/// widens it back to the `number` it computes with, and its own f64 result
+/// (folded to 4294967295, `echoed` inlined) is unchanged. The refusals are the
+/// narrowed parameters' own range checks.
+#[test]
+fn source_kind_returns_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/kind-returns");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "kind-returns",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 19, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(
+        output["refused"],
+        serde_json::json!({"number does not fit u32": 9, "number does not fit i32": 9}),
+        "{output}"
+    );
+}
+
 /// Typed arrays made with `new Array(n)` and written before they are read: a
 /// loop counting from zero to the array's own length fills it (numbers,
 /// objects, strings, rows of a grid), and a slot reads back at the index value
