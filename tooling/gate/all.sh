@@ -1626,7 +1626,13 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # clean bind pin 789f271d7207 adds the regression and its control, with
   # the same ten partials and twelve projects without scalar comparisons.
   # Evidence: ~/.cache/nts-jvm-codex/bind-extra-20261018/jvm.log.
-  backend_examples 616 "through the JVM backend" exact 10 ); }
+  # 616 -> 622, 2026-10-19: pinned 267cd5786 measured 622 of 622 -- the
+  # corpus had grown four past the floor, and the inheriting-faces child
+  # adds two more (inherited-interface-fields, and
+  # a-cache-entry-prefix-read-from-an-erased-array graduating out of
+  # refusals), same ten partials.
+  # Evidence: ~/.cache/nts-jvm-codex/inherited-faces-20261019/pinned-faces2.log.
+  backend_examples 622 "through the JVM backend" exact 10 ); }
 # The programs through the WebAssembly backend, by the same `nts check` as
 # every other backend: the module the WasmGC backend emits, run by node through
 # its generated glue, against node running the source -- one pool, one order,
