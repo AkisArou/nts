@@ -9156,6 +9156,26 @@ int32_t nts_map_next(const NtsMap *map, int32_t from) {
  * loop body runs after the read, not between it and the step. An out-of-range
  * index would be a compiler bug rather than a program's, so it is not a check
  * this pays for on every element. */
+/* The key and the value at `at`, **borrowed**: what a walk inside this file
+ * reads, to hand to something that keeps its own count -- `nts_map_set`, or
+ * an array slot retained where it is written.
+ *
+ * `nts_map_key_at` and `nts_map_value_at` are the program's readers, and hand
+ * back a count the caller owns. Read here, they retained once more than
+ * anything released: `nts_map_copy`, `nts_map_extend` and `nts_map_keys_str`
+ * each kept one count of every key (and value) they walked, which reference
+ * counting reports as objects never given back --
+ * `tests/programs/a-function-that-can-fall-off-its-end` under `rc`, the first
+ * program to enumerate keys it had built. Literal keys hid it: they are
+ * immortal, and a retain of one does nothing. */
+static inline NtsValue nts_map_key_borrowed(const NtsMap *map, int32_t at) {
+  return map->keys[(uint32_t)at];
+}
+
+static inline NtsValue nts_map_value_borrowed(const NtsMap *map, int32_t at) {
+  return map->values ? map->values[(uint32_t)at] : nts_value_of_undefined();
+}
+
 /* `{ ...table }`, and every other copy of a string-keyed table.
  *
  * Insertion order, because that is what a copy of a JavaScript object is: the
@@ -9175,7 +9195,8 @@ NtsMap *nts_map_copy(const NtsMap *map) {
       nts_map_alloc(map->header.descriptor, map->kind, map->holds_values);
   for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
-    nts_map_set(out, nts_map_key_at(map, at), nts_map_value_at(map, at));
+    nts_map_set(out, nts_map_key_borrowed(map, at),
+                nts_map_value_borrowed(map, at));
   }
   return out;
 }
@@ -9183,8 +9204,8 @@ NtsMap *nts_map_copy(const NtsMap *map) {
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source) {
   for (int32_t at = nts_map_next(source, 0); at >= 0;
        at = nts_map_next(source, at + 1)) {
-    nts_map_set(target, nts_map_key_at(source, at),
-                nts_map_value_at(source, at));
+    nts_map_set(target, nts_map_key_borrowed(source, at),
+                nts_map_value_borrowed(source, at));
   }
   return target;
 }
@@ -9244,7 +9265,7 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
   uint32_t indices = 0;
   for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
-    NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
+    NtsHeader *key = nts_value_reference(nts_map_key_borrowed(map, at));
     uint32_t slot = 0;
     if (!nts_array_index_key((const NtsString *)key, &slot)) {
       continue;
@@ -9277,7 +9298,7 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
   }
   for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
-    NtsHeader *key = nts_value_reference(nts_map_key_at(map, at));
+    NtsHeader *key = nts_value_reference(nts_map_key_borrowed(map, at));
     uint32_t slot = 0;
     if (nts_array_index_key((const NtsString *)key, &slot)) {
       continue;
