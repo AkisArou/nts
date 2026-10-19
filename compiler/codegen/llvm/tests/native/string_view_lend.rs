@@ -1,7 +1,8 @@
 //! The gated fixture for a `StringView` lent straight out of a field while the
 //! call it is lent for runs a callback: both backends, reference counting and
-//! AddressSanitizer. `control` and `subject` must both pass; `subject` was a
-//! recorded use-after-free (see the fixture's `src/main.ts`).
+//! `AddressSanitizer`. `control`, `subject` and `temporary` must all pass;
+//! `subject` was a recorded use-after-free, and `temporary` guards the view
+//! leaning on the string it lends (see the fixture's `src/main.ts`).
 use super::{Command, clang, hir, prepare_with_files};
 
 const SOURCE: &str =
@@ -105,11 +106,13 @@ fn a_view_lent_from_a_field_outlives_a_callback_that_overwrites_it() {
             "{backend}: the control failed: {}",
             String::from_utf8_lossy(&control.stderr)
         );
-        let subject = run("subject");
-        assert!(
-            subject.status.success(),
-            "{backend}: the lent string was freed before C read it: {}",
-            String::from_utf8_lossy(&subject.stderr)
-        );
+        for which in ["subject", "temporary"] {
+            let run = run(which);
+            assert!(
+                run.status.success(),
+                "{backend} {which}: the lent string was freed before C read it: {}",
+                String::from_utf8_lossy(&run.stderr)
+            );
+        }
     }
 }

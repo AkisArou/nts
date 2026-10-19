@@ -29,6 +29,7 @@ class Holder { s: string = ""; t: string = ""; }
 const holder = new Holder();
 function overwriteS(): void { holder.s = "o".repeat(40); }
 function overwriteT(): void { holder.t = "o".repeat(40); }
+function nothing(): void {}
 export function subject(n: number): number {
   holder.s = "k".repeat(n) + "px";
   return visit(holder.s, overwriteS);
@@ -36,4 +37,11 @@ export function subject(n: number): number {
 export function control(n: number): number {
   holder.s = "k".repeat(n) + "px";
   return visit(holder.s, overwriteT);
+}
+// A temporary, which nothing but the call holds: the view leans on it (rc's
+// `Leaning`, through the view's operand), so its release follows the call
+// rather than the view. Without that it is freed before C allocates and
+// reads it.
+export function temporary(n: number): number {
+  return visit("k".repeat(n) + "px", nothing);
 }

@@ -1,8 +1,9 @@
 #!/bin/sh
 # Both native backends under reference counting and AddressSanitizer, each
-# linked to the same host library and consumer. `control` and `subject` must
-# both pass: `subject` was a recorded use-after-free (see src/main.ts), and is
-# a guard since the borrow counts the view's reader.
+# linked to the same host library and consumer. `control`, `subject` and
+# `temporary` must all pass: `subject` was a recorded use-after-free (see
+# src/main.ts), a guard since the borrow counts the view's reader, and
+# `temporary` guards the view leaning on the string it lends.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 out=${1:-"$root/target/interop-native-string-view-lend"}
@@ -23,4 +24,5 @@ for backend in c llvm; do
     "$out/caller.c.o" -lm -lpthread -o "$out/$backend-run"
   ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" control
   ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" subject
+  ASAN_OPTIONS=detect_leaks=0 "$out/$backend-run" temporary
 done
