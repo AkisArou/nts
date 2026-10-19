@@ -490,7 +490,7 @@ impl FuncBuilder<'_> {
                 args.extend(self.iterator_return_arguments(action, contract.receiver, &method.key)?);
                 if self.is_terminated() { return Ok(()); }
                 let (callee, raises) =
-                    self.iterator_method(action.at, contract.receiver, &method.key)?;
+                    self.implicit_method(action.at, contract.receiver, &method.key)?;
                 let value = self.push(
                     OpKind::Call {
                         callee,
@@ -501,7 +501,7 @@ impl FuncBuilder<'_> {
                     origin.clone(),
                 );
                 if raises {
-                    self.iterator_raise_test(action.at, &origin)?;
+                    self.implicit_raise_test(action.at, &origin)?;
                 }
                 if *result == HirType::Never {
                     self.terminate(Terminator::Unreachable);
@@ -519,7 +519,7 @@ impl FuncBuilder<'_> {
                 })?;
                 let value = if let Some(getter) = getter {
                     let (callee, raises) =
-                        self.iterator_method(action.at, contract.receiver, &getter.key)?;
+                        self.implicit_method(action.at, contract.receiver, &getter.key)?;
                     let value = self.push(
                         OpKind::Call {
                             callee,
@@ -530,7 +530,7 @@ impl FuncBuilder<'_> {
                         origin.clone(),
                     );
                     if raises {
-                        self.iterator_raise_test(action.at, &origin)?;
+                        self.implicit_raise_test(action.at, &origin)?;
                     }
                     value
                 } else {
@@ -746,7 +746,7 @@ impl FuncBuilder<'_> {
             &HirType::Erased,
         )?;
         if catches {
-            self.iterator_raise_test(action.at, &self.origin(action.at))?;
+            self.implicit_raise_test(action.at, &self.origin(action.at))?;
         }
         Ok(result)
     }

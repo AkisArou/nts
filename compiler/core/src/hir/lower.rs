@@ -41426,7 +41426,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         if raises {
-            self.iterator_raise_test(id, origin)?;
+            self.implicit_raise_test(id, origin)?;
         }
         let answered = self.push(
             OpKind::FieldGet {
@@ -41801,7 +41801,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(iterator_member) = self.symbol_property_name(ty, "iterator") else {
             return Err(self.unsupported(sequence, "a `for...of` over a type with no iterator"));
         };
-        let (callee, raises) = self.iterator_method(sequence, ty, &iterator_member)?;
+        let (callee, raises) = self.implicit_method(sequence, ty, &iterator_member)?;
         // **A generator `[Symbol.iterator]()` hands back its frame**, and
         // `member_returns` reads the declared `Generator<T, …>`, which has no
         // representation because this compiler does not build that object. The
@@ -41834,7 +41834,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         if raises {
-            self.iterator_raise_test(sequence, &origin)?;
+            self.implicit_raise_test(sequence, &origin)?;
         }
         let iterator = self.note_generator_call(iterator, reserved);
 
@@ -41870,7 +41870,7 @@ impl<'a> FuncBuilder<'a> {
         let HirType::Managed(ManagedType::Object(iterator_id)) = iterator_ty else {
             return Err(self.unsupported(sequence, "an iterator that is not an object"));
         };
-        let (next, next_raises) = self.iterator_method(sequence, iterator_id, "next")?;
+        let (next, next_raises) = self.implicit_method(sequence, iterator_id, "next")?;
         let Some(result) = self.member_returns(iterator_id, "next") else {
             return Err(self.unsupported(sequence, "a `next()` whose result has no representation"));
         };
@@ -41928,6 +41928,11 @@ impl<'a> FuncBuilder<'a> {
 
     /// What a method declared on a type returns, as a representation.
     fn member_returns(&self, ty: TypeId, member: &str) -> Option<HirType> {
+        self.represent(self.member_return_type(ty, member)?)
+    }
+
+    /// What a method declared on a type returns, as the checker's type.
+    fn member_return_type(&self, ty: TypeId, member: &str) -> Option<TypeId> {
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let TypeKind::Object { properties } = &record.kind else {
             return None;
@@ -41938,7 +41943,7 @@ impl<'a> FuncBuilder<'a> {
             return None;
         };
         let signature = self.snapshot.signatures.get(signature.0 as usize)?;
-        self.represent(signature.return_type)
+        Some(signature.return_type)
     }
 
     /// `Symbol()` and `Symbol(description)`: a fresh identity every call.
@@ -60282,6 +60287,35 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// `true + 1` is `2`: once both operands of `+` are primitives and
+    /// neither is a string, `+` adds their numeric values (ECMA-262 13.15.3),
+    /// and a boolean's is the `convert` that `Number(b)` lowers to. Booleans
+    /// beside numbers or each other only: anything else is left for the
+    /// operator to decide as before.
+    fn booleans_as_numbers(
+        &mut self,
+        at: NodeId,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> (ValueId, ValueId) {
+        let ty = |value: ValueId| self.values[value.0 as usize].ty.clone();
+        let numeric = |ty: &HirType| *ty == HirType::Bool || *ty == HirType::NUMBER;
+        let (left, right) = (ty(lhs), ty(rhs));
+        if !(numeric(&left) && numeric(&right)) || (left != HirType::Bool && right != HirType::Bool)
+        {
+            return (lhs, rhs);
+        }
+        let origin = self.origin(at);
+        let mut number = |value: ValueId, ty: &HirType| {
+            if *ty == HirType::Bool {
+                self.push(OpKind::Convert(value), HirType::NUMBER, origin.clone())
+            } else {
+                value
+            }
+        };
+        (number(lhs, &left), number(rhs, &right))
+    }
+
     /// `x += e`, which is `x = x + e` with the target evaluated once.
     ///
     /// Spelled out rather than desugared, so that one place knows a bitwise
@@ -60301,6 +60335,14 @@ impl<'a> FuncBuilder<'a> {
         let mut ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "a compound assignment"))?;
+        // `s += o` converts `o` as `s + o` does: see `lower_binary`.
+        let (current, addend) = if matches!(compound, Compound::Op(BinOp::Add)) {
+            let current = self.ordinary_to_primitive(id, lhs_node, current)?;
+            let addend = self.ordinary_to_primitive(id, rhs_node, addend)?;
+            self.booleans_as_numbers(id, current, addend)
+        } else {
+            (current, addend)
+        };
         if matches!(compound, Compound::Op(BinOp::Add)) && ty == HirType::Erased {
             ty = self.plus_from_operands(current, addend).unwrap_or(ty);
         }
@@ -81783,8 +81825,8 @@ impl<'a> FuncBuilder<'a> {
             return Ok((lhs, rhs));
         }
         let converted = (
-            self.ordinary_to_primitive(lhs_node, lhs)?,
-            self.ordinary_to_primitive(rhs_node, rhs)?,
+            self.ordinary_to_primitive(id, lhs_node, lhs)?,
+            self.ordinary_to_primitive(id, rhs_node, rhs)?,
         );
         // Both sides have to land on one representation, and nothing here is
         // entitled to pick. `valueOf(): number` on one and `toString(): string`
@@ -81805,12 +81847,15 @@ impl<'a> FuncBuilder<'a> {
         Ok(converted)
     }
 
-    /// `OrdinaryToPrimitive(O, "number")` -- `valueOf` first, then `toString`.
+    /// `OrdinaryToPrimitive(O, "number")` -- `valueOf` first, then `toString`
+    /// -- for an operand of `+` (`ToPrimitive` with hint "default") or of a
+    /// relational comparison (hint "number"). The two hints order the methods
+    /// alike for every object but a `Date` and one with `Symbol.toPrimitive`,
+    /// and neither reaches here: a `Date` has a representation of its own, and
+    /// the symbol is refused by name.
     ///
-    /// The specification's order for a relational comparison, and for a typed
-    /// receiver it is a **static** dispatch: both names are members this
-    /// compiler already puts on the descriptor, so "does this object have a
-    /// `valueOf`" is a question about the type rather than a prototype walk.
+    /// For a typed receiver it is a **static** dispatch: "does this object have
+    /// a `valueOf`" is a question about the type rather than a prototype walk.
     /// That is what `blockers/a-relational-comparison-between-objects` predicted
     /// when it called this "reachable machinery wanting an ordering rather than
     /// missing machinery".
@@ -81819,48 +81864,219 @@ impl<'a> FuncBuilder<'a> {
     /// specification's first step and also what makes `o > 1` work without a
     /// second path.
     ///
-    /// **Only a primitive result is taken.** `valueOf(): Point` is legal
-    /// TypeScript and is *not* a conversion -- the specification says to try
-    /// the next method when the first returns an object, and falling through
-    /// here is that rule rather than a limitation.
+    /// **Each call is one the call analysis saw.** `site`, the operator, lists
+    /// the members it may call among its implicit calls
+    /// ([`iterator_calls::Plan`]), so a `valueOf` that throws inside a `try`
+    /// takes its raising entry, and one reached only through `+` is not pruned
+    /// as uncalled. Calling through `callee_for` instead, as this once did, had
+    /// neither.
     ///
-    /// What is refused is an object with neither: JavaScript throws a
-    /// `TypeError` there, and this compiler has no cross-call throw to do it
-    /// with, so it says so at compile time instead.
-    fn ordinary_to_primitive(&mut self, at: NodeId, value: ValueId) -> Result<ValueId, Diagnostic> {
+    /// **A member answering an object is still called.** `valueOf(): Point` is
+    /// legal TypeScript and is *not* a conversion: the specification calls it,
+    /// discards the object and tries the next, and the call's effects are the
+    /// program's.
+    ///
+    /// **An object whose chain declares neither has `Object.prototype`'s**:
+    /// `valueOf` answers the object and `toString` `"[object Object]"`, which is
+    /// the printer's text -- so `m + ""` on a class with no conversion member
+    /// prints as before, and two such objects compare as two equal strings, as
+    /// in node. What is refused is a declared `toString` answering an object
+    /// after `valueOf` did not answer a primitive: JavaScript throws a
+    /// `TypeError` there.
+    fn ordinary_to_primitive(
+        &mut self,
+        site: NodeId,
+        operand: NodeId,
+        value: ValueId,
+    ) -> Result<ValueId, Diagnostic> {
         let HirType::Managed(ManagedType::Object(type_id)) =
             self.values[value.0 as usize].ty.clone()
         else {
             return Ok(value);
         };
+        if self.symbol_property_name(type_id, "toPrimitive").is_some() {
+            return Err(self.unsupported(
+                operand,
+                "a conversion to a primitive of an object whose type declares \
+                 `Symbol.toPrimitive`",
+            ));
+        }
         for member in ["valueOf", "toString"] {
-            let Some(returns) = self.member_returns(type_id, member) else {
+            let Some((answers, returns)) =
+                self.conversion_member(site, operand, type_id, member)?
+            else {
                 continue;
             };
-            if !matches!(
-                returns,
-                HirType::Managed(ManagedType::String) | HirType::Bool
-            ) && returns != HirType::NUMBER
-            {
-                continue;
-            }
-            let callee = self.callee_for(at, type_id, member)?;
-            let origin = self.origin(at);
-            return Ok(self.push(
+            let (callee, raises) = self.implicit_method(site, type_id, member)?;
+            let origin = self.origin(operand);
+            let answer = self.push(
                 OpKind::Call {
                     callee,
                     args: vec![value],
                     frame: None,
                 },
                 returns,
-                origin,
+                origin.clone(),
+            );
+            if raises {
+                self.implicit_raise_test(site, &origin)?;
+            }
+            if answers {
+                return Ok(answer);
+            }
+        }
+        self.as_string(operand, value)
+    }
+
+    /// Whether [`Self::ordinary_to_primitive`] calls `member` on a `type_id`,
+    /// and if so whether it answers a primitive and at what representation.
+    /// `None` is a member the conversion after it stands for:
+    /// `Object.prototype`'s, or a `toString` the printer calls.
+    ///
+    /// Refused by name, each where a static call would answer wrongly or not
+    /// at all: a member held in a field (a function value, called through no
+    /// method); a type with no `valueOf` while a class it may hold has one; a
+    /// call the plan did not list; an answer that may be an object or a
+    /// primitive, or a primitive with no one representation; and a `toString`
+    /// answering an object after `valueOf` did not answer a primitive, which
+    /// is JavaScript's `TypeError`.
+    fn conversion_member(
+        &mut self,
+        site: NodeId,
+        operand: NodeId,
+        type_id: TypeId,
+        member: &str,
+    ) -> Result<Option<(bool, HirType)>, Diagnostic> {
+        if iterator_calls::Method::resolve(self, type_id, member)
+            .is_none_or(|method| method.targets.is_empty())
+        {
+            if self.member_return_type(type_id, member).is_some()
+                && self
+                    .layout_of(operand, type_id)
+                    .ok()
+                    .is_some_and(|layout| self.field_named(type_id, &layout, member).is_some())
+            {
+                return Err(self.unsupported(
+                    operand,
+                    &format!(
+                        "a conversion to a primitive through a `{member}` held in a \
+                         field, which is called implicitly"
+                    ),
+                ));
+            }
+            // The type's chain has none, but a value of it may be one whose
+            // class does: `const a: A = new B()` with `valueOf` on `B` only.
+            // A static dispatch would print `a` where node calls `B`'s. A
+            // `toString` is the printer's, which dispatches at run time.
+            if member == "valueOf" && self.a_holder_declares_value_of(type_id) {
+                return Err(self.unsupported(
+                    operand,
+                    "a conversion to a primitive of a value whose type declares no \
+                     `valueOf` while a class it may hold does",
+                ));
+            }
+            return Ok(None);
+        }
+        // **A call the plan did not list** is one this site's source did not
+        // spell: a copy re-typed `any` to the class, as `"" + value` in a
+        // function taking `any` is in each instantiation. A `toString` is then
+        // the printer's to make -- the conversion after the loop, which reads
+        // the descriptor and carries its own raising entries, as it did before
+        // this site learned to call members -- and a `valueOf` is refused,
+        // having no such conversion to fall back on.
+        if !self
+            .iterators
+            .at(site)
+            .iter()
+            .any(|method| method.receiver == type_id && method.key == member)
+        {
+            if member == "toString" {
+                return Ok(None);
+            }
+            return Err(self.unsupported(
+                operand,
+                &format!("an implicit `{member}` call the call analysis did not see"),
             ));
         }
-        Err(self.unsupported(
-            at,
-            "a relational comparison against an object with neither `valueOf` nor \
-             `toString` returning a primitive, which JavaScript answers with a `TypeError`",
-        ))
+        let answers = self
+            .member_return_type(type_id, member)
+            .and_then(|ty| self.answers_a_primitive(ty));
+        let returns = self.member_returns(type_id, member);
+        let (Some(answers), Some(returns)) = (answers, returns) else {
+            return Err(self.unsupported(
+                operand,
+                &format!(
+                    "a conversion to a primitive through a `{member}` that may answer \
+                     an object or a primitive"
+                ),
+            ));
+        };
+        if answers
+            && !matches!(
+                returns,
+                HirType::Managed(ManagedType::String) | HirType::Bool | HirType::BigInt
+            )
+            && returns != HirType::NUMBER
+        {
+            return Err(self.unsupported(
+                operand,
+                &format!(
+                    "a conversion to a primitive through a `{member}` whose answer has \
+                     no single primitive representation"
+                ),
+            ));
+        }
+        if !answers && member == "toString" {
+            return Err(self.unsupported(
+                operand,
+                "a conversion to a primitive where `valueOf` and `toString` both \
+                 answer objects, which JavaScript answers with a `TypeError`",
+            ));
+        }
+        Ok(Some((answers, returns)))
+    }
+
+    /// Whether a class that a value of `ty` may be declares `valueOf`: one
+    /// whose base chain reaches `ty`, or, for an interface, any class at all,
+    /// since a class need not name an interface to be one.
+    fn a_holder_declares_value_of(&self, ty: TypeId) -> bool {
+        let interface = self.hierarchy.faces.contains(&ty);
+        self.iterators
+            .declaring_value_of()
+            .iter()
+            .any(|&class| interface || self.hierarchy.descends(class, ty))
+    }
+
+    /// Whether every value of `ty` is a primitive (`Some(true)`), every one an
+    /// object (`Some(false)`), or the type does not say.
+    ///
+    /// A `symbol` is neither here: `+` on one throws a `TypeError`, which a
+    /// conversion through its descriptive string would not.
+    fn answers_a_primitive(&self, ty: TypeId) -> Option<bool> {
+        if self.is_the_object_type(ty) {
+            return Some(false);
+        }
+        match &self.snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Union(parts) => {
+                let mut answers = parts.iter().map(|part| self.answers_a_primitive(*part));
+                let first = answers.next()??;
+                answers.all(|answer| answer == Some(first)).then_some(first)
+            }
+            TypeKind::Boolean
+            | TypeKind::Number
+            | TypeKind::BigInt
+            | TypeKind::String
+            | TypeKind::Literal(_)
+            | TypeKind::TemplateLiteral { .. }
+            | TypeKind::Null
+            | TypeKind::Undefined
+            | TypeKind::Void => Some(true),
+            TypeKind::Object { .. }
+            | TypeKind::Array(_)
+            | TypeKind::Tuple(_)
+            | TypeKind::Function(_) => Some(false),
+            _ => None,
+        }
     }
 
     fn compares_objects(&self, lhs: ValueId, rhs: ValueId) -> bool {
@@ -81983,6 +82199,22 @@ impl<'a> FuncBuilder<'a> {
         let token = self
             .kind_of(*operator)
             .ok_or_else(|| self.unsupported(id, "a binary expression with no operator"))?;
+
+        // **ToPrimitive before anything asks what the operands are**, and
+        // after both are evaluated, which is the specification's order (13.15.3).
+        // `m + ""` where `Money`'s `valueOf` answers `5` is `"5"`: the string
+        // conversion below calls `toString`, which is hint "string", and printed
+        // `"[object Object]"` -- a silent wrong answer in typed code. An object
+        // with no conversion member converts to its printed text here, so
+        // `{} + 0` in JavaScript is `"[object Object]0"` rather than an `add` of
+        // a pointer.
+        let (lhs, rhs) = if token == syntax::PLUS_TOKEN {
+            let lhs = self.ordinary_to_primitive(id, *lhs_node, lhs)?;
+            let rhs = self.ordinary_to_primitive(id, *rhs_node, rhs)?;
+            self.booleans_as_numbers(id, lhs, rhs)
+        } else {
+            (lhs, rhs)
+        };
 
         // A source copy can give both operands concrete representations
         // where the shared AST still says any. Derive + from those produced

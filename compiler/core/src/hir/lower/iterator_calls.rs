@@ -1,6 +1,7 @@
-//! The ordinary methods called implicitly by an iterable walk. Source call
-//! analysis and lowering share these identities; a loop has no call expression
-//! from which either could recover them later.
+//! The ordinary methods called implicitly by an iterable walk, and by `+`
+//! converting an object to a primitive. Source call analysis and lowering
+//! share these identities; a loop or an operator has no call expression from
+//! which either could recover them later.
 
 use nts_semantic_schema::{NodeId, TypeId};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -96,15 +97,40 @@ struct Site {
 pub(super) struct Plan {
     sites: FxHashMap<NodeId, Site>,
     methods: FxHashMap<(TypeId, String), Option<Rc<Method>>>,
+    /// The types whose chain declares a program `valueOf`, sorted: asked by
+    /// every conversion whose operand's type has none, so it is found once.
+    value_of: Vec<TypeId>,
 }
 
 impl Plan {
     pub(super) fn new(probe: &FuncBuilder<'_>, generators: &FxHashMap<NodeId, usize>) -> Self {
         let mut plan = Self::default();
+        let mut named: Vec<TypeId> = probe.hierarchy.name.keys().copied().collect();
+        named.sort();
+        plan.value_of = named
+            .into_iter()
+            .filter(|ty| {
+                plan.resolve_method(probe, *ty, "valueOf")
+                    .is_some_and(|method| !method.targets.is_empty())
+            })
+            .collect();
         let mut closes = FxHashMap::default();
         for at in 0..probe.snapshot.nodes.len() {
             let Ok(at) = u32::try_from(at) else { break };
             let at = NodeId(at);
+            let conversions = plan.conversion_methods(probe, at);
+            if !conversions.is_empty() {
+                plan.sites.insert(
+                    at,
+                    Site {
+                        steps: conversions.len(),
+                        methods: conversions,
+                        close: None,
+                        normal_close: false,
+                    },
+                );
+                continue;
+            }
             let Some(input) = input_of(probe, at) else {
                 continue;
             };
@@ -158,6 +184,30 @@ impl Plan {
         plan
     }
 
+    /// The calls an operator converting its operands to primitives may make:
+    /// `OrdinaryToPrimitive` (ECMA-262 7.1.1.1) asks an object's `valueOf`, then
+    /// its `toString`, and where the operand's class declares either in the
+    /// program that is an ordinary method call no call expression spells. Both
+    /// are listed whichever answers first, which is what "may call" means;
+    /// `FuncBuilder::ordinary_to_primitive` refuses a call this did not list.
+    fn conversion_methods(&mut self, probe: &FuncBuilder<'_>, at: NodeId) -> Vec<Rc<Method>> {
+        let mut methods = Vec::new();
+        for operand in converted_operands(probe, at) {
+            let Some(HirType::Managed(ManagedType::Object(receiver))) = probe.type_of(operand)
+            else {
+                continue;
+            };
+            for key in ["valueOf", "toString"] {
+                if let Some(method) = self.resolve_method(probe, receiver, key)
+                    && !method.targets.is_empty()
+                {
+                    methods.push(method);
+                }
+            }
+        }
+        methods
+    }
+
     fn resolve_method(
         &mut self,
         probe: &FuncBuilder<'_>,
@@ -168,6 +218,11 @@ impl Plan {
             .entry((receiver, key.to_owned()))
             .or_insert_with(|| Method::resolve(probe, receiver, key).map(Rc::new))
             .clone()
+    }
+
+    /// The types whose chain declares a program `valueOf`.
+    pub(super) fn declaring_value_of(&self) -> &[TypeId] {
+        &self.value_of
     }
 
     pub(super) fn closes_at(&self, at: NodeId) -> Option<Rc<super::iterator_close::Selection>> {
@@ -269,6 +324,34 @@ fn input_of(probe: &FuncBuilder<'_>, at: NodeId) -> Option<NodeId> {
     }
 }
 
+/// The operands of an operator that converts them to primitives through
+/// `valueOf`: `+` and `+=` (hint "default") and a relational comparison (hint
+/// "number"). The rest of the numeric operators do not convert objects yet.
+fn converted_operands(probe: &FuncBuilder<'_>, at: NodeId) -> Vec<NodeId> {
+    if probe.kind_of(at) != Some(syntax::BINARY_EXPRESSION) {
+        return Vec::new();
+    }
+    let children = probe.children(at);
+    let [left, operator, right] = children.as_slice() else {
+        return Vec::new();
+    };
+    if matches!(
+        probe.kind_of(*operator),
+        Some(
+            syntax::PLUS_TOKEN
+                | syntax::PLUS_EQUALS_TOKEN
+                | syntax::LESS_THAN_TOKEN
+                | syntax::GREATER_THAN_TOKEN
+                | syntax::LESS_THAN_EQUALS_TOKEN
+                | syntax::GREATER_THAN_EQUALS_TOKEN
+        )
+    ) {
+        vec![*left, *right]
+    } else {
+        Vec::new()
+    }
+}
+
 fn bare_rest(probe: &FuncBuilder<'_>, pattern: NodeId) -> bool {
     if probe.kind_of(pattern) != Some(syntax::ARRAY_BINDING_PATTERN) {
         return false;
@@ -298,7 +381,7 @@ impl FuncBuilder<'_> {
         self.iterators.raising_callees(at, &self.throwing)
     }
 
-    pub(super) fn iterator_method(
+    pub(super) fn implicit_method(
         &mut self,
         at: NodeId,
         receiver: TypeId,
@@ -333,7 +416,7 @@ impl FuncBuilder<'_> {
 
     /// Poll before any result is consumed, then use the language's own throw
     /// boundary so enclosing finally/iterator actions run in lexical order.
-    pub(super) fn iterator_raise_test(
+    pub(super) fn implicit_raise_test(
         &mut self,
         at: NodeId,
         origin: &Origin,

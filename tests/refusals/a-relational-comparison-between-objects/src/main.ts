@@ -1,6 +1,6 @@
-// expect: neither `valueOf` nor `toString` returning a primitive
+// expect: `valueOf` and `toString` both answer objects
 //
-// `a > b` where the objects have **neither** conversion method.
+// `a > b` where both of an object's conversion members answer **objects**.
 //
 // # The row this held closed on 2026-09-13
 //
@@ -21,6 +21,12 @@
 // compile time instead. That is the honest shape: the alternative is comparing
 // addresses, which is what this row started as.
 //
+// An object that declares **neither** member is not that case, which this
+// fixture's subject was until 2026-10-19: it inherits `Object.prototype`'s,
+// whose `toString` answers `"[object Object]"`, so two such objects compare as
+// two equal strings and node throws nothing.
+// `tests/programs/a-conversion-through-valueof-under-plus` (`neither`) answers it.
+//
 // # And a second, narrower one
 //
 // `valueOf(): number` on one side and `toString(): string` on the other is a
@@ -32,7 +38,7 @@
 //
 //     numbers            compared, and always were
 //     strings            compared, and always were
-//     explicitValueOf    the same comparison through the member it would call
+//     explicitTag        the same comparison through a member it could call
 //
 // The last is the one that matters: it is the program the author would write
 // instead, so if it ever stops working the refusal has spread beyond its
@@ -45,10 +51,19 @@ class Opaque {
   }
 }
 
-/** Under test: neither `valueOf` nor `toString`. */
-export function neither(n: number): number {
-  const a = new Opaque(n & 7);
-  return (a > new Opaque(3) ? 1 : 0) + 1;
+class Hollow {
+  valueOf(): object {
+    return {};
+  }
+  toString(): object {
+    return {};
+  }
+}
+
+/** Under test: both members answer objects, which is node's `TypeError`. */
+export function bothObjects(n: number): number {
+  const a = new Hollow();
+  return (a > new Hollow() ? 1 : 0) + (n & 0) + 1;
 }
 
 /** Control: numbers compare, and always did. */
