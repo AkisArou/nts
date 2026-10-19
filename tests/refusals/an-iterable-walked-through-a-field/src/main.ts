@@ -1,4 +1,17 @@
-// expect: NTS1003 `summed` cannot be compiled because it calls `Iterable<2>#__@iterator@10`, and no class in this program implements it
+// expect: NTS1001 an array where a `Iterable` is wanted
+//
+// **The expectation moved again on 2026-10-19, one link earlier.** The
+// array is now refused where it is stored: `this.items = [1, 2]` puts an
+// `NtsArray *` into a field laid out as an object, and an array is not one
+// -- its elements sit in a block behind a length, so a pointer to either is
+// not a pointer to the other. It used to pass through unconverted, and only
+// went unread because `summed`, the constructor's one caller, was refused
+// first and both were pruned. The walk this fixture describes below is still
+// the refusal for a *class* behind an interface, and
+// `an-iterable-behind-an-interface` holds that one.
+//
+// It read `NTS1003 `summed` cannot be compiled because it calls
+// `Iterable<2>#__@iterator@10`, and no class in this program implements it`.
 //
 // **The expectation moved on 2026-09-22, one link further in.** It read
 // `NTS1001 a method __@iterator@N with no declaration in the hierarchy`,

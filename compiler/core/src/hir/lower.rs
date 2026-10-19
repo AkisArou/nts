@@ -28046,6 +28046,15 @@ impl<'a> FuncBuilder<'a> {
     /// differently, and building the table would mean walking the layout's names
     /// into `nts_map_new`/`nts_map_set`, which is `lower_table_literal`'s job and
     /// a feature of its own.
+    ///
+    /// **And an array beside an object laid out as fields**, for the same reason
+    /// one container over: an array keeps its elements in a block behind a
+    /// length, so an `NtsArray *` is not a pointer to a struct and the reverse.
+    /// It went unrefused and arrived unchanged, and the verifier stopped the
+    /// whole program at the store -- `g = [1, 2, 3]` into a module variable
+    /// declared `{ length: number }`, whose one slot cannot be specialized as
+    /// a parameter's call can, or an exhausted rest into a global laid out as
+    /// the empty tuple.
     fn crossing_storage(&self, have: &HirType, want: &HirType) -> Option<String> {
         let keyed = |ty: &HirType| {
             matches!(
@@ -28054,19 +28063,37 @@ impl<'a> FuncBuilder<'a> {
             )
         };
         let laid_out = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::Object(_)));
-        if !((laid_out(have) && keyed(want)) || (keyed(have) && laid_out(want))) {
-            return None;
-        }
+        let array = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::Array(_)));
         // The article belongs to the phrase, not to the format: a name comes back
         // as ``a `Thing` `` and the nameless cases carry their own, so the
         // sentence reads the same either way.
         let named = |ty: &HirType| match ty {
+            HirType::Managed(ManagedType::Object(at))
+                if matches!(
+                    self.snapshot.types.get(at.0 as usize).map(|t| &t.kind),
+                    Some(TypeKind::Tuple(_))
+                ) =>
+            {
+                "a tuple laid out as fields".to_owned()
+            }
             HirType::Managed(ManagedType::Object(at)) => self.name_of_type(*at).map_or_else(
                 || "an anonymous object type".to_owned(),
                 |name| format!("a `{name}`"),
             ),
+            HirType::Managed(ManagedType::Array(_)) => "an array".to_owned(),
             _ => "a table".to_owned(),
         };
+        if (laid_out(have) && array(want)) || (array(have) && laid_out(want)) {
+            let (from, to) = (named(have), named(want));
+            return Some(format!(
+                "{from} where {to} is wanted -- one keeps its elements in a block behind a \
+                 length and the other its members as fields at fixed offsets, so a pointer to \
+                 either is not a pointer to the other"
+            ));
+        }
+        if !((laid_out(have) && keyed(want)) || (keyed(have) && laid_out(want))) {
+            return None;
+        }
         let (from, to) = (named(have), named(want));
         Some(format!(
             "{from} where {to} is wanted -- one keeps its members as fields at fixed offsets \
