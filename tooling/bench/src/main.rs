@@ -35,6 +35,9 @@ use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use serde::{Deserialize, Serialize};
 
+/// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
+mod count;
+
 /// One measurement.
 #[derive(Serialize, Deserialize)]
 struct Measured {
@@ -478,6 +481,9 @@ fn main() -> Result<()> {
     let argv: Vec<String> = std::env::args().skip(1).collect();
     validate_lanes()?;
     let root = repository_root(&argv)?;
+    if let Some(counted) = count::dispatch(&root, &argv) {
+        return counted;
+    }
     if let Some(at) = argv.iter().position(|arg| arg == "--render") {
         let path = argv
             .get(at + 1)
@@ -2346,14 +2352,10 @@ fn assemblyscript_case(
     measure(std::process::Command::new("node").arg(&harness))
 }
 
-/// The same program as a WebAssembly module, timed by node's own harness.
+/// The same program as a WebAssembly module, timed by node's own harness:
 ///
-/// Prepared as `nts emit-wasm` prepares it (host-managed objects, interfaces
-/// materialized) and from the same roots as every other column, then run
-/// through the generated glue, so the harness differs from node's in one
-/// line: where the function is imported from. An error is the cell's reason:
-/// the backend's decline at emit, or the first `NTS5001` line of a refusal at
-/// run time.
+/// preparation (`wasm_prepare`) then the timed run, with a run-time refusal
+/// spelled as the cell's reason.
 fn wasm_case(
     case: &Utf8Path,
     out: &Utf8Path,
@@ -2361,6 +2363,37 @@ fn wasm_case(
     tsconfig: &Utf8Path,
     entry: &[String],
 ) -> Result<Measured> {
+    let harness = wasm_prepare(case, out, name, tsconfig, entry)?;
+    measure(std::process::Command::new("node").arg(&harness)).map_err(|error| {
+        let said = error.to_string();
+        let refusal = said.lines().find_map(|line| {
+            line.split_once("NTS5001: ")
+                .map(|(_, rest)| rest.trim().to_owned())
+        });
+        refusal.map_or(error, |reason| {
+            anyhow::anyhow!("refused at run time: {reason}")
+        })
+    })
+}
+
+/// Everything the Wasm column needs before anything runs: the module, its
+/// glue and the harness that calls it, under `out/<name>.wasm`. Returns the
+/// harness path.
+///
+/// Prepared as `nts emit-wasm` prepares it (host-managed objects, interfaces
+/// materialized) and from the same roots as every other column, then run
+/// through the generated glue, so the harness differs from node's in one
+/// line: where the function is imported from. Factored out of the timed run
+/// because counting mode consumes the identical artifact (`count` module).
+/// An error is the cell's reason: the backend's decline at emit, in its own
+/// words.
+fn wasm_prepare(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    tsconfig: &Utf8Path,
+    entry: &[String],
+) -> Result<Utf8PathBuf> {
     // A case's own `driver.mjs` imports `case.ts` itself; it has no line to
     // point at the module instead.
     if case.join("driver.mjs").exists() {
@@ -2420,7 +2453,10 @@ fn wasm_case(
         .context("a case sits two levels below `benches`")?
         .join("common/bench.mjs");
     let harness = dir.join("bench.mjs");
-    let program_file = dir.join(nts_codegen_wasm::PROGRAM_FILE);
+    // A relative import: the harness sits beside the module's glue, and a path
+    // spelled relative to it keeps two preparations of one case byte-identical
+    // drivers. Counting mode's A/B asserts exactly that.
+    let program_file = format!("./{}", nts_codegen_wasm::PROGRAM_FILE);
     // The seed through `process.argv`, for the reason `node_harness` gives.
     let text = format!(
         "// Generated from `case.ts` for the Wasm column: node's harness, the module's function.\n\
@@ -2430,16 +2466,7 @@ fn wasm_case(
          measure(() => {callee}(seed));\n"
     );
     std::fs::write(&harness, &text).with_context(|| format!("writing {harness}"))?;
-    measure(std::process::Command::new("node").arg(&harness)).map_err(|error| {
-        let said = error.to_string();
-        let refusal = said.lines().find_map(|line| {
-            line.split_once("NTS5001: ")
-                .map(|(_, rest)| rest.trim().to_owned())
-        });
-        refusal.map_or(error, |reason| {
-            anyhow::anyhow!("refused at run time: {reason}")
-        })
-    })
+    Ok(harness)
 }
 
 /// The `bench_run` the native harness calls, generated from the workload.

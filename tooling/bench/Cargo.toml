@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 camino.workspace = true
+hmac-sha256.workspace = true
 nts-codegen-c.workspace = true
 nts-codegen-common.workspace = true
 nts-codegen-jvm.workspace = true

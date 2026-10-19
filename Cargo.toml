@@ -60,6 +60,7 @@ react_compiler_diagnostics = { path = "third_party/react-compiler/crates/react_c
 anyhow = "1"
 camino = { version = "1", features = ["serde1"] }
 codespan-reporting = "0.12"
+hmac-sha256 = "1"
 indexmap = { version = "2", features = ["serde"] }
 postcard = { version = "1", features = ["use-std"] }
 rustc-hash = "2"

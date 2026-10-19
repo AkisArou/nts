@@ -4,11 +4,18 @@
 #
 #   tooling/gate/with-lock.sh --wait target/release/nts-bench
 #   tooling/gate/with-lock.sh --wait taskset -c 4 perf stat <program>
+#   tooling/gate/with-lock.sh --no-quiet-wait target/release/nts-bench --count ...
 #
 # After taking the lock, wait up to 180 seconds for the reserved physical
 # core (CPUs 4-5) to be quiet. Other busy cores do not prevent measurement.
 # nts-bench's timed children use CPU 4, leaving its sibling 5 idle.
 # Gates never use this lock: land.ts and pinned.sh exclude CPUs 4-5 instead.
+#
+# `--no-quiet-wait` keeps the mutex and skips that wait. It is for
+# instruction counting (`nts-bench --count`), whose numbers do not move with
+# load and which admits per cell itself (memory plus a swap window, recorded
+# per cell). A counted run under it makes no quiet-core claim, and its wall
+# ratios say so.
 #
 # Without `--wait` a held lock is exit 75 and no run, which suits a session that
 # has other work. With it, the acquisition is retried until it succeeds, which
@@ -93,10 +100,15 @@ if [ "${1-}" = "--self-test" ]; then
 fi
 
 wait_for_it=false
-if [ "${1-}" = "--wait" ]; then
-    wait_for_it=true
+quiet_wait=true
+while [ "${1-}" = "--wait" ] || [ "${1-}" = "--no-quiet-wait" ]; do
+    if [ "$1" = "--wait" ]; then
+        wait_for_it=true
+    else
+        quiet_wait=false
+    fi
     shift
-fi
+done
 
 mkdir -p "$(dirname "$lock")"
 
@@ -127,7 +139,11 @@ done
 echo $$ > "$lock/pid"
 trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
 
-node "$(dirname -- "$0")/measurement.ts"
+if [ "$quiet_wait" = true ]; then
+    node "$(dirname -- "$0")/measurement.ts"
+else
+    echo "with-lock: --no-quiet-wait: lock held, reserved-core quiet wait skipped (instruction counting admits per cell; no quiet-core claim)" >&2
+fi
 NTS_BENCH_CPUS=4
 export NTS_BENCH_CPUS
 "$@"

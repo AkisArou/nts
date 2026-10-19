@@ -151,6 +151,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "camino",
+ "hmac-sha256",
  "nts-codegen-c",
  "nts-codegen-common",
  "nts-codegen-jvm",
