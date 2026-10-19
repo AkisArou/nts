@@ -1,0 +1,4 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "include": ["src", "../../../runtime/native/libc.d.ts"]
+}
