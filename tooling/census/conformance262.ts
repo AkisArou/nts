@@ -4,7 +4,7 @@
 //   node tooling/census/conformance262.ts [--under test/language] [--jobs N]
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
-//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv>] [--fresh]
+//        [--backend c|llvm|jvm|wasm] [--paths-from <tsv> ...] [--fresh]
 //        [--suite test262|typescript]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
@@ -144,6 +144,7 @@ const flag = (name, fallback) => {
   const at = argv.indexOf(name);
   return at === -1 ? fallback : argv[at + 1];
 };
+const flagAll = (name) => argv.flatMap((arg, at) => (arg === name ? [argv[at + 1]] : []));
 const under = flag("--under", TYPESCRIPT ? "tests/typescript" : "test/language");
 // Eight, not a fraction of the cores: memory, not CPU, is what ran out. The
 // frontend is the large process, and eight of them at their ordinary ~100 MB
@@ -161,10 +162,13 @@ const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
 const recordedFile = flag("--recorded", null);
 const checkFile = flag("--check", recordedFile);
-// The cases another record names, run without comparing against it: how a
+// The cases other records name, run without comparing against them: how a
 // backend's first record is made from C's, so the two cover the same cases and
-// "passes on C and not here" is a row-for-row question.
-const pathsFromFile = flag("--paths-from", null);
+// "passes on C and not here" is a row-for-row question. Repeatable, for the
+// union: a backend re-recorded from C's record alone would drop the cases it
+// passes and C refuses, so a re-record names its own previous record too.
+const pathsFrom = flagAll("--paths-from");
+const pathsFromFile = pathsFrom.length === 0 ? null : pathsFrom.join(" + ");
 
 function cannotMeasure(why) {
   console.log(`  INSTRUMENT FAILURE: ${why}`);
@@ -335,11 +339,15 @@ if (TYPESCRIPT) {
 }
 if (records.length === 0) cannotMeasure(`${under} selected no test`);
 
-const named = recordedFile ?? pathsFromFile;
 const chosen = populationOf(records, {
   sample,
   backend: BACKEND,
-  named: named === null ? null : { file: named, text: readFileSync(named, "utf8") },
+  named:
+    recordedFile !== null
+      ? { file: recordedFile, text: readFileSync(recordedFile, "utf8") }
+      : pathsFromFile !== null
+        ? { file: pathsFromFile, text: pathsFrom.map((file) => readFileSync(file, "utf8")).join("\n") }
+        : null,
 });
 if ("refused" in chosen) cannotMeasure(chosen.refused);
 const population = chosen.population;
