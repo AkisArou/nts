@@ -30390,7 +30390,7 @@ impl<'a> FuncBuilder<'a> {
                 self.terminate(Terminator::Return(None));
             }
         } else {
-            self.close_body(&return_type);
+            self.close_body(id, &return_type)?;
         }
 
         let origin = self.origin(id);
@@ -30452,7 +30452,7 @@ impl<'a> FuncBuilder<'a> {
                     self.settle_and_return(member, &result, None)?;
                 }
             }
-            None => self.close_body(return_type),
+            None => self.close_body(member, return_type)?,
         }
         Ok(())
     }
@@ -30986,7 +30986,7 @@ impl<'a> FuncBuilder<'a> {
                     // the difference has not been proven. The unconditional
                     // form built closures that promised an array and returned
                     // none.
-                    self.close_body(&return_type);
+                    self.close_body(id, &return_type)?;
                 }
             }
             outcome
@@ -37200,9 +37200,9 @@ impl<'a> FuncBuilder<'a> {
     /// type is inferred, falling off the end is what *puts* `undefined` in it.
     /// `function pick(c: boolean) { if (c) return 42; }` is ordinary TypeScript
     /// returning `number | undefined`, and it arrives here with nothing produced
-    /// for the path that falls off. `tests/outcomes/
-    /// a-function-that-can-fall-off-its-end` pins it, found by the full test262
-    /// census in four `for-in/return` files.
+    /// for the path that falls off. `tests/programs/
+    /// a-function-that-can-fall-off-its-end` guards it, first found by the full
+    /// test262 census in four `for-in/return` files.
     ///
     /// `FellThrough` stays, because **two different arrivals reach this and only
     /// one of them is that case.** `while (true) { ... return x; }` is the
@@ -37215,22 +37215,77 @@ impl<'a> FuncBuilder<'a> {
     /// at the third call site.
     ///
     /// **What tells the two apart is the checker's type and not the
-    /// representation**, which is why this is not fixed here yet: a nullable
-    /// class and a non-nullable one are one `HirType`, so "does an absence fit
-    /// this representation" answers yes for a closure that owes a real array.
-    /// The discriminator is whether the declared or inferred return type
-    /// *includes* `undefined`, which the callers know and this does not receive.
-    /// Its sibling -- a written `return;` at such a type -- is fixed, through
-    /// [`Self::absent_at`], and that is the function this would ask once it has
-    /// the type to ask about.
-    fn close_body(&mut self, return_type: &HirType) {
+    /// representation**: a nullable class and a non-nullable one are one
+    /// `HirType`, so "does an absence fit this representation" answers yes for
+    /// a closure that owes a real array. The discriminator is whether the
+    /// declared or inferred return type *includes* `undefined`, asked of
+    /// `declaration`'s own signature. Where it does, falling off the end is
+    /// `return undefined;` -- the same [`Self::absent_at`] a written `return;`
+    /// at such a type takes -- and where it does not, or no signature is known,
+    /// the end is `FellThrough` for the verifier to hold dead.
+    /// `function f() { for (const k in o) return 42; }` is the first kind:
+    /// TypeScript infers `number | undefined` for it, and an object with no keys
+    /// returns `undefined` (test262's `for-in/return*` and `for-inof-finally`,
+    /// found by the JVM lane's invalid-HIR census).
+    fn close_body(&mut self, declaration: NodeId, return_type: &HirType) -> Result<(), Diagnostic> {
         if matches!(return_type, HirType::Void) {
             self.terminate(Terminator::Return(None));
+        } else if !self.is_terminated() && self.falls_off_to_undefined(declaration) {
+            let undefined = self.absent_at(
+                OpKind::ConstUndefined,
+                Some(return_type.clone()),
+                declaration,
+            )?;
+            self.terminate(Terminator::Return(Some(undefined)));
         } else {
             // Not `Unreachable`: this is an absence rather than a claim, and
             // the verifier holds it to being dead.
             self.terminate(Terminator::FellThrough);
         }
+        Ok(())
+    }
+
+    /// Whether `declaration`'s signature, as the checker declared or inferred
+    /// it, returns a type that *names* `undefined` -- a union with `undefined`
+    /// or `void` in it, or `any` or `unknown` -- which is what an inferred type
+    /// says when its body's end is reachable. `false` where there is no
+    /// signature to ask, the side that keeps `FellThrough`.
+    ///
+    /// Not [`Self::admits_undefined`], which also answers yes for a type
+    /// parameter: `function f<T>(g: () => T): T { while (true) { … return r; } }`
+    /// has a dead end, and its `T` may be a `number` that no `undefined` fits,
+    /// so asking that would refuse a function that compiles.
+    fn falls_off_to_undefined(&self, declaration: NodeId) -> bool {
+        let kind = |ty: TypeId| {
+            self.snapshot
+                .types
+                .get(ty.0 as usize)
+                .map(|record| &record.kind)
+        };
+        let Some(returned) = self
+            .snapshot
+            .node_types
+            .get(&declaration)
+            .and_then(|&ty| match kind(ty) {
+                Some(TypeKind::Function(signature)) => {
+                    self.snapshot.signatures.get(signature.0 as usize)
+                }
+                _ => None,
+            })
+            .map(|signature| signature.return_type)
+        else {
+            return false;
+        };
+        let parts = match kind(returned) {
+            Some(TypeKind::Union(parts)) => parts.as_slice(),
+            _ => std::slice::from_ref(&returned),
+        };
+        parts.iter().any(|&part| {
+            matches!(
+                kind(part),
+                Some(TypeKind::Undefined | TypeKind::Void | TypeKind::Any | TypeKind::Unknown)
+            )
+        })
     }
 
     /// What each carried name holds right here.
