@@ -23,14 +23,29 @@ out="${TMPDIR:-/tmp}/nts-interop-on-mac"
 names=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --out) out="$2"; shift 2 ;;
-    *) names+=("$1"); shift ;;
+  --out)
+    out="$2"
+    shift 2
+    ;;
+  *)
+    names+=("$1")
+    shift
+    ;;
   esac
 done
-[[ ${#names[@]} -gt 0 ]] || { echo "usage: $0 <example>... [--out DIR]" >&2; exit 2; }
+[[ ${#names[@]} -gt 0 ]] || {
+  echo "usage: $0 <example>... [--out DIR]" >&2
+  exit 2
+}
 [[ -n "${NTS_APPLE_SDK:-}" && -d "$NTS_APPLE_SDK/usr/include" ]] ||
-  { echo "NTS_APPLE_SDK must name a MacOSX.sdk (tooling/apple/sync-sdk.sh)" >&2; exit 2; }
-"$here/run.sh" --reachable || { echo "SKIP interop-on-mac: no Mac reachable"; exit 0; }
+  {
+    echo "NTS_APPLE_SDK must name a MacOSX.sdk (tooling/apple/sync-sdk.sh)" >&2
+    exit 2
+  }
+"$here/run.sh" --reachable || {
+  echo "SKIP interop-on-mac: no Mac reachable"
+  exit 0
+}
 
 mirror="$out/mirror"
 rm -rf "$mirror"
@@ -53,24 +68,40 @@ ln -s "$repo/tests/interop/package.json" "$mirror/tests/interop/package.json"
 status=0
 for name in "${names[@]}"; do
   source="$repo/tests/interop/$name"
-  [[ -f "$source/build.sh" ]] || { echo "no example $name" >&2; status=1; continue; }
+  [[ -f "$source/build.sh" ]] || {
+    echo "no example $name" >&2
+    status=1
+    continue
+  }
   copy="$mirror/tests/interop/$name"
   cp -R "$source" "$copy"
   config="$copy/nts.config.ts"
   grep -q 'target.linux({ backend: "c" })' "$config" ||
-    { echo "$name: its config does not name target.linux({ backend: \"c\" }) once" >&2; status=1; continue; }
+    {
+      echo "$name: its config does not name target.linux({ backend: \"c\" }) once" >&2
+      status=1
+      continue
+    }
   sed -i 's/target.linux({ backend: "c" })/target.macos({ minimumVersion: "13.0", arch: "x86_64", backend: "c" })/' "$config"
   # `CC` stays unset: `nts build` would take it for its own toolchain too, and
   # the Apple branch already chooses the right one. Only the consumer's
   # compiler is substituted.
   grep -q '^cc=${CC:-clang}$' "$copy/build.sh" ||
-    { echo "$name: its build.sh does not choose its compiler as cc=\${CC:-clang}" >&2; status=1; continue; }
+    {
+      echo "$name: its build.sh does not choose its compiler as cc=\${CC:-clang}" >&2
+      status=1
+      continue
+    }
   sed -i -e "s|^cc=\\\${CC:-clang}\$|cc=\"$apple_cc\"|" \
     -e 's|linux-gnu-x86_64|macos-13-x86_64|g' \
     -e "s|^\\([[:space:]]*\\)\"\\\$out/caller\"|\\1\"$here/run.sh\" \"\$out/caller\"|" "$copy/build.sh"
   echo "== $name"
   grep -q "^cc=\"$apple_cc\"$" "$copy/build.sh" ||
-    { echo "$name: the compiler substitution did not take" >&2; status=1; continue; }
+    {
+      echo "$name: the compiler substitution did not take" >&2
+      status=1
+      continue
+    }
   if env -u CC sh "$copy/build.sh" "$out/$name"; then
     echo "== $name: passed on the Mac"
   else
