@@ -171,6 +171,8 @@ export const ASKS = {
   "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
   "test262-jvm": ["answers", "does every recorded test262 row on the JVM still do what it did"],
   "test262-wasm": ["answers", "the same on Wasm"],
+  "test262-llvm": ["answers", "the same on LLVM"],
+  "typescript-cases": ["answers", "does every recorded TypeScript conformance case still do what it did, on every backend"],
   // A corpus of its own, and the only step that compiles it: `any` as Erased
   // (093733f2d) left awfy-towers emitting C that clang rejects, and nothing a
   // lowering change owed pointed at it until another lane found it red.
@@ -258,7 +260,7 @@ export const RULES = [
     // written for a lowering that got slower: a lowering change reaches every
     // program the gate compiles, so addons, profile, assembles, memory,
     // bench-agree, corpus and dex read its output as much as examples does.
-    steps: ["expect-ir", "examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
+    steps: ["expect-ir", "examples", "llvm", "llvm-rc", "jvm", "wasm", "rc", "outcomes", "integrity", "integrity-runtime", "definitions", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases", "benches", "jvm-verifies", "compile-time", "addons", "profile", "assembles", "memory", "bench-agree", "corpus", "dex"],
     arms: [
       ...COMPARE,
       { if: "a type rule", kind: "answers", asks: "a generic class with two live instantiations appears in the corpus, never in a hand-written fixture", run: "the emitted-diff --axis above, and a full census per-case diff (conformance262.ts --rows, both binaries)" },
@@ -280,7 +282,7 @@ export const RULES = [
   {
     name: "the C backend",
     when: (p) => /^compiler\/codegen\/c\//.test(p),
-    steps: ["examples", "rc", "outcomes", "snapshot-cache", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "benches"],
+    steps: ["examples", "rc", "outcomes", "snapshot-cache", "c-compiles", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "typescript-cases", "benches"],
     arms: [COMPARE[0], COMPARE[2]],
   },
   {
@@ -289,7 +291,7 @@ export const RULES = [
     // Every step that selects it through the CLI (see SELECTED_BY_THE_CLI):
     // the differential runs, the IR check, benches.sh's emit-llvm, the interop
     // projects built with `backend: "llvm"`, and outcomes marked `// backend: llvm`.
-    steps: ["llvm", "llvm-rc", "assembles", "benches", "interop", "outcomes"],
+    steps: ["llvm", "llvm-rc", "assembles", "benches", "interop", "outcomes", "test262-llvm", "typescript-cases"],
     arms: [{ kind: "answers", asks: "which code is emitted, on LLVM", run: "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..." }],
   },
   {
@@ -299,7 +301,7 @@ export const RULES = [
     // emit-jvm in the differential, d8, the verifier, bench-agree (JVM by
     // default), benches.sh, the device, the JVM interop projects (java-from-ts,
     // ts-from-java, android-shape), and outcomes marked `// backend: jvm`.
-    steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "benches", "on-device", "interop", "outcomes", "test262-jvm"],
+    steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "benches", "on-device", "interop", "outcomes", "test262-jvm", "typescript-cases"],
     interop: () => interopBuiltWith("jvm"),
     arms: [
       { kind: "answers", asks: "which code is emitted, on the JVM", run: "NTS_BACKEND=jvm node tooling/differential/agree.mjs <before> <after>" },
@@ -309,7 +311,7 @@ export const RULES = [
   {
     name: "the WebAssembly backend",
     when: (p) => /^compiler\/codegen\/wasm\//.test(p),
-    steps: ["tests", "wasm", "test262-wasm"],
+    steps: ["tests", "wasm", "test262-wasm", "typescript-cases"],
     arms: [
       { kind: "answers", asks: "do scalar operations and reducible and irreducible CFGs agree with their independent oracles", run: "cargo test -p nts-codegen-wasm --locked -- --test-threads=2   # includes Node execution and the arbitrary-graph oracle" },
       { kind: "answers", asks: "which code is emitted, on Wasm: every example through `nts check`, as the `wasm` step runs it", run: "NTS_BACKEND=wasm node tooling/differential/agree.mjs <before> <after>" },
@@ -319,7 +321,7 @@ export const RULES = [
   {
     name: "the frontend or the snapshot schema",
     when: (p) => /^compiler\/(frontend-ts|semantic-schema)\//.test(p),
-    steps: ["snapshot-cache", "types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm"],
+    steps: ["snapshot-cache", "types", "examples", "expect-ir", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [
       { kind: "hygiene", asks: "does a cache written by the old schema get rejected", run: "bump SCHEMA_VERSION if a semantic-schema struct changed" },
       { kind: "valid", asks: "the examples' type tables too, not only the runtime's", run: "NTS_BIN=<after> node tooling/conformance/types-check.mjs --examples" },
@@ -357,7 +359,7 @@ export const RULES = [
     // nor a table -- nothing in it said who parses the line it changed.
     name: "the printed diagnostics",
     when: (p) => /^(tooling\/cli\/src|compiler\/diagnostics|tooling\/differential\/src)\//.test(p),
-    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm"],
+    steps: ["outcomes", "integrity", "example-refusals", "blockers", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [
       { if: "it changes what a printed diagnostic line says or how it is shaped", kind: "valid", asks: "who parses this line: every reader of it, widened to accept both shapes before the shape changes", run: "git grep -nE 'TS(.d|.0-9)|refused:|not (rendered|emitted):' -- '*.mjs' '*.sh' '*.ts' ':!*.d.ts'   # `.` is the \\ of a JS reader's \\d and the [ of a shell one's [0-9]" },
     ],
@@ -429,7 +431,7 @@ export const RULES = [
   {
     name: "the backends' common code",
     when: (p) => /^compiler\/codegen\/common\//.test(p),
-    steps: ["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches", "test262-jvm", "test262-wasm"],
+    steps: ["examples", "llvm", "jvm", "wasm", "rc", "llvm-rc", "assembles", "jvm-verifies", "dex", "bench-agree", "benches", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -487,6 +489,20 @@ export const RULES = [
     arms: [],
   },
   {
+    name: "an LLVM test262 record",
+    when: (p) => /^results\/test262\/llvm\/[^/]+\.tsv$/.test(p),
+    steps: ["test262-llvm"],
+    arms: [],
+  },
+  {
+    // A case and its records: typescript_cases runs every backend's, by paths
+    // it builds from the backend's name.
+    name: "the TypeScript conformance suite",
+    when: (p) => /^(tests\/typescript|results\/typescript)\//.test(p) || p === "tooling/census/suites/typescript.ts",
+    steps: ["typescript-cases"],
+    arms: [{ kind: "answers", asks: "does node, the oracle, pass a new case first", run: "node tooling/census/conformance262.ts --suite typescript --under tests/typescript/<family>" }],
+  },
+  {
     name: "the JVM class writer",
     when: (p) => /^compiler\/jvm-emitter\//.test(p),
     steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "on-device", "test262-jvm"],
@@ -503,7 +519,7 @@ export const RULES = [
   {
     name: "the CLI",
     when: (p) => /^tooling\/cli\//.test(p),
-    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "wasm", "rc", "expect-ir", "test262-jvm", "test262-wasm"],
+    steps: ["interop", "config", "addons", "profile", "dex", "bench-agree", "examples", "llvm", "jvm", "wasm", "rc", "expect-ir", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -531,7 +547,7 @@ export const RULES = [
   {
     name: "the suite and the test262 protocol",
     when: (p) => /^tooling\/suite\//.test(p),
-    steps: ["corpus", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm"],
+    steps: ["corpus", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"],
     arms: [],
   },
   {
@@ -1256,7 +1272,7 @@ function selfTest() {
   const printed = owed([{ path: "tooling/cli/src/main.rs", added: false }]).find((r) => r.name === "the printed diagnostics");
   if (!printed?.steps.includes("test262-cases") || !printed.arms.some((a) => /git grep/.test(a.run))) return "a change to the driver's printing does not owe its readers";
   const lowered = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
-  if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets on every backend";
+  if (!["test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases"].every((st) => lowered.steps.includes(st))) return "a lowering change does not owe the recorded test262 sets on every backend";
   if (!lowered.steps.includes("benches")) return "a lowering change does not owe the benches corpus";
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.

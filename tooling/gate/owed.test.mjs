@@ -122,7 +122,7 @@ test("a backend the CLI selects owes the steps that select it, not everything th
   // through the CLI, so their own rules owe those.
   owes("compiler/codegen/jvm/src/lib.rs", ["jvm", "dex", "jvm-verifies", "interop", "outcomes", "bench-agree", "on-device"]);
   owes("compiler/jvm-emitter/src/lib.rs", ["jvm", "dex", "jvm-verifies", "interop", "outcomes"]);
-  owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "interop", "outcomes", "benches"]);
+  owes("compiler/codegen/llvm/src/lib.rs", ["llvm", "llvm-rc", "assembles", "interop", "outcomes", "benches", "test262-llvm"]);
   // The C backend is what the CLI runs by default: it keeps the CLI's reach.
   superset(reach("compiler/codegen/c/src/lib.rs"), ["interop", "addons", "profile", "config"], "the C backend");
 });
@@ -158,6 +158,12 @@ test("what a step runs owes that step", () => {
   // A backend's records owe that backend's step alone.
   owes("results/test262/jvm/language.tsv", ["test262-jvm"], { not: ["test262-wasm", "test262-cases", "examples"] });
   owes("results/test262/wasm/builtins.tsv", ["test262-wasm"], { not: ["test262-jvm", "test262-cases", "examples"] });
+  owes("results/test262/llvm/staging.tsv", ["test262-llvm"], { not: ["test262-jvm", "test262-wasm", "test262-cases", "examples"] });
+  // The TypeScript suite: a case or a record owes its step alone, on every backend at once.
+  owes("results/typescript/jvm/cases.tsv", ["typescript-cases"], { not: ["test262-jvm", "test262-cases", "examples"] });
+  // A case is also an input of the runner every test262 step drives (its
+  // default directory), so stepInputs owes those too: broad, never short.
+  owes("tests/typescript/enums/numeric-members.ts", ["typescript-cases"], { not: ["examples"] });
   owes("tooling/gate/compile-times.tsv", ["compile-time"]);
 });
 
@@ -261,7 +267,7 @@ test("documentation owes its two readers, not the gate", () => {
 test("the hand-written rules still decide what they name", () => {
   owes("tests/programs/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
   owes("runtime/c/nts_runtime.h", ["tests", "bench-agree", "format"]);
-  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-wasm", "jvm-verifies", "benches"]);
+  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-wasm", "test262-llvm", "typescript-cases", "jvm-verifies", "benches"]);
   // The JVM runtime owes the program step that runs it and the JVM's test262
   // rows, not only the lane's wide trio. (It owes the other test262 steps too,
   // but through their shared runner, which names the jar: `stepInputs`.)

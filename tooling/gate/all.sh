@@ -2056,29 +2056,38 @@ test262_rest_cases() {
 #
 # About two minutes for the five on either backend at the gate's eight
 # workers (285 s and 245 s at two, 2026-10-16).
+# One record held: the runner over the cases it names, its outcome lines
+# printed, and whether every row did what it recorded. The arguments after the
+# record select the suite, backend and directory.
+held_to_record() {
+  record=$1
+  shift
+  # The same cap as test262_recorded's, for the same reason: memory.
+  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
+  out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
+    "$@" --recorded "$record" --jobs "$cap" 2>&1)
+  status=$?
+  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+  if [ "$status" -ne 0 ]; then
+    return 1
+  elif [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
+    echo "  no pass-count line: the run measured nothing, which is not zero"
+    return 1
+  fi
+}
+
 test262_backend() {
   backend=$1
   if [ ! -d third_party/test262/.git ]; then
     echo "  SKIP: no test262 checkout, so this says nothing; tooling/bootstrap/bootstrap.sh clones it"
     return 77
   fi
-  # The same cap as test262_recorded's, for the same reason: memory.
-  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
   failed=""
   for pair in test/language:language test/built-ins:builtins test/annexB:annexb test/staging:staging test/harness:harness; do
     under=${pair%%:*}
     record=results/test262/$backend/${pair##*:}.tsv
     echo "  $under on $backend, against $record:"
-    out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
-      --backend "$backend" --under "$under" --recorded "$record" --jobs "$cap" 2>&1)
-    status=$?
-    printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
-    if [ "$status" -ne 0 ]; then
-      failed="$failed $under"
-    elif [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
-      echo "  no pass-count line: the run measured nothing, which is not zero"
-      failed="$failed $under"
-    fi
+    held_to_record "$record" --backend "$backend" --under "$under" || failed="$failed $under"
   done
   if [ -n "$failed" ]; then
     echo "  not held to their records on $backend:$failed"
@@ -2090,6 +2099,36 @@ test262_jvm() {
 }
 test262_wasm() {
   test262_backend wasm
+}
+# LLVM shares C's runtime and most of its pipeline, which is why it had no
+# records until 2026-10-19: first written from C's paths on a pin of
+# 362b32f13, 4,909 passes over the five. It has no lane, so a core change that
+# broke only its rows reached main unseen.
+test262_llvm() {
+  test262_backend llvm
+}
+
+# The TypeScript conformance suite (`tests/typescript/`, run by the test262
+# runner with node as the oracle: tooling/census/suites/typescript.ts), held
+# to its record on every backend: TypeScript's runtime-bearing features and
+# the typed paths, which test262's untyped JavaScript never reaches. First
+# recorded 2026-10-19 on a pin of 362b32f13: 23 of 34 on each backend.
+# Seconds, not minutes: 12 s for the four at eight workers.
+typescript_cases() {
+  if [ ! -d third_party/test262/.git ]; then
+    echo "  SKIP: no test262 checkout for the harness the cases assert with; tooling/bootstrap/bootstrap.sh clones it"
+    return 77
+  fi
+  failed=""
+  for backend in c llvm jvm wasm; do
+    record=results/typescript/$backend/cases.tsv
+    echo "  tests/typescript on $backend, against $record:"
+    held_to_record "$record" --suite typescript --backend "$backend" || failed="$failed $backend"
+  done
+  if [ -n "$failed" ]; then
+    echo "  not held to their records on:$failed"
+    return 1
+  fi
 }
 
 # Defects pinned to what they do: `tests/outcomes/`, where a wrong
@@ -2570,6 +2609,8 @@ step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "test262-jvm" test262_jvm
 step "test262-wasm" test262_wasm
+step "test262-llvm" test262_llvm
+step "typescript-cases" typescript_cases
 step "outcomes" outcomes
 step "expect-ir" expect_ir
 step "integrity" integrity
