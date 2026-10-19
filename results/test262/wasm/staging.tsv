@@ -1,8 +1,9 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 2b8b40a76b691a3d, commit 4d0430950ef7f31afc1dfa0e3c8f4e5ee2ce704b, backend wasm, harness d6442dbc09f91ad0; machine at start: 21.4 GB available, swap 6.5/31.5 GB, load 6.8/9.1 (1m/5m), 16 cores; 1 worker(s)
+# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend wasm, harness d6442dbc09f91ad0; machine at start: 22.8 GB available, swap 2/31.5 GB, load 32.3/45 (1m/5m), 16 cores; 8 worker(s)
 test/staging/sm/Array/sort_native_string_nan.js	pass	
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
+test/staging/sm/BigInt/mod.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
 test/staging/sm/Math/cosh-exact.js	pass	
 test/staging/sm/Math/exp-exact.js	pass	
@@ -13,6 +14,7 @@ test/staging/sm/Math/log2-exact.js	pass
 test/staging/sm/Math/sign.js	pass	
 test/staging/sm/Math/sinh-exact.js	pass	
 test/staging/sm/Math/tanh-exact.js	pass	
+test/staging/sm/Number/toString-radix-handling.js	pass	
 test/staging/sm/Number/tonumber-string-hex.js	pass	
 test/staging/sm/PrivateName/parse-utf8-non-ascii-identifier.js	pass	
 test/staging/sm/String/15.5.4.7.js	pass	
@@ -35,9 +37,11 @@ test/staging/sm/misc/error-undefined-message.js	pass
 test/staging/sm/misc/redeclare-var-non-writable-property.js	pass	
 test/staging/sm/module/bug1488117.js	pass	
 test/staging/sm/object/regress-459405.js	pass	
+test/staging/sm/regress/regress-441477-01.js	pass	
 test/staging/sm/regress/regress-452498-079.js	pass	
 test/staging/sm/regress/regress-559402-2.js	pass	
 test/staging/sm/regress/regress-561031.js	pass	
+test/staging/sm/regress/regress-573875.js	pass	
 test/staging/sm/regress/regress-592202-4.js	pass	
 test/staging/sm/regress/regress-600067.js	pass	
 test/staging/sm/regress/regress-619003-2.js	pass	
@@ -45,4 +49,5 @@ test/staging/sm/regress/regress-672893.js	pass
 test/staging/sm/statements/if-constant-folding.js	pass	
 test/staging/sm/strict/8.7.2-01.js	pass	
 test/staging/sm/strict/regress-532041.js	pass	
+test/staging/sm/strict/strict-this-is-not-truthy.js	pass	
 test/staging/sm/syntax/omitted-catch-binding.js	pass	

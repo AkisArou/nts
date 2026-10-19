@@ -1,6 +1,6 @@
 # Test262 test/annexB cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler a236c37af9401a01, commit 64fe6c9fc5ec5d49468c66cbc6a87ea179b0a6ac, backend wasm, harness d6442dbc09f91ad0; machine at start: 17.1 GB available, swap 7.1/31.5 GB, load 34.7/42.3 (1m/5m), 16 cores; 2 worker(s)
+# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend wasm, harness d6442dbc09f91ad0; machine at start: 22.8 GB available, swap 2/31.5 GB, load 32.9/45.3 (1m/5m), 16 cores; 8 worker(s)
 test/annexB/language/statements/try/catch-redeclared-for-in-var.js	fail	nts: uncaught Test262Error: during loop body evaluation
 test/annexB/language/statements/try/catch-redeclared-for-of-var.js	fail	nts: uncaught Test262Error: during loop body evaluation
 test/annexB/language/statements/try/catch-redeclared-for-var.js	pass	

@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler ba31ca6f38584871, commit 9b233569e8c54d24672568148179a94d3d911674, backend wasm, harness d6442dbc09f91ad0; machine at start: 23.1 GB available, swap 5.4/31.5 GB, load 3/4.2 (1m/5m), 16 cores; 1 worker(s)
+# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend wasm, harness d6442dbc09f91ad0; machine at start: 20.9 GB available, swap 2/31.5 GB, load 53.7/38.8 (1m/5m), 16 cores; 8 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-array.js	pass	
@@ -530,6 +530,7 @@ test/built-ins/Set/prototype/size/returns-count-of-present-values-before-after-a
 test/built-ins/Set/prototype/size/returns-count-of-present-values-by-insertion.js	pass	
 test/built-ins/Set/prototype/size/returns-count-of-present-values-by-iterable.js	pass	
 test/built-ins/Set/set-iterable.js	pass	
+test/built-ins/String/S15.5.1.1_A1_T1.js	pass	
 test/built-ins/String/S15.5.1.1_A1_T10.js	pass	
 test/built-ins/String/S15.5.1.1_A1_T11.js	pass	
 test/built-ins/String/S15.5.1.1_A1_T12.js	pass	

@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 2b8b40a76b691a3d, commit 4d0430950ef7f31afc1dfa0e3c8f4e5ee2ce704b, backend jvm, harness d6442dbc09f91ad0; machine at start: 21.9 GB available, swap 6.9/31.5 GB, load 7.5/13.1 (1m/5m), 16 cores; 1 worker(s)
+# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend jvm, harness d6442dbc09f91ad0; machine at start: 19.6 GB available, swap 2.2/31.5 GB, load 42.7/53.4 (1m/5m), 16 cores; 8 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -136,6 +136,7 @@ test/language/destructuring/binding/syntax/property-list-followed-by-a-single-co
 test/language/destructuring/binding/syntax/property-list-single-name-bindings.js	pass	
 test/language/destructuring/binding/syntax/property-list-with-property-list.js	pass	
 test/language/expressions/addition/S11.6.1_A2.4_T1.js	pass	
+test/language/expressions/addition/S11.6.1_A2.4_T2.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T1.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T2.js	pass	
 test/language/expressions/addition/S11.6.1_A4_T3.js	pass	
@@ -184,6 +185,7 @@ test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-exhaust
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js	pass	
+test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-init-undef.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-complete.js	pass	
@@ -254,7 +256,11 @@ test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref.js
 test/language/expressions/assignment/dstr/array-elem-put-prop-ref-user-err.js	pass	
 test/language/expressions/assignment/dstr/array-elem-target-identifier.js	pass	
 test/language/expressions/assignment/dstr/array-elision-val-array.js	pass	
+test/language/expressions/assignment/dstr/array-elision-val-bool.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/assignment/dstr/array-elision-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-elision-val-num.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-elision-val-string.js	pass	
+test/language/expressions/assignment/dstr/array-elision-val-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/assignment/dstr/array-elision-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/assignment/dstr/array-empty-val-array.js	pass	
 test/language/expressions/assignment/dstr/array-empty-val-bool.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -364,12 +370,15 @@ test/language/expressions/await/await-in-global.js	pass
 test/language/expressions/await/await-in-nested-function.js	pass	
 test/language/expressions/await/await-in-nested-generator.js	pass	
 test/language/expressions/bitwise-and/S11.10.1_A2.4_T1.js	pass	
+test/language/expressions/bitwise-and/S11.10.1_A2.4_T2.js	pass	
 test/language/expressions/bitwise-not/S9.5_A2.1_T2.js	pass	
 test/language/expressions/bitwise-not/S9.5_A2.2_T2.js	pass	
 test/language/expressions/bitwise-not/S9.5_A2.3_T2.js	pass	
 test/language/expressions/bitwise-not/S9.5_A3.2_T2.js	pass	
 test/language/expressions/bitwise-or/S11.10.3_A2.4_T1.js	pass	
+test/language/expressions/bitwise-or/S11.10.3_A2.4_T2.js	pass	
 test/language/expressions/bitwise-xor/S11.10.2_A2.4_T1.js	pass	
+test/language/expressions/bitwise-xor/S11.10.2_A2.4_T2.js	pass	
 test/language/expressions/call/scope-lex-close.js	pass	
 test/language/expressions/call/scope-var-close.js	pass	
 test/language/expressions/call/spread-obj-mult-spread-getter.js	pass	
@@ -1095,6 +1104,7 @@ test/language/expressions/class/ident-name-method-def-var-escaped.js	pass
 test/language/expressions/class/ident-name-method-def-void-escaped.js	pass	
 test/language/expressions/class/ident-name-method-def-while-escaped.js	pass	
 test/language/expressions/class/ident-name-method-def-with-escaped.js	pass	
+test/language/expressions/class/method-static/dflt-params-abrupt.js	pass	
 test/language/expressions/class/method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/expressions/coalesce/chainable.js	pass	
@@ -1191,6 +1201,7 @@ test/language/expressions/conditional/symbol-conditional-evaluation.js	pass
 test/language/expressions/conditional/tco-cond.js	pass	
 test/language/expressions/conditional/tco-pos.js	pass	
 test/language/expressions/division/S11.5.2_A2.4_T1.js	pass	
+test/language/expressions/division/S11.5.2_A2.4_T2.js	pass	
 test/language/expressions/division/S11.5.2_A4_T1.1.js	pass	
 test/language/expressions/division/S11.5.2_A4_T1.2.js	pass	
 test/language/expressions/division/S11.5.2_A4_T10.js	pass	
@@ -1386,6 +1397,7 @@ test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-exhausted.js	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-arrow.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-cover.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-fn.js	pass	
+test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-fn-name-gen.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-hole.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-init-undef.js	pass	
 test/language/expressions/function/dstr/dflt-ary-ptrn-elem-id-iter-complete.js	pass	
@@ -1510,6 +1522,7 @@ test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	pass
 test/language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/static-init-await-reference.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A2.4_T1.js	pass	
+test/language/expressions/greater-than-or-equal/S11.8.4_A2.4_T2.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A4.1.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A4.10.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A4.11.js	pass	
@@ -1529,6 +1542,7 @@ test/language/expressions/greater-than-or-equal/bigint-and-non-finite.js	pass
 test/language/expressions/greater-than-or-equal/bigint-and-number.js	pass	
 test/language/expressions/greater-than-or-equal/bigint-and-string.js	pass	
 test/language/expressions/greater-than/S11.8.2_A2.4_T1.js	pass	
+test/language/expressions/greater-than/S11.8.2_A2.4_T2.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.1.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.10.js	pass	
 test/language/expressions/greater-than/S11.8.2_A4.11.js	pass	
@@ -1553,6 +1567,7 @@ test/language/expressions/grouping/S11.1.6_A3_T4.js	pass
 test/language/expressions/in/S8.12.6_A1.js	pass	
 test/language/expressions/in/S8.12.6_A2_T1.js	fail	nts: uncaught Test262Error: #1: var __obj={}; "valueOf" in __obj
 test/language/expressions/left-shift/S11.7.1_A2.4_T1.js	pass	
+test/language/expressions/left-shift/S11.7.1_A2.4_T2.js	pass	
 test/language/expressions/left-shift/S11.7.1_A4_T1.js	pass	
 test/language/expressions/left-shift/S11.7.1_A4_T2.js	pass	
 test/language/expressions/left-shift/S11.7.1_A4_T3.js	pass	
@@ -1565,6 +1580,7 @@ test/language/expressions/left-shift/S9.5_A2.2_T1.js	pass
 test/language/expressions/left-shift/S9.5_A2.3_T1.js	pass	
 test/language/expressions/left-shift/S9.5_A3.2_T1.js	pass	
 test/language/expressions/less-than-or-equal/S11.8.3_A2.4_T1.js	pass	
+test/language/expressions/less-than-or-equal/S11.8.3_A2.4_T2.js	pass	
 test/language/expressions/less-than-or-equal/S11.8.3_A4.1.js	pass	
 test/language/expressions/less-than-or-equal/S11.8.3_A4.10.js	pass	
 test/language/expressions/less-than-or-equal/S11.8.3_A4.11.js	pass	
@@ -1584,6 +1600,7 @@ test/language/expressions/less-than-or-equal/bigint-and-non-finite.js	pass
 test/language/expressions/less-than-or-equal/bigint-and-number.js	pass	
 test/language/expressions/less-than-or-equal/bigint-and-string.js	pass	
 test/language/expressions/less-than/S11.8.1_A2.4_T1.js	pass	
+test/language/expressions/less-than/S11.8.1_A2.4_T2.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.1.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.10.js	pass	
 test/language/expressions/less-than/S11.8.1_A4.11.js	pass	
@@ -1606,6 +1623,7 @@ test/language/expressions/less-than/bigint-and-string.js	pass
 test/language/expressions/less-than/bigint-and-symbol.js	fail	nts: uncaught Test262Error: 3n < Symbol("2") throws TypeError
 test/language/expressions/logical-and/S11.11.1_A2.1_T4.js	pass	
 test/language/expressions/logical-and/S11.11.1_A2.4_T1.js	pass	
+test/language/expressions/logical-and/S11.11.1_A2.4_T2.js	pass	
 test/language/expressions/logical-and/S11.11.1_A3_T1.js	pass	
 test/language/expressions/logical-and/S11.11.1_A3_T4.js	pass	
 test/language/expressions/logical-and/S11.11.1_A4_T4.js	pass	
@@ -1634,10 +1652,12 @@ test/language/expressions/logical-not/bigint.js	pass
 test/language/expressions/logical-not/symbol-logical-not-evaluation.js	pass	
 test/language/expressions/logical-or/S11.11.2_A2.1_T4.js	pass	
 test/language/expressions/logical-or/S11.11.2_A2.4_T1.js	pass	
+test/language/expressions/logical-or/S11.11.2_A2.4_T2.js	pass	
 test/language/expressions/logical-or/S11.11.2_A3_T4.js	pass	
 test/language/expressions/logical-or/S11.11.2_A4_T4.js	pass	
 test/language/expressions/logical-or/tco-right.js	pass	
 test/language/expressions/modulus/S11.5.3_A2.4_T1.js	pass	
+test/language/expressions/modulus/S11.5.3_A2.4_T2.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T1.1.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T1.2.js	pass	
 test/language/expressions/modulus/S11.5.3_A4_T2.js	pass	
@@ -1649,6 +1669,7 @@ test/language/expressions/modulus/bigint-arithmetic.js	pass
 test/language/expressions/modulus/bigint-modulo-zero.js	pass	
 test/language/expressions/modulus/line-terminator.js	pass	
 test/language/expressions/multiplication/S11.5.1_A2.4_T1.js	pass	
+test/language/expressions/multiplication/S11.5.1_A2.4_T2.js	pass	
 test/language/expressions/multiplication/S11.5.1_A4_T1.1.js	pass	
 test/language/expressions/multiplication/S11.5.1_A4_T1.2.js	pass	
 test/language/expressions/multiplication/S11.5.1_A4_T2.js	pass	
@@ -1986,6 +2007,7 @@ test/language/expressions/object/ident-name-prop-name-literal-with-escaped.js	pa
 test/language/expressions/object/method-definition/gen-meth-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/object/method-definition/gen-meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/generator-params.js	pass	
+test/language/expressions/object/method-definition/meth-dflt-params-abrupt.js	pass	
 test/language/expressions/object/method-definition/meth-dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/object/method-definition/meth-dflt-params-ref-prior.js	pass	
 test/language/expressions/object/method-definition/name-params.js	pass	
@@ -2026,6 +2048,7 @@ test/language/expressions/prefix-increment/target-cover-id.js	pass
 test/language/expressions/prefix-increment/whitespace.js	pass	
 test/language/expressions/property-accessors/S8.12.3_A3.js	pass	
 test/language/expressions/right-shift/S11.7.2_A2.4_T1.js	pass	
+test/language/expressions/right-shift/S11.7.2_A2.4_T2.js	pass	
 test/language/expressions/right-shift/S11.7.2_A4_T1.js	pass	
 test/language/expressions/right-shift/S11.7.2_A4_T2.js	pass	
 test/language/expressions/right-shift/S11.7.2_A4_T3.js	pass	
@@ -2041,7 +2064,11 @@ test/language/expressions/strict-does-not-equals/S11.9.5_A5.js	pass
 test/language/expressions/strict-does-not-equals/S11.9.5_A6.2.js	pass	
 test/language/expressions/strict-does-not-equals/S11.9.5_A8_T5.js	pass	
 test/language/expressions/strict-does-not-equals/bigint-and-bigint.js	pass	
+test/language/expressions/strict-does-not-equals/bigint-and-boolean.js	pass	
 test/language/expressions/strict-does-not-equals/bigint-and-incomparable-primitive.js	pass	
+test/language/expressions/strict-does-not-equals/bigint-and-non-finite.js	pass	
+test/language/expressions/strict-does-not-equals/bigint-and-number.js	pass	
+test/language/expressions/strict-does-not-equals/bigint-and-string.js	pass	
 test/language/expressions/strict-equals/S11.9.4_A2.4_T1.js	pass	
 test/language/expressions/strict-equals/S11.9.4_A2.4_T2.js	pass	
 test/language/expressions/strict-equals/S11.9.4_A3.js	pass	
@@ -2051,8 +2078,13 @@ test/language/expressions/strict-equals/S11.9.4_A5.js	pass
 test/language/expressions/strict-equals/S11.9.4_A6.2.js	pass	
 test/language/expressions/strict-equals/S11.9.4_A8_T5.js	pass	
 test/language/expressions/strict-equals/bigint-and-bigint.js	pass	
+test/language/expressions/strict-equals/bigint-and-boolean.js	pass	
 test/language/expressions/strict-equals/bigint-and-incomparable-primitive.js	pass	
+test/language/expressions/strict-equals/bigint-and-non-finite.js	pass	
+test/language/expressions/strict-equals/bigint-and-number.js	pass	
+test/language/expressions/strict-equals/bigint-and-string.js	pass	
 test/language/expressions/subtraction/S11.6.2_A2.4_T1.js	pass	
+test/language/expressions/subtraction/S11.6.2_A2.4_T2.js	pass	
 test/language/expressions/subtraction/S11.6.2_A4_T1.js	pass	
 test/language/expressions/subtraction/S11.6.2_A4_T2.js	pass	
 test/language/expressions/subtraction/S11.6.2_A4_T3.js	pass	
@@ -2095,6 +2127,7 @@ test/language/expressions/unary-plus/S9.3_A4.1_T2.js	pass
 test/language/expressions/unary-plus/S9.3_A4.2_T2.js	pass	
 test/language/expressions/unary-plus/bigint-throws.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A2.4_T1.js	pass	
+test/language/expressions/unsigned-right-shift/S11.7.3_A2.4_T2.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A4_T1.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A4_T2.js	pass	
 test/language/expressions/unsigned-right-shift/S11.7.3_A4_T3.js	pass	
@@ -2105,6 +2138,8 @@ test/language/expressions/unsigned-right-shift/S9.6_A1.js	pass
 test/language/expressions/unsigned-right-shift/S9.6_A2.1.js	pass	
 test/language/expressions/unsigned-right-shift/S9.6_A2.2.js	pass	
 test/language/expressions/unsigned-right-shift/S9.6_A3.2_T1.js	pass	
+test/language/expressions/void/S11.4.2_A4_T4.js	pass	
+test/language/expressions/void/S11.4.2_A4_T5.js	pass	
 test/language/expressions/void/S11.4.2_A4_T6.js	pass	
 test/language/function-code/10.4.3-1-11-s.js	pass	
 test/language/function-code/10.4.3-1-11gs.js	pass	
@@ -2467,10 +2502,14 @@ test/language/literals/string/S7.8.4_A4.3_T7.js	pass
 test/language/literals/string/S7.8.4_A5.1_T1.js	pass	
 test/language/literals/string/S7.8.4_A5.1_T2.js	pass	
 test/language/literals/string/S7.8.4_A5.1_T3.js	pass	
+test/language/literals/string/S7.8.4_A6.1_T1.js	pass	
 test/language/literals/string/S7.8.4_A6.1_T2.js	pass	
 test/language/literals/string/S7.8.4_A6.1_T3.js	pass	
+test/language/literals/string/S7.8.4_A6.3_T1.js	pass	
+test/language/literals/string/S7.8.4_A7.1_T1.js	pass	
 test/language/literals/string/S7.8.4_A7.1_T2.js	pass	
 test/language/literals/string/S7.8.4_A7.1_T3.js	pass	
+test/language/literals/string/S7.8.4_A7.3_T1.js	pass	
 test/language/literals/string/line-continuation-double.js	pass	
 test/language/literals/string/line-continuation-single.js	pass	
 test/language/literals/string/line-separator.js	pass	
@@ -3362,6 +3401,7 @@ test/language/statements/class/ident-name-method-def-var-escaped.js	pass
 test/language/statements/class/ident-name-method-def-void-escaped.js	pass	
 test/language/statements/class/ident-name-method-def-while-escaped.js	pass	
 test/language/statements/class/ident-name-method-def-with-escaped.js	pass	
+test/language/statements/class/method-static/dflt-params-abrupt.js	pass	
 test/language/statements/class/method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/name-binding/basic.js	pass	
@@ -3428,6 +3468,7 @@ test/language/statements/class/super/in-static-setter.js	pass
 test/language/statements/class/syntax/class-body-has-direct-super-class-heritage.js	pass	
 test/language/statements/class/syntax/class-method-propname-constructor.js	pass	
 test/language/statements/const/block-local-closure-get-before-initialization.js	pass	
+test/language/statements/const/block-local-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/const/dstr/ary-name-iter-val.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/const/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -3453,6 +3494,7 @@ test/language/statements/const/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass
 test/language/statements/const/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/const/dstr/obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/const/function-local-closure-get-before-initialization.js	pass	
+test/language/statements/const/function-local-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/const/global-closure-get-before-initialization.js	pass	
 test/language/statements/const/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/const/static-init-await-binding-valid.js	pass	
@@ -3537,6 +3579,10 @@ test/language/statements/for-in/head-const-fresh-binding-per-iteration.js	pass
 test/language/statements/for-in/head-let-bound-names-fordecl-tdz.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/for-in/head-lhs-cover.js	pass	
 test/language/statements/for-in/head-var-bound-names-in-stmt.js	pass	
+test/language/statements/for-in/return-from-catch.js	pass	
+test/language/statements/for-in/return-from-finally.js	pass	
+test/language/statements/for-in/return-from-try.js	pass	
+test/language/statements/for-in/return.js	pass	
 test/language/statements/for-of/Array.prototype.keys.js	pass	
 test/language/statements/for-of/array-contract.js	pass	
 test/language/statements/for-of/array-expand-contract.js	pass	
@@ -3566,6 +3612,12 @@ test/language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref.js	pass
 test/language/statements/for-of/dstr/array-elem-put-prop-ref-user-err.js	pass	
 test/language/statements/for-of/dstr/array-elem-target-identifier.js	pass	
 test/language/statements/for-of/dstr/array-elision-val-array.js	pass	
+test/language/statements/for-of/dstr/array-elision-val-bool.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elision-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elision-val-num.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elision-val-string.js	pass	
+test/language/statements/for-of/dstr/array-elision-val-symbol.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elision-val-undef.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/for-of/dstr/array-empty-val-array.js	pass	
 test/language/statements/for-of/dstr/array-empty-val-bool.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/for-of/dstr/array-empty-val-null.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -3676,6 +3728,8 @@ test/language/statements/for-of/dstr/var-obj-ptrn-prop-ary-value-null.js	pass
 test/language/statements/for-of/dstr/var-obj-ptrn-prop-obj-value-null.js	pass	
 test/language/statements/for-of/generator-next-error.js	pass	
 test/language/statements/for-of/generator.js	pass	
+test/language/statements/for-of/head-const-bound-names-fordecl-tdz.js	pass	
+test/language/statements/for-of/head-let-bound-names-fordecl-tdz.js	pass	
 test/language/statements/for-of/head-lhs-async-dot.js	pass	
 test/language/statements/for-of/head-lhs-async-parens.js	pass	
 test/language/statements/for-of/head-lhs-cover.js	pass	
@@ -3825,11 +3879,14 @@ test/language/statements/function/S13.2.1_A6_T3.js	pass
 test/language/statements/function/S13.2.1_A6_T4.js	pass	
 test/language/statements/function/S13.2.1_A8_T1.js	pass	
 test/language/statements/function/S13.2.1_A8_T2.js	pass	
+test/language/statements/function/S13.2.1_A9.1_T2.js	pass	
+test/language/statements/function/S13.2.1_A9_T2.js	pass	
 test/language/statements/function/S13.2_A7_T1.js	pass	
 test/language/statements/function/S13.2_A7_T2.js	pass	
 test/language/statements/function/S13_A10.js	pass	
 test/language/statements/function/S13_A4_T1.js	pass	
 test/language/statements/function/S13_A4_T2.js	pass	
+test/language/statements/function/dflt-params-abrupt.js	pass	
 test/language/statements/function/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/function/dflt-params-ref-prior.js	pass	
 test/language/statements/function/dstr/ary-name-iter-val.js	pass	
@@ -3934,6 +3991,7 @@ test/language/statements/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-empty.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/generators/dstr/dflt-ary-name-iter-val.js	pass	
 test/language/statements/generators/dstr/dflt-ary-ptrn-elem-ary-elem-init.js	pass	
@@ -4005,6 +4063,7 @@ test/language/statements/labeled/tco.js	pass
 test/language/statements/labeled/value-await-non-module-escaped.js	pass	
 test/language/statements/labeled/value-await-non-module.js	pass	
 test/language/statements/let/block-local-closure-set-before-initialization.js	pass	
+test/language/statements/let/block-local-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/let/dstr/ary-name-iter-val.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-init.js	pass	
 test/language/statements/let/dstr/ary-ptrn-elem-ary-elem-iter.js	pass	
@@ -4029,6 +4088,7 @@ test/language/statements/let/dstr/obj-ptrn-id-trailing-comma.js	pass
 test/language/statements/let/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/statements/let/dstr/obj-ptrn-prop-obj-value-null.js	pass	
+test/language/statements/let/function-local-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/let/global-closure-set-before-initialization.js	pass	
 test/language/statements/let/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/let/static-init-await-binding-valid.js	pass	
@@ -4164,6 +4224,7 @@ test/language/types/number/S8.5_A2.1.js	pass
 test/language/types/number/S8.5_A2.2.js	pass	
 test/language/types/number/S8.5_A3.js	pass	
 test/language/types/number/S8.5_A4_T1.js	pass	
+test/language/types/number/S8.5_A5.js	pass	
 test/language/types/number/S8.5_A6.js	pass	
 test/language/types/number/S8.5_A7.js	pass	
 test/language/types/number/S8.5_A8.js	pass	

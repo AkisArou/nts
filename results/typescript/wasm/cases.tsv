@@ -1,0 +1,27 @@
+# Test262 tests/typescript cases that ran, and what each did. Written by
+# tooling/census/conformance262.ts --record; compared by --check.
+# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend wasm, harness f8ca0afd3c45597f; machine at start: 23.1 GB available, swap 2/31.5 GB, load 24.4/36.6 (1m/5m), 16 cores; 8 worker(s)
+tests/typescript/classes/field-initialiser-order.ts	pass	
+tests/typescript/classes/fields-before-parameter-properties.ts	fail	nts: uncaught Test262Error: sameValue
+tests/typescript/classes/parameter-properties.ts	pass	
+tests/typescript/classes/private-field-accessor.ts	pass	
+tests/typescript/classes/readonly-parameter-property.ts	pass	
+tests/typescript/classes/static-block.ts	pass	
+tests/typescript/enums/as-parameter-type.ts	pass	
+tests/typescript/enums/computed-members.ts	pass	
+tests/typescript/enums/const-enum.ts	pass	
+tests/typescript/enums/declaration-merging.ts	pass	
+tests/typescript/enums/heterogeneous.ts	pass	
+tests/typescript/enums/in-switch.ts	pass	
+tests/typescript/enums/merged-with-namespace.ts	pass	
+tests/typescript/enums/numeric-initialisers.ts	pass	
+tests/typescript/enums/numeric-members.ts	pass	
+tests/typescript/typed-paths/discriminated-union.ts	pass	
+tests/typescript/typed-paths/generic-constraint.ts	pass	
+tests/typescript/typed-paths/generic-over-number-and-string.ts	pass	
+tests/typescript/typed-paths/interface-one-holder.ts	pass	
+tests/typescript/typed-paths/interface-several-holders.ts	pass	
+tests/typescript/typed-paths/same-shape-classes-print-their-own-text.ts	pass	
+tests/typescript/typed-paths/structural-object-literal.ts	pass	
+tests/typescript/typed-paths/union-narrowing.ts	pass	
+tests/typescript/typed-paths/value-of-under-plus.ts	pass	
