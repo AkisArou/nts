@@ -7,7 +7,7 @@ use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId, native::Fun
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Plan};
-use super::{Platform, extension, name, refuse, signatures, ty_of};
+use super::{Platform, name, refuse, signatures, ty_of};
 
 /// How this call's arguments and result cross, or the refusal that names why
 /// one cannot: a record or an erased value on arm64, whose convention this
@@ -54,9 +54,13 @@ fn parameter_spelling(
                 vec!["i32, i64".to_owned()]
             } else {
                 vec![
-                    format!("{} {}", ty_of(&ty, func)?, extension(&ty).trim_end())
-                        .trim_end()
-                        .to_owned(),
+                    format!(
+                        "{} {}",
+                        ty_of(&ty, func)?,
+                        platform.extension(&ty).trim_end()
+                    )
+                    .trim_end()
+                    .to_owned(),
                 ]
             }
         }
@@ -75,7 +79,11 @@ fn returned_type(
         return Ok(aggregate::result_type(passing));
     }
     let result = target.result.abi(platform.abi);
-    Ok(format!("{}{}", extension(&result), ty_of(&result, func)?))
+    Ok(format!(
+        "{}{}",
+        platform.extension(&result),
+        ty_of(&result, func)?
+    ))
 }
 
 /// The arguments C sees, and a record result's storage: the last HIR
@@ -161,7 +169,7 @@ pub(super) fn declarations(
             }
             match declaration(func, target, platform) {
                 Ok(line) => {
-                    if let Some(known) = signatures::signature(symbol) {
+                    if let Some(known) = signatures::signature_on(symbol, platform) {
                         let expected = format!(
                             "declare {} @{}({})",
                             known.returns,
@@ -356,9 +364,15 @@ pub(super) fn call(
                         "{temp}.narrow = trunc {from} {} to {to}",
                         name(*arg)
                     ));
-                    parameters.push(format!("{to} {}{temp}.narrow", extension(&slot)));
+                    parameters.push(format!("{to} {}{temp}.narrow", platform.extension(&slot)));
                 } else {
-                    parameters.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+                    parameters.extend(super::arguments(
+                        func,
+                        &temp,
+                        &[*arg],
+                        &mut before,
+                        platform,
+                    )?);
                 }
             }
         }
@@ -401,7 +415,7 @@ pub(super) fn call(
     };
     before.push(format!(
         "{prefix}call {}{} {callee}({})",
-        extension(&returned),
+        platform.extension(&returned),
         spelled,
         parameters.join(", ")
     ));

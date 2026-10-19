@@ -662,7 +662,8 @@ fn aggregate_arguments_respect_register_exhaustion() {
 /// names it. Its `boolean` parameter was declared `zeroext i1`, a result's
 /// order, which is not IR: the module failed to parse, the failure the
 /// declaration exists to prevent. An export taking a `bigint` is one this
-/// backend refuses on arm64 Windows.
+/// backend refuses on arm64 Windows, whose C widens no `_Bool`
+/// (`Platform::extension`), so the parameter is a plain `i1` there.
 #[test]
 fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
     let Some((dir, prepared)) = prepare(
@@ -683,10 +684,7 @@ fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
         "{:?}",
         prepared.diagnostics
     );
-    let arm64_windows = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LLP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64_windows = nts_codegen_llvm::Platform::WINDOWS_ARM64;
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64_windows);
     let declared = llvm
         .text
@@ -698,7 +696,7 @@ fn a_refused_function_taking_a_boolean_is_declared_as_ir() {
                 llvm.diagnostics
             )
         });
-    assert!(declared.contains("(i1 zeroext, "), "{declared}");
+    assert!(declared.contains("(i1, "), "{declared}");
     std::fs::write(dir.join("program.ll"), &llvm.text).unwrap();
     clang(
         &dir,
@@ -1719,6 +1717,7 @@ export function roundTrip(n: number): number { return echo(high()) + n; }
         nts_codegen_llvm::Platform {
             abi: unsigned,
             arch: nts_codegen_llvm::Arch::X86_64,
+            darwin: false,
         },
     );
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -5718,6 +5717,7 @@ export function probe(seed: number): number {
             nts_codegen_llvm::Platform {
                 abi,
                 arch: nts_codegen_llvm::Arch::X86_64,
+                darwin: false,
             },
         );
         assert!(
@@ -5954,6 +5954,7 @@ export function wide(): void { take_long(2147483648n as c_long); }
             nts_codegen_llvm::Platform {
                 abi: win64,
                 arch: nts_codegen_llvm::Arch::X86_64,
+                darwin: false,
             },
         )
         .diagnostics,
@@ -5971,7 +5972,8 @@ export function wide(): void { take_long(2147483648n as c_long); }
                 &prepared.program,
                 nts_codegen_llvm::Platform {
                     abi: sysv,
-                    arch: nts_codegen_llvm::Arch::X86_64
+                    arch: nts_codegen_llvm::Arch::X86_64,
+                    darwin: false,
                 }
             )
             .diagnostics
@@ -6297,6 +6299,7 @@ export function negative(): number { return echo_long(-5 as c_long32); }
         nts_codegen_llvm::Platform {
             abi: win64,
             arch: nts_codegen_llvm::Arch::X86_64,
+            darwin: false,
         },
     );
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
@@ -6364,6 +6367,7 @@ export function negative(): number { return echo_long(-5 as c_long32); }
             nts_codegen_llvm::Platform {
                 abi: sysv,
                 arch: nts_codegen_llvm::Arch::X86_64,
+                darwin: false,
             },
         )
         .diagnostics,

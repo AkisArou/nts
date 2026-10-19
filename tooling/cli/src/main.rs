@@ -7166,16 +7166,18 @@ fn native_abi(os: &str, arch: &str) -> nts_core::hir::native::NativeAbi {
     nts_core::hir::native::NativeAbi::of(os, arch)
 }
 
-/// The LLVM backend's target: the data model `native_abi` gives, and the arch,
-/// which with it decides how a record crosses a call.
+/// The LLVM backend's target: the data model `native_abi` gives, the arch,
+/// which with it decides how a record crosses a call, and whether it is
+/// Apple's, whose arm64 convention is its own.
 fn llvm_platform(os: &str, arch: &str) -> nts_codegen_llvm::Platform {
     let abi = native_abi(os, arch);
+    let darwin = matches!(os, "macos" | "ios");
     let arch = if arch == "aarch64" {
         nts_codegen_llvm::Arch::Aarch64
     } else {
         nts_codegen_llvm::Arch::X86_64
     };
-    nts_codegen_llvm::Platform { abi, arch }
+    nts_codegen_llvm::Platform { abi, arch, darwin }
 }
 
 /// The system libraries a static libuv needs on Windows: its `CMakeLists.txt`

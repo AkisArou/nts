@@ -1,23 +1,19 @@
-//! Recorded gap: the extension attributes on a narrow integer crossing C --
-//! `signext` on an `i8`/`i16`, `zeroext` on an unsigned one and on a boolean
-//! -- are the same on every platform here, and C's are not. Measured against
-//! clang's own IR for the same prototypes: x86-64 System V and Apple arm64
-//! extend narrow arguments and results, and so does this backend (the
-//! controls); Win64, on x86-64 and arm64, and AAPCS64 Linux extend nothing
-//! narrower than 32 bits except Win64 x86-64's `_Bool` result.
+//! The extension attributes on a narrow integer crossing C -- `signext` on an
+//! `i8`/`i16`, `zeroext` on an unsigned one -- are clang's for the platform
+//! (`Platform::extension`), checked against clang's own IR for the same
+//! prototypes, in both directions: an exported function's parameters and a
+//! C function's declared result and parameters. x86-64 System V and Apple
+//! arm64 extend narrow arguments and results; Win64, on x86-64 and arm64, and
+//! AAPCS64 Linux do not.
 //!
-//! Both directions are exposed. An attribute on an exported function's
-//! parameter tells LLVM the C caller already extended it, and a Windows or
-//! Linux-arm64 caller did not, so the upper bits may be dirty where the body
-//! assumes them clean. On a C function's declared result it tells LLVM the C
-//! callee extended it, and the same callees did not -- a Win32 `SHORT`,
-//! `WORD` or `BYTE` result read through bits nothing set.
-//!
-//! When the attributes follow the platform, the gap rows become guards.
+//! **A guard; it was a recorded gap**, the same attributes on every platform.
+//! On the three that do not extend, an attribute told LLVM a C caller had
+//! cleaned an exported function's narrow argument, or a C callee its narrow
+//! result -- a Win32 `SHORT`, `WORD` or `BYTE` read through upper bits nothing
+//! set.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::{Command, hir, prepare_with_files};
-use nts_codegen_llvm::{Arch, Platform};
-use nts_core::hir::native::NativeAbi;
+use nts_codegen_llvm::Platform;
 
 const SOURCE: &str = r#"
 import { narrow_i8, narrow_take, narrow_u16 } from "c:narrow";
@@ -69,7 +65,7 @@ fn extensions(ir: &str, name: &str) -> Vec<Vec<&'static str>> {
 }
 
 #[test]
-fn recorded_gap_narrow_integer_extensions_ignore_the_platform() {
+fn narrow_integer_extensions_follow_the_platform() {
     let Some((dir, prepared)) = prepare_with_files(
         "narrow-extension",
         SOURCE,
@@ -84,23 +80,15 @@ fn recorded_gap_narrow_integer_extensions_ignore_the_platform() {
         prepared.diagnostics
     );
     std::fs::write(dir.join("reference.c"), REFERENCE).unwrap();
-    let aarch64 = |abi| Platform {
-        abi,
-        arch: Arch::Aarch64,
-    };
-    // (clang's triple, this backend's platform, whether the two agree today)
+    // (clang's triple, this backend's platform)
     let rows = [
-        ("x86_64-linux-gnu", Platform::SYSV_X86_64, true),
-        ("aarch64-apple-darwin", aarch64(NativeAbi::LP64), true),
-        ("x86_64-windows-gnu", Platform::WIN64_X86_64, false),
-        ("aarch64-windows-gnu", aarch64(NativeAbi::LLP64), false),
-        (
-            "aarch64-linux-gnu",
-            aarch64(NativeAbi::LP64_UNSIGNED_CHAR),
-            false,
-        ),
+        ("x86_64-linux-gnu", Platform::SYSV_X86_64),
+        ("aarch64-apple-darwin", Platform::APPLE_ARM64),
+        ("x86_64-windows-gnu", Platform::WIN64_X86_64),
+        ("aarch64-windows-gnu", Platform::WINDOWS_ARM64),
+        ("aarch64-linux-gnu", Platform::LINUX_ARM64),
     ];
-    for (triple, platform, agrees) in rows {
+    for (triple, platform) in rows {
         let ours = nts_codegen_llvm::emit(&prepared.program, platform);
         assert!(
             ours.diagnostics.is_empty(),
@@ -128,19 +116,11 @@ fn recorded_gap_narrow_integer_extensions_ignore_the_platform() {
         );
         let theirs = String::from_utf8_lossy(&clang.stdout);
         for name in ["f", "narrow_i8", "narrow_u16", "narrow_take"] {
-            let (mine, c) = (extensions(&ours.text, name), extensions(&theirs, name));
-            if agrees {
-                assert_eq!(
-                    mine, c,
-                    "{triple} {name}: the control no longer agrees with clang"
-                );
-            } else {
-                assert_ne!(
-                    mine, c,
-                    "{triple} {name}: this records the gap; when it fails because the \
-                     attributes agree with clang, flip the row to a guard"
-                );
-            }
+            assert_eq!(
+                extensions(&ours.text, name),
+                extensions(&theirs, name),
+                "{triple} {name}: the extension attributes disagree with clang's"
+            );
         }
     }
 }

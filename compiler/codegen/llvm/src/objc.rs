@@ -15,7 +15,7 @@ use nts_core::hir::{Callee, Func, HirType, OpKind, Program, ValueId};
 use nts_diagnostics::Diagnostic;
 
 use super::aggregate::{self, Crossing, Passing};
-use super::{Platform, extension, name, refuse, ty_of};
+use super::{Platform, name, refuse, ty_of};
 
 /// A C string as an LLVM constant. Selectors and class names are identifier
 /// characters and colons only (checked where they are read), so no byte here
@@ -48,8 +48,8 @@ fn lookup(text: &mut String, symbol: &str, lookup: &str, spelled: &str) {
 }
 
 /// The runtime declarations and the lookups, when the program sends anything.
-pub(super) fn module(program: &Program) -> String {
-    let mut text = blocks(program);
+pub(super) fn module(program: &Program, platform: Platform) -> String {
+    let mut text = blocks(program, platform);
     if !program.objc {
         return text;
     }
@@ -211,7 +211,13 @@ pub(super) fn send(
             ));
         } else {
             types.push(ty_of(ty, func)?.to_owned());
-            values.extend(super::arguments(func, &temp, &[*arg], &mut before)?);
+            values.extend(super::arguments(
+                func,
+                &temp,
+                &[*arg],
+                &mut before,
+                platform,
+            )?);
         }
     }
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
@@ -249,7 +255,7 @@ pub(super) fn send(
     };
     before.push(format!(
         "{prefix}call {}{} ({}) @{entry}({})",
-        extension(result),
+        platform.extension(result),
         ty_of(result, func)?,
         types.join(", "),
         values.join(", ")
@@ -272,7 +278,7 @@ fn bound(program: &Program, symbol: &str) -> bool {
 /// The C backend's `objc::blocks`, in the other spelling: the block layout,
 /// the owner-checked copy and dispose helpers, and one invoke adapter and
 /// descriptor per signature. See there for why each piece is what it is.
-fn blocks(program: &Program) -> String {
+fn blocks(program: &Program, platform: Platform) -> String {
     let signatures = block_signatures(program);
     let mut text = String::new();
     // A block returning an object hands it back at +0, as ARC's caller
@@ -315,7 +321,10 @@ fn blocks(program: &Program) -> String {
         constant("@nts.block.copied", "copied"),
         constant("@nts.block.released", "released"),
         "define internal void @nts_block_on_owner(ptr %what) {".to_owned(),
-        "  %owned = call zeroext i1 @nts_is_owner_thread()".to_owned(),
+        format!(
+            "  %owned = call {}i1 @nts_is_owner_thread()",
+            platform.extension(&HirType::Bool)
+        ),
         "  br i1 %owned, label %fine, label %foreign".to_owned(),
         "fine:".to_owned(),
         "  ret void".to_owned(),
@@ -337,7 +346,10 @@ fn blocks(program: &Program) -> String {
         "define internal void @nts_block_dispose(ptr %block) {".to_owned(),
         "  %slot = getelementptr inbounds %nts.block, ptr %block, i32 0, i32 5".to_owned(),
         "  %context = load ptr, ptr %slot".to_owned(),
-        "  %owned = call zeroext i1 @nts_is_owner_thread()".to_owned(),
+        format!(
+            "  %owned = call {}i1 @nts_is_owner_thread()",
+            platform.extension(&HirType::Bool)
+        ),
         "  br i1 %owned, label %here, label %carry".to_owned(),
         "carry:".to_owned(),
         "  call void @nts_block_unlend(ptr %context)".to_owned(),
@@ -350,7 +362,7 @@ fn blocks(program: &Program) -> String {
         let _ = writeln!(text, "{line}");
     }
     for signature in signatures {
-        adapter(&mut text, signature, counted);
+        adapter(&mut text, signature, counted, platform);
         let encoding = format!("@{}.signature", block_descriptor_symbol(signature));
         let _ = writeln!(text, "{}", constant(&encoding, &block_encoding(signature)));
         let _ = writeln!(
@@ -364,18 +376,26 @@ fn blocks(program: &Program) -> String {
 
 /// A native ABI type as an LLVM result type, with the extension C gives it:
 /// `zeroext i1`, the attribute before the type, as a result is written.
-pub(super) fn abi(ty: &Type) -> String {
+pub(super) fn abi(ty: &Type, platform: Platform) -> String {
     let representation = ty.representation();
-    format!("{}{}", extension(&representation), bare(&representation))
+    format!(
+        "{}{}",
+        platform.extension(&representation),
+        bare(&representation)
+    )
 }
 
 /// The same as a parameter or an argument: `i1 zeroext`, the attribute after
 /// the type. The result's order there is not IR.
-pub(super) fn abi_parameter(ty: &Type) -> String {
+pub(super) fn abi_parameter(ty: &Type, platform: Platform) -> String {
     let representation = ty.representation();
-    format!("{} {}", bare(&representation), extension(&representation))
-        .trim_end()
-        .to_owned()
+    format!(
+        "{} {}",
+        bare(&representation),
+        platform.extension(&representation)
+    )
+    .trim_end()
+    .to_owned()
 }
 
 pub(super) fn bare(ty: &HirType) -> &'static str {
@@ -400,13 +420,13 @@ pub(super) fn returns_object(result: &Type) -> bool {
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
-    let result = abi(&signature.result);
+fn adapter(text: &mut String, signature: &FnPointer, counted: bool, platform: Platform) {
+    let result = abi(&signature.result, platform);
     let mut parameters = vec!["ptr %block".to_owned()];
     let mut types = Vec::new();
     let mut arguments = Vec::new();
     for (at, ty) in signature.parameters.iter().enumerate() {
-        let spelled = abi_parameter(ty);
+        let spelled = abi_parameter(ty, platform);
         parameters.push(format!("{spelled} %a{at}"));
         types.push(bare(&ty.representation()).to_owned());
         arguments.push(format!("{spelled} %a{at}"));
@@ -433,7 +453,11 @@ fn adapter(text: &mut String, signature: &FnPointer, counted: bool) {
     );
     if let Some(carried) = &carried {
         let hop = nts_codegen_common::objc::block_hop_symbol(signature);
-        let _ = writeln!(text, "  %owned = call zeroext i1 @nts_is_owner_thread()");
+        let _ = writeln!(
+            text,
+            "  %owned = call {}i1 @nts_is_owner_thread()",
+            platform.extension(&HirType::Bool)
+        );
         let _ = writeln!(text, "  br i1 %owned, label %here, label %carry");
         let _ = writeln!(text, "carry:");
         let _ = writeln!(text, "  %h = alloca %{hop}");

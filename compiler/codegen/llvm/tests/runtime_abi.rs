@@ -202,10 +202,7 @@ fn arm64_passes_an_erased_value_as_two_words() {
     let tsconfig = Utf8Path::from_path(&dir).unwrap().join("tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&tsconfig).unwrap();
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
         let prepared = hir::prepare_with(
             &snapshot,
@@ -356,10 +353,7 @@ fn arm64_exports_an_erased_value_through_a_c_entry() {
         "{:?}",
         prepared.diagnostics
     );
-    let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     let emitted = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     for shape in [

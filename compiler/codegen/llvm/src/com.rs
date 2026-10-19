@@ -20,14 +20,14 @@ use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty
 /// bridge, the context, a word each), the bridge called with the context
 /// last, and `S_OK` -- or, called off the thread owning the closure, the call
 /// carried there (`nts_com_carry`), as the C backend's adapter carries it.
-pub(super) fn delegates(program: &Program) -> String {
+pub(super) fn delegates(program: &Program, platform: Platform) -> String {
     let mut text = String::new();
     for signature in delegate_signatures(program) {
         let mut parameters = vec!["ptr %self".to_owned()];
         let mut types = Vec::new();
         let mut arguments = Vec::new();
         for (at, ty) in signature.parameters.iter().enumerate() {
-            let spelled = abi_parameter(ty);
+            let spelled = abi_parameter(ty, platform);
             parameters.push(format!("{spelled} %a{at}"));
             types.push(bare(&ty.representation()).to_owned());
             arguments.push(format!("{spelled} %a{at}"));
@@ -62,7 +62,11 @@ pub(super) fn delegates(program: &Program) -> String {
             } else {
                 format!("@{hop}.objects")
             };
-            let _ = writeln!(text, "  %owned = call zeroext i1 @nts_is_owner_thread()");
+            let _ = writeln!(
+                text,
+                "  %owned = call {}i1 @nts_is_owner_thread()",
+                platform.extension(&HirType::Bool)
+            );
             let _ = writeln!(text, "  br i1 %owned, label %here, label %carry");
             let _ = writeln!(text, "carry:");
             let _ = writeln!(text, "  %h = alloca %{hop}");
@@ -384,7 +388,7 @@ fn adapter(
         }
         let from = foreign.abi(platform.abi);
         let from_ty = ty_of(&from, compiled)?;
-        parameters.push(format!("{} %a{slot}", abi_parameter(foreign)));
+        parameters.push(format!("{} %a{slot}", abi_parameter(foreign, platform)));
         if slot >= declared {
             continue;
         }
@@ -522,7 +526,7 @@ fn forwarder(
                 Some(bits) => format!("i{bits}"),
                 None => "ptr".to_owned(),
             },
-            other => abi_parameter(other),
+            other => abi_parameter(other, platform),
         });
     }
     let parameters: Vec<String> = spelled

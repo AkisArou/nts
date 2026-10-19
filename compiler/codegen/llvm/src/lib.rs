@@ -54,7 +54,7 @@ pub mod signatures_win64;
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::NativeAbi;
+use nts_core::hir::native::{NativeAbi, PlatformConvention};
 use nts_core::hir::{
     BinOp, BlockId, Callee, Func, FunctionName, HirType, OpKind, Printed, Program, Terminator,
     UnOp, ValueId,
@@ -70,14 +70,17 @@ pub struct Emitted {
 
 /// The target a module is emitted for, as far as its text depends on it.
 ///
-/// **Two facts, because neither decides the other.** `abi` is the C data
+/// **Three facts, because none decides the others.** `abi` is the C data
 /// model, which decides every native size and offset. `arch` decides with it
 /// the calling convention: how a record or an erased value crosses a call.
 /// `x86_64` Linux and arm64 macOS share a data model and not a convention.
+/// `darwin` is Apple's, whose arm64 convention (clang's `DarwinPCS`) is not
+/// AAPCS64 though the data model and the arch say nothing to tell them apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Platform {
     pub abi: NativeAbi,
     pub arch: Arch,
+    pub darwin: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,12 +94,73 @@ impl Platform {
     pub const SYSV_X86_64: Self = Self {
         abi: NativeAbi::LP64,
         arch: Arch::X86_64,
+        darwin: false,
     };
     /// `x86_64` Windows, mingw and MSVC alike.
     pub const WIN64_X86_64: Self = Self {
         abi: NativeAbi::LLP64,
         arch: Arch::X86_64,
+        darwin: false,
     };
+    /// arm64 macOS and iOS: Apple's data model and convention.
+    pub const APPLE_ARM64: Self = Self {
+        abi: NativeAbi::LP64,
+        arch: Arch::Aarch64,
+        darwin: true,
+    };
+    /// arm64 Linux and Android: AAPCS64, with an unsigned `char`.
+    pub const LINUX_ARM64: Self = Self {
+        abi: NativeAbi::LP64_UNSIGNED_CHAR,
+        arch: Arch::Aarch64,
+        darwin: false,
+    };
+    /// arm64 Windows.
+    pub const WINDOWS_ARM64: Self = Self {
+        abi: NativeAbi::LLP64,
+        arch: Arch::Aarch64,
+        darwin: false,
+    };
+
+    /// The attribute a value of `ty` crosses a C call with -- `signext`,
+    /// `zeroext`, or nothing -- on either side of it, a parameter or a result:
+    /// whether this platform's C widens it to 32 bits, so that the other side
+    /// may rely on the upper bits.
+    ///
+    /// **clang's rule, and the one place it is written.** A `_Bool` and an
+    /// integer narrower than 32 bits are widened -- by the caller for an
+    /// argument, by the callee for a result -- on `x86_64` System V
+    /// (`X86_64ABIInfo`) and on Apple's arm64 (`AArch64ABIInfo` under
+    /// `DarwinPCS`, which extends a promotable integer on both sides). `x86_64`
+    /// Windows widens only a `_Bool` (`WinX86_64ABIInfo`); AAPCS64 Linux and
+    /// arm64 Windows widen nothing, and the upper bits of a narrow value are
+    /// unspecified. Measured against clang 23's IR for the same prototypes on
+    /// each of these targets (`tests/native/narrow_extension.rs`).
+    ///
+    /// An attribute where C does not widen tells LLVM something C never did --
+    /// that a C caller cleaned an argument's upper bits, or a C callee its
+    /// result's -- and LLVM may read them.
+    #[must_use]
+    pub const fn extension(self, ty: &HirType) -> &'static str {
+        let (integers, booleans) = match (self.arch, self.abi.convention) {
+            (Arch::X86_64, PlatformConvention::SysV) => (true, true),
+            (Arch::X86_64, PlatformConvention::Win64) => (false, true),
+            (Arch::Aarch64, _) => (self.darwin, self.darwin),
+        };
+        match ty {
+            HirType::Int {
+                bits: 8 | 16,
+                signed: true,
+            } if integers => "signext ",
+            // A `_Bool` and an unsigned narrow integer are the same case:
+            // neither has a sign bit to carry into the upper half.
+            HirType::Int {
+                bits: 8 | 16,
+                signed: false,
+            } if integers => "zeroext ",
+            HirType::Bool if booleans => "zeroext ",
+            _ => "",
+        }
+    }
 }
 
 /// Render a whole program as textual LLVM IR.
@@ -142,10 +206,10 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         let _ = writeln!(text, "{line}");
     }
     text.push_str(&native_memory::helpers(program));
-    text.push_str(&objc::module(program));
-    text.push_str(&com::delegates(program));
+    text.push_str(&objc::module(program, platform));
+    text.push_str(&com::delegates(program, platform));
     text.push_str(&counting_declarations(program));
-    text.push_str(&open_chains(program));
+    text.push_str(&open_chains(program, platform));
     // What the runtime offers this backend, declared up front.
     //
     // `nts_to_int32` is `static inline` in the C header, which is right for C
@@ -272,7 +336,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
                 // the linker, which is where the C backend already puts it: C
                 // emits a prototype for everything and lets `ld` say what is
                 // missing. A refusal should look like a refusal.
-                if let Some(line) = refused_declaration(func) {
+                if let Some(line) = refused_declaration(func, platform) {
                     let _ = writeln!(text, "{line}");
                 }
             }
@@ -448,7 +512,7 @@ fn helper_operand(
 /// Types only and no `internal`: LLVM has no such thing as an internal
 /// declaration, and external is what makes the link fail with the function's
 /// name in the message rather than the module fail to parse.
-fn refused_declaration(func: &Func) -> Option<String> {
+fn refused_declaration(func: &Func, platform: Platform) -> Option<String> {
     let returns = return_ty_of(&func.return_type, func).ok()?;
     let mut params = Vec::new();
     for param in &func.params {
@@ -460,7 +524,7 @@ fn refused_declaration(func: &Func) -> Option<String> {
             // A parameter's extension follows its type; a result's precedes.
             let ty = ty_of(&param.ty, func).ok()?;
             params.push(
-                format!("{ty} {}", extension(&param.ty))
+                format!("{ty} {}", platform.extension(&param.ty))
                     .trim_end()
                     .to_owned(),
             );
@@ -468,7 +532,7 @@ fn refused_declaration(func: &Func) -> Option<String> {
     }
     Some(format!(
         "declare {}{returns} {}({}) nounwind",
-        extension(&func.return_type),
+        platform.extension(&func.return_type),
         symbol(&func.name),
         params.join(", ")
     ))
@@ -1342,8 +1406,9 @@ fn suspension(
                 })?;
             [
             format!(
-                "call void @nts_callback_task({returned} {out}.task, ptr {}, double {slot}.0, i1 zeroext false)",
-                name(*reaction)
+                "call void @nts_callback_task({returned} {out}.task, ptr {}, double {slot}.0, i1 {}false)",
+                name(*reaction),
+                platform.extension(&HirType::Bool)
             ),
             format!(
                 "call void @nts_promise_subscribe(ptr {}, {taken} {out}.task)",
@@ -2372,7 +2437,8 @@ fn instance_of(
             shared.clone()
         };
         lines.push(format!(
-            "{at} = call zeroext i1 @nts_is_class({argument}, ptr @nts_desc_{})",
+            "{at} = call {}i1 @nts_is_class({argument}, ptr @nts_desc_{})",
+            platform.extension(&HirType::Bool),
             descriptor_for(program, layout, Some(*class))
         ));
         answers.push(at);
@@ -2534,10 +2600,17 @@ pub const ALWAYS_DECLARED: &[&str] = &[
 ///
 /// See the arm that reaches this for why it exists and why it must come after
 /// the absent-reference test.
-fn string_equality(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String {
+fn string_equality(
+    out: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+    platform: Platform,
+) -> String {
     let same = format!("{out}.eq");
     let call = format!(
-        "{same} = call zeroext i1 @nts_string_eq(ptr {}, ptr {})",
+        "{same} = call {}i1 @nts_string_eq(ptr {}, ptr {})",
+        platform.extension(&HirType::Bool),
         name(lhs),
         name(rhs)
     );
@@ -2556,7 +2629,14 @@ fn string_equality(out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> String 
 /// to come first for the reason `absent_reference` gives: `s === null` asks
 /// about the pointer, and reading contents through it would be reading through
 /// the null one.
-fn string_binary(func: &Func, out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId) -> Option<String> {
+fn string_binary(
+    func: &Func,
+    out: &str,
+    bin: BinOp,
+    lhs: ValueId,
+    rhs: ValueId,
+    platform: Platform,
+) -> Option<String> {
     if func.values[lhs.0 as usize].ty != HirType::Managed(nts_core::hir::ManagedType::String)
         || absent(func, lhs)
         || absent(func, rhs)
@@ -2564,7 +2644,7 @@ fn string_binary(func: &Func, out: &str, bin: BinOp, lhs: ValueId, rhs: ValueId)
         return None;
     }
     match bin {
-        BinOp::Eq | BinOp::Ne => Some(string_equality(out, bin, lhs, rhs)),
+        BinOp::Eq | BinOp::Ne => Some(string_equality(out, bin, lhs, rhs, platform)),
         BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => Some(string_ordering(out, bin, lhs, rhs)),
         _ => None,
     }
@@ -2945,19 +3025,6 @@ fn ty_of(ty: &HirType, func: &Func) -> Result<&'static str, Diagnostic> {
     })
 }
 
-/// The extension attribute a value of this type carries across a call.
-///
-/// Taken from clang rather than derived. A `_Bool` is passed `zeroext`, an
-/// `int8_t` `signext`, a `uint16_t` `zeroext`, and anything word-sized or
-/// wider nothing at all -- which is what `clang -S -emit-llvm` prints for the
-/// same declarations, and the only way to be sure is to look.
-///
-/// On x86-64 a bare `i1` happens to work, because both ends use the low bit of
-/// a register. "Happens to work" is not an ABI: the runtime is compiled by
-/// clang and this has to agree with it on every target, not on the one it was
-/// written on. This is the whole of the ABI story for the scalar slice --
-/// `NtsValue` by value is the part that is not, and it is refused rather than
-/// guessed at.
 /// The instruction that widens a narrower C slot to the value HIR holds, where
 /// the two differ: a `c_long` read under Win64 is an `i32` becoming an `i64`,
 /// by `sext` or `zext` as the slot's signedness says. `None` where they agree.
@@ -2974,23 +3041,6 @@ fn widening(slot: &HirType, value: &HirType) -> Option<&'static str> {
             HirType::Int { bits: wide, .. },
         ) if narrow < wide => Some(if *signed { "sext" } else { "zext" }),
         _ => None,
-    }
-}
-
-fn extension(ty: &HirType) -> &'static str {
-    match ty {
-        HirType::Int {
-            bits: 8 | 16,
-            signed: true,
-        } => "signext ",
-        // A `_Bool` and an unsigned narrow integer are the same case: neither
-        // has a sign bit to carry into the upper half of the register.
-        HirType::Bool
-        | HirType::Int {
-            bits: 8 | 16,
-            signed: false,
-        } => "zeroext ",
-        _ => "",
     }
 }
 
@@ -3063,7 +3113,7 @@ fn function(
                 "{value} = insertvalue {ERASED_TYPE} {value}.half, i64 {value}.bits, 1"
             ));
         } else {
-            params.push(format!("{ty} {}{value}", extension(&param.ty)));
+            params.push(format!("{ty} {}{value}", platform.extension(&param.ty)));
         }
     }
     prologue.extend(frame_storage(program, func));
@@ -3084,7 +3134,7 @@ fn function(
     let _ = writeln!(
         out,
         "define {linkage}{}{returns} {defined}({}) nounwind {{",
-        extension(&func.return_type),
+        platform.extension(&func.return_type),
         params.join(", ")
     );
 
@@ -3220,7 +3270,7 @@ fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Dia
                 arguments.push(format!("i128 %a{at}.v"));
             }
             ty => {
-                let spelled = format!("{} {}%a{at}", ty_of(ty, func)?, extension(ty));
+                let spelled = format!("{} {}%a{at}", ty_of(ty, func)?, platform.extension(ty));
                 params.push(spelled.clone());
                 arguments.push(spelled);
             }
@@ -3261,7 +3311,7 @@ fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Dia
             vec![format!("call void {call}"), "ret void".to_owned()],
         ),
         other => (
-            format!("{}{returns}", extension(other)),
+            format!("{}{returns}", platform.extension(other)),
             vec![
                 format!("%r = call {returns} {call}"),
                 format!("ret {returns} %r"),
@@ -3536,7 +3586,7 @@ fn operation(
         // reference. Splitting them was what pushed `operation` over its line
         // limit, and the guard was written twice to do it.
         OpKind::Binary { op: bin, lhs, rhs } => integral_remainder(func, op, &out)
-            .or_else(|| string_binary(func, &out, *bin, *lhs, *rhs))
+            .or_else(|| string_binary(func, &out, *bin, *lhs, *rhs, platform))
             .map_or_else(|| arithmetic(func, &out, *bin, *lhs, *rhs, platform), Ok)?,
         OpKind::Unary { op: un, operand } => unary(func, &out, value, *un, *operand, platform)?,
         // A representation change specialization decided on. The C backend
@@ -4126,10 +4176,10 @@ fn text_operation(
             } else {
                 "nts_unit_fn"
             };
-            // What the helper hands back, from the table rather than from
-            // memory: one is a `double` and the other a `uint16_t`, and the
-            // second carries `zeroext`.
-            let known = signatures::signature(helper)
+            // What the helper hands back, from the platform's table rather
+            // than from memory: one is a `double` and the other a `uint16_t`,
+            // which carries `zeroext` where the platform's C widens it.
+            let known = signatures::signature_on(helper, platform)
                 .ok_or_else(|| refuse(func, "a string read with no declared helper"))?;
             let produced = known
                 .returns
@@ -4284,7 +4334,7 @@ fn mixed_equality(
         }
         HirType::Bool => (
             "nts_value_eq_boolean_fn",
-            format!("i1 zeroext {}", name(against)),
+            format!("i1 {}{}", platform.extension(&HirType::Bool), name(against)),
         ),
         HirType::Managed(nts_core::hir::ManagedType::String) => {
             ("nts_value_eq_string", format!("ptr {}", name(against)))
@@ -4298,7 +4348,8 @@ fn mixed_equality(
         }
     };
     lines.push(format!(
-        "{same} = call zeroext i1 @{helper}({receiver}, {argument})"
+        "{same} = call {}i1 @{helper}({receiver}, {argument})",
+        platform.extension(&HirType::Bool)
     ));
     Ok(lines)
 }
@@ -4351,7 +4402,8 @@ fn tagging(
                 let left = erased_argument(platform, &name(*lhs), &out, 0, &mut lines);
                 let right = erased_argument(platform, &name(*rhs), &out, 1, &mut lines);
                 lines.push(format!(
-                    "{same} = call zeroext i1 @nts_value_strict_eq({left}, {right})"
+                    "{same} = call {}i1 @nts_value_strict_eq({left}, {right})",
+                    platform.extension(&HirType::Bool)
                 ));
             }
             lines.push(if matches!(bin, BinOp::Ne) {
@@ -4613,6 +4665,7 @@ fn arguments(
     out: &str,
     args: &[ValueId],
     before: &mut Vec<String>,
+    platform: Platform,
 ) -> Result<Vec<String>, Diagnostic> {
     let mut rendered: Vec<String> = Vec::new();
     for (at, arg) in args.iter().enumerate() {
@@ -4655,7 +4708,7 @@ fn arguments(
         // because `i32` is both `int32_t` and `uint32_t` and the difference is
         // `fptosi` against `fptoui` -- so an argument arrives already at the
         // type the callee declares, for both backends, from one place.
-        rendered.push(format!("{ty} {}{}", extension(arg_ty), name(*arg)));
+        rendered.push(format!("{ty} {}{}", platform.extension(arg_ty), name(*arg)));
     }
     Ok(rendered)
 }
@@ -4676,13 +4729,13 @@ fn runtime_arguments(
             if func.values[arg.0 as usize].ty == HirType::Erased {
                 rendered.push(erased_argument(platform, &name(*arg), out, at, before));
             } else {
-                rendered.extend(arguments(func, out, &[*arg], before)?);
+                rendered.extend(arguments(func, out, &[*arg], before, platform)?);
             }
         }
         return Ok(rendered);
     }
     if !indirect::applies(platform) {
-        return arguments(func, out, args, before);
+        return arguments(func, out, args, before, platform);
     }
     let mut rendered = Vec::new();
     let mut slot = 0;
@@ -4703,7 +4756,7 @@ fn runtime_arguments(
             ));
             slot += 1;
         } else {
-            rendered.extend(arguments(func, out, &[*arg], before)?);
+            rendered.extend(arguments(func, out, &[*arg], before, platform)?);
         }
     }
     Ok(rendered)
@@ -4831,7 +4884,7 @@ fn call(
             rendered.extend(if into_c {
                 runtime_arguments(func, &out, args, &mut before, platform)?
             } else {
-                arguments(func, &out, args, &mut before)?
+                arguments(func, &out, args, &mut before, platform)?
             });
             // A helper the table does not carry is one this backend cannot
             // call. `nts_to_uint8` is `static inline` in the header, so there
@@ -4894,7 +4947,7 @@ fn call(
                 return Ok(before.join("\n  "));
             }
             let (attribute, call_returns) = declared.map_or_else(
-                || (extension(&op.ty).to_owned(), call_returns),
+                || (platform.extension(&op.ty).to_owned(), call_returns),
                 |known| declared_result(known.returns),
             );
             let call = format!(
@@ -5106,7 +5159,7 @@ fn memory_operation(
         // A field whose index depends on which layout arrived: the chain, called
         // rather than written here. `open_chains` says why it is a call.
         OpKind::OpenFieldGet { .. } | OpKind::OpenFieldSet { .. } => {
-            open_chain_op(program, func, op, &out)?
+            open_chain_op(program, func, op, &out, platform)?
         }
         OpKind::FieldSet {
             object,
@@ -5902,7 +5955,8 @@ fn unary(
         // is a short circuit and so a call.
         UnOp::Truthy => match &func.values[operand.0 as usize].ty {
             HirType::Managed(nts_core::hir::ManagedType::String) => format!(
-                "{out} = call zeroext i1 @nts_string_truthy(ptr {})",
+                "{out} = call {}i1 @nts_string_truthy(ptr {})",
+                platform.extension(&HirType::Bool),
                 name(operand)
             ),
             HirType::Managed(_) | HirType::NativePointer(_) => {
@@ -5927,7 +5981,8 @@ fn unary(
                 let mut lines = Vec::new();
                 let argument = erased_argument(platform, &name(operand), out, 0, &mut lines);
                 lines.push(format!(
-                    "{out} = call zeroext i1 @nts_value_truthy_fn({argument})"
+                    "{out} = call {}i1 @nts_value_truthy_fn({argument})",
+                    platform.extension(&HirType::Bool)
                 ));
                 lines.join("\n  ")
             }
@@ -6062,11 +6117,12 @@ fn open_chain_op(
     func: &Func,
     op: &nts_core::hir::Op,
     out: &str,
+    platform: Platform,
 ) -> Result<String, Diagnostic> {
     match &op.kind {
         OpKind::OpenFieldGet { object, arms } => {
             let ty = ty_of(&op.ty, func)?;
-            open_chain_call(program, func, arms, ty, false)?;
+            open_chain_call(program, func, arms, ty, false, platform)?;
             Ok(format!(
                 "{out} = call {ty} @\"{}\"({ERASED_TYPE} {})",
                 open_chain_name(arms, ty, false),
@@ -6079,7 +6135,7 @@ fn open_chain_op(
             value,
         } => {
             let ty = ty_of(&func.values[value.0 as usize].ty, func)?;
-            open_chain_call(program, func, arms, ty, true)?;
+            open_chain_call(program, func, arms, ty, true, platform)?;
             Ok(format!(
                 "call void @\"{}\"({ERASED_TYPE} {}, {ty} {})",
                 open_chain_name(arms, ty, true),
@@ -6106,6 +6162,7 @@ fn open_chain_call(
     arms: &[nts_core::hir::FieldArm],
     ty: &str,
     stored: bool,
+    platform: Platform,
 ) -> Result<(), Diagnostic> {
     if arms.is_empty() {
         return Err(refuse(func, "an open field access over no arms"));
@@ -6116,6 +6173,7 @@ fn open_chain_call(
         arms,
         ty,
         stored,
+        platform,
     )
     .is_none()
     {
@@ -6127,7 +6185,7 @@ fn open_chain_call(
     Ok(())
 }
 
-fn open_chains(program: &Program) -> String {
+fn open_chains(program: &Program, platform: Platform) -> String {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut text = String::new();
     for func in program.native_funcs() {
@@ -6147,7 +6205,9 @@ fn open_chains(program: &Program) -> String {
             if !seen.insert(name.clone()) {
                 continue;
             }
-            if let Some(body) = open_chain_body(program, &name, arms, ty, stored.is_some()) {
+            if let Some(body) =
+                open_chain_body(program, &name, arms, ty, stored.is_some(), platform)
+            {
                 text.push_str(&body);
             }
         }
@@ -6183,6 +6243,7 @@ fn open_chain_body(
     arms: &[nts_core::hir::FieldArm],
     ty: &str,
     stored: bool,
+    platform: Platform,
 ) -> Option<String> {
     let result = if stored { "void" } else { ty };
     let params = if stored {
@@ -6217,7 +6278,8 @@ fn open_chain_body(
         let _ = writeln!(text, "arm{at}:");
         let _ = writeln!(
             text,
-            "  %c{at} = call zeroext i1 @nts_is_class(i32 %t, i64 %p, ptr @nts_desc_{})",
+            "  %c{at} = call {}i1 @nts_is_class(i32 %t, i64 %p, ptr @nts_desc_{})",
+            platform.extension(&HirType::Bool),
             descriptor_for(program, layout, Some(arm.ty))
         );
         let _ = writeln!(text, "  br i1 %c{at}, label %hit{at}, label %{next}");

@@ -476,10 +476,7 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
         "{:?}",
         prepared.diagnostics
     );
-    let windows_arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LLP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let windows_arm64 = nts_codegen_llvm::Platform::WINDOWS_ARM64;
     let llvm = nts_codegen_llvm::emit(&prepared.program, windows_arm64);
     assert!(
         llvm.diagnostics
@@ -490,10 +487,7 @@ fn the_llvm_backend_refuses_what_it_cannot_classify_by_name() {
     );
     // Apple's and Linux's arm64 place the same rectangle: four doubles, in
     // `d0`-`d3` both ways, and a send that returns one needs no `_stret`.
-    let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
@@ -631,10 +625,7 @@ fn the_llvm_declarations_are_clangs_on_arm64() {
         "{:?}",
         prepared.diagnostics
     );
-    let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     std::fs::write(dir.join("shapes.c"), format!(
@@ -742,10 +733,7 @@ declare module "objc:Foundation" {
         "{:?}",
         prepared.diagnostics
     );
-    let arm64 = nts_codegen_llvm::Platform {
-        abi: nts_core::hir::native::NativeAbi::LP64,
-        arch: nts_codegen_llvm::Arch::Aarch64,
-    };
+    let arm64 = nts_codegen_llvm::Platform::APPLE_ARM64;
     let llvm = nts_codegen_llvm::emit(&prepared.program, arm64);
     assert!(
         llvm.diagnostics.is_empty(),
