@@ -1,6 +1,7 @@
 //! `String(value)` of an object or a function in an erased slot, as the core
-//! decides it per layout (`Program::printed`), read off the value's identity
-//! the way C reads `NtsDescriptor.to_string`:
+//! decides it per class (`Program::printing`, the layout's entry where the
+//! class has none of its own), read off the value's identity the way C reads
+//! `NtsDescriptor.to_string`:
 //! - **the class's own `toString`** (or the compiler's for the `Error`
 //!   family), a function of this program taking the object;
 //! - **`"[object Object]"`**;
@@ -53,8 +54,12 @@ fn printing(m: &Builder<'_>) -> Result<BTreeMap<u32, Option<Printed>>, Failure> 
         let Some(class) = descriptor.class else {
             continue;
         };
-        let object = objects.object(&HirType::Managed(ManagedType::Object(class)))?;
-        let printed = m.program.printed.get(&object.name).cloned();
+        // Per class where classes share the layout (`Program::printing`,
+        // through `printing_of_type` so the derivation lives in core once):
+        // this descriptor already names the class its identity serves, so
+        // ask as that class rather than by the shared layout's agreement.
+        objects.object(&HirType::Managed(ManagedType::Object(class)))?;
+        let printed = m.program.printing_of_type(class).cloned();
         found
             .entry(descriptor.identity)
             .and_modify(|known| {
