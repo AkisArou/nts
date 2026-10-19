@@ -63574,16 +63574,7 @@ impl<'a> FuncBuilder<'a> {
             // reached -- so `[...x]` is the only shape that arrives, which is also what the
             // census found: every one of the 190 cases has the rest at position 0. Stated
             // rather than enforced, because enforcing it twice is how two rules come apart.
-            let Some(target) = self.children(element).into_iter().find(|part| {
-                matches!(
-                    self.kind_of(*part),
-                    Some(
-                        syntax::IDENTIFIER
-                            | syntax::ARRAY_BINDING_PATTERN
-                            | syntax::OBJECT_BINDING_PATTERN
-                    )
-                )
-            }) else {
+            let Some(target) = self.rest_target(element) else {
                 return Err(self.unsupported(element, "a rest element with no name or pattern"));
             };
             let Some(built @ HirType::Managed(ManagedType::Array(_))) = self.type_of(target) else {
@@ -63597,6 +63588,30 @@ impl<'a> FuncBuilder<'a> {
             return self.collect_a_walk(element, element, value, walk, &built);
         }
         let origin = self.origin(element);
+        // **The rest of a tuple read past its end is the empty tuple, built at
+        // its own layout.** `let [, , ...x] = [1, 2]` gives `x` the type `[]`,
+        // which has no element to share and is laid out as an object with no
+        // fields (`tuple_representation`), while the slice below answers the
+        // source's array. A local took the array and nothing disagreed; a
+        // module variable is one slot at `[]`'s layout, and the store reached
+        // the verifier as `StoreType { expected: Managed(Object(..)), found:
+        // Managed(Array(..)) }` -- the `var`, `let` and `const` forms of
+        // test262's `dstr/ary-ptrn-rest-id-exhausted`.
+        //
+        // Built rather than sliced, because the type says the slice is empty:
+        // a tuple's length is part of its type, which is the assumption its
+        // field layout already makes. Nothing is read from the source, and the
+        // source is an array, whose slice has no effect to skip.
+        if let Some(target) = self.rest_target(element)
+            && let Some(empty @ HirType::Managed(ManagedType::Object(tuple))) = self.type_of(target)
+            && matches!(
+                self.snapshot.types.get(tuple.0 as usize).map(|record| &record.kind),
+                Some(TypeKind::Tuple(elements)) if elements.is_empty()
+            )
+        {
+            self.layout_of(element, tuple)?;
+            return Ok(self.push(OpKind::ObjectNew { frame: false }, empty, origin));
+        }
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
         let helper = match &ty {
@@ -63616,6 +63631,20 @@ impl<'a> FuncBuilder<'a> {
             ty,
             origin,
         ))
+    }
+
+    /// What a rest element binds: a name, or a pattern destructured again.
+    fn rest_target(&self, element: NodeId) -> Option<NodeId> {
+        self.children(element).into_iter().find(|part| {
+            matches!(
+                self.kind_of(*part),
+                Some(
+                    syntax::IDENTIFIER
+                        | syntax::ARRAY_BINDING_PATTERN
+                        | syntax::OBJECT_BINDING_PATTERN
+                )
+            )
+        })
     }
 
     fn bind_rest(
@@ -63639,16 +63668,7 @@ impl<'a> FuncBuilder<'a> {
         // The tail is built first either way, because both cases need it and the
         // slice is what the language says a rest element is: a fresh array, so
         // writing to it does not touch the one it came from.
-        let Some(target) = self.children(element).into_iter().find(|part| {
-            matches!(
-                self.kind_of(*part),
-                Some(
-                    syntax::IDENTIFIER
-                        | syntax::ARRAY_BINDING_PATTERN
-                        | syntax::OBJECT_BINDING_PATTERN
-                )
-            )
-        }) else {
+        let Some(target) = self.rest_target(element) else {
             return Err(self.unsupported(element, "a rest element with no name or pattern"));
         };
         let nested = matches!(
