@@ -722,6 +722,24 @@ function selfTest() {
   };
   const control = judge(clean);
   if (control.unmeasured || control.violations.length > 0) return `the control reported ${JSON.stringify(control)}`;
+  // A slot target need not be a Class#member. Keep its whole spelling,
+  // including spaces, and check it against the same prepared definitions.
+  const slotNames = ["Other#value", "nts$refused$Other$1", "plain_stop", "Other#set value"];
+  const slotBodies = slotNames.slice(1).map((name) => `func ${name}(this: managed<obj#11>) -> void {\n}\n`).join("");
+  const slots = {
+    ...clean,
+    prepared: clean.prepared.replace(summary(5), `\n${slotBodies}${summary(8)}`),
+    layouts: clean.layouts.replace("  methods Other#value\n", slotNames.map((name) => `  methods ${name}\n`).join("")),
+  };
+  const parsedSlots = readLayouts(slots.layouts).byName.get("Other").methods;
+  if (JSON.stringify(parsedSlots) !== JSON.stringify(slotNames)) return `slot names were lost or joined: ${JSON.stringify(parsedSlots)}`;
+  const resolvedSlots = judge(slots);
+  if (resolvedSlots.unmeasured || resolvedSlots.violations.length !== 0) return `defined slot targets did not resolve: ${JSON.stringify(resolvedSlots)}`;
+  const stopBody = "func nts$refused$Other$1(this: managed<obj#11>) -> void {\n}\n";
+  const missingSlot = judge({ ...slots, prepared: slots.prepared.replace(stopBody, "").replace(summary(8), summary(7)) });
+  if (!missingSlot.violations?.some((v) => v.rule === "table-resolves" && v.detail.includes("`nts$refused$Other$1`, defined 0 time(s)"))) return "a missing stop entry was exempted from table resolution";
+  const duplicateSlot = judge({ ...slots, prepared: slots.prepared.replace(summary(8), `\n${stopBody}${summary(9)}`) });
+  if (!duplicateSlot.violations?.some((v) => v.rule === "table-resolves" && v.detail.includes("`nts$refused$Other$1`, defined 2 time(s)"))) return "a duplicate stop entry was exempted from table resolution";
   // 8482afb63's defect: two `Thing`s merged into one layout with no table.
   const merged = judge({
     ...clean,

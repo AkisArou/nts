@@ -5,6 +5,55 @@ use std::path::Path;
 use std::process::Command;
 
 #[test]
+fn every_layout_slot_names_one_prepared_definition() {
+    nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../compiler/core/tests/programs/refused-virtual-slots/runtime.json");
+    let listing = |args: &[&str]| {
+        let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg(args[0])
+            .arg(&fixture)
+            .args(&args[1..])
+            .env_remove("NTS_RC")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        String::from_utf8(result.stdout).unwrap()
+    };
+    let hir = listing(&["hir", "--prepared", "--backend", "c"]);
+    let layouts = listing(&["layouts"]);
+    let mut definitions = std::collections::BTreeMap::new();
+    for line in hir.lines() {
+        let line = line.strip_prefix("export ").unwrap_or(line);
+        let line = line.strip_prefix("declare ").unwrap_or(line);
+        if let Some((name, _)) = line.strip_prefix("func ").and_then(|s| s.split_once('(')) {
+            *definitions.entry(name).or_insert(0) += 1;
+        }
+    }
+    let slots: Vec<_> = layouts
+        .lines()
+        .filter_map(|line| line.strip_prefix("  methods "))
+        .collect();
+    assert!(slots.iter().any(|name| name.starts_with("nts$refused$")));
+    assert!(
+        slots.contains(&"Compiled#value"),
+        "the compiled control must remain"
+    );
+    for name in slots {
+        assert_eq!(
+            definitions.get(name),
+            Some(&1),
+            "slot {name:?} must name one complete definition\n{layouts}\n{hir}"
+        );
+    }
+}
+
+#[test]
 fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
     nts_frontend_ts::tsgo::locate().expect("set NTS_TSGO; this guard must run the frontend");
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
