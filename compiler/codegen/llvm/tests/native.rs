@@ -19,6 +19,9 @@ mod constants;
 #[path = "native/hresult.rs"]
 mod hresult;
 
+#[path = "native/narrow_extension.rs"]
+mod narrow_extension;
+
 #[path = "native/pointer_bits.rs"]
 mod pointer_bits;
 
