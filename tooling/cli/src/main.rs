@@ -1498,13 +1498,10 @@ fn dump_layouts(tsconfig: &Utf8Path) -> Result<()> {
         for field in &layout.fields {
             println!("  {} : {:?}", field.name, field.ty);
         }
-        let filled: Vec<&str> = layout
-            .methods
-            .iter()
-            .filter_map(|slot| slot.as_deref())
-            .collect();
-        if !filled.is_empty() {
-            println!("  methods {}", filled.join(" "));
+        // One complete name per row: targets can be free functions, and
+        // member names such as `set value` can themselves contain spaces.
+        for method in layout.methods.iter().flatten() {
+            println!("  methods {method}");
         }
     }
     // What an addon would publish, which was invisible until now: an export the

@@ -219,10 +219,9 @@ export function readHir(text) {
  * methods }`. A block is a header `Name [ids]` and two-space lines under it.
  * Joined to HIR **by type id**, never by name: after 8482afb63 `layouts` names
  * two same-named classes `Thing` and `Thing11` while their methods are
- * `Thing@a#value` and `Thing@b#value` -- a third spelling of one class. A table line's entries each name
- * a method, `Owner#member`, and member names may hold spaces (`C#get size`), so
- * entries split only before a token holding `#`. A *field* that happens to be
- * called `methods` prints as `methods : Type` and is not a table.
+ * `Thing@a#value` and `Thing@b#value` -- a third spelling of one class. A *field*
+ * that happens to be called `methods` prints as `methods : Type` and is not a table. Each table
+ * entry has its own row; names can contain spaces or lack a member separator.
  */
 export function readLayouts(text) {
   const byName = new Map();
@@ -237,6 +236,10 @@ export function readLayouts(text) {
       for (const id of head[2].split(" ")) byId.set(id, current);
       continue;
     }
+    if (!line.startsWith("  ")) {
+      current = null;
+      continue;
+    }
     if (!current) continue;
     const hirType = /^ {2}hir-type (managed<[^>]+>)$/.exec(line);
     if (hirType) byType.set(hirType[1], current);
@@ -246,7 +249,7 @@ export function readLayouts(text) {
     if (implemented) current.implements.push(...implemented[1].split(/,\s*|\s+/).filter(Boolean));
     if (/^ {2}\S+ : /.test(line)) current.fields += 1;
     const table = /^ {2}methods (?!:)(.+)$/.exec(line);
-    if (table && table[1].includes("#")) current.methods.push(...table[1].split(/ (?=\S+#)/));
+    if (table) current.methods.push(table[1]);
   }
   return { byName, byId, byType };
 }
@@ -740,6 +743,13 @@ function selfTest() {
   if (!missingSlot.violations?.some((v) => v.rule === "table-resolves" && v.detail.includes("`nts$refused$Other$1`, defined 0 time(s)"))) return "a missing stop entry was exempted from table resolution";
   const duplicateSlot = judge({ ...slots, prepared: slots.prepared.replace(summary(8), `\n${stopBody}${summary(9)}`) });
   if (!duplicateSlot.violations?.some((v) => v.rule === "table-resolves" && v.detail.includes("`nts$refused$Other$1`, defined 2 time(s)"))) return "a duplicate stop entry was exempted from table resolution";
+  // The last layout may be a closure frame. Public exports follow it, and
+  // an export called `methods` is not another slot on that frame.
+  for (const gap of ["", "\n"]) {
+    const sections = { ...slots, layouts: `${slots.layouts}${gap}public api\n  methods -> methods   (a value)\n` };
+    if (JSON.stringify(readLayouts(sections.layouts).byName.get("Other").methods) !== JSON.stringify(slotNames)) return "a public export named methods attached to the last layout";
+    if (judge(sections).violations?.length !== 0) return "the public export section read as a layout table";
+  }
   // 8482afb63's defect: two `Thing`s merged into one layout with no table.
   const merged = judge({
     ...clean,
@@ -938,7 +948,7 @@ function selfTest() {
   const rules = (t) => (judge(t).violations ?? []).map((v) => v.rule);
   if (!rules({ ...clean, prepared: clean.prepared.replace("  %2 = call total(%1) : f64", "  %2 = call nowhere(%1) : f64") }).includes("call-resolves")) return "a direct call to a function nothing defines was not caught";
   if (!rules({ ...clean, prepared: clean.prepared.replace("func total(t: f64) -> f64 {", "func total(t: f64) -> f64 {\n}\nfunc total(t: f64) -> f64 {").replace(summary(5), summary(6)) }).includes("call-resolves")) return "a function defined twice was not caught";
-  if (!rules({ ...clean, layouts: clean.layouts.replace("  methods Other#value", "  methods Other#value Other#missing") }).includes("table-resolves")) return "a table naming a method nothing defines was not caught";
+  if (!rules({ ...clean, layouts: clean.layouts.replace("  methods Other#value", "  methods Other#value\n  methods Other#missing") }).includes("table-resolves")) return "a table naming a method nothing defines was not caught";
   if (!rules({ ...clean, layouts: clean.layouts.replace("Other [11]", "Other [12]") }).includes("owner-has-layout")) return "a method whose `this` type has no layout was not caught";
   // A field named `methods` is not a table.
   if (readLayouts("C [1]\n  methods : Erased\n").byName.get("C").methods.length !== 0) return "a field named `methods` read as a table";
