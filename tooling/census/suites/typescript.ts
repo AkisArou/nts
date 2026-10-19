@@ -6,7 +6,7 @@
 // `features:` name the concepts it exercises; they are the suite's index from
 // concept to case, and the report's by-feature section. A TypeScript case has
 // no negatives (a program that must not compile is `tests/refusals`'s), no
-// includes and no flags beyond `module`.
+// includes and no flags beyond `module` and `async`.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -71,14 +71,27 @@ export function selectTypescript(root: string, under: string): Selected[] {
  * as tsgo's emit does.
  */
 export function oracle(source: string, scratch: string): { ok: true } | { ok: false; why: string } {
-  const file = join(scratch, "oracle.ts");
+  // **A module, so strict.** nts compiles every case strict, and node ran an
+  // `oracle.ts` with no import as a sloppy script: `this` in a plain function
+  // was `globalThis` there, so a case could pass the oracle on an answer nts
+  // is right not to give.
+  const file = join(scratch, "oracle.mts");
   writeFileSync(file, `${harnessFor(source)}\n${bodyOf(source)}\n`);
   const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", file], {
     encoding: "utf8",
     timeout: 30_000,
   });
-  if (run.status === 0) return { ok: true };
   const said = `${run.stderr ?? ""}${run.stdout ?? ""}`;
-  const line = said.split("\n").find((text) => /Error|error/.test(text)) ?? said.split("\n")[0] ?? "";
-  return { ok: false, why: run.signal ? `node was stopped by ${run.signal}` : line.trim().slice(0, 200) };
+  if (run.status !== 0) {
+    const line = said.split("\n").find((text) => /Error|error/.test(text)) ?? said.split("\n")[0] ?? "";
+    return { ok: false, why: run.signal ? `node was stopped by ${run.signal}` : line.trim().slice(0, 200) };
+  }
+  // **An async case passes by its completion line, not its exit status**, as
+  // attempt262 judges nts: `$DONE(error)` prints `Test262:AsyncTestFailure:`
+  // and node still exits 0, so a wrong async case was admitted.
+  if (flagsOf(source).includes("async") && !/^Test262:AsyncTestComplete$/m.test(run.stdout ?? "")) {
+    const failure = /^Test262:AsyncTestFailure:.*$/m.exec(run.stdout ?? "")?.[0];
+    return { ok: false, why: (failure ?? "the async case never called $DONE").slice(0, 200) };
+  }
+  return { ok: true };
 }
