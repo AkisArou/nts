@@ -86,6 +86,12 @@ NTS_BENCH_COUNT_BASELINE_ENV='NTS_SOME_FLAG=1;NTS_OTHER=0'
 `;`-separated `KEY=VALUE` pairs, applied only to the baseline preparation
 child, never to the coordinator's own environment.
 
+Both sides' binaries must speak counting mode: a baseline older than this
+mode has no `--count-prepare` and the run says so rather than counting
+something else. To A/B against an older compiler, build its tree with this
+commit's bench tooling on top — preparation is bench-side, the artifacts
+still come from that tree's compiler.
+
 ## Admission
 
 Counting is a quality gate per cell, inside nts-bench, still under the

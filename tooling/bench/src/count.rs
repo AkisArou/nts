@@ -915,11 +915,15 @@ fn prepare_sides(
                 &record,
             )?;
         }
-        let manifest: Manifest = serde_json::from_str(
-            &std::fs::read_to_string(&manifest_path)
-                .with_context(|| format!("reading {manifest_path}"))?,
-        )
-        .with_context(|| format!("parsing {manifest_path}"))?;
+        let manifest: Manifest =
+            serde_json::from_str(&std::fs::read_to_string(&manifest_path).with_context(|| {
+                format!(
+                    "reading {manifest_path} — a missing manifest usually means the \
+                     {side} binary predates counting mode and has no --count-prepare; \
+                     build that side from a tree that has it"
+                )
+            })?)
+            .with_context(|| format!("parsing {manifest_path}"))?;
         verify_manifest(&manifest)?;
         row["prepared"][side] = json!({
             "binarySha256": manifest.binary_sha256,
