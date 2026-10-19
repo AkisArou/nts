@@ -63627,7 +63627,15 @@ impl<'a> FuncBuilder<'a> {
         // feature instead of guessing at it. Reading `x.length` directly is
         // already refused as "`length`, which `Iterable` does not declare", so
         // the sentences agree about the same program.
-        if !super::carries_a_length(&ty) {
+        //
+        // **Sliced only from an array.** Carrying a length was the test, and a
+        // string, a `Set`, a `Map` and an erased value carry one too: each went to
+        // `nts_array_slice` as if it were an array, which C rejects -- 23 of
+        // test262's `dstr/*-ary-rest-iter` cases, over an erased element. Each is
+        // collected through its iterator now, as below, which is exactly the rest
+        // since nothing before it reads such a source by position; an erased value
+        // has no walk yet, so it is refused by name, as its spread is.
+        if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
             // **Collected through its iterator, which is what that sentence named.** The
             // refusal here said *"needs it collected through its iterator first"* and the
             // machinery it pointed at is `collect_a_walk`, extracted out of
@@ -63685,12 +63693,10 @@ impl<'a> FuncBuilder<'a> {
         }
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
-        let helper = match &ty {
-            HirType::Managed(ManagedType::Array(items)) => {
-                self.slice_helper(element, items, "a rest element")?
-            }
-            _ => "nts_array_slice",
+        let HirType::Managed(ManagedType::Array(items)) = &ty else {
+            unreachable!("a rest over anything but an array is collected above");
         };
+        let helper = self.slice_helper(element, items, "a rest element")?;
         let from = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
         let to = self.push(OpKind::Length(value), HirType::NUMBER, origin.clone());
         Ok(self.push(
