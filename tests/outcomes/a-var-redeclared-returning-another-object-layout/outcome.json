@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program was killed by signal 11 without refusing anything -- a crash, not a declined case",
+  "node": null,
+  "measured_with": "b0a73aa513e09a2f",
+  "source": "measured"
+}
