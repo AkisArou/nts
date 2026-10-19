@@ -628,10 +628,12 @@ fn declare_presence(
 
 /// The empty subclass that gives one class its own identity.
 ///
-/// It declares nothing: the layout's class holds every field, and this exists
+/// It declares no field: the layout's class holds every one, and this exists
 /// so that `instanceof` has something to distinguish. `final`, because nothing
 /// extends a class token, and the JVM resolves a superclass field statically so
-/// reaching `x` through it costs what reaching it through the base costs.
+/// reaching `x` through it costs what reaching it through the base costs. The
+/// one method it may declare is `nts$print`, where this class prints
+/// differently from its layout (`Program::printing`).
 ///
 /// Of a layout emitted as an interface it is that interface's implementation
 /// instead, as `X$Object` is a literal's: an interface has no constructor to
@@ -672,6 +674,25 @@ fn identity_class(
     // Named for its layout and itself, `Layout__Class`, where C's descriptor
     // says only `Class`.
     class_named(&mut builder, &mut pool, &name, &class.name, &origin)?;
+    // How an instance of this class prints, where that is not how its layout
+    // prints. Two classes of one field shape share the layout's class and so
+    // its inherited `nts$print`; the one whose own `toString` the layout's
+    // entry does not name overrides it here. Of an interface layout there is
+    // no layout class to inherit from, so the override is this class's only
+    // `nts$print` and declares `NtsPrintable` itself.
+    let own = program.printing(layout, Some(class));
+    if own != program.printing(layout, None) {
+        let rendered = print_body(package, program, layout, &name, &class.name, own, &mut pool)?;
+        builder.method(
+            access::PUBLIC,
+            types::PRINT,
+            "()Ljava/lang/String;",
+            Some(rendered),
+        );
+        if interface {
+            builder.interfaces.push(types::PRINTABLE.to_owned());
+        }
+    }
     builder.build(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4004",
@@ -1601,10 +1622,12 @@ fn render(
     Ok((body::method_name(&func.name), signature, rendered))
 }
 
-/// `nts$print`, how an object of this layout prints (`Program::printed`), which
-/// `NtsValue.objectText` calls for `String(o)`, `${o}` and an array's text on
-/// any object this program made, closures included: the decision is the
-/// table's, as on C and LLVM, so the three backends print one answer.
+/// `nts$print`, how an object of this layout prints -- by the layout's own
+/// entry (`Program::printing(layout, None)`), which `NtsValue.objectText`
+/// calls for `String(o)`, `${o}` and an array's text on any object this
+/// program made, closures included: the decision is the table's, as on C
+/// and LLVM, so the three backends print one answer. A class of this layout
+/// that prints differently overrides it in its identity subclass.
 ///
 /// A method of its own rather than Java's `toString`, which Java calls
 /// implicitly -- concatenation, a refusal's own message, a debugger -- and a
@@ -1636,12 +1659,46 @@ fn printing_method(
         ));
     }
     let class = types::class_name(package, layout);
-    let mut code = Code::new(vec![VType::Object(class)], 1);
-    let by = match program.printed.get(&layout.name) {
+    let rendered = print_body(
+        package,
+        program,
+        layout,
+        &class,
+        &layout.name,
+        program.printing(layout, None),
+        pool,
+    )?;
+    builder.method(
+        access::PUBLIC,
+        types::PRINT,
+        "()Ljava/lang/String;",
+        Some(rendered),
+    );
+    builder.interfaces.push(types::PRINTABLE.to_owned());
+    Ok(())
+}
+
+/// The body of one `nts$print`: `owner` is the class declaring it (the type
+/// of `this`), `name` what a refusal names (the layout, or the class whose
+/// identity subclass this is, as C's per-class descriptor names it), and
+/// `printed` the decision it answers by -- a layout's own entry on its
+/// class, a class's own on its identity subclass.
+fn print_body(
+    package: &str,
+    program: &JvmProgram<'_>,
+    layout: &nts_core::hir::Layout,
+    owner: &str,
+    name: &str,
+    printed: Option<&Printed>,
+    pool: &mut Pool,
+) -> Result<nts_jvm_emitter::Body, Diagnostic> {
+    let origin = &program_origin(program);
+    let mut code = Code::new(vec![VType::Object(owner.to_owned())], 1);
+    let by = match printed {
         Some(Printed::By(function)) => program_function(package, program, function),
         _ => None,
     };
-    match (program.printed.get(&layout.name), by) {
+    match (printed, by) {
         (Some(Printed::By(_)), Some((func, signature))) => {
             call_on_this(&mut code, pool, package, func, &signature, origin);
         }
@@ -1656,7 +1713,7 @@ fn printing_method(
                     &format!("function {name}() {{ [native code] }}"),
                 );
             } else {
-                code.const_string(origin, pool, &layout.name);
+                code.const_string(origin, pool, name);
                 code.invoke_static(
                     origin,
                     pool,
@@ -1672,7 +1729,7 @@ fn printing_method(
         // Refused, or a function this lane did not emit: the runtime names the
         // type and refuses, as `runtime/c` does for a null `to_string`.
         _ => {
-            code.const_string(origin, pool, &layout.name);
+            code.const_string(origin, pool, name);
             code.invoke_static(
                 origin,
                 pool,
@@ -1683,21 +1740,13 @@ fn printing_method(
         }
     }
     code.ret(origin, Some(Kind::Ref));
-    let rendered = code.finish(pool).map_err(|error| {
+    code.finish(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4009",
             format!("how `{}` prints could not be written: {error}", layout.name),
             origin.location,
         )
-    })?;
-    builder.method(
-        access::PUBLIC,
-        types::PRINT,
-        "()Ljava/lang/String;",
-        Some(rendered),
-    );
-    builder.interfaces.push(types::PRINTABLE.to_owned());
-    Ok(())
+    })
 }
 
 /// `nts$name`, what a function of this layout is called
