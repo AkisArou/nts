@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "aborted",
-  "nts": "SIGABRT; nts: refused: String() of `Right`, whose type says nothing about how it prints",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: control=right1;erased=right1;",
   "node": "exit 1; nts: uncaught Observed: control=right1;erased=right1;",
-  "measured_with": "e3d0824dcf03fd28",
+  "measured_with": "3e9cd79ec4cc9b2c",
   "source": "measured"
 }
