@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend llvm, harness d6442dbc09f91ad0; machine at start: 22.7 GB available, swap 2/31.5 GB, load 30.3/44.1 (1m/5m), 16 cores; 8 worker(s)
+# compiler ffb62d8dc8ea6afa, commit e4a487e33a1c87e45492125015f96a88fed02197, backend llvm, harness d6442dbc09f91ad0; machine at start: 23.3 GB available, swap 2.2/31.5 GB, load 11.8/16.4 (1m/5m), 16 cores; 8 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -2313,6 +2313,7 @@ test/language/identifiers/part-unicode-9.0.0-class-escaped.js	pass
 test/language/identifiers/part-unicode-9.0.0-class.js	pass	
 test/language/identifiers/part-unicode-9.0.0-escaped.js	pass	
 test/language/identifiers/part-unicode-9.0.0.js	pass	
+test/language/identifiers/part-zwj-zwnj-escaped.js	pass	
 test/language/identifiers/start-dollar-sign.js	pass	
 test/language/identifiers/start-escape-seq.js	pass	
 test/language/identifiers/start-underscore.js	pass	
@@ -2375,12 +2376,20 @@ test/language/identifiers/val-dollar-sign.js	pass
 test/language/identifiers/val-underscore-via-escape-hex.js	pass	
 test/language/identifiers/val-underscore-via-escape-hex4.js	pass	
 test/language/identifiers/val-underscore.js	pass	
+test/language/identifiers/vals-cjk-escaped.js	pass	
+test/language/identifiers/vals-cjk.js	pass	
 test/language/identifiers/vals-eng-alpha-lower-via-escape-hex.js	pass	
 test/language/identifiers/vals-eng-alpha-lower-via-escape-hex4.js	pass	
 test/language/identifiers/vals-eng-alpha-lower.js	pass	
 test/language/identifiers/vals-eng-alpha-upper-via-escape-hex.js	pass	
 test/language/identifiers/vals-eng-alpha-upper-via-escape-hex4.js	pass	
 test/language/identifiers/vals-eng-alpha-upper.js	pass	
+test/language/identifiers/vals-rus-alpha-lower-via-escape-hex.js	pass	
+test/language/identifiers/vals-rus-alpha-lower-via-escape-hex4.js	pass	
+test/language/identifiers/vals-rus-alpha-lower.js	pass	
+test/language/identifiers/vals-rus-alpha-upper-via-escape-hex.js	pass	
+test/language/identifiers/vals-rus-alpha-upper-via-escape-hex4.js	pass	
+test/language/identifiers/vals-rus-alpha-upper.js	pass	
 test/language/import/import-defer/syntax/import-attributes.js	pass	
 test/language/import/import-defer/syntax/valid-defer-namespace.js	pass	
 test/language/line-terminators/7.3-15.js	pass	
