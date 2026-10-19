@@ -27959,6 +27959,15 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a value asserted to be `never`"));
         }
         if *want != HirType::Erased {
+            // **Nothing has no representation but its own.** A `void` result
+            // where anything else is wanted passed every check below -- it is
+            // neither managed nor erased -- and arrived unchanged, so the
+            // verifier stopped the whole program at its use. An erased slot
+            // takes it as `undefined` (the arm after this branch); every other
+            // slot has no `undefined` to hold, so it is refused here, by name.
+            if have == HirType::Void {
+                return Err(self.unsupported(id, &representation_mismatch(&have, want)));
+            }
             // The absent constant is the one value that can be re-made at
             // another representation without asking what it holds: `null` is a
             // null pointer as a reference and a tag as an erased value, and it
@@ -49378,10 +49387,72 @@ impl<'a> FuncBuilder<'a> {
         let Some(want) = self.slot_type(id, place)? else {
             return Ok(value);
         };
+        // **A setter's parameter says what it wants, and where that came
+        // from.** `coerce` refuses a `void` result where a value is wanted,
+        // and for a setter the wanted type is often one nobody wrote: an
+        // untyped `set #field(value)` takes its getter's type, so `this.#field
+        // = doNotCall()` in unchecked JavaScript wants a `boolean` that
+        // appears nowhere in the source. It reached the verifier as
+        // `CallArgumentType { callee: "C#set #field", expected: Bool, found:
+        // Void }`, and test262's logical assignments to a private accessor
+        // (`||=`, `&&=`) are that.
+        if let Place::Setter { at, ref getter, .. } = *place
+            && self.values[value.0 as usize].ty == HirType::Void
+            && !matches!(want, HirType::Void | HirType::Erased)
+        {
+            let why = self.void_where_a_setter_wants(at, getter.is_some());
+            return Err(self.unsupported(id, &why));
+        }
         // Unchanged where there is nothing to do, which is every store in a
         // program with no erased values in it -- `coerce` answers `Ok(value)`
         // for that and an `Err` only where it genuinely cannot get there.
         self.coerce(value, &want, id)
+    }
+
+    /// Why a `void` result cannot be a setter's argument: the parameter's
+    /// type, and -- where nothing wrote it -- that its getter supplied it.
+    fn void_where_a_setter_wants(&self, access: NodeId, has_getter: bool) -> String {
+        let parameter = self.setter_parameter(access);
+        // A primitive by its keyword, an object type by its name or shape.
+        let named = parameter
+            .and_then(|parameter| self.children(parameter).into_iter().next())
+            .and_then(|name| self.snapshot.node_types.get(&name).copied())
+            .map(
+                |ty| match self.snapshot.types.get(ty.0 as usize).map(|t| &t.kind) {
+                    Some(TypeKind::Object { .. } | TypeKind::Structured { .. }) => {
+                        self.type_in_a_message(ty)
+                    }
+                    _ => format!("`{}`", short(self.snapshot, ty)),
+                },
+            );
+        match (parameter, named) {
+            (Some(parameter), Some(named)) if has_getter && !self.annotated(parameter) => format!(
+                "nothing (`void`) where the setter's parameter, inferred {named} from its \
+                 getter, is wanted"
+            ),
+            (_, Some(named)) => {
+                format!("nothing (`void`) where the setter's parameter, {named}, is wanted")
+            }
+            _ => "nothing (`void`) where the setter's parameter is wanted".to_owned(),
+        }
+    }
+
+    /// The parameter of the `set` accessor an access reaches, found through
+    /// the member's symbol.
+    fn setter_parameter(&self, access: NodeId) -> Option<NodeId> {
+        let member = self.children(access).into_iter().last()?;
+        let symbol = self.node(member).symbol?;
+        let declaration = self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::SET_ACCESSOR))?;
+        self.children(declaration)
+            .into_iter()
+            .find(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
     }
 
     /// Store into a field, and record that it was written.
