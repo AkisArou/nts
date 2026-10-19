@@ -1762,6 +1762,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_process_start",
+        returns: "void",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_promise_adopt",
         returns: "void",
         params: &["ptr", "ptr"],

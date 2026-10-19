@@ -93,6 +93,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         ],
     },
     Signature {
+        name: "nts_access_key_description",
+        returns: "ptr",
+        params: &["ptr align 8 dead_on_return"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_alloc",
         returns: "noalias nonnull ptr",
         params: &["i64"],
@@ -109,6 +115,17 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         returns: "double",
         params: &["ptr", "double"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_array_at_element",
+        returns: "void",
+        params: &[
+            "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
+            "ptr",
+            "double",
+            "i32",
+        ],
+        attributes: &[],
     },
     Signature {
         name: "nts_array_at_foreign",
@@ -312,6 +329,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_array_mark_null_slots",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_array_new",
         returns: "noalias nonnull ptr",
         params: &["ptr", "double"],
@@ -445,6 +468,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     },
     Signature {
         name: "nts_array_slice_ref",
+        returns: "ptr",
+        params: &["ptr", "double", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_array_slice_value",
         returns: "ptr",
         params: &["ptr", "double", "double"],
         attributes: &[],
@@ -1923,6 +1952,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_presence_set_fn",
         returns: "void",
         params: &["ptr", "i32"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_process_start",
+        returns: "void",
+        params: &[],
         attributes: &[],
     },
     Signature {

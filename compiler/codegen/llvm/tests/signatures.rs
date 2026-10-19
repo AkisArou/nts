@@ -544,17 +544,19 @@ fn check(table: &Table, flags: &[String]) {
     }
     for declared in &fresh {
         let name = &declared.name;
+        // **Every helper the header declares is the table's**, not only those
+        // the backend reaches for today. A helper reached for and missing is
+        // a call emitted with no declaration and no argument conversion -- an
+        // invalid module, not a refusal -- and a table that only had to cover
+        // today's calls went stale unseen: the arm64 table lacked five helpers
+        // the header had added, nts_access_key_description among them, and
+        // nothing failed until a regeneration showed it.
         let Some(known) = table.rows.iter().find(|known| known.name == *name) else {
-            // A helper the backend *reaches for* must be here. Missing, its
-            // call is emitted with no declaration and no argument conversion --
-            // an invalid module, not a refusal. Anything else the table does
-            // not carry is a refusal, which is fine.
-            assert!(
-                !nts_codegen_llvm::ALWAYS_DECLARED.contains(&name.as_str()),
-                "`{name}` is reached for by the backend but missing from the table; \
-                 rerun with NTS_REGENERATE=1"
+            panic!(
+                "`{name}` is declared by the header but missing from {}; \
+                 rerun with NTS_REGENERATE=1",
+                table.file
             );
-            continue;
         };
         assert_eq!(
             known.returns, declared.returns,
