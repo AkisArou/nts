@@ -806,25 +806,48 @@ const KIND_TUPLE: u32 = 6;
 /// which is what `nts_is_class` compares, and in the name it reports as its own.
 /// See `descriptor_for`; the C backend emits the same pair and
 /// `tests/programs/two-classes-one-descriptor` holds both lanes to it.
+/// A descriptor's fields after its name, for the shape (`None`) or for one
+/// class sharing it: they differ in how the object prints.
+type DescriptorTail<'a> = &'a dyn Fn(Option<&nts_core::hir::ClassIdentity>) -> String;
+
+/// How an object of `layout`, or of one class sharing it, prints
+/// (`Program::printing`), as the descriptor's `to_string` slot. Null where
+/// nothing says, which the runtime refuses by name.
+fn to_string_slot(
+    program: &Program,
+    layout: &nts_core::hir::Layout,
+    class: Option<&nts_core::hir::ClassIdentity>,
+) -> String {
+    match program.printing(layout, class) {
+        Some(Printed::By(function)) => format!("ptr {}", symbol(function)),
+        Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
+        Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
+        Some(Printed::BoundFunction) => "ptr @nts_bound_function_to_string".to_owned(),
+        Some(Printed::Refused) | None => "ptr null".to_owned(),
+    }
+}
+
 fn class_descriptors(
     out: &mut String,
     program: &Program,
     layout: &nts_core::hir::Layout,
     tag: &str,
-    body: (&str, &str),
+    body: (&str, DescriptorTail<'_>),
 ) {
     let (head, tail) = body;
     let sharing = program.distinct_identities(layout);
     if sharing.is_empty() {
         return;
     }
+    // Each class its own tail, which carries how it prints.
     for class in &sharing {
         let spelling = format!("{tag}__{}", identity_suffix(&sharing, class));
         name_constant(out, &spelling, &class.name);
         let _ = writeln!(
             out,
             "@nts_desc_{spelling} = internal constant %NtsDescriptor \
-             {{ {head}, ptr @nts_name_{spelling}, {tail} }}"
+             {{ {head}, ptr @nts_name_{spelling}, {} }}",
+            tail(Some(class))
         );
     }
 }
@@ -971,13 +994,6 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
         // prints (`Program::printed`) and what a function of it is called
         // (`Program::function_names`) last, null where nothing says, which the
         // runtime refuses by name.
-        let to_string = match program.printed.get(&layout.name) {
-            Some(Printed::By(function)) => format!("ptr {}", symbol(function)),
-            Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
-            Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
-            Some(Printed::BoundFunction) => "ptr @nts_bound_function_to_string".to_owned(),
-            Some(Printed::Refused) | None => "ptr null".to_owned(),
-        };
         let function_name = match program.function_names.get(&layout.name) {
             Some(FunctionName::Is(text)) => {
                 let index = literals.iter().position(|known| known == text).unwrap_or(0);
@@ -986,15 +1002,19 @@ fn descriptors(program: &Program, diagnostics: &mut Vec<Diagnostic>) -> String {
             Some(FunctionName::Bound) => "ptr @nts_bound_function_name".to_owned(),
             None => "ptr null".to_owned(),
         };
-        let tail = format!(
-            "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {to_string}, \
-             {function_name}",
-            erased.len()
-        );
+        let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
+            format!(
+                "i32 {}, {erased_table}, i32 0, i32 {foreign}, {foreign_table}, {}, \
+                 {function_name}",
+                erased.len(),
+                to_string_slot(program, layout, class)
+            )
+        };
         let _ = writeln!(
             out,
             "@nts_desc_{tag} = internal constant %NtsDescriptor \
-             {{ {head}, ptr @nts_name_{tag}, {tail} }}"
+             {{ {head}, ptr @nts_name_{tag}, {} }}",
+            tail(None)
         );
         class_descriptors(&mut out, program, layout, &tag, (&head, &tail));
     }

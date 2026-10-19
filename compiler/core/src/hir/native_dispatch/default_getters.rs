@@ -5,7 +5,7 @@
 //! All object arguments have the same native pointer ABI; their layout is
 //! irrelevant only because the body reads none of it. JVM identities remain.
 
-use crate::hir::{Callee, Func, HirType, ManagedType, OpKind, Printed, Program, Terminator};
+use crate::hir::{Callee, Func, HirType, ManagedType, OpKind, Program, Terminator};
 use rustc_hash::FxHashSet;
 use std::collections::BTreeMap;
 
@@ -93,15 +93,7 @@ fn referenced_outside_tables(program: &Program) -> FxHashSet<&str> {
             .iter()
             .flat_map(|(_, properties)| properties.iter().map(|(_, name)| name.as_str())),
     );
-    names.extend(
-        program
-            .printed
-            .values()
-            .filter_map(|printed| match printed {
-                Printed::By(name) => Some(name.as_str()),
-                _ => None,
-            }),
-    );
+    names.extend(program.printing_functions());
     for func in &program.funcs {
         for op in &func.values {
             match &op.kind {

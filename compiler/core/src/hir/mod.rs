@@ -3046,7 +3046,23 @@ pub struct Program {
     /// `${o}` and an array's text read off its descriptor
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every
     /// layout, so the backends write one answer rather than each deriving it.
+    /// Read through [`Self::printing`], which asks [`Self::printed_classes`]
+    /// first.
     pub printed: std::collections::BTreeMap<String, Printed>,
+    /// How an instance of each class prints, by layout name and then class
+    /// symbol, for the classes [`Self::distinct_identities`] separates.
+    ///
+    /// **Two classes of one field shape share a layout and do not share how
+    /// they print.** `class Celsius { degrees }` and `class Fahrenheit {
+    /// degrees }` with their own `toString` are one layout, and a layout's
+    /// entry is the agreement of all its types -- so the pair disagreed, the
+    /// layout was refused, and `String(new Celsius(1))` stopped at run time on
+    /// every backend. Every backend already gives each such class an identity
+    /// of its own (a descriptor, a subclass); this is what that identity prints
+    /// by. Keyed by layout as well, because a generic class is one symbol over
+    /// several layouts, each with its own `toString`.
+    pub printed_classes:
+        std::collections::BTreeMap<String, std::collections::BTreeMap<u32, Printed>>,
     /// The signature layouts, by name, whose calls take the typed entry
     /// (`closure_slot`): every layout extending one is a closure class whose
     /// `#call` takes exactly the signature's parameter representations and
@@ -3524,6 +3540,70 @@ impl Program {
         } else {
             Vec::new()
         }
+    }
+
+    /// How an object of `layout` prints: as an instance of `class`, one of
+    /// [`Self::distinct_identities`], or by the layout's own entry -- what a
+    /// plain record or an interface-typed object of the shape prints by. The
+    /// one question a backend asks about printing, so the per-class and
+    /// per-layout tables cannot be read two ways.
+    #[must_use]
+    pub fn printing(&self, layout: &Layout, class: Option<&ClassIdentity>) -> Option<&Printed> {
+        class
+            .and_then(|class| {
+                self.printed_classes
+                    .get(&layout.name)
+                    .and_then(|classes| classes.get(&class.symbol))
+            })
+            .or_else(|| self.printed.get(&layout.name))
+    }
+
+    /// How a value of the schema type `ty` prints, through its layout and,
+    /// where it shares that layout with other classes, its class.
+    #[must_use]
+    pub fn printing_of_type(&self, ty: TypeId) -> Option<&Printed> {
+        let layout = self
+            .layouts
+            .iter()
+            .find(|layout| layout.types.contains(&ty))?;
+        let class = self
+            .distinct_identities(layout)
+            .into_iter()
+            .find(|class| class.types.contains(&ty));
+        self.printing(layout, class)
+    }
+
+    /// Every function some descriptor prints by, in either table: what
+    /// reachability keeps and what a printer check may name.
+    pub fn printing_functions(&self) -> impl Iterator<Item = &str> {
+        self.printed
+            .values()
+            .chain(
+                self.printed_classes
+                    .values()
+                    .flat_map(|classes| classes.values()),
+            )
+            .filter_map(|printed| match printed {
+                Printed::By(name) => Some(name.as_str()),
+                _ => None,
+            })
+    }
+
+    /// The functions `layout` and its classes print by.
+    pub fn printing_functions_of<'a>(&'a self, layout: &Layout) -> impl Iterator<Item = &'a str> {
+        self.printed
+            .get(&layout.name)
+            .into_iter()
+            .chain(
+                self.printed_classes
+                    .get(&layout.name)
+                    .into_iter()
+                    .flat_map(|classes| classes.values()),
+            )
+            .filter_map(|printed| match printed {
+                Printed::By(name) => Some(name.as_str()),
+                _ => None,
+            })
     }
 
     /// Whether anything uses the layout's own identity rather than a class's.

@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Callee, Func, HirType, Layout, ManagedType, OpKind, Printed, Program};
+use super::{Callee, Func, HirType, Layout, ManagedType, OpKind, Program};
 
 mod default_getters;
 
@@ -319,15 +319,7 @@ fn omitted_bodies(program: &Program, table: &NativeDispatch) -> FxHashSet<String
             .is_some_and(|(owner, _)| published.contains(owner))
             .then_some(func.name.as_str())
     }));
-    pending.extend(
-        program
-            .printed
-            .values()
-            .filter_map(|printed| match printed {
-                Printed::By(name) => Some(name.as_str()),
-                _ => None,
-            }),
-    );
+    pending.extend(program.printing_functions());
     let kept = follow_calls(program, &by_name, &layouts, pending);
     candidates
         .difference(&kept)
@@ -382,7 +374,7 @@ fn follow_calls<'p>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hir::{Block, Func, Op, Terminator, ValueId};
+    use crate::hir::{Block, Func, Op, Printed, Terminator, ValueId};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::{GeneratedReason, Origin, TypeId};
 

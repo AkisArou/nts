@@ -137,17 +137,14 @@ fn callback_targets<'p>(
         .flat_map(|at| hierarchy.implementations(at))
         .flat_map(|at| {
             let layout = &program.layouts[at];
-            // And how it prints, which the runtime calls off its descriptor
-            // when it converts the object to a string (`Program::printed`).
-            let printed = match program.printed.get(&layout.name) {
-                Some(super::Printed::By(function)) => Some(function.as_str()),
-                _ => None,
-            };
+            // And how it and its classes print, which the runtime calls off
+            // their descriptors when it converts one to a string
+            // (`Program::printing`).
             layout
                 .methods
                 .iter()
                 .filter_map(Option::as_deref)
-                .chain(printed)
+                .chain(program.printing_functions_of(layout))
         })
         .collect()
 }
@@ -184,14 +181,7 @@ fn printed_through_an_erasure<'p>(
     if !prints || !erased {
         return Vec::new();
     }
-    program
-        .printed
-        .values()
-        .filter_map(|printed| match printed {
-            super::Printed::By(function) => Some(function.as_str()),
-            _ => None,
-        })
-        .collect()
+    program.printing_functions().collect()
 }
 
 /// Runtime helpers that read what they are handed and call none of it, so
@@ -734,7 +724,11 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
 /// A descriptor never names a missing callback. Lowering's pending printer
 /// checks read the same settled table as emission and reachability do.
 pub(super) fn retain_printed(program: &mut Program, keep: &FxHashSet<String>) {
-    for printed in program.printed.values_mut() {
+    let classes = program
+        .printed_classes
+        .values_mut()
+        .flat_map(|classes| classes.values_mut());
+    for printed in program.printed.values_mut().chain(classes) {
         if matches!(printed, super::Printed::By(name) if !keep.contains(name)) {
             *printed = super::Printed::Refused;
         }

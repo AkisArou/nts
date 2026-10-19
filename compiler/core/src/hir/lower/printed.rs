@@ -57,14 +57,7 @@ pub(super) fn settle_checks(program: &mut Program, checks: &mut Vec<Check>) {
     }
     let present = program.funcs.iter().map(|func| func.name.clone()).collect();
     crate::hir::reachable::retain_printed(program, &present);
-    let selected: rustc_hash::FxHashSet<&str> = program
-        .printed
-        .values()
-        .filter_map(|printed| match printed {
-            Printed::By(name) => Some(name.as_str()),
-            _ => None,
-        })
-        .collect();
+    let selected: rustc_hash::FxHashSet<&str> = program.printing_functions().collect();
     let functions: rustc_hash::FxHashMap<&str, usize> = program
         .funcs
         .iter()
@@ -108,19 +101,55 @@ pub(super) fn decide(
     program: &mut Program,
 ) {
     let mut printed = BTreeMap::new();
+    let mut classes: BTreeMap<String, BTreeMap<u32, Printed>> = BTreeMap::new();
     let mut written = Vec::new();
     for layout in &program.layouts {
-        let mut answer = printing(snapshot, hierarchy, closures, naming, program, layout);
-        if answer == Printed::By(error_rule_name(layout)) {
-            match error_to_string(layout) {
-                Some(func) => written.push(func),
-                None => answer = Printed::Refused,
+        // The error rule is one function per layout, written the first time an
+        // answer names it; a layout whose fields do not carry it refuses.
+        let mut rule = None;
+        let mut settle = |answer: Printed| {
+            if answer != Printed::By(error_rule_name(layout)) {
+                return answer;
             }
+            let usable = *rule.get_or_insert_with(|| match error_to_string(layout) {
+                Some(func) => {
+                    written.push(func);
+                    true
+                }
+                None => false,
+            });
+            if usable { answer } else { Printed::Refused }
+        };
+        let answer = printing(
+            snapshot,
+            hierarchy,
+            closures,
+            naming,
+            program,
+            layout,
+            &layout.types,
+        );
+        printed.insert(layout.name.clone(), settle(answer));
+        // Each class sharing the layout prints as its own types agree, which
+        // the layout's entry -- the agreement of every type -- cannot say
+        // when two classes of one shape print differently.
+        for class in program.distinct_identities(layout) {
+            let own: Vec<TypeId> = layout
+                .types
+                .iter()
+                .copied()
+                .filter(|ty| class.types.contains(ty))
+                .collect();
+            let answer = printing(snapshot, hierarchy, closures, naming, program, layout, &own);
+            classes
+                .entry(layout.name.clone())
+                .or_default()
+                .insert(class.symbol, settle(answer));
         }
-        printed.insert(layout.name.clone(), answer);
     }
     program.funcs.extend(written);
     program.printed = printed;
+    program.printed_classes = classes;
 }
 
 /// The compiler's `Error.prototype.toString` for one error layout.
@@ -128,7 +157,8 @@ fn error_rule_name(layout: &Layout) -> String {
     format!("{}@toString", layout.name)
 }
 
-/// How one layout's objects print. See the module documentation.
+/// How the objects of `types`, some of `layout`'s, print: the answer every
+/// one of them agrees on. See the module documentation.
 fn printing(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
@@ -136,6 +166,7 @@ fn printing(
     naming: &Naming,
     program: &Program,
     layout: &Layout,
+    types: &[TypeId],
 ) -> Printed {
     if let Some(closure) = layout
         .types
@@ -157,8 +188,7 @@ fn printing(
     if super::super::is_tuple_layout_name(&layout.name) {
         return Printed::Refused;
     }
-    let answers: Vec<Printed> = layout
-        .types
+    let answers: Vec<Printed> = types
         .iter()
         .map(|ty| {
             if hierarchy.is_an_error(*ty) {
@@ -407,16 +437,37 @@ pub(super) fn devirtualize(
     hierarchy: &Hierarchy,
     program: &mut Program,
 ) {
-    let printed = program.printed.clone();
+    // Each laid-out type's answer, through its class where it shares its
+    // layout with others (`Program::printing`), found once: `direct_form`
+    // asks it for every conversion while the bodies are being rewritten.
+    let mut by_type: BTreeMap<TypeId, (usize, Printed)> = BTreeMap::new();
+    for (at, layout) in program.layouts.iter().enumerate() {
+        let classes = program.distinct_identities(layout);
+        for ty in &layout.types {
+            let class = classes
+                .iter()
+                .copied()
+                .find(|class| class.types.contains(ty));
+            if let Some(answer) = program.printing(layout, class) {
+                by_type.insert(*ty, (at, answer.clone()));
+            }
+        }
+    }
+    let functions: rustc_hash::FxHashSet<String> =
+        program.printing_functions().map(str::to_owned).collect();
     let layouts = program.layouts.clone();
+    let printing = Printing {
+        layouts: &layouts,
+        by_type: &by_type,
+        functions: &functions,
+    };
     for func in &mut program.funcs {
         let rewrites: Vec<(usize, Direct)> = func
             .values
             .iter()
             .enumerate()
             .filter_map(|(at, op)| {
-                direct_form(snapshot, hierarchy, &layouts, &printed, func, op)
-                    .map(|form| (at, form))
+                direct_form(snapshot, hierarchy, &printing, func, op).map(|form| (at, form))
             })
             .collect();
         for (at, form) in rewrites {
@@ -457,6 +508,15 @@ pub(super) fn devirtualize(
     }
 }
 
+/// How every laid-out type prints, as `direct_form` asks it.
+struct Printing<'a> {
+    layouts: &'a [Layout],
+    /// A type's layout, by index, and its answer.
+    by_type: &'a BTreeMap<TypeId, (usize, Printed)>,
+    /// Every function some descriptor prints by.
+    functions: &'a rustc_hash::FxHashSet<String>,
+}
+
 /// What a conversion becomes where its type settles it.
 enum Direct {
     Call(String, ValueId),
@@ -468,8 +528,7 @@ enum Direct {
 fn direct_form(
     snapshot: &SemanticSnapshot,
     hierarchy: &Hierarchy,
-    layouts: &[Layout],
-    printed: &BTreeMap<String, Printed>,
+    printing: &Printing<'_>,
     func: &Func,
     op: &Op,
 ) -> Option<Direct> {
@@ -492,19 +551,26 @@ fn direct_form(
     };
     match &func.values[value.0 as usize].ty {
         HirType::Managed(ManagedType::Object(ty)) if is_a_class(snapshot, hierarchy, *ty) => {
-            let candidates: Vec<&Layout> = layouts
+            // Every type a value of the class can be, each with its layout and
+            // how it prints: per type, because two classes of one layout can
+            // print differently.
+            let (candidates, answers): (Vec<&Layout>, Vec<Option<&Printed>>) = printing
+                .layouts
                 .iter()
-                .filter(|layout| {
+                .flat_map(|layout| {
                     layout
                         .types
                         .iter()
-                        .any(|candidate| hierarchy.descends(*candidate, *ty))
+                        .filter(|candidate| hierarchy.descends(**candidate, *ty))
+                        .map(move |candidate| (layout, candidate))
                 })
-                .collect();
-            let answers: Vec<Option<&Printed>> = candidates
-                .iter()
-                .map(|layout| printed.get(&layout.name))
-                .collect();
+                .map(|(layout, candidate)| {
+                    (
+                        layout,
+                        printing.by_type.get(candidate).map(|(_, answer)| answer),
+                    )
+                })
+                .unzip();
             let first = (*answers.first()?)?;
             if answers.iter().all(|answer| *answer == Some(first)) {
                 return match first {
@@ -518,19 +584,16 @@ fn direct_form(
             // the static type, so its fields sit where the static type's do:
             // the static type's own rule answers for all of them. Not where
             // any of them declares its own `toString`.
-            let own = layouts
-                .iter()
-                .find(|layout| layout.types.contains(ty))
-                .map(error_rule_name)?;
+            let own = printing
+                .by_type
+                .get(ty)
+                .map(|(at, _)| error_rule_name(&printing.layouts[*at]))?;
             let every_one_a_rule = candidates
                 .iter()
                 .zip(&answers)
                 .all(|(layout, answer)| *answer == Some(&Printed::By(error_rule_name(layout))));
-            (every_one_a_rule
-                && printed
-                    .values()
-                    .any(|answer| *answer == Printed::By(own.clone())))
-            .then_some(Direct::Call(own, value))
+            (every_one_a_rule && printing.functions.contains(&own))
+                .then_some(Direct::Call(own, value))
         }
         HirType::Managed(ManagedType::Array(element)) => match element.as_ref() {
             HirType::Float { bits: 64 } => Some(Direct::Join("nts_array_join_num", value)),

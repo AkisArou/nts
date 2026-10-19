@@ -3594,21 +3594,23 @@ fn emit_object_descriptors(
             references.len()
         );
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
-        // How an object of this layout prints (`Program::printed`), which the
-        // runtime reads off the descriptor. A function this program does not
-        // define is null, as a table entry is, and null is a refusal by name.
-        let to_string = match program.printed.get(&layout.name) {
-            Some(Printed::By(function)) => Some(c_identifier(function))
-                .filter(|symbol| defined.contains(symbol))
-                .map_or_else(
-                    || "NULL".to_owned(),
-                    |symbol| format!("(NtsString *(*)(const NtsHeader *))(void *){symbol}"),
-                ),
-            Some(Printed::Object) => "nts_object_to_string".to_owned(),
-            Some(Printed::Function) => "nts_function_to_string".to_owned(),
-            Some(Printed::BoundFunction) => "nts_bound_function_to_string".to_owned(),
-            Some(Printed::Refused) | None => "NULL".to_owned(),
-        };
+        // How an object of this layout, or of one class sharing it, prints
+        // (`Program::printing`), which the runtime reads off the descriptor. A
+        // function this program does not define is null, as a table entry is,
+        // and null is a refusal by name.
+        let to_string =
+            |class: Option<&nts_core::hir::ClassIdentity>| match program.printing(layout, class) {
+                Some(Printed::By(function)) => Some(c_identifier(function))
+                    .filter(|symbol| defined.contains(symbol))
+                    .map_or_else(
+                        || "NULL".to_owned(),
+                        |symbol| format!("(NtsString *(*)(const NtsHeader *))(void *){symbol}"),
+                    ),
+                Some(Printed::Object) => "nts_object_to_string".to_owned(),
+                Some(Printed::Function) => "nts_function_to_string".to_owned(),
+                Some(Printed::BoundFunction) => "nts_bound_function_to_string".to_owned(),
+                Some(Printed::Refused) | None => "NULL".to_owned(),
+            };
         // And what a function of it is called (`Program::function_names`): a
         // literal, or the runtime's marker for a bound function that reads
         // its target's. Null refuses by name.
@@ -3619,11 +3621,14 @@ fn emit_object_descriptors(
             Some(FunctionName::Bound) => "&nts_bound_function_name".to_owned(),
             None => "NULL".to_owned(),
         };
-        let tail = format!(
-            "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {to_string}, \
-             {function_name}",
-            erased.len()
-        );
+        let tail = |class: Option<&nts_core::hir::ClassIdentity>| {
+            format!(
+                "{}u, {erased_offsets}, NTS_ARRAY_UNKNOWN, {foreign}u, {foreign_slots}, {}, \
+                 {function_name}",
+                erased.len(),
+                to_string(class)
+            )
+        };
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
         if published.contains(&index) {
             // One hole per semantic class, even when their storage is shared.
@@ -3918,13 +3923,17 @@ fn instance_of(
 ///
 /// An ordinary class whose layout already has its name needs no extra constant.
 /// A lone class on an interface-named layout still needs its declared name.
+/// A descriptor's fields after its name, for the shape (`None`) or for one
+/// class sharing it: they differ in how the object prints.
+type DescriptorTail<'a> = &'a dyn Fn(Option<&nts_core::hir::ClassIdentity>) -> String;
+
 fn emit_layout_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
     program: &Program,
     layout: &nts_core::hir::Layout,
     shape: &str,
-    body: (&str, &str),
+    body: (&str, DescriptorTail<'_>),
 ) {
     let (shared, tail) = body;
     let sharing = program.distinct_identities(layout);
@@ -3934,21 +3943,25 @@ fn emit_layout_descriptors(
         writer.line(
             origin,
             format!(
-                "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {tail} }};",
-                layout.name
+                "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {} }};",
+                layout.name,
+                tail(None)
             ),
         );
     }
     if sharing.is_empty() {
         return;
     }
+    // Each class its own tail: it prints as that class does, which two
+    // classes of one shape need not agree on (`Program::printed_classes`).
     for class in &sharing {
         writer.line(
             origin,
             format!(
-                "static const NtsDescriptor nts_desc_{shape}__{} = {{ {shared}, \"{}\", {tail} }};",
+                "static const NtsDescriptor nts_desc_{shape}__{} = {{ {shared}, \"{}\", {} }};",
                 identity_suffix(&sharing, class),
                 class.name,
+                tail(Some(class)),
             ),
         );
     }
