@@ -59,14 +59,18 @@ pub(crate) fn candidate(program: &JvmProgram<'_>, face: &Layout) -> bool {
 }
 
 /// Whether `face` may split. One that is a JVM interface already is left as
-/// it is, and so is one with a JVM superclass of its own: the companion
-/// interface would have to stand for that superclass too, which nothing asks
-/// for yet. Fields or none: a face of methods alone that no edge names is not
-/// a JVM interface either (`hierarchy::is_interface` is told by edges), so a
-/// class fitting it by shape was refused a store the same way.
+/// it is. One with a JVM superclass of its own may split only where that
+/// superclass is its proved declared ancestry
+/// ([`JvmProgram::declared_proved`]): the companion then extends the
+/// ancestors' companions, so it never has to stand for a superclass the
+/// declarations do not explain. Fields or none: a face of methods alone
+/// that no edge names is not a JVM interface either
+/// (`hierarchy::is_interface` is told by edges), so a class fitting it by
+/// shape was refused a store the same way.
 #[must_use]
 pub(crate) fn eligible(program: &JvmProgram<'_>, face: &Layout) -> bool {
-    hierarchy::jvm_base(program, face).is_none() && !hierarchy::is_interface(program, face)
+    !hierarchy::is_interface(program, face)
+        && (hierarchy::jvm_base(program, face).is_none() || program.declared_proved(face))
 }
 
 /// The layouts other than `face`'s own whose values a value of `face` can be
@@ -255,8 +259,12 @@ fn held(
 }
 
 /// The descriptor field `at` of split face `face` is read and written at
-/// through its accessor: as the face's own class holds it, which is what the
-/// positional access the accessor stands for leaves on the stack.
+/// through its accessor: as the class that declares the field holds it,
+/// which is what the positional access the accessor stands for leaves on
+/// the stack. The declaring class rather than the face, so a child face
+/// and the parent that declared an inherited field spell its accessor one
+/// way -- the widen plan keys a field on its declaring class, and the two
+/// companions would otherwise declare one accessor at two descriptors.
 #[must_use]
 pub(crate) fn field_descriptor(
     program: &JvmProgram<'_>,
@@ -265,7 +273,8 @@ pub(crate) fn field_descriptor(
     face: &Layout,
     at: u32,
 ) -> Option<String> {
-    held(program, package, plan, face, at as usize)
+    let owner = hierarchy::declares_field(program, face, at as usize);
+    held(program, package, plan, owner, at as usize)
 }
 
 /// Every method a split face's interface declares: its slots, then a getter
@@ -372,10 +381,13 @@ pub(crate) fn members<'a>(
 }
 
 /// The companion interface of split face `face`, declaring [`members`]. It
-/// extends the JVM interfaces the face's layout declares, and **no other
-/// companion**: a member class implements each companion it belongs to
-/// itself (`JvmProgram::settle_faces`), so two faces that flow into each other
-/// are not two interfaces extending each other.
+/// extends the JVM interfaces the face's layout declares, and the
+/// companions of its declared parents ([`JvmProgram::declared_parents`]) --
+/// and **no other companion**: a member class implements each companion it
+/// belongs to itself (`JvmProgram::settle_faces`), so two faces that merely
+/// flow into each other are not two interfaces extending each other. The
+/// declared graph is acyclic where proved, which is all that stands
+/// between these edges and that circularity.
 ///
 /// # Errors
 /// A member with no representation, by name.
@@ -400,6 +412,21 @@ pub(crate) fn interface_class(
         builder
             .interfaces
             .push(types::class_name(package, declared));
+    }
+    // Its declared parents, every one of them: a diamond's two arms both,
+    // never a first parent. A split parent is extended at its companion; a
+    // parent emitted as a JVM interface is extended as itself.
+    for parent in program.declared_parents(face) {
+        let name = if program.is_split(parent) {
+            interface_name(package, parent)
+        } else if hierarchy::is_interface(program, parent) {
+            types::class_name(package, parent)
+        } else {
+            continue;
+        };
+        if !builder.interfaces.contains(&name) {
+            builder.interfaces.push(name);
+        }
     }
     for declared in members(program, package, plan, face).map_err(refused)? {
         builder.method(

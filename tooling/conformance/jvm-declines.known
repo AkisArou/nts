@@ -18,7 +18,6 @@ PerformanceNodeTiming.toJSON ()Lnts/gen/PerformanceNodeTimingJSON; over ()Lnts/g
 # jvm-only when C's read through the target is the source's own field -- same
 # index, same type -- or the target has no field and no slot to read. A row
 # stays unmeasured only where no program can reach the store on C.
-stateful store DurableCacheEntry -> HttpCacheEntry	jvm-only	DurableHttpCacheStore#find newly declines an erased-array write; a-cache-entry-prefix-read-from-an-erased-array reproduces the baseline ClassCastException with extra entry fields, and agrees on C
 stateful store TypeN -> TypeN	jvm-only	pre-existing JVM generic-controller assignment refusal in a-controller-stored-by-a-generic-branch; that producer agrees on C
 unrelated store URLSearchParamsIteratorImpl -> URLSearchParamsIterator<N>	jvm-only	createIterator's existing store now names the semantic empty target; still held as EventTargetLike with no field or live slot. Same store as the former EventTargetLike/BlobExternalReader keys (47199a39b against 2a4e53739), so C reads nothing through it
 unrelated store ReadableStreamAsyncIterator<N> -> AsyncIterableIterator<N>	jvm-only	ReadableStream#values in fs/http/process retains main's iterator store into the same empty EventTargetLike layout, now named by its semantic AsyncIterableIterator identity (08f5ccab1 vs 2a4e53739); no field or live slot can be read through the target. Replaces the former EventTargetLike/Iterable keys

@@ -1,5 +1,9 @@
-// expect: emit-jvm -> `Entry` carries state
-// Main f6811e8f aborts with ClassCastException; the C lane agrees.
+// A cache entry read by prefix from an erased array, through an
+// inheriting face: `Entry extends Metadata`, both carrying state, held
+// by `DurableEntry`, which extends neither. This was a JVM refusal
+// (`Entry` carries state; before that, on f6811e8f, a
+// ClassCastException) until a split face could follow its declared
+// chain; the C lane agreed throughout.
 interface Metadata { readonly url: string; readonly status: number; }
 interface Entry extends Metadata { readonly body: object; }
 class DurableEntry implements Entry { readonly url = "key"; readonly status = 17; readonly body = {}; readonly id = "id"; readonly bodyLength = 2; used = 1; }

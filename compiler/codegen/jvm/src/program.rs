@@ -38,6 +38,138 @@ pub struct JvmProgram<'a> {
     /// Each module global's static field, by global index; see
     /// [`Self::global_field`].
     global_fields: Vec<String>,
+    /// Per layout, its proved declared interface parents and whether its
+    /// whole declared chain is proved; see [`Self::declared_parents`].
+    declared: DeclaredAncestry,
+}
+
+/// Declared interface ancestry, from `InterfaceIdentity::parents` alone.
+///
+/// Semantic ancestry is never inferred from physical prefixes, holder flow
+/// or same-shaped storage: an edge exists here only where the core
+/// published a declared parent for that exact instantiation. A layout is
+/// *proved* when every identity type it holds has a parents entry, every
+/// parent resolves to an interface identity's layout, the chain above it
+/// is likewise proved and acyclic, and its physical superclass chain
+/// (`hierarchy::jvm_base`) names only declared ancestors. Anything else --
+/// a missing entry (unknown), a concrete parent, a cycle, a physical base
+/// the declarations do not explain -- keeps the floor a face has today.
+#[derive(Debug, Default)]
+struct DeclaredAncestry {
+    /// Per layout index, its direct declared parents' layout indices, in
+    /// declaration order with same-layout edges collapsed. Empty where the
+    /// layout is no face or its ancestry is not proved.
+    parents: Vec<Vec<usize>>,
+    /// Per layout index, every declared ancestor's layout index.
+    ancestors: Vec<FxHashSet<usize>>,
+    /// Per layout index, whether its declared chain is proved whole.
+    proved: Vec<bool>,
+}
+
+/// Each layout's own declared edges, before the chain above them is asked:
+/// a layout holding an identity type with no parents entry, a parent with
+/// no layout, or a parent that is no interface identity (a concrete
+/// parent) is not proved, however its fields line up.
+fn declared_edges(
+    program: &Program,
+    by_type: &FxHashMap<TypeId, usize>,
+    identity_of: &FxHashMap<TypeId, &nts_core::hir::InterfaceIdentity>,
+) -> (Vec<Vec<usize>>, Vec<bool>) {
+    let count = program.layouts.len();
+    let mut parents: Vec<Vec<usize>> = vec![Vec::new(); count];
+    let mut local: Vec<bool> = vec![false; count];
+    for (at, layout) in program.layouts.iter().enumerate() {
+        let mut proved = false;
+        let mut edges: Vec<usize> = Vec::new();
+        for id in &layout.types {
+            let Some(identity) = identity_of.get(id) else {
+                continue;
+            };
+            proved = true;
+            let Some(declared) = identity.parents.get(id) else {
+                proved = false;
+                break;
+            };
+            for parent in declared {
+                if !identity_of.contains_key(parent) {
+                    proved = false;
+                    break;
+                }
+                let Some(&parent_at) = by_type.get(parent) else {
+                    proved = false;
+                    break;
+                };
+                // A semantic edge within one shared layout is no edge
+                // here: there is one class and at most one companion.
+                if parent_at != at && !edges.contains(&parent_at) {
+                    edges.push(parent_at);
+                }
+            }
+            if !proved {
+                break;
+            }
+        }
+        local[at] = proved;
+        if proved {
+            parents[at] = edges;
+        }
+    }
+    (parents, local)
+}
+
+/// Whether layout `at`'s declared chain is proved whole: its own edges,
+/// every ancestor's, no cycle, and its physical superclass chain naming
+/// only declared ancestors. A parent emitted as a JVM interface is a
+/// proved leaf -- its own edges are that interface's, emitted with it,
+/// and no companion stands for it.
+fn declared_chain(
+    facts: &JvmProgram<'_>,
+    parents: &[Vec<usize>],
+    local: &[bool],
+    at: usize,
+    state: &mut [u8],
+    ancestors: &mut [FxHashSet<usize>],
+    proved: &mut [bool],
+) -> bool {
+    match state[at] {
+        1 => return false,
+        2 => return proved[at],
+        _ => {}
+    }
+    state[at] = 1;
+    let layout = &facts.program.layouts[at];
+    let mut whole = local[at];
+    let mut above: FxHashSet<usize> = FxHashSet::default();
+    if whole {
+        for &parent in &parents[at] {
+            above.insert(parent);
+            let parent_layout = &facts.program.layouts[parent];
+            if crate::hierarchy::is_interface(facts, parent_layout) {
+                continue;
+            }
+            if !declared_chain(facts, parents, local, parent, state, ancestors, proved) {
+                whole = false;
+                break;
+            }
+            above.extend(ancestors[parent].iter().copied());
+        }
+    }
+    if whole {
+        whole = crate::hierarchy::ancestry(facts, layout)
+            .iter()
+            .skip(1)
+            .all(|base| {
+                facts
+                    .index(base)
+                    .is_some_and(|base_at| above.contains(&base_at))
+            });
+    }
+    state[at] = 2;
+    proved[at] = whole;
+    if whole {
+        ancestors[at] = above;
+    }
+    whole
 }
 
 impl<'a> JvmProgram<'a> {
@@ -76,8 +208,10 @@ impl<'a> JvmProgram<'a> {
             live,
             positional: FxHashSet::default(),
             global_fields: global_fields(program),
+            declared: DeclaredAncestry::default(),
         };
         facts.positional = facts.positional_accesses();
+        facts.declared = facts.declared_ancestry();
         facts.settle_faces();
         facts
     }
@@ -118,6 +252,72 @@ impl<'a> JvmProgram<'a> {
             .is_some_and(|at| self.positional.contains(&(at, field)))
     }
 
+    /// Every layout's declared interface parents, as far as the core proved
+    /// them; see [`DeclaredAncestry`].
+    fn declared_ancestry(&self) -> DeclaredAncestry {
+        let program = self.program;
+        let count = program.layouts.len();
+        let mut by_type: FxHashMap<TypeId, usize> = FxHashMap::default();
+        for (at, layout) in program.layouts.iter().enumerate() {
+            for id in &layout.types {
+                by_type.entry(*id).or_insert(at);
+            }
+        }
+        let mut identity_of: FxHashMap<TypeId, &nts_core::hir::InterfaceIdentity> =
+            FxHashMap::default();
+        for identity in &program.interface_identities {
+            for id in &identity.types {
+                identity_of.entry(*id).or_insert(identity);
+            }
+        }
+        let (mut parents, local) = declared_edges(program, &by_type, &identity_of);
+        let mut state = vec![0u8; count];
+        let mut ancestors: Vec<FxHashSet<usize>> = vec![FxHashSet::default(); count];
+        let mut proved = vec![false; count];
+        for at in 0..count {
+            declared_chain(
+                self,
+                &parents,
+                &local,
+                at,
+                &mut state,
+                &mut ancestors,
+                &mut proved,
+            );
+        }
+        for at in 0..count {
+            if !proved[at] {
+                parents[at].clear();
+                ancestors[at].clear();
+            }
+        }
+        DeclaredAncestry {
+            parents,
+            ancestors,
+            proved,
+        }
+    }
+
+    /// `layout`'s direct declared interface parents, where its whole chain
+    /// is proved; empty otherwise.
+    #[must_use]
+    pub fn declared_parents<'p>(&'p self, layout: &Layout) -> Vec<&'p Layout> {
+        let program = self.program;
+        self.index(layout)
+            .and_then(|at| self.declared.parents.get(at))
+            .map(|edges| edges.iter().map(|&at| &program.layouts[at]).collect())
+            .unwrap_or_default()
+    }
+
+    /// Whether `layout`'s declared interface chain is proved whole.
+    #[must_use]
+    pub fn declared_proved(&self, layout: &Layout) -> bool {
+        self.index(layout)
+            .and_then(|at| self.declared.proved.get(at))
+            .copied()
+            .unwrap_or(false)
+    }
+
     /// Which faces split, who belongs to each, and who implements which.
     ///
     /// **A face's values are its holders' and its holders' values.** A class
@@ -125,10 +325,21 @@ impl<'a> JvmProgram<'a> {
     /// `M` too, and an `invokeinterface M$Face` reaches it. So each split face's
     /// members are the closure of its direct holders through every holder that
     /// is a face, and every member class implements the companion interface
-    /// itself. The companion interfaces extend none of each other: two faces
-    /// that flow into each other made them extend each other, and the JVM
-    /// refused every class that loaded either -- `ClassCircularityError` in
-    /// `in-operator` and four runtime modules.
+    /// itself. Companion interfaces extend each other only along declared
+    /// ancestry ([`DeclaredAncestry`]): two faces that merely flow into each
+    /// other made them extend each other, and the JVM refused every class
+    /// that loaded either -- `ClassCircularityError` in `in-operator` and
+    /// four runtime modules. The declared graph is acyclic where proved,
+    /// which is what reopens the door for it and nothing else.
+    ///
+    /// **Declared ancestry closes membership upward.** A holder of a child
+    /// face is a value of every declared ancestor whether or not a value of
+    /// it ever flows into an ancestor-typed place, and the child's own
+    /// layout is one too. Each is admitted only where it can be a value of
+    /// that ancestor itself ([`crate::split_faces::can_be`]): proof for the
+    /// child alone does not prove the parent. An ancestor of a split face
+    /// splits too, even with no direct holder of its own, because the
+    /// child's companion extends its companion.
     fn settle_faces(&mut self) {
         let program = self.program;
         let direct: Vec<Vec<usize>> = program
@@ -145,37 +356,39 @@ impl<'a> JvmProgram<'a> {
                 }
             })
             .collect();
+        let member_sets = self.close_members(&direct);
+        let descends = |face: &Layout, member: usize| {
+            crate::hierarchy::ancestry(self, &program.layouts[member])
+                .iter()
+                .any(|above| std::ptr::eq(*above, face))
+        };
+        let mut split: FxHashSet<usize> = FxHashSet::default();
         for (at, face) in program.layouts.iter().enumerate() {
-            if direct[at].is_empty() || !crate::split_faces::is_face(self, face) {
-                continue;
-            }
-            let mut members: FxHashSet<usize> = FxHashSet::default();
-            let mut queue: Vec<usize> = direct[at].clone();
-            while let Some(next) = queue.pop() {
-                // A holder of a holder is a member only if it can be a value
-                // of *this* face: one keeping the field it reaches somewhere
-                // else is not, whatever the face between them allows -- 3258
-                // refusing accessor stubs when the closure did not ask.
-                if next == at
-                    || members.contains(&next)
-                    || !crate::split_faces::can_be(self, face, &program.layouts[next])
-                {
-                    continue;
-                }
-                members.insert(next);
-                queue.extend(direct[next].iter().copied());
-            }
-            let descends = |member: usize| {
-                crate::hierarchy::ancestry(self, &program.layouts[member])
-                    .iter()
-                    .any(|above| std::ptr::eq(*above, face))
-            };
             if crate::split_faces::eligible(self, face)
-                && members.iter().any(|member| !descends(*member))
+                && member_sets[at]
+                    .iter()
+                    .any(|member| !descends(face, *member))
             {
-                self.split.extend(face.types.iter().copied());
-                self.members.insert(at, members);
+                split.insert(at);
             }
+        }
+        // A split face's companions extend its declared ancestors'
+        // companions, so every proved, eligible ancestor splits too.
+        let mut queue: Vec<usize> = split.iter().copied().collect();
+        while let Some(at) = queue.pop() {
+            for &ancestor in &self.declared.ancestors[at] {
+                if !split.contains(&ancestor)
+                    && crate::split_faces::eligible(self, &program.layouts[ancestor])
+                {
+                    split.insert(ancestor);
+                    queue.push(ancestor);
+                }
+            }
+        }
+        for at in split {
+            let face = &program.layouts[at];
+            self.split.extend(face.types.iter().copied());
+            self.members.insert(at, member_sets[at].clone());
         }
         // Each member implements the interface itself unless its class is the
         // face's or one below it, or a class above it is a member already.
@@ -197,6 +410,96 @@ impl<'a> JvmProgram<'a> {
             }
         }
         self.implemented = implemented;
+    }
+
+    /// Every face's members, closed under holder flow and under declared
+    /// ancestry, each admission re-asked of the face it joins.
+    ///
+    /// Flow first, as settlement always closed it. Then ancestry, in
+    /// descendant-first order over the declared graph: a face pushes
+    /// itself and its members into every ancestor, expanded through
+    /// holder flow there too, so when an ancestor's turn comes its set
+    /// already holds what its descendants contributed and one pass
+    /// suffices.
+    fn close_members(&self, direct: &[Vec<usize>]) -> Vec<FxHashSet<usize>> {
+        let program = self.program;
+        let mut can: FxHashMap<(usize, usize), bool> = FxHashMap::default();
+        let mut admit = |facts: &Self, face: usize, candidate: usize| {
+            *can.entry((face, candidate)).or_insert_with(|| {
+                crate::split_faces::can_be(
+                    facts,
+                    &program.layouts[face],
+                    &program.layouts[candidate],
+                )
+            })
+        };
+        let mut member_sets: Vec<FxHashSet<usize>> =
+            vec![FxHashSet::default(); program.layouts.len()];
+        for (at, face) in program.layouts.iter().enumerate() {
+            if !crate::split_faces::is_face(self, face) {
+                continue;
+            }
+            let mut queue: Vec<usize> = direct[at].clone();
+            while let Some(next) = queue.pop() {
+                // A holder of a holder is a member only if it can be a
+                // value of *this* face: one keeping the field it reaches
+                // somewhere else is not, whatever the face between them
+                // allows -- 3258 refusing accessor stubs when the closure
+                // did not ask.
+                if next == at || member_sets[at].contains(&next) || !admit(self, at, next) {
+                    continue;
+                }
+                member_sets[at].insert(next);
+                queue.extend(direct[next].iter().copied());
+            }
+        }
+        for at in self.descendant_first() {
+            if !self.declared.proved[at] {
+                continue;
+            }
+            let candidates: Vec<usize> = std::iter::once(at)
+                .chain(member_sets[at].iter().copied())
+                .collect();
+            for &ancestor in &self.declared.ancestors[at] {
+                let mut queue: Vec<usize> = candidates.clone();
+                while let Some(candidate) = queue.pop() {
+                    if candidate == ancestor
+                        || member_sets[ancestor].contains(&candidate)
+                        || !admit(self, ancestor, candidate)
+                    {
+                        continue;
+                    }
+                    member_sets[ancestor].insert(candidate);
+                    queue.extend(direct[candidate].iter().copied());
+                }
+            }
+        }
+        member_sets
+    }
+
+    /// Layout indices with every declared descendant before its ancestors:
+    /// a post-order over the declared graph, reversed. Unproved layouts
+    /// have no edges and sit anywhere.
+    fn descendant_first(&self) -> Vec<usize> {
+        fn visit(parents: &[Vec<usize>], at: usize, state: &mut [u8], order: &mut Vec<usize>) {
+            if state[at] != 0 {
+                return;
+            }
+            state[at] = 1;
+            for &parent in &parents[at] {
+                visit(parents, parent, state, order);
+            }
+            state[at] = 2;
+            order.push(at);
+        }
+        let count = self.program.layouts.len();
+        let mut state = vec![0u8; count];
+        let mut order: Vec<usize> = Vec::with_capacity(count);
+        for at in 0..count {
+            visit(&self.declared.parents, at, &mut state, &mut order);
+        }
+        order.reverse();
+        order
     }
 
     /// The core's program, for a caller that needs the type itself.
