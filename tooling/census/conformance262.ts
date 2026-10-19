@@ -5,6 +5,7 @@
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
 //        [--backend c|llvm|jvm|wasm] [--paths-from <tsv>] [--fresh]
+//        [--suite test262|typescript]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
 // die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
@@ -24,6 +25,13 @@
 // before any backend runs. `--paths-from <tsv>` selects the cases another
 // record names without comparing against it, which is how a backend's first
 // record is made from C's.
+//
+// `--suite typescript` runs the TypeScript conformance cases instead
+// (`tests/typescript/<family>/<case>.ts`, selected by `suites/typescript.ts`):
+// strict TypeScript with test262's front matter and harness, recorded,
+// ratcheted and ranked exactly as a test262 row is. Only the selection, the
+// language the case is written in and the exclusions differ, and a TypeScript
+// case has no negatives.
 //
 // # Why this exists beside `run262.ts`
 //
@@ -109,13 +117,21 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
-import { bodyOf, collectCaseRoots, HARNESS_HASH, pinCompiler, populationOf } from "./project.ts";
+import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
+import { selectTypescript } from "./suites/typescript.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
 import { Admission, createFeed } from "../gate/admission.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const SUITE = join(ROOT, "third_party/test262");
+const argvEarly = process.argv.slice(2);
+// Which suite: test262, upstream and unedited, or the TypeScript cases. The
+// suite's root is what every path is relative to.
+const SUITE_NAME = argvEarly.includes("--suite") ? argvEarly[argvEarly.indexOf("--suite") + 1] : "test262";
+const TYPESCRIPT = SUITE_NAME === "typescript";
+const SUITE = TYPESCRIPT ? ROOT : join(ROOT, "third_party/test262");
+const LANGUAGE = TYPESCRIPT ? "ts" : "js";
+const HARNESS_HASH = harnessHashOf(LANGUAGE);
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
 // Under `~/.cache`, not `/tmp`: `/tmp` is a tmpfs that runs out of inodes
@@ -128,7 +144,7 @@ const flag = (name, fallback) => {
   const at = argv.indexOf(name);
   return at === -1 ? fallback : argv[at + 1];
 };
-const under = flag("--under", "test/language");
+const under = flag("--under", TYPESCRIPT ? "tests/typescript" : "test/language");
 // Eight, not a fraction of the cores: memory, not CPU, is what ran out. The
 // frontend is the large process, and eight of them at their ordinary ~100 MB
 // leave room for one case that climbs to the cap.
@@ -157,6 +173,7 @@ function cannotMeasure(why) {
 }
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
+if (!["test262", "typescript"].includes(SUITE_NAME)) cannotMeasure(`--suite ${SUITE_NAME} is neither test262 nor typescript`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
 // **A record is a claim about a commit, so it is written from a pin of one.**
 // A record's header names its commit only for a clean, unpatched pin (see
@@ -296,21 +313,25 @@ const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OB
 // waited behind `cargo test` compiling, and it built a second, debug copy of a
 // binary the release build already has. Same source, no feature gates it.
 let records;
-try {
-  const protocol = process.env.NTS_TEST262_PROTOCOL;
-  records = execFileSync(
-    protocol ?? "cargo",
-    protocol ? ["select", SUITE, under] : [
-      "run", "-q", "-p", "nts-suite", "--no-default-features",
-      "--bin", "nts-test262-protocol", "--", "select", SUITE, under,
-    ],
-    { cwd: ROOT, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
-  )
-    .split("\n")
-    .filter((line) => line !== "")
-    .map((line) => JSON.parse(line));
-} catch (error) {
-  cannotMeasure(`the selection could not be produced: ${String(error.message).split("\n")[0]}`);
+if (TYPESCRIPT) {
+  records = selectTypescript(ROOT, under);
+} else {
+  try {
+    const protocol = process.env.NTS_TEST262_PROTOCOL;
+    records = execFileSync(
+      protocol ?? "cargo",
+      protocol ? ["select", SUITE, under] : [
+        "run", "-q", "-p", "nts-suite", "--no-default-features",
+        "--bin", "nts-test262-protocol", "--", "select", SUITE, under,
+      ],
+      { cwd: ROOT, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
+    )
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => JSON.parse(line));
+  } catch (error) {
+    cannotMeasure(`the selection could not be produced: ${String(error.message).split("\n")[0]}`);
+  }
 }
 if (records.length === 0) cannotMeasure(`${under} selected no test`);
 
@@ -329,8 +350,12 @@ const partial = sample > 0 || recordedFile !== null;
 const FEATURES = JSON.parse(readFileSync(join(HERE, "features.json"), "utf8"));
 const EXTRA = JSON.parse(readFileSync(join(HERE, "test262-exclusions.json"), "utf8"));
 
-/** `{ id, kind, match, reason, authority }` -- one list, from two ledgers. */
-const exclusions = [
+/**
+ * `{ id, kind, match, reason, authority }` -- one list, from two ledgers.
+ * Both are test262's: a TypeScript case is in scope by being written, so its
+ * suite excludes nothing.
+ */
+const exclusions = TYPESCRIPT ? [] : [
   ...Object.entries(FEATURES.features ?? FEATURES)
     .filter(([name, entry]) => !name.startsWith("//") && entry?.class === "inapplicable")
     .map(([name, entry]) => ({
@@ -466,7 +491,7 @@ async function runAll(all) {
     new Promise((resolve, reject) => {
       const child = spawn(
         process.execPath,
-        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots"],
+        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
         { stdio: ["pipe", "pipe", "inherit"] },
       );
       let exited = false;
@@ -555,6 +580,9 @@ function classify(row) {
     }
     case "timeout":
       return { outcome: "no-verdict", cause: `timeout${row.why ? ` (${row.why})` : ""}` };
+    // A TypeScript case node itself fails: the case is wrong, not the compiler.
+    case "oracle":
+      return { outcome: "no-verdict", cause: `oracle: node fails the case: ${row.why}` };
     case "crash":
       return { outcome: "no-verdict", cause: `crash (${row.why})${row.first ? `: ${row.first}` : ""}` };
     case "memory-cap":
@@ -962,6 +990,24 @@ say(`  outcome        cases   of ${population.length}`);
 for (const o of OUTCOMES) say(`  ${o.padEnd(12)} ${String(tally[o]).padStart(7)}   ${pct(tally[o], population.length).padStart(7)}`);
 say(`  ${"sum".padEnd(12)} ${String(summed).padStart(7)}`);
 say();
+// The TypeScript suite's index from concept to case: each `features:` tag
+// with how its cases came out, on this backend. A case carries several tags,
+// so the rows overlap and do not sum to the population.
+if (TYPESCRIPT) {
+  const byFeature = new Map();
+  for (const c of cases) {
+    for (const feature of c.record.features ?? []) {
+      const counts = byFeature.get(feature) ?? Object.fromEntries(OUTCOMES.map((o) => [o, 0]));
+      counts[c.outcome] += 1;
+      byFeature.set(feature, counts);
+    }
+  }
+  say(`  by feature                       ${OUTCOMES.map((o) => o.padStart(10)).join(" ")}`);
+  for (const [feature, counts] of [...byFeature].sort(([a], [b]) => a.localeCompare(b))) {
+    say(`    ${feature.padEnd(30)} ${OUTCOMES.map((o) => String(counts[o]).padStart(10)).join(" ")}`);
+  }
+  say();
+}
 if (partial) {
   // A headline over a sample or over the recorded set is not conformance: the
   // denominator is not the suite. Printed as what it is, and nothing else.

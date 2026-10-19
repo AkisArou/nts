@@ -423,10 +423,10 @@ export const BACKENDS = {
 export function attempt(dir, body, tools, origin?) {
   const { nts } = tools;
   const project = tools.fresh
-    ? (materialise(dir, body, origin), dir)
+    ? (materialise(dir, body, origin, tools.language), dir)
     : caseRoot((root) => {
-        workspace(root);
-        materialise(root, body, origin);
+        workspace(root, tools.language);
+        materialise(root, body, origin, tools.language);
       }).root;
   const out = join(dir, "out");
 

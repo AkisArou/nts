@@ -1,7 +1,10 @@
 // One worker of `conformance262.ts`: reads a Test262 path per stdin line,
 // writes one JSON outcome per stdout line, in order.
 //
-//   node tooling/census/attempt262-worker.ts <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache] [backend] [fresh]
+//   node tooling/census/attempt262-worker.ts <scratch> <nts> <cc> <suite> [memory-cap-kb] [object-cache] [backend] [fresh] [js|ts]
+//
+// `<suite>` is the root the paths are relative to; the last argument is the
+// language the cases are written in (`project.ts` `Language`).
 //
 // **One workspace per worker, never shared.** `attempt` writes `src/main.js`
 // and then compiles it, so two attempts in one directory race on that file and
@@ -19,17 +22,30 @@ import { createInterface } from "node:readline";
 
 import { attempt } from "./attempt262.ts";
 import { workspace } from "./project.ts";
+import { oracle } from "./suites/typescript.ts";
 
-const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend, fresh] = process.argv.slice(2);
-const dir = workspace(scratch);
-const tools = { nts, cc, memoryCapKb: Number(memoryCapKb ?? 0), objectCache, backend: backend ?? "c", fresh: fresh === "fresh" };
+const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend, fresh, language] = process.argv.slice(2);
+const tools = {
+  nts,
+  cc,
+  memoryCapKb: Number(memoryCapKb ?? 0),
+  objectCache,
+  backend: backend ?? "c",
+  fresh: fresh === "fresh",
+  language: language === "ts" ? ("ts" as const) : ("js" as const),
+};
+const dir = workspace(scratch, tools.language);
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const path of lines) {
   if (path === "") continue;
   let outcome;
   try {
-    outcome = attempt(dir, readFileSync(join(suite, path), "utf8"), tools, join(suite, path));
+    const source = readFileSync(join(suite, path), "utf8");
+    // A TypeScript case is admitted by node first: one node fails is a wrong
+    // case, and is reported as that rather than measured against nts.
+    const admitted = tools.language === "ts" ? oracle(source, dir) : { ok: true as const };
+    outcome = admitted.ok ? attempt(dir, source, tools, join(suite, path)) : { bucket: "oracle", why: admitted.why };
   } catch (error) {
     // A throw out of `attempt` is this instrument failing, not the test: it is
     // reported as such, never dropped, so the orchestrator's reconciliation

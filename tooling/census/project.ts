@@ -74,6 +74,29 @@ export const HARNESS_HASH = [LAYOUT, HARNESS, ...GLOBALS.map((g) => g.source), .
   .digest("hex")
   .slice(0, 16);
 
+/**
+ * The language a case is written in: test262's JavaScript (`js`), or a
+ * TypeScript conformance case (`ts`, `tests/typescript/`), which is strict
+ * TypeScript and is checked as such -- the same harness, the same layout,
+ * with the test in `src/main.ts`.
+ */
+export type Language = "js" | "ts";
+
+/** Where a case of `language` is written. */
+export function testFileOf(language: Language = "js") {
+  return language === "ts" ? "src/main.ts" : TEST_FILE;
+}
+
+/**
+ * The harness identity a record of `language` names. test262's is
+ * [`HARNESS_HASH`] unchanged, so every existing record still matches; a
+ * TypeScript record's adds its own layout, since its test is another file.
+ */
+export function harnessHashOf(language: Language = "js") {
+  if (language === "js") return HARNESS_HASH;
+  return createHash("sha256").update(HARNESS_HASH).update(testFileOf(language)).digest("hex").slice(0, 16);
+}
+
 /** The stand-in one test receives: `HARNESS`, the members it calls, and `$DONOTEVALUATE` if it names it. */
 export function harnessFor(body) {
   const opening = "namespace assert {\n";
@@ -91,19 +114,28 @@ export const FRONTMATTER = /\/\*---([\s\S]*?)---\*\//;
  * (`flags:\n  - async`), as the metadata parser reads both.
  */
 export function flagsOf(source) {
-  const meta = FRONTMATTER.exec(source)?.[1] ?? "";
-  const flow = /^\s*flags:\s*\[([^\]]*)\]/m.exec(meta);
-  if (flow) return flow[1].split(",").map((f) => f.trim()).filter(Boolean);
-  const block = /^\s*flags:\s*\n((?:\s*-\s*\S+\s*\n?)+)/m.exec(meta);
-  return block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((m) => m[1]) : [];
+  return frontmatterList(source, "flags");
 }
 
 /** A test262 file's `includes:`, flow-style or a block list, as `flagsOf` reads flags. */
 export function includesOf(source) {
+  return frontmatterList(source, "includes");
+}
+
+/** A case's `features:`, the concepts it exercises. */
+export function featuresOf(source) {
+  return frontmatterList(source, "features");
+}
+
+/**
+ * A list-valued front-matter key, in either YAML spelling test262 uses: flow
+ * (`key: [a, b]`) or block (`key:` then `- a` lines).
+ */
+function frontmatterList(source, key) {
   const meta = FRONTMATTER.exec(source)?.[1] ?? "";
-  const flow = /^\s*includes:\s*\[([^\]]*)\]/m.exec(meta);
+  const flow = new RegExp(`^\\s*${key}:\\s*\\[([^\\]]*)\\]`, "m").exec(meta);
   if (flow) return flow[1].split(",").map((f) => f.trim()).filter(Boolean);
-  const block = /^\s*includes:\s*\n((?:\s*-\s*\S+\s*\n?)+)/m.exec(meta);
+  const block = new RegExp(`^\\s*${key}:\\s*\\n((?:\\s*-\\s*\\S+\\s*\\n?)+)`, "m").exec(meta);
   return block ? [...block[1].matchAll(/-\s*(\S+)/g)].map((m) => m[1]) : [];
 }
 
@@ -117,7 +149,7 @@ export const bodyOf = (source) => source.replace(FRONTMATTER, "");
  * nothing, silently, and the options vanish — which has already cost this
  * repository a probe that measured a different language than it meant to.
  */
-export function workspace(dir) {
+export function workspace(dir, language: Language = "js") {
   // The workspace owns `src/`: a file a previous layout left there -- a
   // `main.ts` beside today's `main.js` -- is compiled with it, and declares
   // every name twice (TS2300).
@@ -157,7 +189,7 @@ export function workspace(dir) {
         // be evaluated whether or not anything loads it, so "evaluated lazily,
         // once" could not be seen, and a test checking a fixture has not run
         // yet would pass for the wrong reason.
-        include: [HARNESS_FILE, `${INCLUDE_PREFIX}*`, TEST_FILE],
+        include: [HARNESS_FILE, `${INCLUDE_PREFIX}*`, testFileOf(language)],
       },
       null,
       2,
@@ -184,7 +216,7 @@ export function workspace(dir) {
  * include's top-level statements (`tcoHelper.js`'s `$MAX_ITERATIONS`) are
  * done before the test's first line.
  */
-export function materialise(dir, body, origin?) {
+export function materialise(dir, body, origin?, language: Language = "js") {
   const src = join(dir, "src");
   for (const stale of readdirSync(src).filter((f) => `src/${f}`.startsWith(INCLUDE_PREFIX))) rmSync(join(src, stale));
   for (const stale of readdirSync(src, { recursive: true }).map(String).filter((f) => f.endsWith("_FIXTURE.js"))) rmSync(join(src, stale), { force: true });
@@ -208,7 +240,7 @@ export function materialise(dir, body, origin?) {
   // errors (`await` as a name, a duplicate export) are the point of many of
   // them -- so it is marked a module the way a fixture is.
   const test = `${TEST_PRELUDE}${body}`;
-  writeFileSync(join(dir, TEST_FILE), flagsOf(body).includes("module") ? asModule(test) : test);
+  writeFileSync(join(dir, testFileOf(language)), flagsOf(body).includes("module") ? asModule(test) : test);
 }
 
 /**
