@@ -164,6 +164,7 @@ test("what a step runs owes that step", () => {
   // A case is also an input of the runner every test262 step drives (its
   // default directory), so stepInputs owes those too: broad, never short.
   owes("tests/typescript/enums/numeric-members.ts", ["typescript-cases"], { not: ["examples"] });
+  owes("tests/typescript-pending/decorators/README.md", ["typescript-cases"], { not: ["examples", "test262-cases"] });
   owes("tooling/gate/compile-times.tsv", ["compile-time"]);
 });
 

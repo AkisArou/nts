@@ -496,9 +496,10 @@ export const RULES = [
   },
   {
     // A case and its records: typescript_cases runs every backend's, by paths
-    // it builds from the backend's name.
+    // it builds from the backend's name. A pending case (one node cannot be
+    // the oracle for yet) runs nowhere, and is here so it owes no more.
     name: "the TypeScript conformance suite",
-    when: (p) => /^(tests\/typescript|results\/typescript)\//.test(p) || p === "tooling/census/suites/typescript.ts",
+    when: (p) => /^(tests\/typescript|tests\/typescript-pending|results\/typescript)\//.test(p) || p === "tooling/census/suites/typescript.ts",
     steps: ["typescript-cases"],
     arms: [{ kind: "answers", asks: "does node, the oracle, pass a new case first", run: "node tooling/census/conformance262.ts --suite typescript --under tests/typescript/<family>" }],
   },
