@@ -2014,12 +2014,13 @@ changes: a counted handle is borrowed for it, as it is for `===`.
 from storage or from a declared `@ntsConstant` -- so the bits of a pointer are
 not an escape of it, `local()` storage included. In HIR it is
 `OpKind::NativePointerBits`, the one exception to `NativePointer`'s "never
-represented as a number", and the verifier holds it to that: no `Convert` has a
-pointer on one side and a number on the other, and an assertion chain
+represented as a number", and the verifier holds it to that: a `Convert` with a
+pointer on one side has a pointer on the other, and an assertion chain
 (`p as unknown as c_uintptr_t`) is still refused
-(`tests/refusals/pointer-bits-by-assertion`). A managed value made a pointer by
-`Convert` is the other half, and not yet a rule: `lend_string` lends a
-`StringView` that way, and naming that lend is what widens the rule.
+(`tests/refusals/pointer-bits-by-assertion`). The one other crossing is a
+`StringView`, the string itself lent to C as `const NtsBorrowedString *`:
+`OpKind::NativeStringView`, a loan with no count of its own that leans on the
+string, so the string is released after the call that reads it.
 
 C spells it `(uint64_t)(uintptr_t)p`; LLVM `ptrtoint`. `ptrtoaddr`, which is
 exactly this operation and captures no provenance, is LLVM 22's, and a cross

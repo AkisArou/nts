@@ -121,6 +121,7 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::NativeMalloc { .. }
         | OpKind::NativeFree { .. }
         | OpKind::NativePointerBits { .. }
+        | OpKind::NativeStringView { .. }
         | OpKind::NativeIndexAddress { .. }
         | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. }

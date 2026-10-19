@@ -4704,6 +4704,7 @@ fn emit_body(
                     | OpKind::NativeMalloc { .. }
                     | OpKind::ArrayGet { .. }
                     | OpKind::Convert(_)
+                    | OpKind::NativeStringView { .. }
             )
     });
 
@@ -5914,7 +5915,17 @@ fn emit_op(
         // A cast has no effect, so one nothing reads in C is not emitted: the
         // remainder `float_remainder` answers from the integers beneath its
         // operands leaves exactly that behind (`operands_in_c`).
-        OpKind::Convert(_) if !context.read.contains(&value) => return Ok(()),
+        OpKind::Convert(_) | OpKind::NativeStringView { .. } if !context.read.contains(&value) => {
+            return Ok(());
+        }
+        // The string itself, as the opaque type C reads it through.
+        OpKind::NativeStringView { string } => {
+            let target = match &op.ty {
+                HirType::NativePointer(pointee) => pointee.pointer_type(),
+                other => c_type(other, &op.origin)?.to_owned(),
+            };
+            format!("{name} = ({target}){};", value_name(*string))
+        }
         OpKind::Convert(operand) => {
             // A C cast. Between an integer and a double this is one instruction,
             // and every one is a place specialization decided two adjacent

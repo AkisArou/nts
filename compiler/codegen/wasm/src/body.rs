@@ -663,6 +663,7 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::NativeMalloc { .. }
             | OpKind::NativeFree { .. }
             | OpKind::NativePointerBits { .. }
+            | OpKind::NativeStringView { .. }
             | OpKind::NativeIndexAddress { .. }
             | OpKind::NativeFieldAddress { .. }
             | OpKind::NativeBitLoad { .. }

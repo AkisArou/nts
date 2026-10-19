@@ -1551,6 +1551,7 @@ fn runs_elsewhere(kind: &OpKind) -> bool {
             | OpKind::Unary { .. }
             | OpKind::Convert(_)
             | OpKind::NativePointerBits { .. }
+            | OpKind::NativeStringView { .. }
             | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
             | OpKind::ArrayGet { .. }

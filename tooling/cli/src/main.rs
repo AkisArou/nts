@@ -3245,6 +3245,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::NativePointerBits { pointer } => {
             format!("%{index} = native.bits %{} : {ty}", pointer.0)
         }
+        OpKind::NativeStringView { string } => {
+            format!("%{index} = native.string.view %{} : {ty}", string.0)
+        }
         OpKind::PromiseSubscribe {
             promise,
             reaction,

@@ -343,6 +343,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         }
         OpKind::Unary { operand, .. }
         | OpKind::Convert(operand)
+        | OpKind::NativeStringView { string: operand }
         | OpKind::FieldView { value: operand, .. } => *operand = of(*operand),
         OpKind::Call { args, .. } => {
             for arg in args {
@@ -618,6 +619,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::Unary { .. }
             | OpKind::Convert(_)
             | OpKind::NativePointerBits { .. }
+            | OpKind::NativeStringView { .. }
             | OpKind::FieldView { .. }
             | OpKind::TagOf { .. }
             | OpKind::InstanceOf { .. }

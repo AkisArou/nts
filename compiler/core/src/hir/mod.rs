@@ -1118,6 +1118,18 @@ pub enum OpKind {
     NativePointerBits {
         pointer: ValueId,
     },
+    /// A `StringView`: the string itself, lent to C for one call as the opaque
+    /// `const NtsBorrowedString *` C reads with `nts_string_view`.
+    ///
+    /// **A loan, not a conversion**, and an op of its own for that reason: it
+    /// was a `Convert` from the string to the pointer, which made "a managed
+    /// value becomes a native pointer" something any `Convert` could say. It
+    /// allocates nothing and holds no count: the pointer leans on the string
+    /// (`rc`'s `Leaning`, through its operand), so the string's release follows
+    /// the last read of the view -- the call it was lent for.
+    NativeStringView {
+        string: ValueId,
+    },
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress {
         pointer: ValueId,
@@ -4874,6 +4886,7 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             OpKind::Erase { .. }
                 | OpKind::Unerase { .. }
                 | OpKind::Convert(_)
+                | OpKind::NativeStringView { .. }
                 | OpKind::FieldView { .. }
                 | OpKind::BlockParam(_)
         )
@@ -4898,6 +4911,7 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
             OpKind::Erase { value, .. }
             | OpKind::Unerase { value }
             | OpKind::Convert(value)
+            | OpKind::NativeStringView { string: value }
             | OpKind::FieldView { value, .. } => {
                 pending.push(value);
             }

@@ -24,6 +24,12 @@
 //     observe({ trackVisibility: true });
 //
 // compiles.
+//
+// The field is lent by the operation that says so, `NativeStringView`, and
+// not by a conversion: a managed value made a native pointer by `Convert` is
+// refused by the verifier.
+// expect-ir: c llvm: count native.string.view in go == 1
+// expect-ir: c llvm: no convert in go
 
 import { observe } from "nts:observer";
 export function go(margin: string): number {

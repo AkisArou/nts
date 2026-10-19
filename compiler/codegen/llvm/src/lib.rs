@@ -3545,8 +3545,11 @@ fn operation(
         //
         // Out-of-range float to integer is undefined in C and poison here --
         // the same hazard by the same argument, and specialization only emits
-        // one where the interval analysis proved the value fits.
-        OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. } => {
+        // one where the interval analysis proved the value fits. A string
+        // view is the string's own `ptr`, read as the view's.
+        OpKind::Convert(operand)
+        | OpKind::FieldView { value: operand, .. }
+        | OpKind::NativeStringView { string: operand } => {
             return representation_change(func, value, *operand, &out);
         }
         OpKind::Call { .. } => return call(program, func, value, &out, platform),

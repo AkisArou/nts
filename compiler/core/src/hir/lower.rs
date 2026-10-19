@@ -69778,7 +69778,12 @@ impl<'a> FuncBuilder<'a> {
         origin: Origin,
     ) -> ValueId {
         let Some(to_c) = encoding.to_c() else {
-            return self.push(OpKind::Convert(string), representation, origin);
+            // A view is the string itself, lent (`NativeStringView`). One
+            // already at the view's representation is passed on as it is.
+            if self.values[string.0 as usize].ty == representation {
+                return string;
+            }
+            return self.push(OpKind::NativeStringView { string }, representation, origin);
         };
         let pointer = self.runtime_call(to_c, vec![string], representation, origin);
         lent.push(Lent::String {

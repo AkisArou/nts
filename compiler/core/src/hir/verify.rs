@@ -1376,24 +1376,13 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
                 found: op.ty.clone(),
             });
         }
-        // A pointer becomes a number in exactly one place, and a number a
-        // pointer in none. `specialize::convert` keeps a scalar-to-scalar cast
-        // for a native pointer, which is permissive by construction; this is
-        // what makes it a rule instead: the bits of a data pointer are
-        // `NativePointerBits`, at `uintptr_t`'s representation, and no
-        // `Convert` has a pointer on one side and a scalar on the other.
-        //
-        // **The scalar half only.** A managed value made a pointer by `Convert`
-        // is a different contract, a reference lent to C, and it has one known
-        // crossing: `lend_string` in `lower.rs`, which lends a `StringView` as
-        // `Convert(string)` to `const NtsBorrowedString *`. That half is the
-        // lend's own operation to settle, and the rule widens with it.
-        let scalar = |ty: &HirType| {
-            matches!(
-                ty,
-                HirType::Int { .. } | HirType::Float { .. } | HirType::BigInt | HirType::Bool
-            )
-        };
+        // A pointer becomes something else in exactly two places, and nothing
+        // else becomes a pointer except the second. `specialize::convert`
+        // keeps a scalar-to-scalar cast for a native pointer, which is
+        // permissive by construction; this is what makes it a rule instead:
+        // the bits of a data pointer are `NativePointerBits`, at `uintptr_t`'s
+        // representation; a string lent to C as a view is `NativeStringView`;
+        // and a `Convert` with a pointer on one side has one on the other.
         let crossing = match &op.kind {
             OpKind::NativePointerBits { pointer } => {
                 let data = matches!(
@@ -1404,12 +1393,13 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
                 (!data || op.ty != super::native::Scalar::UIntPtr.representation())
                     .then_some("a pointer's bits, from something other than a data pointer")
             }
-            OpKind::Convert(value) => {
-                let from = &func.value(*value).ty;
-                let pointer = |ty: &HirType| matches!(ty, HirType::NativePointer(_));
-                ((pointer(from) && scalar(&op.ty)) || (scalar(from) && pointer(&op.ty)))
-                    .then_some("a native pointer converted to or from a number")
-            }
+            OpKind::NativeStringView { string } => (func.value(*string).ty
+                != HirType::Managed(super::ManagedType::String)
+                || op.ty != super::native::Encoding::View.c_type().representation())
+            .then_some("a string view of something that is not a string"),
+            OpKind::Convert(value) => (matches!(func.value(*value).ty, HirType::NativePointer(_))
+                != matches!(op.ty, HirType::NativePointer(_)))
+            .then_some("a native pointer converted to or from something that is not one"),
             _ => None,
         };
         if let Some(what) = crossing {
@@ -2319,8 +2309,12 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::Yield { value } | OpKind::GlobalSet { value, .. } => vec![*value],
         OpKind::StringUnitAt { string, index, .. } => vec![*string, *index],
         OpKind::Binary { lhs, rhs, .. } => vec![*lhs, *rhs],
+        // A view's string is an operand like a converted value's, and for the
+        // same reason it matters: the view holds no count, so it leans on what
+        // it reads (`rc`'s `Leaning`), and the string outlives its last read.
         OpKind::Unary { operand, .. }
         | OpKind::Convert(operand)
+        | OpKind::NativeStringView { string: operand }
         | OpKind::FieldView { value: operand, .. } => vec![*operand],
         OpKind::Call { args, .. } => args.clone(),
         OpKind::ArrayNew { length, .. } => vec![*length],
