@@ -39,6 +39,13 @@ pub(super) fn operation(
         OpKind::NativeFree { pointer } => {
             return Ok(format!("call void @free(ptr {})", name(pointer)));
         }
+        // `ptrtoint`, which also exposes the pointer's provenance. `ptrtoaddr`
+        // says exactly this op -- the address, capturing nothing -- but it is
+        // LLVM 22's, and a cross build assembles this IR with the LLVM `zig`
+        // bundles, which is older.
+        OpKind::NativePointerBits { pointer } => {
+            return Ok(format!("{out} = ptrtoint ptr {} to i64", name(pointer)));
+        }
         // `llvm.memcpy` rather than a load and a store of an aggregate: this
         // backend never names a struct type -- every address here is a byte
         // GEP -- so there is no aggregate value to move through a register.

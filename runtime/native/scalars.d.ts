@@ -71,6 +71,8 @@ declare module "@nts/scalars" {
   /** `size_t` and `ptrdiff_t`: as wide as a pointer, a bigint. */
   export type c_size_t = bigint & { readonly __c_size_t?: true };
   export type c_ptrdiff_t = bigint & { readonly __c_ptrdiff_t?: true };
+  /** `uintptr_t`: a pointer's bits as an integer, as wide as a pointer, a bigint. */
+  export type c_uintptr_t = bigint & { readonly __c_uintptr_t?: true };
   // `int8_t` ... `uint64_t`, `float` and `double` are the fixed widths above,
   // which C spells as those names: there is no second name for them here.
 

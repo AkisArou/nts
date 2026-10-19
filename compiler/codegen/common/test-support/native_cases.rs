@@ -59,6 +59,12 @@ pub(crate) const WIDE_CASES: &[(&str, &str, &str, &str)] = &[
     ),
     ("c_size_t", "size_t", "18446744073709551615n", "SIZE_MAX"),
     (
+        "c_uintptr_t",
+        "uintptr_t",
+        "18446744073709551615n",
+        "UINTPTR_MAX",
+    ),
+    (
         "c_ptrdiff_t",
         "ptrdiff_t",
         "9223372036854775807n",

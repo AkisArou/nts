@@ -662,6 +662,7 @@ impl<'b, 'p> Body<'b, 'p> {
             | OpKind::NativeSizeOf(_)
             | OpKind::NativeMalloc { .. }
             | OpKind::NativeFree { .. }
+            | OpKind::NativePointerBits { .. }
             | OpKind::NativeIndexAddress { .. }
             | OpKind::NativeFieldAddress { .. }
             | OpKind::NativeBitLoad { .. }

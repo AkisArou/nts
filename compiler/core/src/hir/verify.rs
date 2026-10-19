@@ -1376,6 +1376,49 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
                 found: op.ty.clone(),
             });
         }
+        // A pointer becomes a number in exactly one place, and a number a
+        // pointer in none. `specialize::convert` keeps a scalar-to-scalar cast
+        // for a native pointer, which is permissive by construction; this is
+        // what makes it a rule instead: the bits of a data pointer are
+        // `NativePointerBits`, at `uintptr_t`'s representation, and no
+        // `Convert` has a pointer on one side and a scalar on the other.
+        //
+        // **The scalar half only.** A managed value made a pointer by `Convert`
+        // is a different contract, a reference lent to C, and it has one known
+        // crossing: `lend_string` in `lower.rs`, which lends a `StringView` as
+        // `Convert(string)` to `const NtsBorrowedString *`. That half is the
+        // lend's own operation to settle, and the rule widens with it.
+        let scalar = |ty: &HirType| {
+            matches!(
+                ty,
+                HirType::Int { .. } | HirType::Float { .. } | HirType::BigInt | HirType::Bool
+            )
+        };
+        let crossing = match &op.kind {
+            OpKind::NativePointerBits { pointer } => {
+                let data = matches!(
+                    &func.value(*pointer).ty,
+                    HirType::NativePointer(pointee)
+                        if !matches!(pointee.viewed(), super::native::Pointee::FnPointer(_))
+                );
+                (!data || op.ty != super::native::Scalar::UIntPtr.representation())
+                    .then_some("a pointer's bits, from something other than a data pointer")
+            }
+            OpKind::Convert(value) => {
+                let from = &func.value(*value).ty;
+                let pointer = |ty: &HirType| matches!(ty, HirType::NativePointer(_));
+                ((pointer(from) && scalar(&op.ty)) || (scalar(from) && pointer(&op.ty)))
+                    .then_some("a native pointer converted to or from a number")
+            }
+            _ => None,
+        };
+        if let Some(what) = crossing {
+            problems.push(Invalid::OperandType {
+                func: func.name.clone(),
+                op: what,
+                found: op.ty.clone(),
+            });
+        }
 
         let (pointer, index) = match &op.kind {
             OpKind::NativeLoad { pointer, index }
@@ -2298,7 +2341,8 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         OpKind::NativeMalloc { bytes } => vec![*bytes],
         OpKind::NativeFieldAddress { pointer, .. }
         | OpKind::NativeBitLoad { pointer, .. }
-        | OpKind::NativeFree { pointer } => vec![*pointer],
+        | OpKind::NativeFree { pointer }
+        | OpKind::NativePointerBits { pointer } => vec![*pointer],
         OpKind::NativeIndexAddress { pointer, index } | OpKind::NativeLoad { pointer, index } => {
             vec![*pointer, *index]
         }

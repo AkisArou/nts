@@ -707,6 +707,23 @@ declare module "c:memory" {
   // storage, and nothing else; a managed object has no address to take.
   /** @ntsAbi intrinsic */
   export function addrOf<T>(place: { readonly __c_of?: T }): Ptr<T>;
+  import type { c_uintptr_t } from "@nts/scalars";
+  import type { ClassChain, Opaque } from "c:types";
+  // A pointer's bits, as C's `(uintptr_t)p` has them: every bit of the
+  // address, as an exact integer. NULL is `0n`.
+  //
+  // **Inspection, and nothing else.** Nothing is read through the pointer, so
+  // an address that is not one -- `MAKEINTRESOURCE(5)`, a tagged word -- is
+  // answered rather than dereferenced, and the pointer is neither kept, freed
+  // nor counted, whatever its family. That is what lets `winuser.h`'s own test
+  // be written as it is written there: `IS_INTRESOURCE(r)` is
+  // `(pointerBits(r) >> 16n) === 0n`, and the atom is the low sixteen bits.
+  //
+  // **One way.** Nothing makes a pointer from an integer: an address comes from
+  // C, from storage or from a declared `@ntsConstant`, and its bits cannot be
+  // turned back into something to read through.
+  /** @ntsAbi intrinsic */
+  export function pointerBits(pointer: ConstPtr<void> | Opaque<string> | ClassChain | null): c_uintptr_t;
   // `*destination = *source` -- one whole `T`, copied.
   //
   // **An operation rather than an assignment**, because there is nowhere to
@@ -789,7 +806,8 @@ declare module "c:pending" {
 }
 
 declare module "c:stdint" {
-  // Hand-written fixed-width C integer aliases. JavaScript number precision applies.
+  // Hand-written fixed-width C integer aliases, and `uintptr_t`, as wide as a
+  // pointer. JavaScript number precision applies.
   export type {
     Int8 as int8_t,
     Uint8 as uint8_t,
@@ -799,6 +817,7 @@ declare module "c:stdint" {
     Uint32 as uint32_t,
     BigInt64 as int64_t,
     BigUint64 as uint64_t,
+    c_uintptr_t as uintptr_t,
   } from "@nts/scalars";
 }
 

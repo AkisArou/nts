@@ -3242,6 +3242,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         OpKind::ObjcSelector { name } => format!("%{index} = objc.selector {name} : {ty}"),
         OpKind::NativeMalloc { bytes } => format!("%{index} = native.malloc %{} : {ty}", bytes.0),
         OpKind::NativeFree { pointer } => format!("native.free %{}", pointer.0),
+        OpKind::NativePointerBits { pointer } => {
+            format!("%{index} = native.bits %{} : {ty}", pointer.0)
+        }
         OpKind::PromiseSubscribe {
             promise,
             reaction,

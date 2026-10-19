@@ -19,6 +19,9 @@ mod constants;
 #[path = "native/hresult.rs"]
 mod hresult;
 
+#[path = "native/pointer_bits.rs"]
+mod pointer_bits;
+
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};

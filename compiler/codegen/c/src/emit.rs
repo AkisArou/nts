@@ -5484,6 +5484,7 @@ fn memory_op(
         OpKind::NativeLocal { .. }
         | OpKind::NativeMalloc { .. }
         | OpKind::NativeFree { .. }
+        | OpKind::NativePointerBits { .. }
         | OpKind::NativeLoad { .. }
         | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. }
@@ -5836,6 +5837,7 @@ fn emit_op(
         OpKind::NativeLocal { .. }
         | OpKind::NativeMalloc { .. }
         | OpKind::NativeFree { .. }
+        | OpKind::NativePointerBits { .. }
         | OpKind::NativeLoad { .. }
         | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. }

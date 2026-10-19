@@ -5025,6 +5025,7 @@ fn memory_operation(
             return element_access(func, value, &out);
         }
         OpKind::NativeLocal { .. } | OpKind::NativeMalloc { .. } | OpKind::NativeFree { .. }
+        | OpKind::NativePointerBits { .. }
         | OpKind::NativeLoad { .. } | OpKind::NativeStore { .. }
         | OpKind::NativeIndexAddress { .. } | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. } | OpKind::NativeBitStore { .. }

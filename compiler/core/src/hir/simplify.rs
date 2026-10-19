@@ -366,7 +366,8 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         OpKind::NativeMalloc { bytes } => *bytes = of(*bytes),
         OpKind::NativeFieldAddress { pointer, .. }
         | OpKind::NativeBitLoad { pointer, .. }
-        | OpKind::NativeFree { pointer } => *pointer = of(*pointer),
+        | OpKind::NativeFree { pointer }
+        | OpKind::NativePointerBits { pointer } => *pointer = of(*pointer),
         OpKind::NativeIndexAddress {
             pointer: array,
             index,
@@ -616,6 +617,7 @@ const fn leaves_fields_alone(kind: &OpKind) -> bool {
             | OpKind::Binary { .. }
             | OpKind::Unary { .. }
             | OpKind::Convert(_)
+            | OpKind::NativePointerBits { .. }
             | OpKind::FieldView { .. }
             | OpKind::TagOf { .. }
             | OpKind::InstanceOf { .. }

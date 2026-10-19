@@ -1654,6 +1654,61 @@ impl FuncBuilder<'_> {
         Ok(self.runtime_call("nts_string_from_cstring", vec![pointer], ty, origin))
     }
 
+    /// `pointerBits(p)`: a data pointer's bits as `uintptr_t`, C's
+    /// `(uintptr_t)p` -- the one way a pointer becomes a number
+    /// ([`OpKind::NativePointerBits`]). Nothing is read through the pointer
+    /// and nothing about its lifetime changes, so a counted handle is only
+    /// borrowed, as it is for `==`.
+    pub(super) fn native_pointer_bits(
+        &mut self,
+        id: NodeId,
+        args: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
+        let [pointer] = args else {
+            return Err(self.unsupported(id, "pointerBits takes one pointer"));
+        };
+        let mut pointer = self.lower_expression(*pointer)?;
+        // A bare `null` takes the parameter's type, a union of pointer kinds
+        // with no one representation. It is NULL whichever: the absent
+        // constant is the one value re-made at another representation without
+        // asking what it holds, so it is a `void *` here.
+        if matches!(self.values[pointer.0 as usize].kind, OpKind::ConstNull)
+            && !matches!(
+                self.values[pointer.0 as usize].ty,
+                HirType::NativePointer(_)
+            )
+        {
+            pointer = self.push(
+                OpKind::ConstNull,
+                HirType::NativePointer(Pointee::Void),
+                self.origin(id),
+            );
+        }
+        match &self.values[pointer.0 as usize].ty {
+            HirType::NativePointer(target) if matches!(target.viewed(), Pointee::FnPointer(_)) => {
+                return Err(self.unsupported(
+                    id,
+                    "pointerBits of a function pointer, which is not a data address",
+                ));
+            }
+            HirType::NativePointer(_) => {}
+            _ => {
+                return Err(self.unsupported(id, "pointerBits of a value that is not a C pointer"));
+            }
+        }
+        // The op answers C's `uintptr_t`; the program holds a `c_uintptr_t` as
+        // the bigint it is, widened from those bits as a native read's is.
+        if self.type_of(id) != Some(HirType::BigInt) {
+            return Err(self.unsupported(id, "pointerBits must answer a `c_uintptr_t`"));
+        }
+        let bits = self.push(
+            OpKind::NativePointerBits { pointer },
+            Scalar::UIntPtr.representation(),
+            self.origin(id),
+        );
+        self.coerce(bits, &HirType::BigInt, id)
+    }
+
     /// `bytesFrom(bytes, length)`: `length` bytes at a C pointer copied into
     /// a new `Uint8Array` (`nts_view_from_bytes`) -- a buffer C filled or
     /// handed back, read into the program's own. The pointer is neither kept

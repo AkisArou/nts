@@ -1990,6 +1990,48 @@ wide family round-trips INT64_MIN, INT64_MAX, UINT64_MAX, SIZE_MAX, PTRDIFF_MAX
 and 2^53+1 through a separately compiled C library, in both backends, and
 asserts that no value in either direction passed through a double.
 
+## A pointer's bits
+
+`pointerBits(p)` (`c:memory`) is C's `(uintptr_t)p`: every bit of a data
+pointer's address -- a `Ptr`, a `ConstPtr`, an opaque or class handle, or
+`null`, which is `0n` -- as a `c_uintptr_t`, a `bigint` kind as wide as a
+pointer. It exists for tests C writes on an address without reading through it.
+`winuser.h`'s `IS_INTRESOURCE(r)` is `((ULONG_PTR)(r)) >> 16 == 0`, and a
+resource-enumeration callback's `LPCWSTR` is either a resource atom or a string,
+so the binding asks before it reads:
+
+    if ((pointerBits(name) >> 16n) === 0n) {
+      const atom = Number(pointerBits(name) & 0xffffn); // MAKEINTRESOURCE's inverse
+    } else {
+      // NUL-terminated UTF-16 text, read through the ConstPtr<Uint16>
+    }
+
+**Inspection and nothing else.** Nothing is loaded, so `MAKEINTRESOURCE(5)` is
+answered rather than dereferenced, and nothing about the pointer's lifetime
+changes: a counted handle is borrowed for it, as it is for `===`.
+
+**One way.** Nothing makes a pointer from an integer -- an address comes from C,
+from storage or from a declared `@ntsConstant` -- so the bits of a pointer are
+not an escape of it, `local()` storage included. In HIR it is
+`OpKind::NativePointerBits`, the one exception to `NativePointer`'s "never
+represented as a number", and the verifier holds it to that: no `Convert` has a
+pointer on one side and a number on the other, and an assertion chain
+(`p as unknown as c_uintptr_t`) is still refused
+(`tests/refusals/pointer-bits-by-assertion`). A managed value made a pointer by
+`Convert` is the other half, and not yet a rule: `lend_string` lends a
+`StringView` that way, and naming that lend is what widens the rule.
+
+C spells it `(uint64_t)(uintptr_t)p`; LLVM `ptrtoint`. `ptrtoaddr`, which is
+exactly this operation and captures no provenance, is LLVM 22's, and a cross
+build assembles the IR with the clang `zig` bundles (21 with zig 0.16), so it
+waits. The JVM and Wasm have no native pointers at all and refuse the program
+before this.
+
+`tests/interop/native-pointer-bits` checks it against C's own `(uintptr_t)p` on
+both backends and providers: atoms 0, 1 and 65535, the 65536 boundary, the high
+bit and every bit -- none of which may be read through -- and real stack, heap
+and static addresses, whose differences match C's pointer arithmetic.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

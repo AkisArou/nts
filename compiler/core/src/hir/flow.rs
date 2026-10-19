@@ -1550,6 +1550,7 @@ fn runs_elsewhere(kind: &OpKind) -> bool {
             | OpKind::Binary { .. }
             | OpKind::Unary { .. }
             | OpKind::Convert(_)
+            | OpKind::NativePointerBits { .. }
             | OpKind::ArrayNew { .. }
             | OpKind::Length(_)
             | OpKind::ArrayGet { .. }

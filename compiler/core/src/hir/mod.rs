@@ -1102,6 +1102,22 @@ pub enum OpKind {
     NativeFree {
         pointer: ValueId,
     },
+    /// `pointerBits(p)`: a data pointer's bits, C's `(uintptr_t)p`, as an
+    /// unsigned 64-bit integer ([`native::Scalar::UIntPtr`]'s representation).
+    ///
+    /// **The one exception to [`HirType::NativePointer`]'s "never represented
+    /// as a number", and named so it is the only one.** Inspection and nothing
+    /// else: no storage is read, so an address that is not one -- a resource
+    /// atom, a tagged word -- is answered rather than dereferenced, and no
+    /// ownership moves, so a counted handle is borrowed for it as for `==`.
+    ///
+    /// **One way.** No operation makes a pointer from an integer, so the bits
+    /// of a pointer are not an escape of it: they cannot be read through, kept
+    /// alive or freed. A [`Self::ConstHandle`] is the nearest thing, and its
+    /// bits come from a declaration, not from a value.
+    NativePointerBits {
+        pointer: ValueId,
+    },
     /// Form an address, without reading storage or changing its lifetime.
     NativeIndexAddress {
         pointer: ValueId,

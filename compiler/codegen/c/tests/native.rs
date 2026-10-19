@@ -234,7 +234,7 @@ fn snapshot_with_types(
     )
     .unwrap();
     let imports = if include_types {
-        "import type { c_char, c_int, c_uint, Int8, Uint8, Int16, Uint16, Int32, Uint32, BigInt64, BigUint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, Float32, Float64 } from \"@nts/scalars\";\n"
+        "import type { c_char, c_int, c_uint, Int8, Uint8, Int16, Uint16, Int32, Uint32, BigInt64, BigUint64, c_long, c_ulong, c_size_t, c_ptrdiff_t, c_uintptr_t, Float32, Float64 } from \"@nts/scalars\";\n"
     } else {
         ""
     };

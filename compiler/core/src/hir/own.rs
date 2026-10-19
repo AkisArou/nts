@@ -2283,6 +2283,7 @@ fn quiet(kind: &OpKind) -> bool {
         | OpKind::Unerase { .. }
         | OpKind::Unary { .. }
         | OpKind::Convert(_)
+        | OpKind::NativePointerBits { .. }
         | OpKind::FieldView { .. }
         | OpKind::Length(_)
         | OpKind::FieldGet { .. }

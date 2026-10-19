@@ -5213,6 +5213,8 @@ pub enum Scalar {
     ULong32,
     Size,
     Ptrdiff,
+    /// `uintptr_t`: a pointer's bits, what `c:memory`'s `pointerBits` answers.
+    UIntPtr,
     Float,
     Double,
     /// A Windows Runtime `boolean` held in a struct: one byte, 0 or 1, and a
@@ -5244,6 +5246,7 @@ pub const SCALARS: &[&str] = &[
     "c_ulong32",
     "c_size_t",
     "c_ptrdiff_t",
+    "c_uintptr_t",
     "AsNumber",
 ];
 
@@ -5301,6 +5304,7 @@ impl Scalar {
             "__c_ulong32" => Self::ULong32,
             "__c_size_t" => Self::Size,
             "__c_ptrdiff_t" => Self::Ptrdiff,
+            "__c_uintptr_t" => Self::UIntPtr,
             _ => return None,
         })
     }
@@ -5406,7 +5410,7 @@ impl Scalar {
                 bits: 64,
                 signed: true,
             },
-            Self::UInt64 | Self::ULong | Self::Size => HirType::Int {
+            Self::UInt64 | Self::ULong | Self::Size | Self::UIntPtr => HirType::Int {
                 bits: 64,
                 signed: false,
             },
@@ -5435,6 +5439,7 @@ impl Scalar {
             Self::ULong | Self::ULong32 => "unsigned long",
             Self::Size => "size_t",
             Self::Ptrdiff => "ptrdiff_t",
+            Self::UIntPtr => "uintptr_t",
             Self::Float => "float",
             Self::Double => "double",
         }
@@ -5485,7 +5490,13 @@ impl Scalar {
     pub fn needs_exact_integer(self) -> bool {
         matches!(
             self,
-            Self::Int64 | Self::UInt64 | Self::Long | Self::ULong | Self::Size | Self::Ptrdiff
+            Self::Int64
+                | Self::UInt64
+                | Self::Long
+                | Self::ULong
+                | Self::Size
+                | Self::Ptrdiff
+                | Self::UIntPtr
         )
     }
 }

@@ -278,8 +278,10 @@ fn borrowed(func: &Func, root: ValueId, summaries: &Borrows) -> bool {
                     // what separates it from a store, where an aliased value
                     // being written is the address escaping into the storage
                     // it points at. Comparison keeps nothing either, which is
-                    // why they share an arm.
+                    // why they share an arm, and nor do a pointer's bits, which
+                    // nothing turns back into an address.
                     OpKind::NativeCopy { .. }
+                    | OpKind::NativePointerBits { .. }
                     | OpKind::Binary {
                         op: BinOp::Eq | BinOp::Ne,
                         ..

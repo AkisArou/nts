@@ -120,6 +120,7 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::ConstHandle(_)
         | OpKind::NativeMalloc { .. }
         | OpKind::NativeFree { .. }
+        | OpKind::NativePointerBits { .. }
         | OpKind::NativeIndexAddress { .. }
         | OpKind::NativeFieldAddress { .. }
         | OpKind::NativeBitLoad { .. }

@@ -502,7 +502,8 @@ and Q4's check for `AsNumber`.**
   wanted, with an optional label. The fixed widths are `Int8` ... `Uint32`,
   `BigInt64`, `BigUint64`, `Float32` and `Float64`. C's own types are
   `c_char`, `c_int`, `c_uint`, `c_long`, `c_ulong`, `c_long32`, `c_ulong32`,
-  `c_size_t` and `c_ptrdiff_t`. And `AsNumber<C>` is a 64-bit C kind handed
+  `c_size_t`, `c_ptrdiff_t` and `c_uintptr_t` (what `c:memory`'s
+  `pointerBits` answers). And `AsNumber<C>` is a 64-bit C kind handed
   over as a number. **Not as planned:** there is no generic `Scalar<K>` or
   `CType<Name, Table>`. A separate name reads better in a binding and in an
   error, and the per-target tables are 2c's. `CBool` and `CEnum` stay in

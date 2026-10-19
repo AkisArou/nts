@@ -279,6 +279,11 @@ pub(super) fn operation(
             }
         }
         OpKind::NativeFree { pointer } => format!("free({});", value_name(pointer)),
+        // The standard's own conversion, to `uintptr_t`; the widening after it
+        // is the identity on every row, where pointers are 64 bits.
+        OpKind::NativePointerBits { pointer } => {
+            format!("{name} = (uint64_t)(uintptr_t){};", value_name(pointer))
+        }
         // `*d = *s`, which is C's own aggregate assignment: the compiler picks
         // how to move the bytes and knows the type's alignment. A `memcpy` with
         // `sizeof` would be equivalent and would restate a size this file has

@@ -39919,6 +39919,7 @@ impl<'a> FuncBuilder<'a> {
                 }
                 Some("unsafeDowncast") => return Some(self.native_downcast(id, arguments)),
                 Some("stringFrom") => return Some(self.native_string_from(id, arguments)),
+                Some("pointerBits") => return Some(self.native_pointer_bits(id, arguments)),
                 Some("bytesFrom") => return Some(self.native_bytes_from(id, arguments)),
                 Some("selector") if self.in_objc_module(decl) => {
                     return Some(self.lower_selector(id, arguments));

@@ -137,6 +137,8 @@ fn has_effects(op: &Op) -> bool {
         OpKind::NativeLocal { .. } => false,
         // A size is a constant the backend spells.
         OpKind::NativeSizeOf(_) => false,
+        // A pointer's bits read the pointer and nothing it points at.
+        OpKind::NativePointerBits { .. } => false,
         // A cached lookup: the first one registers nothing a later one needs,
         // and a class that is not loaded is found by the send that uses it.
         OpKind::ObjcClass { .. } | OpKind::ObjcSelector { .. } => false,
