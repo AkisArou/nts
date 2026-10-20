@@ -82777,6 +82777,95 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// `(x as T).p !== undefined` over a union of objects, answered by which of
+    /// `x`'s members declare `p` -- as `"p" in x` is, which is what it asks
+    /// there.
+    ///
+    /// `as` has no run-time effect, so the read is of whatever object arrived:
+    /// its field where its layout declares one, `undefined` where it does not.
+    /// Reading through `T`'s offsets instead read another layout's field --
+    /// `as` over a union now refuses that by name (`refuse_a_foreign_layout`)
+    /// -- and this is node's answer for the idiom every user-defined type
+    /// guard is written with, `return (shape as Square).side !== undefined`.
+    ///
+    /// Only where presence is the whole answer: every member is an object, and
+    /// every member that declares `p` declares it a required *field* -- stored,
+    /// so no accessor runs on the read -- of a type `undefined` is not in.
+    /// Anything else returns `None` and is lowered as it was.
+    fn cast_member_presence(
+        &mut self,
+        id: NodeId,
+        token: u16,
+        lhs: NodeId,
+        rhs: NodeId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        let absent = match token {
+            syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_TOKEN => true,
+            syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_TOKEN => false,
+            _ => return None,
+        };
+        let access = if self.is_the_undefined_literal(rhs) {
+            self.through_parentheses(lhs)
+        } else if self.is_the_undefined_literal(lhs) {
+            self.through_parentheses(rhs)
+        } else {
+            return None;
+        };
+        if self.kind_of(access) != Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
+            return None;
+        }
+        let parts = self.children(access);
+        let [object, member] = parts.as_slice() else {
+            return None;
+        };
+        let cast = self.through_parentheses(*object);
+        if self.kind_of(cast) != Some(syntax::AS_EXPRESSION) {
+            return None;
+        }
+        let operand = *self.children(cast).first()?;
+        let operand_ty = *self.snapshot.node_types.get(&operand)?;
+        let TypeKind::Union(members) = self.snapshot.types.get(operand_ty.0 as usize)?.kind.clone()
+        else {
+            return None;
+        };
+        let key = self.literal_name(*member)?;
+        let mut declaring = Vec::new();
+        for arm in &members {
+            let concrete = super::generics::concrete(self.snapshot, *arm);
+            let TypeKind::Object { properties } =
+                &self.snapshot.types.get(concrete.0 as usize)?.kind
+            else {
+                return None;
+            };
+            match properties.iter().find(|property| property.name == key) {
+                None => {}
+                Some(property)
+                    if property.kind == nts_semantic_schema::MemberKind::Field
+                        && !property.optional
+                        && !self.admits_undefined(Some(property.ty)) =>
+                {
+                    declaring.push(*arm);
+                }
+                Some(_) => return None,
+            }
+        }
+        let origin = self.origin(id);
+        Some((|| {
+            let present = self.in_over_the_arms(id, operand, &members, declaring, &origin)?;
+            if !absent {
+                return Ok(present);
+            }
+            Ok(self.push(
+                OpKind::Unary {
+                    op: UnOp::Not,
+                    operand: present,
+                },
+                HirType::Bool,
+                origin.clone(),
+            ))
+        })())
+    }
+
     fn lower_binary(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let [lhs_node, operator, rhs_node] = children.as_slice() else {
@@ -82833,6 +82922,9 @@ impl<'a> FuncBuilder<'a> {
         // member is an optional *method*, whose absence is a fact about the
         // receiver's class rather than a tag on a value that was read.
         if let Some(result) = self.optional_method_presence(id, token, *lhs_node, *rhs_node) {
+            return result;
+        }
+        if let Some(result) = self.cast_member_presence(id, token, *lhs_node, *rhs_node) {
             return result;
         }
         if let Some(result) = self.erased_absence_test(id, token, *lhs_node, *rhs_node) {
