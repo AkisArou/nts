@@ -1,4 +1,4 @@
-//! An erased value read as its representation once, wherever it is read.
+//! A pure read made once, wherever it is made.
 //!
 //! **A guard reads one value and the use another, unless something says they
 //! are one.** `const x: any = n; if (typeof x === "number" && x >= 0 && x <=
@@ -16,6 +16,14 @@
 //! value once instead of once per mention, which every pass after this one
 //! and every backend also pays less for.
 //!
+//! **A string is read the same way.** A scanner tests one character several
+//! ways -- `s.charCodeAt(at) === ZERO`, then `isDigit(s.charCodeAt(at))` -- and
+//! each mention is a code-unit read, which on Wasm is a host call. Strings are
+//! immutable, so two reads of one string at one index answer the same, and a
+//! checked read's `NaN` out of range is a function of the same two values; a
+//! string's length is fixed for its lifetime. An array's length is not: a
+//! `push` between two reads moves it, so only a string's is a read here.
+//!
 //! **As the lowering's last step**, so the program every reader gets -- the
 //! strict check, `prepare`, `nts facts` -- is this one, and the obligations the
 //! lowering recorded are renamed with the values they name. The replaced
@@ -25,10 +33,56 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::simplify::{substitute, substitute_terminator};
-use super::{BlockId, Func, HirType, OpKind, ValueId};
+use super::{BlockId, Func, HirType, ManagedType, OpKind, ValueId};
 
-/// An erased value read as one representation: what makes two `unerase`s one.
-type Read = (ValueId, HirType);
+/// What makes two reads one: the operation, its operands, and the type it
+/// answers in.
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum Read {
+    /// An erased value read as one representation.
+    Unerase(ValueId, HirType),
+    /// One code unit of a string. Checked and unchecked reads stay apart, so a
+    /// read proven in range never takes the answer of one that may be `NaN`.
+    Unit {
+        string: ValueId,
+        index: ValueId,
+        checked: bool,
+        ty: HirType,
+    },
+    /// A string's length.
+    Length(ValueId, HirType),
+}
+
+/// The read `op` makes, with its operands as the replacements so far name
+/// them, or nothing when it is not a pure read.
+///
+/// Through `of`, because the walk meets a definition before its uses: a read
+/// of a replaced value is a read of its twin, so a chain folds in one walk.
+fn read_of(func: &Func, op: ValueId, of: impl Fn(ValueId) -> ValueId) -> Option<Read> {
+    let value = &func.values[op.0 as usize];
+    match value.kind {
+        OpKind::Unerase { value: erased } => Some(Read::Unerase(of(erased), value.ty.clone())),
+        OpKind::StringUnitAt {
+            string,
+            index,
+            checked,
+        } => Some(Read::Unit {
+            string: of(string),
+            index: of(index),
+            checked,
+            ty: value.ty.clone(),
+        }),
+        OpKind::Length(string)
+            if matches!(
+                func.values[string.0 as usize].ty,
+                HirType::Managed(ManagedType::String)
+            ) =>
+        {
+            Some(Read::Length(of(string), value.ty.clone()))
+        }
+        _ => None,
+    }
+}
 
 /// The dominator-tree walk, one block at a time: entering a block, and leaving
 /// it with the reads it made, which then stop dominating.
@@ -37,13 +91,14 @@ enum Step {
     Leave(Vec<Read>),
 }
 
-/// Replace each `unerase` dominated by an identical one, returning how many.
-pub fn unerase_once(func: &mut Func) -> usize {
-    if !func
-        .values
+/// Replace each pure read dominated by an identical one, returning how many.
+pub fn reads_once(func: &mut Func) -> usize {
+    let reads_anything = func
+        .blocks
         .iter()
-        .any(|op| matches!(op.kind, OpKind::Unerase { .. }))
-    {
+        .flat_map(|block| &block.ops)
+        .any(|&op| read_of(func, op, |value| value).is_some());
+    if !reads_anything {
         return 0;
     }
     let reachable = super::verify::reachable_blocks(func);
@@ -76,11 +131,10 @@ pub fn unerase_once(func: &mut Func) -> usize {
         }
         let mut made = Vec::new();
         for &op in &func.blocks[block.0 as usize].ops {
-            let value = &func.values[op.0 as usize];
-            let OpKind::Unerase { value: erased } = value.kind else {
+            let twin_of = |value: ValueId| replaced.get(&value).copied().unwrap_or(value);
+            let Some(read) = read_of(func, op, twin_of) else {
                 continue;
             };
-            let read = (erased, value.ty.clone());
             if let Some(&twin) = first.get(&read) {
                 replaced.insert(op, twin);
             } else {
