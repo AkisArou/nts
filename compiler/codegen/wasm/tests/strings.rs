@@ -151,6 +151,8 @@ fn operators() -> Vec<Func> {
             .push(block(&[], &[lhs, rhs, out], Terminator::Return(Some(out))));
         funcs.push(f);
     }
+    funcs.push(null_test("isNull", BinOp::Eq, false));
+    funcs.push(null_test("notNull", BinOp::Ne, true));
     for (name, op) in [("truthy", UnOp::Truthy), ("not", UnOp::Not)] {
         let mut f = function(name, &[string()], HirType::Bool);
         let s = value(&mut f, OpKind::Param(0), string());
@@ -160,6 +162,84 @@ fn operators() -> Vec<Func> {
         funcs.push(f);
     }
     funcs
+}
+
+/// `(k > 0 ? null : s) === null`, the null on either side: a null made in the
+/// module, because the boundary declines one as a `string` argument.
+fn null_test(name: &str, op: BinOp, null_on_left: bool) -> Func {
+    let mut f = function(name, &[string(), F64], HirType::Bool);
+    let s = value(&mut f, OpKind::Param(0), string());
+    let k = value(&mut f, OpKind::Param(1), F64);
+    let zero = value(&mut f, OpKind::ConstFloat(0.0), F64);
+    let pick = value(
+        &mut f,
+        OpKind::Binary {
+            op: BinOp::Gt,
+            lhs: k,
+            rhs: zero,
+        },
+        HirType::Bool,
+    );
+    f.blocks.push(block(
+        &[],
+        &[s, k, zero, pick],
+        Terminator::Branch {
+            cond: pick,
+            then_target: BlockId(1),
+            then_args: vec![],
+            else_target: BlockId(2),
+            else_args: vec![s],
+        },
+    ));
+    let null = value(&mut f, OpKind::ConstNull, string());
+    f.blocks.push(block(
+        &[],
+        &[null],
+        Terminator::Jump {
+            target: BlockId(2),
+            args: vec![null],
+        },
+    ));
+    let picked = value(&mut f, OpKind::BlockParam(0), string());
+    let other = value(&mut f, OpKind::ConstNull, string());
+    let (lhs, rhs) = if null_on_left {
+        (other, picked)
+    } else {
+        (picked, other)
+    };
+    let out = value(&mut f, OpKind::Binary { op, lhs, rhs }, HirType::Bool);
+    f.blocks.push(block(
+        &[picked],
+        &[other, out],
+        Terminator::Return(Some(out)),
+    ));
+    f
+}
+
+#[test]
+fn a_comparison_with_null_is_a_null_test_not_a_string_equality() {
+    // Builtins are listed apart from ordinary imports (`Manifest::builtins`).
+    let builtins = |funcs: Vec<Func>| -> Vec<String> {
+        let emitted = nts_codegen_wasm::emit(&program(funcs)).unwrap();
+        emitted
+            .manifest
+            .builtins
+            .iter()
+            .map(|i| i.name.clone())
+            .collect()
+    };
+    let null_tests = builtins(vec![
+        null_test("isNull", BinOp::Eq, false),
+        null_test("notNull", BinOp::Ne, true),
+    ]);
+    assert!(
+        !null_tests.iter().any(|name| name == "equals"),
+        "{null_tests:?}"
+    );
+    // The control: two strings compared do import it, so the absence above is
+    // the null test's and not a list that never holds `equals`.
+    let control = builtins(operators().into_iter().filter(|f| f.name == "eq").collect());
+    assert!(control.iter().any(|name| name == "equals"), "{control:?}");
 }
 
 fn global_writers() -> Vec<Func> {

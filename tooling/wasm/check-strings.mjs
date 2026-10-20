@@ -14,6 +14,7 @@ const same = (actual, expected) => { assert.ok(Object.is(actual, expected), `${S
 for (const s of strings) {
   same(wasm.length(s), s.length); same(wasm.lengthU32(s), s.length);
   same(wasm.truthy(s), Boolean(s)); same(wasm.not(s), !s);
+  for (const k of [-1, 1]) { same(wasm.isNull(s, k), k > 0); same(wasm.notNull(s, k), !(k > 0)); }
   for (const i of indices) {
     same(wasm.charCodeAt(s, i), s.charCodeAt(i));
     same(wasm.charCodeAtAlias(s, i), s.charCodeAt(i));

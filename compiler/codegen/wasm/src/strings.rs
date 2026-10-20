@@ -9,7 +9,7 @@ use crate::{
     numeric,
     types::{Physical, Slot},
 };
-use nts_core::hir::{BinOp, HirType, ManagedType, UnOp, ValueId};
+use nts_core::hir::{BinOp, HirType, ManagedType, OpKind, UnOp, ValueId};
 use wasm_encoder::{BlockType, Instruction as I, RefType, ValType};
 
 pub(crate) const STRING: Physical = Physical::Reference(RefType::EXTERNREF);
@@ -346,6 +346,19 @@ pub(crate) fn binary(
     if !matches!(op, BinOp::Eq | BinOp::Ne) {
         crate::contract::nonnull(b, lhs, "a null string in a string operation")?;
         crate::contract::nonnull(b, rhs, "a null string in a string operation")?;
+    }
+    // `text === null` asks `ref.is_null`, as `objects::binary` does, not the
+    // engine's string `equals` with a null operand: the same answer without a
+    // builtin call, and in the form V8 reads as a type test. absences made 259
+    // such calls an operation.
+    let null = |value: ValueId| matches!(b.func.value(value).kind, OpKind::ConstNull);
+    if matches!(op, BinOp::Eq | BinOp::Ne) && null(lhs) != null(rhs) {
+        b.load(if null(lhs) { rhs } else { lhs })?;
+        b.instruction(&I::RefIsNull);
+        if op == BinOp::Ne {
+            b.instruction(&I::I32Eqz);
+        }
+        return Ok(());
     }
     b.load(lhs)?;
     b.load(rhs)?;
