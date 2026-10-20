@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 783552d5ea52a9c7, commit 5de3b9a29a18fa408930e2e14f8b4e1a974cf3a3, backend wasm, harness d6442dbc09f91ad0; machine at start: 21 GB available, swap 5.2/31.5 GB, load 16.3/17.7 (1m/5m), 16 cores; 6 worker(s)
+# compiler b2733010c1af65f9, commit bff21d22ef31fefbc359ff8ea38427123cd105ef, backend wasm, harness d6442dbc09f91ad0; machine at start: 18.7 GB available, swap 1.8/31.5 GB, load 27.3/31.8 (1m/5m), 16 cores; 6 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -116,13 +116,13 @@ test/language/computed-property-names/class/method/constructor-duplicate-1.js	pa
 test/language/computed-property-names/class/method/constructor-duplicate-2.js	pass	
 test/language/computed-property-names/class/method/constructor-duplicate-3.js	pass	
 test/language/computed-property-names/class/static/generator-constructor.js	pass	
-test/language/computed-property-names/class/static/generator-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/computed-property-names/class/static/generator-prototype.js	pass	
 test/language/computed-property-names/class/static/getter-constructor.js	pass	
-test/language/computed-property-names/class/static/getter-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/computed-property-names/class/static/getter-prototype.js	pass	
 test/language/computed-property-names/class/static/method-constructor.js	pass	
-test/language/computed-property-names/class/static/method-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/computed-property-names/class/static/method-prototype.js	pass	
 test/language/computed-property-names/class/static/setter-constructor.js	pass	
-test/language/computed-property-names/class/static/setter-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/computed-property-names/class/static/setter-prototype.js	pass	
 test/language/computed-property-names/object/method/generator.js	pass	
 test/language/destructuring/binding/initialization-requires-object-coercible-null.js	pass	
 test/language/destructuring/binding/initialization-requires-object-coercible-undefined.js	pass	
@@ -2702,11 +2702,11 @@ test/language/statements/class/decorator/syntax/valid/decorator-member-expr-iden
 test/language/statements/class/decorator/syntax/valid/decorator-parenthesized-expr-identifier-reference.js	pass	
 test/language/statements/class/definition/class-method-returns-promise.js	pass	
 test/language/statements/class/definition/constructable-but-no-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/definition/getters-non-configurable-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/definition/getters-non-configurable-err.js	pass	
 test/language/statements/class/definition/getters-restricted-ids.js	pass	
 test/language/statements/class/definition/methods-async-super-call-body.js	pass	
 test/language/statements/class/definition/methods-named-eval-arguments.js	pass	
-test/language/statements/class/definition/setters-non-configurable-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/definition/setters-non-configurable-err.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
@@ -3276,7 +3276,7 @@ test/language/statements/class/elements/evaluation-error/computed-name-tostring-
 test/language/statements/class/elements/evaluation-error/computed-name-valueof-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/fields-asi-2.js	pass	
 test/language/statements/class/elements/fields-computed-name-static-computed-var-propname-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/elements/fields-computed-name-static-propname-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/elements/fields-computed-name-static-propname-prototype.js	pass	
 test/language/statements/class/elements/private-accessor-is-visible-in-computed-properties.js	fail	nts: uncaught Test262Error: access to a private acessor from ordinary object
 test/language/statements/class/elements/private-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-async-method-name.js	pass	
@@ -3444,8 +3444,8 @@ test/language/statements/class/static-init-scope-var-derived.js	pass
 test/language/statements/class/static-init-scope-var-open.js	pass	
 test/language/statements/class/static-init-sequence.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/static-init-statement-list-optional.js	pass	
-test/language/statements/class/static-method-gen-non-configurable-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/static-method-non-configurable-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/class/static-method-gen-non-configurable-err.js	pass	
+test/language/statements/class/static-method-non-configurable-err.js	pass	
 test/language/statements/class/subclass-builtins/subclass-Error.js	pass	
 test/language/statements/class/subclass-builtins/subclass-EvalError.js	pass	
 test/language/statements/class/subclass-builtins/subclass-Float32Array.js	fail	nts: uncaught Test262Error: assert
