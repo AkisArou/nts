@@ -348,11 +348,15 @@ fn namespace_facts(
         .filter_map(|e| e.c_type.as_deref())
         .collect();
     let slots = vfunc_slots(namespace);
-    // Each boxed record, for its size.
+    // Each boxed record, for its size; and each plain one with members GIR
+    // lists, which is a `Struct` where the headers complete it.
     let sized: Vec<&str> = namespace
         .records
         .iter()
-        .filter(|r| r.get_type.is_some() && !r.class_struct)
+        .filter(|r| {
+            !r.class_struct
+                && (r.get_type.is_some() || (!r.pointer && !r.opaque && !r.fields.is_empty()))
+        })
         .filter_map(|r| r.c_type.as_deref())
         .collect();
     // And each boxed record's `get_type`, for whether the

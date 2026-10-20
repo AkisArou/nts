@@ -77,6 +77,20 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     for decl in &binding.types {
         match decl {
+            // A record C lays out for the program: its members, private ones
+            // too, which the compiler lays out and asserts against the
+            // header's own struct.
+            TypeDecl::Struct { name, tag, fields } => {
+                let members: Vec<String> = fields
+                    .iter()
+                    .map(|(field, ts)| format!("{field}: {ts}"))
+                    .collect();
+                let _ = writeln!(
+                    out,
+                    "  export type {name} = Struct<{{ {} }}, \"{tag}\">;",
+                    members.join("; ")
+                );
+            }
             TypeDecl::Class {
                 name,
                 tag,
@@ -1365,14 +1379,13 @@ fn declared_parameters(taken: &[(String, Mapped)], defaulted: &[(&str, &str)]) -
 /// was imported from, or `c:types` for a brand. `None` for anything else --
 /// `string`, `null`, a keyword.
 fn module_of_type(binding: &Binding, name: &str) -> Option<String> {
-    if binding
-        .types
+    if binding.types.iter().any(|decl| {
+        matches!(decl, super::map::TypeDecl::Class { name: n, .. }
+                | super::map::TypeDecl::Struct { name: n, .. } if n == name)
+    }) || binding
+        .enums
         .iter()
-        .any(|decl| matches!(decl, super::map::TypeDecl::Class { name: n, .. } if n == name))
-        || binding
-            .enums
-            .iter()
-            .any(|decl| decl.c_type.as_deref() == Some(name))
+        .any(|decl| decl.c_type.as_deref() == Some(name))
     {
         return Some(binding.module.clone());
     }

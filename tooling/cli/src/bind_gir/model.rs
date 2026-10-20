@@ -139,6 +139,21 @@ pub(crate) struct Record {
     /// (`typedef const struct hb_language_impl_t *hb_language_t`), so the
     /// type spelled bare is already the handle.
     pub(crate) pointer: bool,
+    /// `opaque="1"` or `disguised="1"`: GIR says the struct's members are
+    /// not the program's to know.
+    pub(crate) opaque: bool,
+    /// Its members, in order, private ones too: each is layout.
+    pub(crate) fields: Vec<Field>,
+}
+
+/// A record's member as GIR lists it. A nested `<union>` is one with no
+/// type, as a callback member is: layout no record spelling here reaches.
+#[derive(Debug)]
+pub(crate) struct Field {
+    pub(crate) name: String,
+    pub(crate) ty: TypeRef,
+    /// `bits="n"`: a bit-field.
+    pub(crate) bits: bool,
 }
 
 #[derive(Debug)]

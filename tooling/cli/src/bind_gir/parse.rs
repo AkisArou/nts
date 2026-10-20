@@ -5,7 +5,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Member,
+    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Field, Member,
     Namespace, Param, Property, Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
 };
 
@@ -215,6 +215,9 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 callables: callables(node),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
                 pointer: attribute(node, "pointer") == Some("1"),
+                opaque: attribute(node, "opaque") == Some("1")
+                    || attribute(node, "disguised") == Some("1"),
+                fields: fields(node),
             }),
             kind @ ("enumeration" | "bitfield") => namespace.enums.push(Enum {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
@@ -491,6 +494,24 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
         closure: attribute(node, "closure").and_then(|v| v.parse().ok()),
         destroy: attribute(node, "destroy").and_then(|v| v.parse().ok()),
     }
+}
+
+/// A record's members, in order: each `<field>` with its type as a
+/// parameter's would be read, and each nested `<union>` with none.
+fn fields(record: Node<'_, '_>) -> Vec<Field> {
+    record
+        .children()
+        .filter(|n| is(*n, "field") || is(*n, "union"))
+        .map(|node| Field {
+            name: attribute(node, "name").unwrap_or_default().to_owned(),
+            ty: if is(node, "field") {
+                param(node, false).ty
+            } else {
+                TypeRef::Missing
+            },
+            bits: attribute(node, "bits").is_some(),
+        })
+        .collect()
 }
 
 fn is(node: Node<'_, '_>, name: &str) -> bool {

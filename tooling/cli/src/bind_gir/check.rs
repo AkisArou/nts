@@ -136,7 +136,9 @@ fn against_headers_with_ready(
     // GLib's -- is the plain handle it was before, which the program cannot
     // hold in a box.
     for decl in &mut binding.types {
-        let super::map::TypeDecl::Class { boxed, .. } = decl;
+        let super::map::TypeDecl::Class { boxed, .. } = decl else {
+            continue;
+        };
         if boxed
             .as_ref()
             .is_some_and(|(get_type, _)| !bound.contains(get_type.as_str()))

@@ -23,8 +23,8 @@ use crate::bind_header::ctype::CType;
 use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Namespace, Param, Repository,
-    Scope, Transfer, TypeRef,
+    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Field, Namespace, Param, Record,
+    Repository, Scope, Transfer, TypeRef,
 };
 
 /// A type named from another module, or this one: `(module, name)`, the module
@@ -194,6 +194,14 @@ pub(crate) enum TypeDecl {
         /// For a `GLib` boxed record, its `GType` function and its size (0
         /// where the headers keep it opaque): `Boxed<Tag, GetType, Size>`.
         boxed: Option<(String, u64)>,
+    },
+    /// A record C lays out for the program -- `PangoRectangle` -- as
+    /// `Struct<{ x: c_int; ... }, "_PangoRectangle">`: each member as
+    /// `(name, spelling)`, private ones too, since each is layout.
+    Struct {
+        name: String,
+        tag: String,
+        fields: Vec<(String, String)>,
     },
 }
 
@@ -580,6 +588,11 @@ struct Mapper<'a> {
     c_types: BTreeMap<&'a str, &'a Namespace>,
     /// What the headers say: struct tags and enum signedness (see `facts`).
     facts: &'a super::facts::Facts,
+    /// The records the type system embeds first in what it hands out -- an
+    /// instance's `GTypeInstance`, a class struct's `GTypeClass`, an
+    /// interface's `GTypeInterface` -- which stay handles, never `Struct`s:
+    /// `g_type_class_ref` returns one.
+    embedded: BTreeSet<&'a str>,
     binding: Binding,
     /// Mapping one of `COMPARES_ITEMS`: its compare callback's `gpointer`s are
     /// a list model's items.
@@ -625,11 +638,30 @@ pub(crate) fn bind<'a>(
             c_types.entry(c_type).or_insert(ns);
         }
     }
+    let mut embedded = BTreeSet::new();
+    for ns in repository.namespaces.values() {
+        let instances = ns.classes.iter().filter_map(|c| c.first_field.as_ref());
+        let class_structs = ns
+            .records
+            .iter()
+            .filter(|r| r.class_struct)
+            .filter_map(|r| r.fields.first().map(|f| &f.ty));
+        for first in instances.chain(class_structs) {
+            if let TypeRef::Named {
+                c_type: Some(c_type),
+                ..
+            } = first
+            {
+                embedded.insert(c_type.as_str());
+            }
+        }
+    }
     let mut mapper = Mapper {
         repository,
         namespace,
         c_types,
         facts,
+        embedded,
         comparing_items: false,
         binding: Binding {
             module: module_of(namespace),
@@ -673,6 +705,7 @@ pub(crate) fn bind<'a>(
                         .then(|| callable.name.clone());
                 if let Some(record) = record
                     && function.method.is_none()
+                    && mapper.plain_struct(record).is_none()
                     && matches!(
                         callable.kind,
                         CallableKind::Constructor | CallableKind::Function
@@ -1346,6 +1379,39 @@ fn vfunc_tuple(function: &mut Function) -> Vec<(String, bool)> {
     names
 }
 
+/// A plain record's member, as [`Mapper::member`] reads it.
+enum StructMember {
+    /// A value of the type GIR names, qualified.
+    Value(String),
+    /// Another plain record, held by value, by its C type.
+    Nested(String),
+}
+
+/// A type name as `namespace` writes it, qualified so it resolves from any
+/// namespace's binding -- `Weight` in Pango is `Pango.Weight` -- with C's own
+/// names (`gint`, `gpointer`, `utf8`) left bare.
+fn qualified_in(namespace: &Namespace, name: &str) -> String {
+    if name.contains('.')
+        || SCALARS.iter().any(|(gir, ..)| *gir == name)
+        || matches!(
+            name,
+            "gpointer" | "gconstpointer" | "utf8" | "filename" | "none" | "va_list"
+        )
+    {
+        name.to_owned()
+    } else {
+        format!("{}.{name}", namespace.name)
+    }
+}
+
+/// What a `T *` spelling points at: `T`, without `const`.
+fn pointee_of(c_type: &str) -> &str {
+    c_type
+        .trim()
+        .trim_start_matches("const ")
+        .trim_end_matches(['*', ' '])
+}
+
 /// A method of the class its instance is: `this` on that class's methods.
 /// Only a plain or `Const` handle is an instance a method can be called on;
 /// an erased one is left a function.
@@ -1630,6 +1696,17 @@ impl<'a> Mapper<'a> {
             else {
                 continue;
             };
+            if self.plain_struct(c_type).is_some()
+                && let Some(fields) = self.struct_fields(record)
+            {
+                self.binding.brands.insert("Struct");
+                self.binding.types.push(TypeDecl::Struct {
+                    name: c_type.clone(),
+                    tag: tag.clone(),
+                    fields,
+                });
+                continue;
+            }
             self.binding.brands.insert("Class");
             let boxed = self.boxed_record(c_type);
             // A boxed record's `GType`, which the compiler boxes and copies it
@@ -2307,8 +2384,12 @@ impl<'a> Mapper<'a> {
     /// A handle's slot is nullable whatever GIR says of the value: it holds
     /// what the caller put there until the callee writes it, and `local`
     /// zeroes it. `optional` is whether the caller may pass no slot at all.
+    ///
+    /// A plain record's pointer is no slot but the storage itself, whether
+    /// or not GIR says the caller allocates it: `pango_extents_to_pixels`
+    /// reads and rewrites the `PangoRectangle` the program gives it.
     fn out(&mut self, param: &Param) -> Result<Mapped, Reason> {
-        if param.caller_allocates {
+        if param.caller_allocates || self.struct_storage(param) {
             return self.caller_allocated(param);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
@@ -2397,7 +2478,9 @@ impl<'a> Mapper<'a> {
     /// a values form. For one the headers keep opaque there is no storage a
     /// caller could allocate, so GIR can only mean the caller's own object:
     /// `hb_face_collect_unicodes(face, set)` fills a set `hb_set_create()`
-    /// made, passed as the handle. Anything else is refused.
+    /// made, passed as the handle. For a plain record, a pointer to its
+    /// `Struct`: storage the program makes, `local<PangoRectangle>()`, and
+    /// reads once C has filled it. Anything else is refused.
     fn caller_allocated(&mut self, param: &Param) -> Result<Mapped, Reason> {
         if !matches!(param.ty, TypeRef::Named { .. }) {
             return Err(Reason::CallerAllocates);
@@ -2410,7 +2493,11 @@ impl<'a> Mapper<'a> {
             optional: false,
             ..param.clone()
         };
+        let storage = self.struct_storage(param);
         let mapped = self.typed(&value)?;
+        if storage {
+            return Ok(mapped);
+        }
         let Shape::Handle { class, .. } = &mapped.shape else {
             return Err(Reason::CallerAllocates);
         };
@@ -3075,6 +3162,16 @@ impl<'a> Mapper<'a> {
         {
             let local = self.name_in(namespace, base);
             return Ok(self.handle(local, &pointer.tag, pointer.constant, param.nullable));
+        }
+        // A plain record's pointer points at its `Struct`, which the program
+        // reads and writes through: `Ptr<PangoRectangle>`, and `ConstPtr<…>`
+        // where C points `const`.
+        if depth == 1
+            && let Some((namespace, _)) = self.plain_struct(base)
+            && let Some(tag) = self.facts.tags.get(base).cloned()
+        {
+            let local = self.name_in(namespace, base);
+            return Ok(self.struct_pointer(&local, &tag, constant, param.nullable));
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
@@ -3887,6 +3984,149 @@ impl<'a> Mapper<'a> {
         false
     }
 
+    /// Whether `param` is a pointer to a plain record's storage: one `*` on a
+    /// `Struct`'s C type.
+    fn struct_storage(&self, param: &Param) -> bool {
+        matches!(
+            &param.ty,
+            TypeRef::Named { c_type: Some(c_type), .. }
+                if c_type.matches('*').count() == 1 && self.plain_struct(pointee_of(c_type)).is_some()
+        )
+    }
+
+    /// A pointer to a plain record's `Struct`: `Ptr<PangoRectangle>`, or
+    /// `ConstPtr<…>`. To C the same `struct _PangoRectangle *` a handle is.
+    fn struct_pointer(&mut self, local: &str, tag: &str, constant: bool, nullable: bool) -> Mapped {
+        let pointee = Pointee::Opaque(Handle::from(tag));
+        let (brand, pointee) = if constant {
+            ("ConstPtr", Pointee::Const(Box::new(pointee)))
+        } else {
+            ("Ptr", pointee)
+        };
+        self.binding.brands.insert(brand);
+        Mapped {
+            shape: Shape::Other,
+            ts: format!("{brand}<{local}>{}", if nullable { " | null" } else { "" }),
+            c: Type::Pointer(pointee),
+        }
+    }
+
+    /// A record C lays out for the program, a `Struct` rather than a handle
+    /// (`PangoRectangle`): one with no `GType` to box it by, that GIR does not
+    /// call opaque, whose members GIR lists and the headers complete --
+    /// `sizeof` answered -- each one a `Struct` spells, and that is not one
+    /// the type system embeds first in what it hands out.
+    fn plain_struct(&self, c_type: &str) -> Option<(&'a Namespace, &'a Record)> {
+        self.plain_struct_at(c_type, 0)
+    }
+
+    fn plain_struct_at(&self, c_type: &str, depth: usize) -> Option<(&'a Namespace, &'a Record)> {
+        let namespace = self.c_types.get(c_type).copied()?;
+        let record = namespace
+            .records
+            .iter()
+            .find(|r| !r.class_struct && r.c_type.as_deref() == Some(c_type))?;
+        // Bounded: a record holding itself by value is C's error, not a
+        // reason to recurse.
+        let plain = depth < 8
+            && record.get_type.is_none()
+            && !record.pointer
+            && !record.opaque
+            && !record.fields.is_empty()
+            && !self.embedded.contains(c_type)
+            && self.facts.sizes.contains_key(c_type)
+            && self.facts.tags.contains_key(c_type)
+            && record
+                .fields
+                .iter()
+                .all(|field| self.member(namespace, field, depth).is_some());
+        plain.then_some((namespace, record))
+    }
+
+    /// What a record's member is to a `Struct`: a value `typed` spells -- a
+    /// scalar, an enum, a `void *` -- by its type's qualified name, or
+    /// another plain record held by value, by its C type. `None` for what no
+    /// `Struct` spells here: a bit-field, a `volatile` member, a string, a
+    /// handle, an array, a callback, a union.
+    fn member(&self, namespace: &Namespace, field: &Field, depth: usize) -> Option<StructMember> {
+        if field.bits {
+            return None;
+        }
+        let TypeRef::Named { name, c_type } = &field.ty else {
+            return None;
+        };
+        let c_type = c_type.as_deref().unwrap_or("").trim();
+        if c_type.split_whitespace().any(|word| word == "volatile") {
+            return None;
+        }
+        let name = qualified_in(namespace, name);
+        let target = self.alias_target(&name).unwrap_or_else(|| name.clone());
+        if matches!(target.as_str(), "gpointer" | "gconstpointer") {
+            return Some(StructMember::Value(name));
+        }
+        if c_type.contains('*') || matches!(c_type, "bool" | "_Bool") {
+            return None;
+        }
+        if SCALARS.iter().any(|(gir, ..)| *gir == target) {
+            return Some(StructMember::Value(name));
+        }
+        match self.resolve(&target) {
+            Some(Resolved::Enum(..)) => Some(StructMember::Value(name)),
+            Some(Resolved::Record) => self
+                .plain_struct_at(c_type, depth + 1)
+                .map(|_| StructMember::Nested(c_type.to_owned())),
+            _ => None,
+        }
+    }
+
+    /// A plain record's members as its `Struct` spells them, in order; `None`
+    /// where one does not spell after all.
+    fn struct_fields(&mut self, record: &'a Record) -> Option<Vec<(String, String)>> {
+        let mut fields = Vec::new();
+        for field in &record.fields {
+            let ts = match self.member(self.namespace, field, 0)? {
+                StructMember::Nested(c_type) => {
+                    let owner = self.c_types.get(c_type.as_str()).copied()?;
+                    self.name_in(owner, &c_type)
+                }
+                StructMember::Value(name) => {
+                    let TypeRef::Named { c_type, .. } = &field.ty else {
+                        return None;
+                    };
+                    // A scalar member is C's integer as C lays it out: the
+                    // brand itself, never `AsNumber`, which is how a call
+                    // hands one over.
+                    let target = self.alias_target(&name).unwrap_or_else(|| name.clone());
+                    if let Some((_, brand, _)) = SCALARS.iter().find(|(gir, ..)| *gir == target) {
+                        self.binding.brands.insert(brand);
+                        fields.push((field.name.clone(), (*brand).to_owned()));
+                        continue;
+                    }
+                    let value = Param {
+                        name: field.name.clone(),
+                        ty: TypeRef::Named {
+                            name,
+                            c_type: c_type.clone(),
+                        },
+                        direction: Direction::In,
+                        transfer: Transfer::None,
+                        transfer_stated: false,
+                        // A pointer member holds `NULL` as readily as not.
+                        nullable: true,
+                        optional: false,
+                        caller_allocates: false,
+                        scope: None,
+                        closure: None,
+                        destroy: None,
+                    };
+                    self.typed(&value).ok()?.ts
+                }
+            };
+            fields.push((field.name.clone(), ts));
+        }
+        Some(fields)
+    }
+
     fn handle(&mut self, local: String, tag: &str, constant: bool, nullable: bool) -> Mapped {
         let pointee = Pointee::Opaque(Handle::from(tag));
         let class = local.clone();
@@ -4680,6 +4920,136 @@ mod tests {
                 binding.refused
             );
         }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// The GIR `a_plain_record_is_a_struct_and_its_pointer_is_storage` binds:
+    /// `SRect`, and one record beside it for each thing that keeps one a
+    /// handle; and a function taking an `SRect *` out, inout and `const`.
+    fn plain_struct_gir() -> String {
+        let field = |name: &str, ty: &str, c_type: &str| {
+            format!(
+                r#"<field name="{name}" writable="1"><type name="{ty}" c:type="{c_type}"/></field>"#
+            )
+        };
+        let record = |name: &str, fields: &str| {
+            format!(r#"<record name="{name}" c:type="S{name}">{fields}</record>"#)
+        };
+        let function = |name: &str, parameter: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="none" c:type="void"/></return-value><parameters>{parameter}</parameters></function>"#
+            )
+        };
+        let ints = [field("x", "gint", "gint"), field("y", "gint", "gint")].concat();
+        let rect = [
+            ints.as_str(),
+            &field("stamp", "gint64", "gint64"),
+            r#"<field name="reserved" readable="0" private="1"><type name="gpointer" c:type="gpointer"/></field>"#,
+        ]
+        .concat();
+        [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            &record("Rect", &rect),
+            &record("Volatile", &field("state", "gint", "volatile gint")),
+            &record("Root", &field("type", "GType", "GType")),
+            &record("Unsized", &ints),
+            r#"<record name="ThingClass" c:type="SThingClass" glib:is-gtype-struct-for="Thing">"#,
+            &field("root", "Root", "SRoot"),
+            "</record>",
+            &function(
+                "fill",
+                r#"<parameter name="out" direction="out" caller-allocates="1" transfer-ownership="none"><type name="Rect" c:type="SRect*"/></parameter>"#,
+            ),
+            &function(
+                "scale",
+                r#"<parameter name="rect" direction="inout" caller-allocates="0" transfer-ownership="full" nullable="1"><type name="Rect" c:type="SRect*"/></parameter>"#,
+            ),
+            &function(
+                "area",
+                r#"<parameter name="rect"><type name="Rect" c:type="const SRect*"/></parameter>"#,
+            ),
+            "</namespace></repository>",
+        ]
+        .concat()
+    }
+
+    /// A record with no `GType`, whose members the headers lay out, is a
+    /// `Struct` -- private members too, a 64-bit one as its brand -- and a
+    /// pointer to one is the program's storage, in, out or both. The
+    /// controls differ from it in one thing each and stay handles: a
+    /// `volatile` member, a record a class struct embeds first, one the
+    /// headers do not complete.
+    #[test]
+    fn a_plain_record_is_a_struct_and_its_pointer_is_storage() {
+        use super::super::facts;
+        use super::{Reason, TypeDecl, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-plain-struct-test").expect("fixture directory");
+        std::fs::write(dir.join("S-1.0.gir"), plain_struct_gir()).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: ["SRect", "SVolatile", "SRoot", "SUnsized"]
+                .map(|c| (c.to_owned(), format!("_{c}")))
+                .into(),
+            sizes: [("SRect", 32), ("SVolatile", 4), ("SRoot", 8)]
+                .map(|(c, size)| (c.to_owned(), size))
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["S"], &header);
+        let mut structs = binding.types.iter().filter_map(|decl| match decl {
+            TypeDecl::Struct { name, tag, fields } => Some((name, tag, fields)),
+            TypeDecl::Class { .. } => None,
+        });
+        let (name, tag, fields) = structs.next().expect("a Struct");
+        assert!(structs.next().is_none(), "more than one Struct");
+        assert_eq!((name.as_str(), tag.as_str()), ("SRect", "_SRect"));
+        let spelled: Vec<(&str, &str)> = fields
+            .iter()
+            .map(|(name, ts)| (name.as_str(), ts.as_str()))
+            .collect();
+        assert_eq!(
+            spelled,
+            [
+                ("x", "c_int"),
+                ("y", "c_int"),
+                ("stamp", "BigInt64"),
+                ("reserved", "Ptr<void> | null"),
+            ]
+        );
+        for control in ["SVolatile", "SRoot", "SUnsized"] {
+            assert!(
+                binding
+                    .types
+                    .iter()
+                    .any(|decl| matches!(decl, TypeDecl::Class { name, .. } if name == control)),
+                "{control} is no longer a handle"
+            );
+        }
+        let parameter = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .map_or_else(
+                    || panic!("{symbol}: {:?}", binding.refused),
+                    |f| f.parameters[0].1.ts.clone(),
+                )
+        };
+        assert_eq!(parameter("s_fill"), "Ptr<SRect>");
+        assert_eq!(parameter("s_scale"), "Ptr<SRect> | null");
+        assert_eq!(parameter("s_area"), "ConstPtr<SRect>");
+        assert!(
+            !binding
+                .refused
+                .iter()
+                .any(|(_, r)| *r == Reason::CallerAllocates)
+        );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

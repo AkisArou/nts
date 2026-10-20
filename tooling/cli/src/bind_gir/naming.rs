@@ -332,7 +332,9 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
     let mut taken: BTreeSet<String> = out
         .types
         .iter()
-        .map(|TypeDecl::Class { name, .. }| name.clone())
+        .map(|decl| match decl {
+            TypeDecl::Class { name, .. } | TypeDecl::Struct { name, .. } => name.clone(),
+        })
         .collect();
     taken.extend(out.enums.iter().map(|e| e.name.clone()));
     taken.extend(out.constants.iter().map(|c| c.name.clone()));
@@ -374,15 +376,24 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
     for text in texts {
         qualifiers.extend(names.qualifiers(&namespace.name, text));
     }
-    for TypeDecl::Class {
-        parent, implements, ..
-    } in &binding.types
-    {
-        let bases = parent
-            .iter()
-            .map(|(_, name)| name)
-            .chain(implements.iter().map(|(name, _)| name));
-        qualifiers.extend(bases.flat_map(|base| names.qualifiers(&namespace.name, base)));
+    for decl in &binding.types {
+        match decl {
+            TypeDecl::Class {
+                parent, implements, ..
+            } => {
+                let bases = parent
+                    .iter()
+                    .map(|(_, name)| name)
+                    .chain(implements.iter().map(|(name, _)| name));
+                qualifiers.extend(bases.flat_map(|base| names.qualifiers(&namespace.name, base)));
+            }
+            // A member another namespace's record or enum types.
+            TypeDecl::Struct { fields, .. } => qualifiers.extend(
+                fields
+                    .iter()
+                    .flat_map(|(_, ts)| names.qualifiers(&namespace.name, ts)),
+            ),
+        }
     }
     out.namespaces = qualifiers
         .into_iter()
@@ -460,30 +471,40 @@ impl Renamer<'_> {
     }
 
     fn decl(&self, decl: &TypeDecl) -> TypeDecl {
-        let TypeDecl::Class {
-            name,
-            tag,
-            parent,
-            counted,
-            interface,
-            implements,
-            boxed,
-        } = decl;
-        TypeDecl::Class {
-            name: self.class(name),
-            tag: tag.clone(),
-            // Qualified where it is another namespace's, so no module is
-            // needed beside it: the namespace is imported whole.
-            parent: parent
-                .as_ref()
-                .map(|(_, parent)| (String::new(), self.class(parent))),
-            counted: *counted,
-            interface: *interface,
-            implements: implements
-                .iter()
-                .map(|(name, tag)| (self.class(name), tag.clone()))
-                .collect(),
-            boxed: boxed.clone(),
+        match decl {
+            TypeDecl::Class {
+                name,
+                tag,
+                parent,
+                counted,
+                interface,
+                implements,
+                boxed,
+            } => TypeDecl::Class {
+                name: self.class(name),
+                tag: tag.clone(),
+                // Qualified where it is another namespace's, so no module is
+                // needed beside it: the namespace is imported whole.
+                parent: parent
+                    .as_ref()
+                    .map(|(_, parent)| (String::new(), self.class(parent))),
+                counted: *counted,
+                interface: *interface,
+                implements: implements
+                    .iter()
+                    .map(|(name, tag)| (self.class(name), tag.clone()))
+                    .collect(),
+                boxed: boxed.clone(),
+            },
+            // Members keep C's names: they are the struct's, as its tag is.
+            TypeDecl::Struct { name, tag, fields } => TypeDecl::Struct {
+                name: self.class(name),
+                tag: tag.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(field, ts)| (field.clone(), self.text(ts)))
+                    .collect(),
+            },
         }
     }
 
