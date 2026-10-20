@@ -1541,12 +1541,17 @@ fn source_instanceof_exact_agrees_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
     // The face dispatch tests for Swapped, whose type is exact: no display
-    // walk on that path.
+    // walk on that path, and the guarded unerase behind the test casts
+    // directly, with no tag-reading fallback.
     let calls = common::calls_by_name(&emitted.bytes);
     let face = &calls["faceFields"];
     assert!(
         !face.iter().any(|c| c.starts_with("object.instance")),
         "faceFields still walks the display: {face:?}"
+    );
+    assert!(
+        !face.iter().any(|c| c == "value.tag"),
+        "faceFields still reads a tag behind its class test: {face:?}"
     );
 }
 

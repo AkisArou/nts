@@ -87,6 +87,9 @@ pub(crate) struct Body<'b, 'p> {
     typed_reads: BTreeMap<ValueId, HirType>,
     /// The values that cannot be null (`never_null`).
     never_null: std::collections::BTreeSet<ValueId>,
+    /// The unerases a dominating class test already answered
+    /// (`guarded_casts`), by the unerase's result.
+    guarded_casts: std::collections::BTreeSet<ValueId>,
     /// The literals a loop reads, each in its own local from entry
     /// (`literals::hoisted`).
     hoisted: std::collections::BTreeSet<ValueId>,
@@ -183,6 +186,7 @@ impl<'b, 'p> Body<'b, 'p> {
         let typed_gets = crate::collections::typed_gets(func, types);
         let typed_reads = crate::collections::typed_reads(func, types);
         let never_null = crate::never_null::values(func);
+        let guarded_casts = crate::guarded_casts::values(func, &types.objects);
         let hoisted = crate::literals::hoisted(func, plan);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
@@ -247,6 +251,7 @@ impl<'b, 'p> Body<'b, 'p> {
             typed_gets,
             typed_reads,
             never_null,
+            guarded_casts,
             hoisted,
             scratch,
             pc,
@@ -279,6 +284,10 @@ impl<'b, 'p> Body<'b, 'p> {
     /// Whether `value` cannot be null.
     pub(crate) fn never_null(&self, value: ValueId) -> bool {
         self.never_null.contains(&value)
+    }
+    /// Whether the unerase answering `result` is guarded by its class test.
+    pub(crate) fn guarded_cast(&self, result: ValueId) -> bool {
+        self.guarded_casts.contains(&result)
     }
     /// The type an entry read is held as, where it is not erased.
     pub(crate) fn typed_read(&self, value: ValueId) -> Option<&HirType> {

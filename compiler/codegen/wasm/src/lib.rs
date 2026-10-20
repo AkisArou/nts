@@ -35,6 +35,7 @@ mod flow;
 mod function_names;
 mod gc;
 mod glue;
+mod guarded_casts;
 mod helpers;
 mod host;
 mod indexing;

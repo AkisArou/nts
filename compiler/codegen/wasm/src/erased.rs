@@ -530,6 +530,15 @@ pub(crate) fn unerase(
         return body.load(value);
     }
     let ty = body.ty(result).clone();
+    // A class test on the only edge in already answered this unerase:
+    // the value is a non-null object of the type, so one cast is it.
+    if body.guarded_cast(result)
+        && let Physical::Reference(reference) = body.types().value_slot(&ty)?
+    {
+        body.load(value)?;
+        body.instruction(&I::RefCastNonNull(reference.heap_type));
+        return Ok(());
+    }
     unerase_to(body, value, &ty)
 }
 
