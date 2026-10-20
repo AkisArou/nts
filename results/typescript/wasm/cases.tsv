@@ -1,6 +1,6 @@
 # Test262 tests/typescript cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 060ce4dcd389a671, commit 5b46e202ff4aa6d7a95e547d23fa2e7b3b1c2b06, backend wasm, harness f8ca0afd3c45597f; machine at start: 20.9 GB available, swap 5/31.5 GB, load 11.3/10.8 (1m/5m), 16 cores; 4 worker(s)
+# compiler c118bf2316cb45e2, commit 06874d7e23bae26a5733ebb0b7a9d2c6106466c3, backend wasm, harness f8ca0afd3c45597f; machine at start: 22.3 GB available, swap 2.2/31.5 GB, load 44.5/52.8 (1m/5m), 16 cores; 4 worker(s)
 tests/typescript/async/async-method.ts	pass	
 tests/typescript/async/async-recursion.ts	pass	
 tests/typescript/async/await-a-plain-value.ts	pass	
@@ -110,6 +110,7 @@ tests/typescript/generics/function-over-nested.ts	pass
 tests/typescript/generics/function-over-number.ts	pass	
 tests/typescript/generics/function-over-string.ts	pass	
 tests/typescript/generics/function-over-union.ts	pass	
+tests/typescript/generics/map-of-arrays.ts	pass	
 tests/typescript/interfaces/class-without-implements.ts	pass	
 tests/typescript/interfaces/declaration-merging.ts	pass	
 tests/typescript/interfaces/extends-class.ts	pass	
