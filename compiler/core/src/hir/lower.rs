@@ -17068,6 +17068,10 @@ fn signature_key(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Vec<TypeId>
 /// disagreement, where a signature synthesized from the checker would have
 /// quietly been a third opinion neither closure held.
 ///
+/// One result is not the first closure's: generators returning different
+/// frames, which agree only about the generator the frames extend. See
+/// [`shared_generator_result`].
+///
 /// # Named function types only
 ///
 /// An inline `(x: number) => number` written in two places can be two type ids
@@ -18236,6 +18240,10 @@ fn relate_closures_to_signatures(
     // them -- sixteen `Fn2#call`s in `captured-by-reference`, which `verify`
     // caught as `DuplicateFunction` on the first run.
     let mut declared_for: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+    // What each signature's closures return, beside the result the signature
+    // declares: see [`shared_generator_result`].
+    let mut returned: rustc_hash::FxHashMap<usize, (TypeId, Vec<HirType>)> =
+        rustc_hash::FxHashMap::default();
 
     for (index, info) in closures.iter().enumerate() {
         // A job's node is the `then` it calls, whose type is `then`'s and not
@@ -18352,10 +18360,20 @@ fn relate_closures_to_signatures(
                 declaration_shell(call, &declared, HirType::Managed(ManagedType::Object(base))),
             ));
         }
+        returned
+            .entry(signature)
+            .or_insert_with(|| (key.1, Vec::new()))
+            .1
+            .push(call.return_type.clone());
         relate.push((at, base, declared));
     }
 
-    for (signature, shell) in declare {
+    for (signature, mut shell) in declare {
+        if let Some((result, results)) = returned.get(&signature)
+            && let Some(shared) = shared_generator_result(snapshot, *result, results)
+        {
+            shell.return_type = shared;
+        }
         let table = hierarchy.table_size();
         if program.layouts[signature].methods.len() < table {
             program.layouts[signature].methods.resize(table, None);
@@ -18366,6 +18384,40 @@ fn relate_closures_to_signatures(
     for (at, ty, _) in relate {
         program.layouts[at].base = Some(ty);
     }
+}
+
+/// The result a signature's declaration gives when its closures are generators
+/// returning different frames: the abstract generator every frame extends.
+///
+/// The declaration is otherwise the first closure's `call`, and a generator's
+/// `call` returns that generator's own frame, a class no other closure's `call`
+/// returns. A second generator's `call` then overrides nothing, and the JVM
+/// declines it (NTS4009; tests/programs/two-generator-closures-called-through-
+/// one-signature). Each frame extends the `Generator<T, …>` its closure
+/// declares, which is the signature's own result, so the declaration takes that
+/// and each `call` narrows it: the covariant override the JVM bridges.
+///
+/// Only then. One closure, or several returning one frame, keep the frame. It
+/// is the stronger fact: whatever holds it reaches that frame's resumption
+/// without a dispatch.
+fn shared_generator_result(
+    snapshot: &SemanticSnapshot,
+    result: TypeId,
+    results: &[HirType],
+) -> Option<HirType> {
+    let mut frames = results
+        .iter()
+        .map(|returned| match returned {
+            HirType::Managed(ManagedType::Object(ty)) if super::is_generator_frame(*ty) => {
+                Some(*ty)
+            }
+            _ => None,
+        })
+        .collect::<Option<Vec<TypeId>>>()?;
+    frames.sort_unstable_by_key(|ty| ty.0);
+    frames.dedup();
+    (frames.len() > 1 && abstract_generator_kind(snapshot, result).is_some())
+        .then_some(HirType::Managed(ManagedType::Object(result)))
 }
 
 /// Lay out every function type the program holds a value of.
@@ -42817,10 +42869,7 @@ impl<'a> FuncBuilder<'a> {
             // A generator, recognised by the type its call produced: the frame
             // ids are their own part of the synthetic space, so nothing else
             // can be mistaken for one.
-            (HirType::Managed(ManagedType::Object(ty)), None)
-                if ty.0 >= super::SYNTHETIC_GENERATOR_FRAMES
-                    && ty.0 < super::SYNTHETIC_CLOSURES =>
-            {
+            (HirType::Managed(ManagedType::Object(ty)), None) if super::is_generator_frame(*ty) => {
                 self.generator_walk(sequence, value)
             }
             // A generator that arrived rather than being made here, which is

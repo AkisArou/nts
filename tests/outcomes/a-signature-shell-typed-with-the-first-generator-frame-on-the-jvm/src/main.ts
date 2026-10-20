@@ -13,6 +13,13 @@
 // would be a covariant return the JVM bridges (`narrows_return`). C, LLVM
 // and Wasm call through the slot and agree with node. The one-change
 // control, `...-control`, binds the arrow with `const`.
+//
+// **Since 2026-10-20 it agrees, a guard.** Where a signature's closures
+// return different frames, its shell returns the abstract generator they all
+// extend (`shared_generator_result` in the lowering), and each closure's
+// `call` narrows it. tests/programs/two-generator-closures-called-through-
+// one-signature steps both generators through such a signature, and the same
+// for two async generators.
 let calls = 0;
 let f;
 f = ([gen = function* () {}, xGen = function* x() {}]) => {

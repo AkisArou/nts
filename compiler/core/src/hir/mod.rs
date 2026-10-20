@@ -2561,6 +2561,12 @@ pub fn generator_frame(index: usize) -> TypeId {
     TypeId(id)
 }
 
+/// Whether a type id is a generator's frame, one [`generator_frame`] reserved.
+#[must_use]
+pub fn is_generator_frame(ty: TypeId) -> bool {
+    (SYNTHETIC_GENERATOR_FRAMES..SYNTHETIC_CLOSURES).contains(&ty.0)
+}
+
 /// Whether a type id names a closure's class.
 ///
 /// The one question about a synthetic id that is asked outside the module that
