@@ -34,6 +34,10 @@
 //                 is the caller's own object. The face is built from two
 //                 tables, a `cmap` mapping U+0041 to glyph 1 and a `maxp` of
 //                 two glyphs, so the set holds exactly U+0041
+//   rect 1,2 3x4  a `PangoRectangle` the program lays out itself -- a record
+//                 with no GType, a `Struct` -- written in Pango units, which
+//                 `pango_extents_to_pixels` rewrites in place: the origin
+//                 rounded down, the far edge up
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -187,7 +191,13 @@ import {
   hb_set_get_population,
   hb_set_has,
 } from "c:HarfBuzz-0.0";
-import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
+import {
+  pango_context_new,
+  pango_extents_to_pixels,
+  pango_font_description_from_string,
+  pango_parse_markup,
+} from "c:Pango-1.0";
+import type { PangoRectangle } from "c:Pango-1.0";
 import type { CBool, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
 import { local, stringFrom, bytesFrom } from "c:memory";
@@ -288,6 +298,16 @@ function boxedRecords(): void {
   const unicodes = hb_set_create();
   hb_face_collect_unicodes(built, unicodes);
   console.log("collected " + String(hb_set_get_population(unicodes)) + " " + String(hb_set_has(unicodes, 0x41) !== 0));
+  // Storage of the program's own, which C reads and rewrites.
+  const extents = local<PangoRectangle>();
+  extents.x = 1024;
+  extents.y = 2048;
+  extents.width = 3072;
+  extents.height = 4096;
+  pango_extents_to_pixels(extents, null);
+  console.log(
+    "rect " + String(extents.x) + "," + String(extents.y) + " " + String(extents.width) + "x" + String(extents.height),
+  );
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
