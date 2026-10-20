@@ -38,8 +38,10 @@ use crate::bind_winmd::{self, winrt};
 const GENERATOR: u64 = fnv(&[
     include_bytes!("bind_scratch.rs"),
     include_bytes!("windows_surface.rs"),
+    include_bytes!("bind_header/ctype.rs"),
+    include_bytes!("bind_header/mod.rs"),
+    include_bytes!("bind_header/probe.rs"),
     include_bytes!("bind_winmd/check.rs"),
-    include_bytes!("bind_winmd/ctype.rs"),
     include_bytes!("bind_winmd/emit.rs"),
     include_bytes!("bind_winmd/facts.rs"),
     include_bytes!("bind_winmd/iid.rs"),
@@ -401,17 +403,21 @@ mod tests {
     #[test]
     fn every_generator_file_is_hashed() {
         let this = include_str!("windows_surface.rs");
-        let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bind_winmd");
-        for entry in std::fs::read_dir(&dir).expect("bind_winmd") {
-            let name = entry
-                .expect("entry")
-                .file_name()
-                .into_string()
-                .expect("utf-8");
-            assert!(
-                this.contains(&format!("include_bytes!(\"bind_winmd/{name}\")")),
-                "bind_winmd/{name} is not hashed into GENERATOR"
-            );
+        for module in ["bind_winmd", "bind_header"] {
+            let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join(module);
+            for entry in std::fs::read_dir(&dir).expect(module) {
+                let name = entry
+                    .expect("entry")
+                    .file_name()
+                    .into_string()
+                    .expect("utf-8");
+                assert!(
+                    this.contains(&format!("include_bytes!(\"{module}/{name}\")")),
+                    "{module}/{name} is not hashed into GENERATOR"
+                );
+            }
         }
     }
 }

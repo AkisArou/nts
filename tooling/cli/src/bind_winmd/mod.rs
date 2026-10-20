@@ -17,7 +17,6 @@
 //! - [`emit`] writes one module per namespace.
 
 mod check;
-mod ctype;
 pub(crate) mod emit;
 mod facts;
 mod iid;

@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use windows_metadata::{Type, Value};
 
-use super::ctype::CType;
 use super::facts::{self, Facts, Questions};
 use super::read::{Kind, Model, Name};
+use crate::bind_header::ctype::CType;
 
 /// C `long`/`unsigned long` in TypeScript: 32 bits on Windows, so a `number`
 /// (`c_long32`), where portable code's `c_long` is a `bigint`. A `DWORD` flag

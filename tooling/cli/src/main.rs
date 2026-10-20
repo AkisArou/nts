@@ -8,6 +8,7 @@
 mod apple_surface;
 mod bind;
 mod bind_gir;
+mod bind_header;
 mod bind_objc;
 mod bind_scratch;
 mod bind_winmd;

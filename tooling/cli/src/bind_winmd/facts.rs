@@ -1,18 +1,14 @@
 //! What the headers say, asked of clang: the exact C type of every function,
-//! struct field and typedef the metadata names.
-//!
-//! Each question is a declaration whose name starts with a prefix no header
-//! uses (`__typeof__(F) ntswinmd_fn_F;`), and `-ast-dump-filter` prints only
-//! those, so a probe of all of `windows.h` is a fraction of a second. clang
-//! desugars one typedef per answer, so the names still left in the answers are
-//! asked about in the next round, until none are.
+//! struct field and typedef the metadata names, through the shared
+//! [`probe`](crate::bind_header::probe).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
-use super::ctype::{self, CType};
+use crate::bind_header::ctype::{self, CType};
+use crate::bind_header::probe::Probe;
 
 const PREFIX: &str = "ntswinmd_";
 
@@ -94,90 +90,6 @@ pub(crate) fn include_lines(headers: &[Vec<String>]) -> Vec<String> {
     lines
 }
 
-struct Answer {
-    name: String,
-    qual: String,
-    desugared: Option<String>,
-    value: Option<u32>,
-}
-
-/// clang nests an evaluated enum initializer under implicit casts. Read only
-/// its `ConstantExpr`, never an unevaluated literal inside the expression.
-fn constant_value(node: &serde_json::Value) -> Option<u32> {
-    if node.get("kind").and_then(serde_json::Value::as_str) == Some("ConstantExpr") {
-        return node.get("value")?.as_str()?.parse().ok();
-    }
-    node.get("inner")?
-        .as_array()?
-        .iter()
-        .find_map(constant_value)
-}
-
-/// One clang run over `headers` and `declarations`, answering with each probe's
-/// type spelling and, for a slot question, its evaluated integer value.
-fn ask(headers: &[Vec<String>], clang_args: &[String], declarations: &str) -> Result<Vec<Answer>> {
-    let dir = std::env::temp_dir().join(format!(
-        "nts-bind-winmd-{}-{}",
-        std::process::id(),
-        CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-    let probe = dir.join("probe.c");
-    let mut text = String::new();
-    for line in include_lines(headers) {
-        let _ = writeln!(text, "{line}");
-    }
-    text.push_str(declarations);
-    std::fs::write(&probe, &text).with_context(|| format!("writing {}", probe.display()))?;
-    // Probes that name nothing fail to compile; the AST still holds every one
-    // that did, which is the answer. `-ferror-limit=0` lets all of them try.
-    let output = std::process::Command::new("clang")
-        .args(clang_args)
-        .args([
-            "-fsyntax-only",
-            "-ferror-limit=0",
-            "-w",
-            "-Xclang",
-            "-ast-dump=json",
-            "-Xclang",
-        ])
-        .arg(format!("-ast-dump-filter={PREFIX}"))
-        .arg(&probe)
-        .output()
-        .context("running clang to read the Windows headers")?;
-    let _ = std::fs::remove_dir_all(&dir);
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut answers = Vec::new();
-    let mut decoder = serde_json::Deserializer::from_str(&text).into_iter::<serde_json::Value>();
-    while let Some(Ok(node)) = decoder.next() {
-        // clang can retain a declaration with a recovery type after a missing
-        // member error. That is not an answer from the header.
-        if node.get("isInvalid").and_then(serde_json::Value::as_bool) == Some(true) {
-            continue;
-        }
-        let Some(name) = node.get("name").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let Some(ty) = node.get("type") else { continue };
-        let Some(qual) = ty.get("qualType").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let desugared = ty
-            .get("desugaredQualType")
-            .and_then(serde_json::Value::as_str)
-            .map(str::to_owned);
-        answers.push(Answer {
-            name: name.to_owned(),
-            qual: qual.to_owned(),
-            desugared,
-            value: constant_value(&node),
-        });
-    }
-    Ok(answers)
-}
-
-static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 /// Type and layout declarations share one filtered C probe.
 fn declarations(questions: &Questions) -> String {
     let mut probes = String::new();
@@ -249,14 +161,20 @@ pub(crate) fn resolve(
     clang_args: &[String],
     questions: &Questions,
 ) -> Result<Facts> {
-    let mut spellings: BTreeMap<String, String> = BTreeMap::new();
+    let preamble = include_lines(headers);
+    let probe = Probe {
+        preamble: &preamble,
+        clang_args,
+        prefix: PREFIX,
+        label: "bind-winmd",
+    };
     let mut function_text: BTreeMap<String, String> = BTreeMap::new();
     let mut field_text: BTreeMap<usize, String> = BTreeMap::new();
     let mut slots: BTreeMap<usize, u32> = BTreeMap::new();
     let mut layouts = BTreeMap::new();
     // `__typeof__(F)` is what the probe says; the type it stands for is one
     // desugaring away.
-    for answer in ask(headers, clang_args, &declarations(questions))? {
+    for answer in probe.ask(&declarations(questions))? {
         if let Some(key) = answer.name.strip_prefix(&format!("{PREFIX}layout_"))
             && let Some(value) = answer.value
         {
@@ -290,30 +208,7 @@ pub(crate) fn resolve(
     for text in function_text.values().chain(field_text.values()) {
         pending.extend(ctype::typedef_names(text));
     }
-    let mut asked: BTreeSet<String> = BTreeSet::new();
-    for _round in 0..16 {
-        pending.retain(|name| !asked.contains(name));
-        if pending.is_empty() {
-            break;
-        }
-        let mut probes = String::new();
-        for name in &pending {
-            // An alias can name void or an incomplete record; an object
-            // declaration of either is invalid even when the type is real.
-            let _ = writeln!(probes, "typedef {name} {PREFIX}td_{name};");
-        }
-        asked.extend(pending.iter().cloned());
-        let mut next = BTreeSet::new();
-        for answer in ask(headers, clang_args, &probes)? {
-            let Some(name) = answer.name.strip_prefix(&format!("{PREFIX}td_")) else {
-                continue;
-            };
-            let resolved = answer.desugared.unwrap_or(answer.qual);
-            next.extend(ctype::typedef_names(&resolved));
-            spellings.insert(name.to_owned(), resolved);
-        }
-        pending = next;
-    }
+    let spellings = probe.typedefs(pending)?;
     let mut facts = Facts::default();
     resolve_records(&mut facts, questions, &layouts);
     for (name, text) in function_text {
@@ -334,7 +229,7 @@ pub(crate) fn resolve(
             facts.typedefs.insert((*name).to_owned(), ty);
         }
     }
-    resolve_enums(&mut facts, headers, clang_args)?;
+    resolve_enums(&mut facts, &probe)?;
     Ok(facts)
 }
 
@@ -385,7 +280,7 @@ fn enum_tags(ty: &CType, tags: &mut BTreeSet<String>) {
 /// name for the type and wins; the bare name is only an answer when the
 /// tag spelling has none. An incomplete tag is compatible with nothing,
 /// so the fallback cannot be taken in by the probe's own forward tag.
-fn resolve_enums(facts: &mut Facts, headers: &[Vec<String>], clang_args: &[String]) -> Result<()> {
+fn resolve_enums(facts: &mut Facts, probe: &Probe) -> Result<()> {
     let mut tags = BTreeSet::new();
     for ty in facts
         .functions
@@ -418,7 +313,7 @@ fn resolve_enums(facts: &mut Facts, headers: &[Vec<String>], clang_args: &[Strin
     // `enum TAG` first, the bare typedef name second.
     let mut by_tag: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
     let mut by_name: BTreeMap<usize, Vec<&str>> = BTreeMap::new();
-    for answer in ask(headers, clang_args, &probes)? {
+    for answer in probe.ask(&probes)? {
         let (key, answers) =
             if let Some(key) = answer.name.strip_prefix(&format!("{PREFIX}enumtype_")) {
                 (key, &mut by_name)
@@ -530,7 +425,7 @@ fn resolve_fields(
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-    use super::{CType, Facts, Questions, resolve};
+    use super::{CType, Facts, Questions, ctype, resolve};
 
     // Deliberately self-contained: no installed Windows SDK supplies the
     // inheritance, typedefs or method signatures this test is asserting.
@@ -561,12 +456,7 @@ mod tests {
     ";
 
     fn header_facts(header: &str, fields: Vec<(&str, &str)>, arch: &str) -> Facts {
-        let dir = std::env::temp_dir().join(format!(
-            "nts-com-facts-test-{}-{}",
-            std::process::id(),
-            super::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::bind_scratch::directory("com-facts-test").unwrap();
         std::fs::write(dir.join("com.h"), header).unwrap();
         let result = resolve(
             &[vec!["com.h".to_owned()]],
@@ -595,7 +485,7 @@ mod tests {
     }
 
     fn parsed(text: &str) -> CType {
-        super::ctype::parse(text, &std::collections::BTreeMap::new()).unwrap()
+        ctype::parse(text, &std::collections::BTreeMap::new()).unwrap()
     }
 
     #[test]
@@ -640,12 +530,7 @@ mod tests {
     }
 
     fn function_facts(header: &str, functions: Vec<&str>, arch: &str) -> Facts {
-        let dir = std::env::temp_dir().join(format!(
-            "nts-enum-facts-test-{}-{}",
-            std::process::id(),
-            super::CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::bind_scratch::directory("enum-facts-test").unwrap();
         std::fs::write(dir.join("enums.h"), header).unwrap();
         let result = resolve(
             &[vec!["enums.h".to_owned()]],
