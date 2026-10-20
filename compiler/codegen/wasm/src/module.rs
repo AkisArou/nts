@@ -559,6 +559,15 @@ impl<'p> Builder<'p> {
             .collect()
     }
 
+    /// Every function the module defines, with its body: the program's, the
+    /// outlined and the runtime's helpers.
+    pub(crate) fn defined_bodies(&self) -> Vec<Func> {
+        (0..self.funcs.len())
+            .map(|at| Func(index(at)))
+            .filter(|func| self.body(*func).is_some())
+            .collect()
+    }
+
     /// The functions the module exports, which keep their own bodies.
     pub(crate) fn exported_funcs(&self) -> BTreeSet<Func> {
         self.exports
@@ -738,6 +747,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     crate::roundtrip::program(&mut m);
     crate::box_web::program(&mut m);
     crate::tail::program(&mut m);
+    crate::locals::program(&mut m);
     let assembled = assemble(&m)?;
     manifest.imports = assembled.imports;
     manifest.builtins = assembled.builtins;

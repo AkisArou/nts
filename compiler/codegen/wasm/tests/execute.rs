@@ -1632,3 +1632,38 @@ fn source_bool_keys_agree_with_node() {
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
+
+/// Every function the module defines declares each local type in one run:
+/// the program's, the outlined and the runtime's helpers alike. A run costs
+/// bytes and V8 inlines by size -- `fib#whole`'s six runs kept its recursion
+/// from inlining (docs/agents/lessons/backends.md).
+#[test]
+fn every_defined_function_declares_each_local_type_in_one_run() {
+    for fixture in ["collection-tables", "array-lookup", "array-methods"] {
+        let emitted = emit_project(&common::repository().join("tests/wasm").join(fixture));
+        let names = common::function_names(&emitted.bytes);
+        let imported = imported_functions(&emitted.bytes);
+        let (mut defined, mut mixed) = (0, 0);
+        for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+            if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+                let runs: Vec<wasmparser::ValType> = body
+                    .get_locals_reader()
+                    .unwrap()
+                    .into_iter()
+                    .map(|local| local.unwrap().1)
+                    .collect();
+                let name = names.get(imported + defined).map_or("?", String::as_str);
+                for (at, ty) in runs.iter().enumerate() {
+                    assert!(
+                        !runs[..at].contains(ty),
+                        "{fixture}: `{name}` declares {ty:?} locals in two runs: {runs:?}"
+                    );
+                }
+                mixed += usize::from(runs.len() > 1);
+                defined += 1;
+            }
+        }
+        // Not vacuous: functions with locals of more than one type were checked.
+        assert!(mixed > 0, "{fixture}: no function has locals of two types");
+    }
+}

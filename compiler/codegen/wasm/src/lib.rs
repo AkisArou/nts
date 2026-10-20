@@ -42,6 +42,7 @@ mod indexing;
 mod inline;
 mod ir;
 mod literals;
+mod locals;
 mod module;
 mod never_null;
 mod numeric;
