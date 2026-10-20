@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 16 case(s) disagree between the compiled program and node",
+  "category": "aborted",
+  "nts": "nts: refused at run time: an `as` asserting an object type of a value whose layout is not one: reading through it would read another type's fields",
   "node": null,
-  "measured_with": "0f7dd40d41b824a4",
+  "measured_with": "18e81a7e0dd40d8a",
   "source": "measured"
 }
