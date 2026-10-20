@@ -557,12 +557,13 @@ fn arrays_match_js_and_input_contracts() {
     ] {
         funcs.push(roundtrip(name, ty, F64, true));
     }
-    funcs.push(roundtrip("integerIndex", F64, I32, false));
+    // Checked: an index from a parameter is no proof (`proven_access`).
+    funcs.push(roundtrip("integerIndex", F64, I32, true));
     funcs.push(roundtrip(
         "floatIndex",
         F64,
         HirType::Float { bits: 32 },
-        false,
+        true,
     ));
     funcs.push(roundtrip("longIndex", F64, i64, true));
     funcs.push(roundtrip("unsignedLongIndex", F64, u64, true));
@@ -586,4 +587,86 @@ fn arrays_match_js_and_input_contracts() {
     let report = common::run("arrays", &emitted, "tooling/wasm/check-arrays.mjs", &[]);
     assert!(report["cases"].as_u64().unwrap() > 1000);
     assert!(report["named_declines"].as_u64().unwrap() > 50);
+}
+
+/// `[v, v]` written and read back at `index`, a constant of type `ty`: with
+/// `checked` false the core's proof that it is whole and inside the array --
+/// which a constant past the backing's storage falsifies.
+fn proven(name: &str, ty: &HirType, index: f64, checked: bool) -> Func {
+    let mut f = function(name, &[F64], F64);
+    let mut ops = vec![];
+    let input = op(&mut f, &mut ops, OpKind::Param(0), F64);
+    let len = op(&mut f, &mut ops, OpKind::ConstInt(2), U32);
+    let a = op(
+        &mut f,
+        &mut ops,
+        OpKind::ArrayNew {
+            length: len,
+            fill: ArrayFill::Uninitialized,
+        },
+        array(F64),
+    );
+    let constant = |f: &mut Func, ops: &mut Vec<ValueId>, n: f64| {
+        let kind = if matches!(ty, HirType::Float { .. }) {
+            OpKind::ConstFloat(n)
+        } else {
+            #[allow(clippy::cast_possible_truncation, reason = "a test's small constant")]
+            OpKind::ConstInt(n as i128)
+        };
+        op(f, ops, kind, ty.clone())
+    };
+    for n in [0.0, 1.0] {
+        let at = constant(&mut f, &mut ops, n);
+        set(&mut f, &mut ops, a, at, input, checked);
+    }
+    let at = constant(&mut f, &mut ops, index);
+    set(&mut f, &mut ops, a, at, input, checked);
+    let result = op(
+        &mut f,
+        &mut ops,
+        OpKind::ArrayGet {
+            array: a,
+            index: at,
+            checked,
+        },
+        F64,
+    );
+    finish(f, ops, result)
+}
+
+/// An unchecked access's index is the core's proof, whole and inside the
+/// array, so it is read and written with no test of its own -- an f64 index
+/// converted exactly, as C casts it -- and a false proof past the backing's
+/// storage traps rather than writing or reading there. The checked control
+/// keeps its test and its refusal.
+#[test]
+fn a_proven_access_tests_nothing_and_a_false_proof_traps() {
+    const PAST: f64 = 1_000_000.0;
+    let emitted = nts_codegen_wasm::emit(&program(vec![
+        proven("provenFloat", &F64, 1.0, false),
+        proven("provenInteger", &U32, 1.0, false),
+        proven("falseFloat", &F64, PAST, false),
+        proven("falseInteger", &U32, PAST, false),
+        proven("checkedFloat", &F64, 1.0, true),
+    ]))
+    .unwrap();
+    let calls = common::calls_by_name(&emitted.bytes);
+    // An access's own refusals; the allocation's length test is another's.
+    let refuses = |name: &str| {
+        calls[name]
+            .iter()
+            .any(|callee| callee.starts_with("refuse<") && callee.contains("past the end"))
+    };
+    for name in ["provenFloat", "provenInteger", "falseFloat", "falseInteger"] {
+        assert!(!refuses(name), "{name}: {calls:?}");
+    }
+    assert!(refuses("checkedFloat"), "{calls:?}");
+    let report = common::run(
+        "proven-arrays",
+        &emitted,
+        "tooling/wasm/check-proven-arrays.ts",
+        &[],
+    );
+    assert_eq!(report["proven"], 4, "{report}");
+    assert_eq!(report["falseProofTraps"], 4, "{report}");
 }

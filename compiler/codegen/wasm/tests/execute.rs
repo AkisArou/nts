@@ -963,6 +963,27 @@ fn source_number_tag_tests_agree_with_node() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A module-scope literal of 2048 records -- 2048 writes the core proves
+/// inside one fresh array -- evaluates under the differential's 2 GB
+/// address-space bound: tested write by write, its module evaluation took V8's
+/// baseline compiler 480 MB and failed there (`arrays.rs`, "Proven").
+#[test]
+fn source_a_literal_of_2048_records_evaluates_within_the_differentials_bound() {
+    let fixture = common::repository().join("tests/wasm/a-literal-of-2048-records");
+    let emitted = emit_project(&fixture);
+    let output = common::run_within(
+        "a-literal-of-2048-records",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+        2_147_483_648,
+    );
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+    assert!(output["cases"].as_u64().unwrap() > 0, "{output}");
+}
+
 /// Symbols: identity by address, descriptions and their absence, the
 /// `Symbol.for` registry and `Symbol.keyFor`, an erased symbol's `typeof` and
 /// text, and symbols as Map keys.

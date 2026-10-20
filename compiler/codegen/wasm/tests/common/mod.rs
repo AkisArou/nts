@@ -61,6 +61,30 @@ pub(crate) fn run_with_node_flags(
     args: &[&Path],
     flags: &[&str],
 ) -> serde_json::Value {
+    run_node(label, emitted, script, args, flags, None)
+}
+
+/// [`run_with_node_flags`] with node held to `bytes` of address space, the
+/// bound the differential puts on every program it runs (`prlimit --as`).
+pub(crate) fn run_within(
+    label: &str,
+    emitted: &nts_codegen_wasm::Emitted,
+    script: &str,
+    args: &[&Path],
+    flags: &[&str],
+    bytes: u64,
+) -> serde_json::Value {
+    run_node(label, emitted, script, args, flags, Some(bytes))
+}
+
+fn run_node(
+    label: &str,
+    emitted: &nts_codegen_wasm::Emitted,
+    script: &str,
+    args: &[&Path],
+    flags: &[&str],
+    bound: Option<u64>,
+) -> serde_json::Value {
     let retained = retained();
     // NTS_WASM_BROWSER runs every check in headless Chromium, on browser glue.
     let browser = std::env::var_os("NTS_WASM_BROWSER").is_some();
@@ -70,7 +94,14 @@ pub(crate) fn run_with_node_flags(
         nts_codegen_wasm::Host::Node
     };
     let artifact = write_artifact(label, emitted, host);
-    let mut command = Command::new("node");
+    let mut command = match bound {
+        Some(bytes) if !browser => {
+            let mut bounded = Command::new("prlimit");
+            bounded.arg(format!("--as={bytes}")).arg("node");
+            bounded
+        }
+        _ => Command::new("node"),
+    };
     if browser {
         // The runner strips TypeScript types itself, so node flags do not apply.
         command.arg(repository().join("tooling/wasm/browser/run.mjs"));

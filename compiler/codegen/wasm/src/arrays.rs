@@ -415,7 +415,11 @@ pub(crate) fn get(
 ) -> Result<(), Failure> {
     let shape = storage(b, array)?;
     contract::nonnull(b, array, "reading an element of a null array")?;
-    valid_index(b, array, at, false)?;
+    // An unchecked read's index the core proved whole and inside the array
+    // (`proven`), so only a checked one is tested.
+    if checked {
+        valid_index(b, array, at, false)?;
+    }
     let absent = checked && shape.element == HirType::Erased;
     if absent {
         if b.ty(result) != &HirType::Erased {
@@ -424,7 +428,7 @@ pub(crate) fn get(
             ));
         }
         b.instruction(&I::If(BlockType::Result(ValType::Ref(RefType::ANYREF))));
-    } else {
+    } else if checked {
         contract::require(
             b,
             "an index past the end, whose undefined this element type cannot hold",
@@ -459,8 +463,13 @@ pub(crate) fn set(
     }
     let shape = storage(b, array)?;
     contract::nonnull(b, array, "writing an element of a null array")?;
+    // An unchecked write's index the core proved whole and inside the array
+    // (`proven`): it is stored with no test.
+    if !checked {
+        return store(b, shape, array, at, value);
+    }
     valid_index(b, array, at, false)?;
-    if !(checked && nts_core::hir::array_write_may_grow(b.func, array)) {
+    if !nts_core::hir::array_write_may_grow(b.func, array) {
         contract::require(b, PAST_THE_END)?;
         return store(b, shape, array, at, value);
     }
@@ -482,6 +491,22 @@ pub(crate) fn set(
 }
 /// Why a write that is not inside the array and not at its end refuses.
 const PAST_THE_END: &str = "a write past the end, which would leave holes this array cannot hold";
+
+// # Proven
+//
+// An access the core marks unchecked (`checked: false`) has an index it proved
+// whole and inside the array, so its read or write tests nothing: C stores
+// through the bare index on the same proof (`slot_expression`), and here the
+// backing's own `array.get` or `array.set` still traps past its storage, so a
+// false proof -- a compiler bug on every backend -- cannot reach past it. The
+// written-prefix test (`initialized`) is another question and stays.
+//
+// Re-testing them cost more than the tests: a module-scope literal of 2048
+// records is that many unchecked writes into one `array.new`, and a refusal
+// `if` per write over a local per record made V8's baseline compiler, whose
+// state spans every local at every merge, take 480 MB for module evaluation,
+// and fail under the differential's 2 GB address-space bound. Untested it
+// takes 57 MB (2026-10-20).
 /// Store `value` in the slot `at` of `array`, an index already known to be in
 /// its storage.
 fn store(
