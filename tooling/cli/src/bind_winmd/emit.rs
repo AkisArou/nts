@@ -182,7 +182,17 @@ pub(crate) fn write(
 
 fn render_type(decl: &TypeDecl, body: &mut String) {
     match decl {
-        TypeDecl::Alias { name, ts, .. } | TypeDecl::Record { name, ts, .. } => {
+        TypeDecl::Alias { name, ts, doc, .. } => {
+            if !doc.is_empty() {
+                body.push_str("  /**\n");
+                for line in doc {
+                    let _ = writeln!(body, "   * {line}");
+                }
+                body.push_str("   */\n");
+            }
+            let _ = writeln!(body, "  export type {name} = {ts};");
+        }
+        TypeDecl::Record { name, ts, .. } => {
             let _ = writeln!(body, "  export type {name} = {ts};");
         }
         TypeDecl::Interface {

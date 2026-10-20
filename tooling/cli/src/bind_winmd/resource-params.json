@@ -142,8 +142,20 @@
   "callbacks": [
     {
       "namespace": "Windows.Win32.System.LibraryLoader",
+      "callback": "ENUMRESTYPEPROCW",
+      "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumrestypeprocw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
       "callback": "ENUMRESNAMEPROCW",
       "parameter": "lpType",
+      "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumresnameprocw"
+    },
+    {
+      "namespace": "Windows.Win32.System.LibraryLoader",
+      "callback": "ENUMRESNAMEPROCW",
+      "parameter": "lpName",
       "documentation": "https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nc-libloaderapi-enumresnameprocw"
     },
     {

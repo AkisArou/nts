@@ -275,14 +275,25 @@ fn resource_typecheck(out: &std::path::Path) {
     )
     .unwrap();
     let source = r#"
-import { IDC_ARROW, LoadCursorW, MessageBoxW } from "c:Windows.Win32.UI.WindowsAndMessaging";
+import { IDC_ARROW, LoadCursorW, MessageBoxW, RT_HTML } from "c:Windows.Win32.UI.WindowsAndMessaging";
 import type { MESSAGEBOX_STYLE } from "c:Windows.Win32.UI.WindowsAndMessaging";
+import { EnumResourceLanguagesW, EnumResourceNamesW } from "c:Windows.Win32.System.LibraryLoader";
+import type { ENUMRESLANGPROCW, ENUMRESNAMEPROCW } from "c:Windows.Win32.System.LibraryLoader";
+import { pointerBits } from "c:memory";
 import type { CEnum } from "c:types";
 import type { c_uint } from "@nts/scalars";
 LoadCursorW(null, IDC_ARROW);
 const text: Parameters<typeof LoadCursorW>[1] = "named";
 LoadCursorW(null, text);
 MessageBoxW(null, "ordinary text", null, 0 as CEnum<MESSAGEBOX_STYLE, c_uint>);
+// An enumeration callback asks before it reads, and hands its borrowed
+// pointers straight back to the next enumeration.
+const onLanguage: ENUMRESLANGPROCW = (module, type, name, language, parameter) =>
+  (pointerBits(type) >> 16n) === 0n || name[0] !== 0 ? 1 : 0;
+const onName: ENUMRESNAMEPROCW = (module, type, name, parameter) =>
+  EnumResourceLanguagesW(module, type, name, onLanguage, parameter);
+EnumResourceNamesW(null, RT_HTML, onName, 0n);
+EnumResourceNamesW(null, "NAMED", onName, 0n);
 "#;
     for negative in [false, true] {
         let text = if negative {
@@ -351,18 +362,39 @@ fn resource_declarations(out: &std::path::Path, messaging: &str) {
     assert_eq!(message_box.len(), 1);
     assert!(!message_box[0].contains("ConstPtr"));
     assert_eq!(loader.matches("export function FindResourceW(").count(), 4);
-    assert!(
-        loader.contains("export type ENUMRESTYPEPROCW = (hModule: HMODULE, lpType: Ptr<Uint16>")
-    );
-    for callback in ["ENUMRESNAMEPROCW", "ENUMRESLANGPROCW"] {
-        assert!(!loader.contains(&format!("export type {callback} =")));
+    // Every callback position that can be handed an atom is the header's
+    // pointer, `const` where the header says so, never a string read
+    // through it.
+    for callback in [
+        "export type ENUMRESTYPEPROCW = (hModule: HMODULE, lpType: Ptr<Uint16>, lParam: BigInt64) => BOOL;",
+        "export type ENUMRESNAMEPROCW = (hModule: HMODULE, lpType: ConstPtr<Uint16>, lpName: Ptr<Uint16>, lParam: BigInt64) => BOOL;",
+        "export type ENUMRESLANGPROCW = (hModule: HMODULE, lpType: ConstPtr<Uint16>, lpName: ConstPtr<Uint16>, wLanguage: Uint16, lParam: BigInt64) => BOOL;",
+    ] {
+        let at = loader
+            .find(callback)
+            .unwrap_or_else(|| panic!("{callback}\n{loader}"));
         assert!(
-            refused
-                .lines()
-                .any(|line| line.starts_with(&format!("{callback}\t"))
-                    && line.contains("integer resource atom")),
-            "{refused}"
+            loader[..at].ends_with("   */\n  ")
+                && loader[..at].contains("(pointerBits(p) >> 16n) === 0n"),
+            "{callback} has no atom note"
         );
+    }
+    assert!(!refused.contains("ENUMRES"), "{refused}");
+    // A function's own atom inputs still gain their pointer overloads.
+    for (function, overloads) in [
+        ("EnumResourceNamesW", 2),
+        ("EnumResourceNamesExW", 2),
+        ("EnumResourceLanguagesW", 4),
+        ("EnumResourceLanguagesExW", 4),
+    ] {
+        assert_eq!(
+            loader
+                .matches(&format!("export function {function}("))
+                .count(),
+            overloads,
+            "{function}"
+        );
+        assert!(!refused.contains(&format!("{function}\t")), "{refused}");
     }
 }
 

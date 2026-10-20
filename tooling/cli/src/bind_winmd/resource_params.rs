@@ -1,5 +1,6 @@
 //! Reviewed facts absent from `WinMD`: which text inputs also accept an integer
-//! resource identifier, and which callback text projections are unsafe for it.
+//! resource identifier, and which callback text parameters can be handed one,
+//! and so cross as the header's pointer rather than a string read through it.
 //! The table is checked against metadata before mapping, never used as a hint.
 
 use std::collections::BTreeSet;
@@ -140,10 +141,12 @@ impl Policy {
             .any(|p| p.namespace == namespace && p.function == function && p.parameter == parameter)
     }
 
-    pub(crate) fn callback_atom(&self, name: &Name, parameter: &str) -> bool {
+    /// The documentation page of a callback parameter that can be an atom.
+    pub(crate) fn callback_atom(&self, name: &Name, parameter: &str) -> Option<&str> {
         self.callbacks
             .iter()
-            .any(|p| p.namespace == name.0 && p.name == name.1 && p.parameter == parameter)
+            .find(|p| p.namespace == name.0 && p.name == name.1 && p.parameter == parameter)
+            .map(|p| p.documentation.as_str())
     }
 }
 
@@ -424,8 +427,9 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    #[test]
-    fn resource_callbacks_refuse_text_projection_but_keep_raw_pointer_contracts() {
+    /// `load(callback)`, whose callback's one parameter is the UTF-16 `text`
+    /// the policy lists as able to carry an atom.
+    fn callback_model() -> (Model, Policy) {
         let mut model = model();
         let text = model.functions[0].parameters[0].ty.clone();
         model.types.insert(
@@ -450,49 +454,100 @@ mod tests {
             }],
         };
         policy.validate(&model, &[NS.into()]).unwrap();
+        (model, policy)
+    }
+
+    /// The same model with the callback's parameter changed, or the callback gone.
+    fn changed_callback(model: &Model, change: Option<fn(&mut (String, Type))>) -> Model {
+        let mut changed = Model {
+            functions: model.functions.clone(),
+            constants: model.constants.clone(),
+            types: model.types.clone(),
+        };
+        let key = (NS.to_owned(), "callback".to_owned());
+        let Some(change) = change else {
+            changed.types.remove(&key);
+            return changed;
+        };
+        let Kind::Delegate { parameters, .. } = &mut changed.types.get_mut(&key).unwrap().kind
+        else {
+            unreachable!()
+        };
+        change(&mut parameters[0]);
+        changed
+    }
+
+    #[test]
+    fn listed_callback_text_crosses_as_the_header_pointer_and_only_when_listed() {
+        let (model, policy) = callback_model();
         let (dir, headers) = header_fixture(
             "callbacks",
             "typedef unsigned short *text; typedef void (*callback)(const unsigned short *); void load(callback);",
         );
+        let doc = "  /**\n   * `name`: an integer resource atom when `(pointerBits(p) >> 16n) === 0n` (`c:memory`), the atom its low 16 bits; otherwise NUL-terminated UTF-16. Borrowed for the callback's duration.\n   * @see https://learn.microsoft.com/example\n   */\n";
         let (text, refused) = rendered(&model, &policy, &headers);
-        assert!(!text.contains("export type callback"), "{text}");
+        assert!(refused.is_empty(), "{refused}");
         assert!(
-            refused.contains("callback\t`callback.name` can be an integer resource atom"),
-            "{refused}"
+            text.contains(&format!(
+                "{doc}  export type callback = (name: ConstPtr<Uint16>) => void;"
+            )),
+            "{text}"
         );
-        assert!(refused.contains("load\t"), "{refused}");
+        // One difference, the table: the same const UTF-16 shape unlisted is
+        // the lent string it always was, with no note.
+        let (text, refused) = rendered(&model, &Policy::default(), &headers);
+        assert!(refused.is_empty(), "{refused}");
+        assert!(
+            text.contains("  export type callback = (name: Utf16String) => void;"),
+            "{text}"
+        );
+        assert!(!text.contains("pointerBits"), "{text}");
+        // The header decides `const`, as for every UTF-16 pointer.
         std::fs::write(dir.join("resources.h"), "typedef unsigned short *text; typedef void (*callback)(unsigned short *); void load(callback);").unwrap();
         let (text, refused) = rendered(&model, &policy, &headers);
         assert!(refused.is_empty(), "{refused}");
         assert!(
-            text.contains("export type callback = (name: Ptr<Uint16>) => void;"),
+            text.contains(&format!(
+                "{doc}  export type callback = (name: Ptr<Uint16>) => void;"
+            )),
             "{text}"
         );
-        for change in ["callback", "parameter", "type"] {
-            let mut changed = Model {
-                functions: model.functions.clone(),
-                constants: model.constants.clone(),
-                types: model.types.clone(),
-            };
-            if change == "callback" {
-                changed.types.remove(&(NS.into(), "callback".into()));
-            } else {
-                let Kind::Delegate { parameters, .. } = &mut changed
-                    .types
-                    .get_mut(&(NS.into(), "callback".into()))
-                    .unwrap()
-                    .kind
-                else {
-                    unreachable!()
-                };
-                if change == "parameter" {
-                    parameters[0].0 = "renamed".into();
-                } else {
-                    parameters[0].1 = Type::U16;
-                }
-            }
-            assert!(policy.validate(&changed, &[NS.into()]).is_err(), "{change}");
+        // A listed position the header does not make UTF-16 is refused.
+        std::fs::write(dir.join("resources.h"), "typedef unsigned short *text; typedef void (*callback)(const char *); void load(callback);").unwrap();
+        let (text, refused) = rendered(&model, &policy, &headers);
+        assert!(!text.contains("export type callback"), "{text}");
+        assert!(
+            refused.contains("load\t") && refused.contains("does not point at 16-bit units"),
+            "{refused}"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_listed_callback_position_fails_closed_when_metadata_changes() {
+        let (model, policy) = callback_model();
+        let rename: fn(&mut (String, Type)) = |parameter| parameter.0 = "renamed".into();
+        let retype: fn(&mut (String, Type)) = |parameter| parameter.1 = Type::U16;
+        for (label, change) in [
+            ("callback", None),
+            ("parameter", Some(rename)),
+            ("type", Some(retype)),
+        ] {
+            let changed = changed_callback(&model, change);
+            assert!(policy.validate(&changed, &[NS.into()]).is_err(), "{label}");
         }
+        // Mapping refuses a listed position the metadata does not make
+        // UTF-16, even where validation was not asked to run.
+        let (dir, headers) = header_fixture(
+            "callback-scalar",
+            "typedef unsigned short *text; typedef void (*callback)(unsigned short); void load(callback);",
+        );
+        let (text, refused) = rendered(&changed_callback(&model, Some(retype)), &policy, &headers);
+        assert!(!text.contains("export type callback"), "{text}");
+        assert!(
+            refused.contains("`callback.name` can be an integer resource atom (resource-params.json), but the metadata does not make it UTF-16 text"),
+            "{refused}"
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 
@@ -515,7 +570,7 @@ mod tests {
         let index = windows_metadata::reader::Index::read(&path).unwrap().leak();
         let model = super::super::read::read(index, &namespaces);
         assert_eq!(policy.parameters.len(), 23);
-        assert_eq!(policy.callbacks.len(), 3);
+        assert_eq!(policy.callbacks.len(), 5);
         policy.validate(&model, &namespaces).unwrap();
     }
 }

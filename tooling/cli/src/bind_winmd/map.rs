@@ -23,6 +23,8 @@ pub(crate) enum TypeDecl {
     Alias {
         name: String,
         ts: String,
+        /// Documentation lines, where the type alone does not say enough.
+        doc: Vec<String>,
         uses: BTreeSet<Name>,
     },
     /// A struct or union with its fields' emitted C spellings.
@@ -228,8 +230,8 @@ pub(crate) fn ask(
 
 /// How a type is being used, which decides nullability and strings.
 ///
-/// Four independent facts, three of them the metadata's own attributes on a
-/// parameter, so four flags and not an enum of their combinations.
+/// Independent facts, three of them the metadata's own attributes on a
+/// parameter, so flags and not an enum of their combinations.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Default)]
 struct Use {
@@ -242,6 +244,10 @@ struct Use {
     /// crosses by value. Never a callback's: the compiler refuses a record by
     /// value there, so the binding does too.
     direct: bool,
+    /// Text that can be an integer resource atom instead
+    /// (`resource-params.json`): never a lent string, which would read
+    /// through the atom, but the header's own pointer.
+    atom: bool,
 }
 
 struct Mapper<'a> {
@@ -902,7 +908,7 @@ impl Mapper<'_> {
         // The header decides `const`: the metadata writes `PWSTR` for
         // members the header declares `LPCWSTR` (`WNDCLASSEXW.lpszClassName`).
         let read_only = *const_in_header || how.constant;
-        if read_only && !how.output && !how.stored {
+        if read_only && !how.output && !how.stored && !how.atom {
             self.brands.insert("Utf16String");
             return Ok(Spelled {
                 ts: nullable("Utf16String".into(), how.optional),
@@ -1022,6 +1028,7 @@ impl Mapper<'_> {
             Some(TypeDecl::Alias {
                 name: simple.into(),
                 ts,
+                doc: Vec::new(),
                 uses: own_uses,
             }),
         );
@@ -1281,16 +1288,25 @@ impl Mapper<'_> {
         let mut uses = BTreeSet::from([name.clone()]);
         let mut list = Vec::new();
         let mut c_list = Vec::new();
+        let mut atoms = Vec::new();
+        let mut pages = Vec::new();
         for ((parameter, meta), c_parameter) in parameters.iter().zip(c_parameters) {
-            let spelled = self.spell(meta, c_parameter, Use::default())?;
-            if spelled.ts.starts_with("Utf16String")
-                && self.resources.callback_atom(name, parameter)
-            {
-                let why = format!(
-                    "`{simple}.{parameter}` can be an integer resource atom; a string callback would dereference it (resource-params.json)"
-                );
-                self.record_refusals.insert(name.clone(), why.clone());
-                return Err(why);
+            let page = self.resources.callback_atom(name, parameter);
+            if page.is_some() && !super::resource_params::utf16_type(self.model, meta) {
+                return Err(format!(
+                    "`{simple}.{parameter}` can be an integer resource atom (resource-params.json), but the metadata does not make it UTF-16 text"
+                ));
+            }
+            let how = Use {
+                atom: page.is_some(),
+                ..Use::default()
+            };
+            let spelled = self.spell(meta, c_parameter, how)?;
+            if let Some(page) = page {
+                atoms.push(format!("`{parameter}`"));
+                if !pages.contains(&page) {
+                    pages.push(page);
+                }
             }
             uses.extend(spelled.uses);
             list.push(format!("{}: {}", super::emit::safe(parameter), spelled.ts));
@@ -1300,11 +1316,22 @@ impl Mapper<'_> {
         uses.extend(returned.uses);
         let mut own = uses.clone();
         own.remove(name);
+        // Nothing in a `ConstPtr` says it may not be text, or that the
+        // pointer is only lent, so the alias says both.
+        let mut doc = Vec::new();
+        if !atoms.is_empty() {
+            doc.push(format!(
+                "{}: an integer resource atom when `(pointerBits(p) >> 16n) === 0n` (`c:memory`), the atom its low 16 bits; otherwise NUL-terminated UTF-16. Borrowed for the callback's duration.",
+                atoms.join(", ")
+            ));
+            doc.extend(pages.iter().map(|page| format!("@see {page}")));
+        }
         self.declared.insert(
             name.clone(),
             Some(TypeDecl::Alias {
                 name: simple.into(),
                 ts: format!("({}) => {}", list.join(", "), returned.ts),
+                doc,
                 uses: own,
             }),
         );
@@ -1764,6 +1791,9 @@ fn map_signature(
             output: parameter.output,
             stored: false,
             direct: true,
+            // A function's own atom input keeps its text signature and gains
+            // pointer overloads (`resource_parameters`).
+            atom: false,
         };
         let spelled = mapper
             .spell(&parameter.ty, c, how)
