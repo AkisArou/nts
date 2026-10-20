@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 3f5dcbe646425043, commit ef40bfcd32b1162caaf41fb4e034a1fb662abd4c, backend llvm, harness d6442dbc09f91ad0; machine at start: 20.9 GB available, swap 6/31.5 GB, load 17.7/18.5 (1m/5m), 16 cores; 6 worker(s)
+# compiler 783552d5ea52a9c7, commit 5de3b9a29a18fa408930e2e14f8b4e1a974cf3a3, backend llvm, harness d6442dbc09f91ad0; machine at start: 19 GB available, swap 5.2/31.5 GB, load 19.3/19.4 (1m/5m), 16 cores; 6 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -251,7 +251,7 @@ test/language/expressions/assignment/S8.12.5_A1.js	pass
 test/language/expressions/assignment/dstr/array-elem-init-let.js	pass	
 test/language/expressions/assignment/dstr/array-elem-nested-array.js	pass	
 test/language/expressions/assignment/dstr/array-elem-nested-obj.js	pass	
-test/language/expressions/assignment/dstr/array-elem-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-elem-put-const.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref-init.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-prop-ref-user-err.js	pass	
@@ -277,7 +277,7 @@ test/language/expressions/assignment/dstr/array-rest-nested-array-undefined-hole
 test/language/expressions/assignment/dstr/array-rest-nested-array-undefined-own.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array-undefined.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-array.js	pass	
-test/language/expressions/assignment/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-rest-put-const.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-let.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/expressions/assignment/dstr/obj-empty-bool.js	pass	
@@ -290,11 +290,12 @@ test/language/expressions/assignment/dstr/obj-empty-undef.js	fail	nts: uncaught 
 test/language/expressions/assignment/dstr/obj-id-identifier-resolution-lone.js	pass	
 test/language/expressions/assignment/dstr/obj-id-identifier-resolution-trlng.js	pass	
 test/language/expressions/assignment/dstr/obj-id-init-assignment-truthy.js	pass	
-test/language/expressions/assignment/dstr/obj-id-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/obj-id-put-const.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-identifier-resolution-lone.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-identifier-resolution-trlng.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-nested-array.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-nested-obj.js	pass	
+test/language/expressions/assignment/dstr/obj-prop-put-const.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-order.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-prop-ref-no-get.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-prop-ref-user-err.js	pass	
@@ -1471,8 +1472,8 @@ test/language/expressions/function/dstr/obj-ptrn-prop-ary-trailing-comma.js	pass
 test/language/expressions/function/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/function/dstr/obj-ptrn-prop-obj-value-null.js	pass	
-test/language/expressions/function/named-strict-error-reassign-fn-name-in-body-in-arrow.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/function/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/named-strict-error-reassign-fn-name-in-body-in-arrow.js	pass	
+test/language/expressions/function/named-strict-error-reassign-fn-name-in-body.js	pass	
 test/language/expressions/function/static-init-await-reference.js	pass	
 test/language/expressions/generators/dflt-params-arg-val-undefined.js	pass	
 test/language/expressions/generators/dflt-params-ref-prior.js	pass	
@@ -1552,7 +1553,6 @@ test/language/expressions/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pa
 test/language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	pass	
-test/language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/static-init-await-reference.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A2.4_T1.js	pass	
 test/language/expressions/greater-than-or-equal/S11.8.4_A2.4_T2.js	pass	
@@ -2567,7 +2567,6 @@ test/language/module-code/eval-export-dflt-gen-named-semi.js	pass
 test/language/module-code/eval-export-fun-semi.js	pass	
 test/language/module-code/eval-export-gen-semi.js	pass	
 test/language/module-code/eval-gtbndng-indirect-trlng-comma.js	pass	
-test/language/module-code/eval-gtbndng-local-bndng-cls.js	fail	nts: uncaught Test262Error: sameValue
 test/language/module-code/eval-gtbndng-local-bndng-const.js	pass	
 test/language/module-code/eval-gtbndng-local-bndng-let.js	pass	
 test/language/module-code/eval-gtbndng-local-bndng-var.js	pass	
@@ -3573,8 +3572,8 @@ test/language/statements/const/function-local-use-before-initialization-in-prior
 test/language/statements/const/global-closure-get-before-initialization.js	pass	
 test/language/statements/const/global-use-before-initialization-in-prior-statement.js	pass	
 test/language/statements/const/static-init-await-binding-valid.js	pass	
-test/language/statements/const/syntax/const-invalid-assignment-next-expression-for.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/const/syntax/const-invalid-assignment-statement-body-for-of.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/const/syntax/const-invalid-assignment-next-expression-for.js	pass	
+test/language/statements/const/syntax/const-invalid-assignment-statement-body-for-of.js	pass	
 test/language/statements/const/syntax/const-outer-inner-let-bindings.js	pass	
 test/language/statements/const/syntax/const.js	pass	
 test/language/statements/const/syntax/with-initializer-case-expression-statement-list.js	pass	
@@ -3681,7 +3680,7 @@ test/language/statements/for-of/continue-label.js	pass
 test/language/statements/for-of/continue.js	pass	
 test/language/statements/for-of/dstr/array-elem-nested-array.js	pass	
 test/language/statements/for-of/dstr/array-elem-nested-obj.js	pass	
-test/language/statements/for-of/dstr/array-elem-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elem-put-const.js	pass	
 test/language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref-init.js	pass	
 test/language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref.js	pass	
 test/language/statements/for-of/dstr/array-elem-put-prop-ref-user-err.js	pass	
@@ -3707,7 +3706,7 @@ test/language/statements/for-of/dstr/array-rest-nested-array-null.js	pass
 test/language/statements/for-of/dstr/array-rest-nested-array-undefined-hole.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array-undefined-own.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-array.js	pass	
-test/language/statements/for-of/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-rest-put-const.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-let.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/statements/for-of/dstr/const-ary-name-iter-val.js	pass	
@@ -3768,12 +3767,13 @@ test/language/statements/for-of/dstr/obj-empty-undef.js	fail	nts: uncaught Test2
 test/language/statements/for-of/dstr/obj-id-identifier-resolution-lone.js	pass	
 test/language/statements/for-of/dstr/obj-id-identifier-resolution-trlng.js	pass	
 test/language/statements/for-of/dstr/obj-id-init-assignment-truthy.js	pass	
-test/language/statements/for-of/dstr/obj-id-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/obj-id-put-const.js	pass	
 test/language/statements/for-of/dstr/obj-prop-elem-target-obj-literal-prop-ref.js	pass	
 test/language/statements/for-of/dstr/obj-prop-identifier-resolution-lone.js	pass	
 test/language/statements/for-of/dstr/obj-prop-identifier-resolution-trlng.js	pass	
 test/language/statements/for-of/dstr/obj-prop-nested-array.js	pass	
 test/language/statements/for-of/dstr/obj-prop-nested-obj.js	pass	
+test/language/statements/for-of/dstr/obj-prop-put-const.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-order.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-prop-ref-no-get.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-prop-ref-user-err.js	pass	
@@ -4247,7 +4247,7 @@ test/language/statements/try/tco-catch-finally.js	pass
 test/language/statements/try/tco-catch.js	pass	
 test/language/statements/try/tco-finally.js	pass	
 test/language/statements/using/syntax/using-for-using-of-of.js	pass	
-test/language/statements/using/syntax/using-invalid-assignment-statement-body-for-of.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/using/syntax/using-invalid-assignment-statement-body-for-of.js	pass	
 test/language/statements/variable/S12.2_A10.js	pass	
 test/language/statements/variable/S12.2_A12.js	pass	
 test/language/statements/variable/S12.2_A3.js	pass	

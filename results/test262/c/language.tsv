@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 3f5dcbe646425043, commit ef40bfcd32b1162caaf41fb4e034a1fb662abd4c, backend c, harness d6442dbc09f91ad0; machine at start: 20.1 GB available, swap 6/31.5 GB, load 9.4/10.5 (1m/5m), 16 cores; 6 worker(s)
+# compiler 783552d5ea52a9c7, commit 5de3b9a29a18fa408930e2e14f8b4e1a974cf3a3, backend c, harness d6442dbc09f91ad0; machine at start: 19.5 GB available, swap 5.2/31.5 GB, load 10.6/10.1 (1m/5m), 16 cores; 6 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -500,7 +500,7 @@ test/language/expressions/assignment/dstr/array-elem-nested-memberexpr-optchain-
 test/language/expressions/assignment/dstr/array-elem-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-nested-obj.js	pass	
-test/language/expressions/assignment/dstr/array-elem-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-elem-put-const.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref-init.js	pass	
 test/language/expressions/assignment/dstr/array-elem-put-obj-literal-prop-ref.js	pass	
@@ -537,7 +537,7 @@ test/language/expressions/assignment/dstr/array-rest-nested-array-yield-ident-in
 test/language/expressions/assignment/dstr/array-rest-nested-array.js	pass	
 test/language/expressions/assignment/dstr/array-rest-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/array-rest-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/array-rest-put-const.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-let.js	pass	
 test/language/expressions/assignment/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/expressions/assignment/dstr/array-rest-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -554,7 +554,7 @@ test/language/expressions/assignment/dstr/obj-id-identifier-yield-ident-invalid.
 test/language/expressions/assignment/dstr/obj-id-init-assignment-truthy.js	pass	
 test/language/expressions/assignment/dstr/obj-id-init-simple-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-id-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/expressions/assignment/dstr/obj-id-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/assignment/dstr/obj-id-put-const.js	pass	
 test/language/expressions/assignment/dstr/obj-id-simple-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-elem-target-memberexpr-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
@@ -568,6 +568,7 @@ test/language/expressions/assignment/dstr/obj-prop-nested-array.js	pass
 test/language/expressions/assignment/dstr/obj-prop-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/expressions/assignment/dstr/obj-prop-nested-obj.js	pass	
+test/language/expressions/assignment/dstr/obj-prop-put-const.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-order.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-prop-ref-no-get.js	pass	
 test/language/expressions/assignment/dstr/obj-prop-put-prop-ref-user-err.js	pass	
@@ -3168,8 +3169,8 @@ test/language/expressions/function/early-params-super-call.js	fail	accepted: ran
 test/language/expressions/function/early-params-super-prop.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/name-arguments-strict.js	pass	
 test/language/expressions/function/name-eval-strict.js	pass	
-test/language/expressions/function/named-strict-error-reassign-fn-name-in-body-in-arrow.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/function/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/expressions/function/named-strict-error-reassign-fn-name-in-body-in-arrow.js	pass	
+test/language/expressions/function/named-strict-error-reassign-fn-name-in-body.js	pass	
 test/language/expressions/function/object-destructuring-param-strict-body.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/function/param-dflt-yield-strict.js	fail	accepted: was refused later (lowering)
 test/language/expressions/function/param-duplicated-strict-1.js	fail	accepted: ran and threw Test262Error
@@ -3272,7 +3273,6 @@ test/language/expressions/generators/dstr/obj-ptrn-prop-ary-trailing-comma.js	pa
 test/language/expressions/generators/dstr/obj-ptrn-prop-ary-value-null.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-prop-id-init-throws.js	pass	
 test/language/expressions/generators/dstr/obj-ptrn-prop-obj-value-null.js	pass	
-test/language/expressions/generators/named-strict-error-reassign-fn-name-in-body.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/generators/named-yield-as-binding-identifier-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/named-yield-as-binding-identifier.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/generators/named-yield-as-identifier-reference-escaped.js	pass	
@@ -5106,7 +5106,6 @@ test/language/module-code/eval-export-dflt-gen-named-semi.js	pass
 test/language/module-code/eval-export-fun-semi.js	pass	
 test/language/module-code/eval-export-gen-semi.js	pass	
 test/language/module-code/eval-gtbndng-indirect-trlng-comma.js	pass	
-test/language/module-code/eval-gtbndng-local-bndng-cls.js	fail	nts: uncaught Test262Error: sameValue
 test/language/module-code/eval-gtbndng-local-bndng-const.js	pass	
 test/language/module-code/eval-gtbndng-local-bndng-let.js	pass	
 test/language/module-code/eval-gtbndng-local-bndng-var.js	pass	
@@ -6940,8 +6939,8 @@ test/language/statements/const/syntax/block-scope-syntax-const-declarations-mixe
 test/language/statements/const/syntax/block-scope-syntax-const-declarations-mixed-without-with-initialiser.js	pass	
 test/language/statements/const/syntax/block-scope-syntax-const-declarations-without-initialiser.js	pass	
 test/language/statements/const/syntax/const-declaring-let-split-across-two-lines.js	pass	
-test/language/statements/const/syntax/const-invalid-assignment-next-expression-for.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/const/syntax/const-invalid-assignment-statement-body-for-of.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/const/syntax/const-invalid-assignment-next-expression-for.js	pass	
+test/language/statements/const/syntax/const-invalid-assignment-statement-body-for-of.js	pass	
 test/language/statements/const/syntax/const-outer-inner-let-bindings.js	pass	
 test/language/statements/const/syntax/const.js	pass	
 test/language/statements/const/syntax/with-initializer-case-expression-statement-list.js	pass	
@@ -7248,7 +7247,7 @@ test/language/statements/for-of/dstr/array-elem-nested-memberexpr-optchain-prop-
 test/language/statements/for-of/dstr/array-elem-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/array-elem-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/array-elem-nested-obj.js	pass	
-test/language/statements/for-of/dstr/array-elem-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-elem-put-const.js	pass	
 test/language/statements/for-of/dstr/array-elem-put-obj-literal-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref-init.js	pass	
 test/language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref.js	pass	
@@ -7285,7 +7284,7 @@ test/language/statements/for-of/dstr/array-rest-nested-array-yield-ident-invalid
 test/language/statements/for-of/dstr/array-rest-nested-array.js	pass	
 test/language/statements/for-of/dstr/array-rest-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/array-rest-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/statements/for-of/dstr/array-rest-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/array-rest-put-const.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-let.js	pass	
 test/language/statements/for-of/dstr/array-rest-put-prop-ref-user-err.js	pass	
 test/language/statements/for-of/dstr/array-rest-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
@@ -7366,7 +7365,7 @@ test/language/statements/for-of/dstr/obj-id-identifier-yield-ident-invalid.js	fa
 test/language/statements/for-of/dstr/obj-id-init-assignment-truthy.js	pass	
 test/language/statements/for-of/dstr/obj-id-init-simple-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-id-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
-test/language/statements/for-of/dstr/obj-id-put-const.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/for-of/dstr/obj-id-put-const.js	pass	
 test/language/statements/for-of/dstr/obj-id-simple-strict.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-elem-init-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-elem-target-memberexpr-optchain-prop-ref-init.js	fail	accepted: was refused later (lowering)
@@ -7381,6 +7380,7 @@ test/language/statements/for-of/dstr/obj-prop-nested-array.js	pass
 test/language/statements/for-of/dstr/obj-prop-nested-obj-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-nested-obj-yield-ident-invalid.js	fail	accepted: was refused later (lowering)
 test/language/statements/for-of/dstr/obj-prop-nested-obj.js	pass	
+test/language/statements/for-of/dstr/obj-prop-put-const.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-order.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-prop-ref-no-get.js	pass	
 test/language/statements/for-of/dstr/obj-prop-put-prop-ref-user-err.js	pass	
@@ -8185,7 +8185,7 @@ test/language/statements/using/syntax/block-scope-syntax-using-declarations-with
 test/language/statements/using/syntax/using-for-using-of-of.js	pass	
 test/language/statements/using/syntax/using-invalid-arraybindingpattern-after-bindingidentifier.js	fail	accepted: was refused later (lowering)
 test/language/statements/using/syntax/using-invalid-arraybindingpattern.js	pass	
-test/language/statements/using/syntax/using-invalid-assignment-statement-body-for-of.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
+test/language/statements/using/syntax/using-invalid-assignment-statement-body-for-of.js	pass	
 test/language/statements/using/syntax/using-invalid-for-in.js	fail	accepted: was refused later (lowering)
 test/language/statements/using/syntax/using-invalid-objectbindingpattern-after-bindingidentifier.js	fail	accepted: was refused later (lowering)
 test/language/statements/using/syntax/using-invalid-objectbindingpattern.js	fail	accepted: was refused later (lowering)
