@@ -136,6 +136,16 @@ test("body, harness, include and fixture diagnostics keep their classification",
   assert.equal(environment({ snapshotCache: true }).NTS_NO_SNAPSHOT_CACHE, "0");
 });
 
+test("a backend decline is one root entry, placed nowhere", () => {
+  const rows = parseDiagnostics(
+    "  declined: NTS4001 interface field accessor dispatch requires JVM stateful interfaces: `Holder` -> `WithParent` (in `makeWith`)",
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].code, "NTS4001");
+  assert.equal(rows[0].where, "none");
+  assert.deepEqual(rows[0].named, ["Holder", "WithParent", "makeWith"]);
+});
+
 test("concurrent publishers agree on the complete read-only root", async (t) => {
   const base = scratch(t);
   const source = `import {caseRoot,workspace,materialise} from ${JSON.stringify(new URL("./project.ts", import.meta.url).href)}; process.stdout.write(JSON.stringify(caseRoot(d=>{workspace(d);materialise(d,'same input');},{base:process.argv[1]})));`;

@@ -95,8 +95,11 @@ export function parseDiagnostics(text) {
   for (const raw of text.split("\n")) {
     // `path:line:col: CODE message`, the one shape every diagnostic prints in.
     // A checker diagnostic printed without its place until ff7e6444a, and a
-    // bare `TS2345 ...` is still read, as placed nowhere.
-    const said = /^(?:(.*?):(\d+):(\d+):\s+)?(NTS\d{4}|TS\d{4,5})\s+(.*)$/.exec(raw.trim());
+    // bare `TS2345 ...` is still read, as placed nowhere. A backend's own
+    // diagnostic is placed nowhere too and carries a prefix instead --
+    // `declined: NTS4001 ... (in `fn`)` from emit-jvm and emit-llvm -- which
+    // this regex skipped whole, so 66 JVM declines ranked as no root at all.
+    const said = /^(?:declined:\s+)?(?:(.*?):(\d+):(\d+):\s+)?(NTS\d{4}|TS\d{4,5})\s+(.*)$/.exec(raw.trim());
     if (said === null) continue;
     const [, file, row, , code, message] = said;
     // A cause in the stand-in is a fact about the stand-in, and ranked as the

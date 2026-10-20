@@ -582,7 +582,14 @@ function classify(row) {
       }
       const roots = diagnostics.filter((d) => !CASCADE.has(d.code));
       if (roots.length === 0) {
-        return { outcome: "refused", cause: "(cascade only: no root reported)", roots: [] };
+        // Nothing parsed at all is a reading failure, not a cascade: 66 JVM
+        // backend declines said exactly that while `parseDiagnostics`
+        // skipped their `declined:` prefix.
+        return {
+          outcome: "refused",
+          cause: diagnostics.length === 0 ? "(no diagnostic read)" : "(cascade only: no root reported)",
+          roots: [],
+        };
       }
       return { outcome: "refused", cause: causeKey(roots[0]), roots };
     }
