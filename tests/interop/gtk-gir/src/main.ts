@@ -29,6 +29,11 @@
 //                 g_access (glib/gstdio.h), the language OpenType tags `ENG `
 //                 (hb-ot.h), a null settings backend (gsettingsbackend.h, under
 //                 its macro) and the unix print dialog's type
+//   collected 1 true  a set the program made, which HarfBuzz fills: GIR's
+//                 caller-allocated `out` of a record the headers keep opaque
+//                 is the caller's own object. The face is built from two
+//                 tables, a `cmap` mapping U+0041 to glyph 1 and a `maxp` of
+//                 two glyphs, so the set holds exactly U+0041
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -170,10 +175,17 @@ import {
 } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
 import {
+  hb_face_builder_add_table,
+  hb_face_builder_create,
+  hb_face_collect_unicodes,
+  hb_glib_blob_create,
   hb_language_from_string,
   hb_language_matches,
   hb_language_to_string,
   hb_ot_tag_to_language,
+  hb_set_create,
+  hb_set_get_population,
+  hb_set_has,
 } from "c:HarfBuzz-0.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CBool, Ptr } from "c:types";
@@ -257,6 +269,25 @@ function boxedRecords(): void {
       " backend=" + String(g_null_settings_backend_new() !== null) +
       " print=" + String(gtk_print_unix_dialog_get_type() !== 0n),
   );
+  // A face of two tables, and a set the program made for HarfBuzz to fill.
+  const cmap = new Uint8Array([
+    0, 0, 0, 1, // version 0, one encoding record
+    0, 3, 0, 1, 0, 0, 0, 12, // Windows Unicode BMP, its subtable at 12
+    0, 4, 0, 32, 0, 0, // format 4, 32 bytes, no language
+    0, 4, 0, 4, 0, 1, 0, 0, // two segments: searchRange 4, entrySelector 1, rangeShift 0
+    0, 0x41, 0xff, 0xff, // endCode
+    0, 0, // reservedPad
+    0, 0x41, 0xff, 0xff, // startCode
+    0xff, 0xc0, 0, 1, // idDelta: U+0041 is glyph 1, U+FFFF glyph 0
+    0, 0, 0, 0, // idRangeOffset
+  ]);
+  const maxp = new Uint8Array([0, 0, 0x50, 0, 0, 2]); // version 0.5, two glyphs
+  const built = hb_face_builder_create();
+  hb_face_builder_add_table(built, 0x636d6170, hb_glib_blob_create(g_bytes_new(cmap)));
+  hb_face_builder_add_table(built, 0x6d617870, hb_glib_blob_create(g_bytes_new(maxp)));
+  const unicodes = hb_set_create();
+  hb_face_collect_unicodes(built, unicodes);
+  console.log("collected " + String(hb_set_get_population(unicodes)) + " " + String(hb_set_has(unicodes, 0x41) !== 0));
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
