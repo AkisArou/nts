@@ -1595,6 +1595,20 @@ fn unsigned_classes(
     unsigned
 }
 
+/// Whether an integer of `bits` bits, `signed` or not, holds `value`.
+fn integer_holds(value: i128, bits: u8, signed: bool) -> bool {
+    let bits = u32::from(bits);
+    if bits >= 128 {
+        return true;
+    }
+    if signed {
+        let half = 1i128 << (bits - 1);
+        (-half..half).contains(&value)
+    } else {
+        (0..(1i128 << bits)).contains(&value)
+    }
+}
+
 /// Whether `value` is a numeric constant, which a comparison can have at
 /// whatever type it compares in.
 fn is_constant(func: &Func, value: ValueId) -> bool {
@@ -1673,6 +1687,17 @@ fn convert(
         {
             #[allow(clippy::cast_possible_truncation)]
             OpKind::ConstInt(*value as i128)
+        }
+        // An integer constant at another integer type, where its value is one
+        // of that type's: a constant again rather than a `convert`, which
+        // left `const 0 : i32` beside a `convert : u32` and the Wasm emitter
+        // holding both operands of the comparison in locals. A value the
+        // wanted type cannot hold keeps the `convert`, whose meaning a
+        // backend owns.
+        (OpKind::ConstInt(value), HirType::Int { bits, signed })
+            if integer_holds(*value, *bits, *signed) =>
+        {
+            OpKind::ConstInt(*value)
         }
         // Only to a double: every backend spells a float constant as one, and
         // a narrower float is reached through a `Convert` as it always was.
