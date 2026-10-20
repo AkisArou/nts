@@ -18,42 +18,9 @@ use nts_surfaces::{Binder, Package, Surface};
 
 use crate::bind_gir;
 
-/// The generator's own source, hashed when this compiler is built: the
-/// packages change when it does, and only then. `every_generator_file_is_hashed`
-/// keeps the list whole.
-const GENERATOR: u64 = fnv(&[
-    include_bytes!("bind_scratch.rs"),
-    include_bytes!("gir_surface.rs"),
-    include_bytes!("bind_header/ctype.rs"),
-    include_bytes!("bind_header/mod.rs"),
-    include_bytes!("bind_header/probe.rs"),
-    include_bytes!("bind_gir/mod.rs"),
-    include_bytes!("bind_gir/check.rs"),
-    include_bytes!("bind_gir/emit.rs"),
-    include_bytes!("bind_gir/facts.rs"),
-    include_bytes!("bind_gir/map.rs"),
-    include_bytes!("bind_gir/model.rs"),
-    include_bytes!("bind_gir/naming.rs"),
-    include_bytes!("bind_gir/parse.rs"),
-    include_bytes!("bind_gir/prerequisites.rs"),
-    include_bytes!("bind_gir/cairo-1.0.gir"),
-]);
-
-/// FNV-1a over `parts` in order, at compile time.
-const fn fnv(parts: &[&[u8]]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    let mut part = 0;
-    while part < parts.len() {
-        let bytes = parts[part];
-        let mut at = 0;
-        while at < bytes.len() {
-            hash = (hash ^ bytes[at] as u64).wrapping_mul(0x0100_0000_01b3);
-            at += 1;
-        }
-        part += 1;
-    }
-    hash
-}
+/// The generator's own source, hashed when this compiler is built
+/// (`generator_inputs`): the packages change when it does, and only then.
+const GENERATOR: &str = env!("NTS_GENERATOR_GIR");
 
 /// The platform package, which names every namespace's.
 pub(crate) const PLATFORM_PACKAGE: &str = "@nts/platform-gtk";
@@ -203,7 +170,7 @@ impl Binder for GirPlatform {
     }
 
     fn version(&self) -> String {
-        format!("{GENERATOR:016x}")
+        GENERATOR.to_owned()
     }
 
     fn inputs(&self) -> Vec<Utf8PathBuf> {
@@ -316,7 +283,7 @@ impl Generated for GirBindings {
         // A snapshot names the store entry it was opened with, which the
         // extras choose; none, and the key is what it was before them.
         format!(
-            "gir-bindings/3 {GENERATOR:016x} {}{}",
+            "gir-bindings/3 {GENERATOR} {}{}",
             nts_surfaces::fingerprint(&files),
             bind_gir::request_of(&self.extras)
         )
@@ -761,29 +728,6 @@ export function made(): number {
         assert_eq!(missing_module(&side_effect), Some("gi:gtk"));
         assert_eq!(missing_module(&other), None);
         assert_eq!(missing_module(&wrong_code), None);
-    }
-
-    /// Every source file the generator is made of is in `GENERATOR`: one left
-    /// out would keep stale packages when it changes.
-    #[test]
-    fn every_generator_file_is_hashed() {
-        let this = include_str!("gir_surface.rs");
-        for module in ["bind_gir", "bind_header"] {
-            let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src")
-                .join(module);
-            for entry in std::fs::read_dir(&dir).expect(module) {
-                let name = entry
-                    .expect("entry")
-                    .file_name()
-                    .into_string()
-                    .expect("utf-8");
-                assert!(
-                    this.contains(&format!("include_bytes!(\"{module}/{name}\")")),
-                    "{module}/{name} is not hashed into GENERATOR"
-                );
-            }
-        }
     }
 
     /// Two projects asking different `girExtras` never share a store entry:

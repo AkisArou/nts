@@ -14,6 +14,8 @@ mod bind_scratch;
 mod bind_winmd;
 mod emission;
 mod expect_ir;
+#[cfg(test)]
+mod generator_inputs;
 mod gir_surface;
 mod jar_resources;
 mod multi_emit;
