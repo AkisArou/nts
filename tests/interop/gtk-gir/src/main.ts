@@ -16,6 +16,11 @@
 //                 name for it, and `copy()`, a record of its own the next move
 //                 leaves behind
 //   rgba true rgb(255,128,0)  a `GdkRGBA` the program made, filled by `parse`
+//   erased bytes=true hash=true rgba=true parent=true  records C takes as
+//                 `gconstpointer` -- two `GBytes`, two `GdkRGBA`, compared as
+//                 `const void *` -- and `GtkButton`'s class struct, which C
+//                 answers and takes as `gpointer`: referenced, its parent's
+//                 peeked, released
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -130,9 +135,19 @@ import {
   KeyFileFlags,
   type GError,
   g_bytes_new,
+  g_bytes_equal,
+  g_bytes_hash,
 } from "c:GLib-2.0";
-import { G_TYPE_STRING, g_signal_group_new, g_object_set_data, g_object_get_data } from "c:GObject-2.0";
-import { GdkRGBA } from "c:Gdk-4.0";
+import {
+  G_TYPE_STRING,
+  g_signal_group_new,
+  g_object_set_data,
+  g_object_get_data,
+  g_type_class_peek_parent,
+  g_type_class_ref,
+  g_type_class_unref,
+} from "c:GObject-2.0";
+import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
@@ -169,6 +184,20 @@ function boxedRecords(): void {
   const rgba = new GdkRGBA();
   const parsed = rgba.parse("#ff8000");
   console.log("rgba " + String(parsed) + " " + rgba.to_string());
+  // Records C takes or answers as `gconstpointer` or `gpointer`, erased:
+  // two `GBytes` and two `GdkRGBA` compared as `const void *`, and a class
+  // struct referenced, its parent's peeked, and released.
+  const same = new GdkRGBA();
+  same.parse("#ff8000");
+  const left = g_bytes_new(new Uint8Array([1, 2]));
+  const right = g_bytes_new(new Uint8Array([1, 2]));
+  const buttonClass = g_type_class_ref(gtk_button_get_type());
+  const parentClass = g_type_class_peek_parent(buttonClass);
+  g_type_class_unref(buttonClass);
+  console.log(
+    "erased bytes=" + String(g_bytes_equal(left, right)) + " hash=" + String(g_bytes_hash(left) === g_bytes_hash(right)) +
+      " rgba=" + String(gdk_rgba_equal(rgba, same)) + " parent=" + String(parentClass !== null),
+  );
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
