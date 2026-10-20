@@ -152,8 +152,9 @@ fn against_headers_with_ready(
 /// prototype the binding would declare, for the report.
 fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) {
     let mut out = String::new();
-    for header in &binding.headers {
-        let _ = writeln!(out, "#include <{header}>");
+    let preamble = crate::bind_header::preamble(&binding.defines, &binding.headers);
+    for line in &preamble {
+        let _ = writeln!(out, "{line}");
     }
     // Every tag a prototype names, declared first: a tag first seen inside a
     // parameter list is scoped to it and would name a different struct.
@@ -171,7 +172,7 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         let _ = writeln!(out, "struct {tag};");
     }
     // Counted as written, rather than by recounting the text per function.
-    let mut line = binding.headers.len() + tags.len();
+    let mut line = preamble.len() + tags.len();
     let mut lines = BTreeMap::new();
     for function in &binding.functions {
         let parameters = if function.c_parameters.is_empty() {

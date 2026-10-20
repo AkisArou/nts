@@ -24,7 +24,7 @@ static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::n
 /// `interface C type -> its first classed prerequisite's C type`, for each
 /// of `interfaces` (`(C type, get_type)`) the type system answered for.
 pub(crate) fn resolve(
-    headers: &[String],
+    preamble: &[String],
     interfaces: &[(&str, &str)],
     cflags: &[String],
     libs: &[String],
@@ -33,8 +33,8 @@ pub(crate) fn resolve(
         return BTreeMap::new();
     }
     let mut probe = String::new();
-    for header in headers {
-        let _ = writeln!(probe, "#include <{header}>");
+    for line in preamble {
+        let _ = writeln!(probe, "{line}");
     }
     probe.push_str("#include <stdio.h>\nint main(void) {\n");
     for (c_type, get_type) in interfaces {

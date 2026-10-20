@@ -233,6 +233,7 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
     let mut out = Binding {
         module: module_of(&namespace.name),
         headers: binding.headers.clone(),
+        defines: binding.defines.clone(),
         brands: binding.brands.clone(),
         refused: binding.refused.clone(),
         deprecated: binding.deprecated.clone(),

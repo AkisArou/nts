@@ -360,11 +360,13 @@ fn check(rest: &[String]) -> Result<()> {
     )
 }
 
-/// `nts bind-gir Gtk-4.0 --out types [--gir-dir <dir>]...`
+/// `nts bind-gir Gtk-4.0 --out types [--gir-dir <dir>]... [--header|--package|--define NS:value]...`
 ///
 /// Binds the named namespace and every one it includes, one `.d.ts`, one
 /// `.values.ts` and one `.refused.txt` each. Any `--gir-dir` is searched
 /// first, then `GI_GIR_PATH`, `XDG_DATA_DIRS` and the system directories.
+/// `--header`, `--package` and `--define`, each `Namespace:value`, add to that
+/// namespace what its GIR does not name (`bind_gir::Extra`).
 fn bind_gir(rest: &[String]) -> Result<()> {
     let root = rest
         .iter()
@@ -387,10 +389,30 @@ fn bind_gir(rest: &[String]) -> Result<()> {
         || Utf8PathBuf::from("."),
         |pair| Utf8PathBuf::from(&pair[1]),
     );
+    let mut extras = bind_gir::Extras::new();
+    for pair in rest.windows(2) {
+        let (flag, value) = (pair[0].as_str(), &pair[1]);
+        if !matches!(flag, "--header" | "--package" | "--define") {
+            continue;
+        }
+        let (namespace, value) = value.split_once(':').ok_or_else(|| {
+            anyhow::anyhow!(
+                "`{flag} {value}` names no namespace: write it `{flag} Gtk-4.0:{value}`"
+            )
+        })?;
+        let extra = extras.entry(namespace.to_owned()).or_default();
+        let into = match flag {
+            "--header" => &mut extra.headers,
+            "--package" => &mut extra.packages,
+            _ => &mut extra.defines,
+        };
+        into.push(value.to_owned());
+    }
     bind_gir::run(&bind_gir::Request {
         root: root.clone(),
         search,
         out,
+        extras,
     })
 }
 

@@ -113,21 +113,17 @@ impl Facts {
 /// the shared probe: one pointer level to a tagged struct, or no answer, and
 /// the record keeps its refusal.
 pub(crate) fn pointer_records(
-    headers: &[String],
+    preamble: &[String],
     cflags: &[String],
     names: &[&str],
 ) -> Result<BTreeMap<String, PointerRecord>> {
     if names.is_empty() {
         return Ok(BTreeMap::new());
     }
-    let preamble: Vec<String> = headers
-        .iter()
-        .map(|header| format!("#include <{header}>"))
-        .collect();
     let mut clang_args = vec!["-std=c11".to_owned(), "-fno-spell-checking".to_owned()];
     clang_args.extend(cflags.iter().cloned());
     let probe = Probe {
-        preamble: &preamble,
+        preamble,
         clang_args: &clang_args,
         prefix: PREFIX,
         label: "bind-gir",
@@ -153,7 +149,7 @@ pub(crate) fn pointer_records(
 /// A declaration clang cannot answer, or whose type the reader does not
 /// parse, is left out, and its callable keeps GIR's spellings.
 pub(crate) fn prototypes(
-    headers: &[String],
+    preamble: &[String],
     cflags: &[String],
     functions: &[&str],
     slots: &[(String, String)],
@@ -161,15 +157,11 @@ pub(crate) fn prototypes(
     if functions.is_empty() && slots.is_empty() {
         return Ok(Default::default());
     }
-    let preamble: Vec<String> = headers
-        .iter()
-        .map(|header| format!("#include <{header}>"))
-        .collect();
     // No spelling correction, as in `resolve`.
     let mut clang_args = vec!["-std=c11".to_owned(), "-fno-spell-checking".to_owned()];
     clang_args.extend(cflags.iter().cloned());
     let probe = Probe {
-        preamble: &preamble,
+        preamble,
         clang_args: &clang_args,
         prefix: PREFIX,
         label: "bind-gir",
@@ -233,7 +225,7 @@ fn spells_volatile(text: &str, typedefs: &BTreeMap<String, String>) -> bool {
 }
 
 /// Ask the headers what `asked` wants to know.
-pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) -> Result<Facts> {
+pub(crate) fn resolve(preamble: &[String], asked: &Asked<'_>, cflags: &[String]) -> Result<Facts> {
     let Asked {
         structs,
         enums,
@@ -252,8 +244,8 @@ pub(crate) fn resolve(headers: &[String], asked: &Asked<'_>, cflags: &[String]) 
         return Ok(Facts::default());
     }
     let mut probe = String::new();
-    for header in headers {
-        let _ = writeln!(probe, "#include <{header}>");
+    for line in preamble {
+        let _ = writeln!(probe, "{line}");
     }
     probe.push_str("#include <stddef.h>\n");
     for (at, (class_struct, member)) in slots.iter().enumerate() {

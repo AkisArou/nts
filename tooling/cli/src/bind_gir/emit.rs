@@ -23,6 +23,9 @@ fn preamble(binding: &Binding, command: &str) -> String {
     for header in &binding.headers {
         let _ = writeln!(out, " * @ntsHeader {header}");
     }
+    for define in &binding.defines {
+        let _ = writeln!(out, " * @ntsDefine {define}");
+    }
     out.push_str(" */\n");
     let _ = writeln!(out, "declare module \"{}\" {{", binding.module);
     out.push_str(&crate::bind::vocabulary_imports(

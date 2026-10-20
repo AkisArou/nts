@@ -84,6 +84,8 @@ pub(crate) struct Binding {
     /// signal map (`Signalled`).
     pub(crate) self_typed: bool,
     pub(crate) headers: Vec<String>,
+    /// Macros defined before `headers`, as `@ntsDefine` writes them.
+    pub(crate) defines: Vec<String>,
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,
     pub(crate) enums: Vec<EnumDecl>,
@@ -632,6 +634,7 @@ pub(crate) fn bind<'a>(
         binding: Binding {
             module: module_of(namespace),
             headers: namespace.headers.clone(),
+            defines: namespace.defines.clone(),
             ..Binding::default()
         },
     };
@@ -4535,8 +4538,13 @@ mod tests {
         let namespace = &repository.namespaces["Q"];
         let cflags = [format!("-I{}", dir.display())];
         let functions = ["q_write", "q_write_plain", "q_find", "q_take", "q_atomic"];
-        let (prototypes, volatile) =
-            facts::prototypes(&namespace.headers, &cflags, &functions, &[]).expect("prototypes");
+        let (prototypes, volatile) = facts::prototypes(
+            &crate::bind_header::preamble(&namespace.defines, &namespace.headers),
+            &cflags,
+            &functions,
+            &[],
+        )
+        .expect("prototypes");
         assert_eq!(
             volatile.iter().map(String::as_str).collect::<Vec<_>>(),
             ["q_atomic"]

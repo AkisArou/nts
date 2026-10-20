@@ -29,6 +29,7 @@ mod parse;
 mod prerequisites;
 
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
@@ -39,6 +40,153 @@ pub(crate) struct Request {
     pub root: String,
     pub search: Vec<Utf8PathBuf>,
     pub out: Utf8PathBuf,
+    /// What the request adds to namespaces of the closure, by namespace.
+    pub extras: Extras,
+}
+
+/// What a bind request adds to one namespace beyond what its GIR names, for
+/// declarations GIR describes in headers its `<c:include>` does not reach:
+/// `--header Gtk-4.0:gtk/gtkunixprint.h`, `--package Gtk-4.0:gtk4-unix-print`,
+/// `--define Gio-2.0:G_SETTINGS_ENABLE_BACKEND`. Data from the request, never a
+/// rule of this binder's about a library: with none, the output is GIR's alone.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct Extra {
+    pub headers: Vec<String>,
+    pub packages: Vec<String>,
+    /// `NAME` or `NAME=VALUE`, defined before the headers wherever they are
+    /// included: the probes, the self-check and the program (`@ntsDefine`).
+    pub defines: Vec<String>,
+}
+
+/// A request's extras, by namespace (`Gtk-4.0`).
+pub(crate) type Extras = BTreeMap<String, Extra>;
+
+/// The command that reproduces a binding, extras and all, for its header.
+fn command_of(root: &str, extras: &Extras) -> String {
+    let mut command = format!("nts bind-gir {root}");
+    for (namespace, extra) in extras {
+        for (flag, values) in [
+            ("--package", &extra.packages),
+            ("--define", &extra.defines),
+            ("--header", &extra.headers),
+        ] {
+            for value in values {
+                let _ = write!(command, " {flag} {namespace}:{value}");
+            }
+        }
+    }
+    command
+}
+
+/// The request's extras added to the closure, each checked: the namespace is
+/// in the closure, and each header compiles under its namespace's flags and
+/// macros. A header that declares none of the namespace's callables its own
+/// headers do not is said so, since it would bind nothing.
+fn apply(repository: &mut model::Repository, root: &str, extras: &Extras) -> Result<()> {
+    // The request names a namespace as the root is named, `Gio-2.0`; the
+    // repository keys it by name alone.
+    let mut keys = BTreeMap::new();
+    for requested in extras.keys() {
+        let key = repository
+            .namespaces
+            .iter()
+            .find(|(_, ns)| format!("{}-{}", ns.name, ns.version) == *requested)
+            .map(|(key, _)| key.clone())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "the bind request names `{requested}`, which is not in {root}'s closure"
+                )
+            })?;
+        keys.insert(requested.clone(), key);
+    }
+    for (name, extra) in extras {
+        let namespace = repository
+            .namespaces
+            .get_mut(&keys[name])
+            .expect("found above");
+        for package in &extra.packages {
+            if !namespace.packages.contains(package) {
+                namespace.packages.push(package.clone());
+            }
+        }
+        namespace.defines.extend(extra.defines.iter().cloned());
+    }
+    for (name, extra) in extras {
+        if extra.headers.is_empty() {
+            continue;
+        }
+        let namespace = &repository.namespaces[&keys[name]];
+        let flags = pkg_config(repository, namespace, "--cflags");
+        let own = crate::bind_header::preamble(&namespace.defines, &namespace.headers);
+        for header in &extra.headers {
+            let mut with = own.clone();
+            with.push(format!("#include <{header}>"));
+            compiles(&with, &flags).map_err(|why| {
+                anyhow::anyhow!(
+                    "`--header {name}:{header}` does not compile under {name}'s flags: {why}"
+                )
+            })?;
+        }
+        let callables = callables(namespace);
+        let mut all = namespace.headers.clone();
+        all.extend(extra.headers.iter().cloned());
+        let with = crate::bind_header::preamble(&namespace.defines, &all);
+        let (before, _) = facts::prototypes(&own, &flags, &callables, &[])?;
+        let (after, _) = facts::prototypes(&with, &flags, &callables, &[])?;
+        if after.len() <= before.len() {
+            eprintln!(
+                "  warning: the requested headers declare none of {name}'s callables its own do not"
+            );
+        }
+    }
+    for (name, extra) in extras {
+        let namespace = repository
+            .namespaces
+            .get_mut(&keys[name])
+            .expect("found above");
+        for header in &extra.headers {
+            if !namespace.headers.contains(header) {
+                namespace.headers.push(header.clone());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether `preamble` compiles under `flags`, or the first error clang gives.
+fn compiles(preamble: &[String], flags: &[String]) -> std::result::Result<(), String> {
+    let dir = crate::bind_scratch::directory("bind-gir-extra").map_err(|e| e.to_string())?;
+    let probe = dir.join("extra.c");
+    let mut text = preamble.join("\n");
+    text.push('\n');
+    std::fs::write(&probe, text).map_err(|e| e.to_string())?;
+    let output = std::process::Command::new("clang")
+        .args(["-std=c11", "-fsyntax-only", "-w"])
+        .args(flags)
+        .arg(&probe)
+        .output();
+    let _ = std::fs::remove_dir_all(&dir);
+    let output = output.map_err(|e| e.to_string())?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(stderr
+        .lines()
+        .find(|line| line.contains("error"))
+        .unwrap_or("clang refused it")
+        .to_owned())
+}
+
+/// Every callable's C identifier in `namespace`.
+fn callables(namespace: &model::Namespace) -> Vec<&str> {
+    namespace
+        .functions
+        .iter()
+        .chain(namespace.classes.iter().flat_map(|c| &c.callables))
+        .chain(namespace.records.iter().flat_map(|r| &r.callables))
+        .filter_map(|callable| callable.c_identifier.as_deref())
+        .collect()
 }
 
 /// The GIR files `root`'s closure is read from (`parse::closure_files`).
@@ -131,7 +279,14 @@ pub(crate) fn newest(name: &str, pinned: Option<&str>, search: &[Utf8PathBuf]) -
 
 /// Bind `request.root` and its closure into `request.out`.
 pub(crate) fn run(request: &Request) -> Result<()> {
-    bind(&request.root, &request.search, &request.out, true).map(|_| ())
+    bind(
+        &request.root,
+        &request.search,
+        &request.out,
+        &request.extras,
+        true,
+    )
+    .map(|_| ())
 }
 
 /// What one namespace's headers say: one clang run over them.
@@ -214,17 +369,11 @@ fn namespace_facts(
         functions: &functions,
         macros,
     };
-    let mut facts = facts::resolve(&namespace.headers, &asked, &flags)?;
+    let preamble = crate::bind_header::preamble(&namespace.defines, &namespace.headers);
+    let mut facts = facts::resolve(&preamble, &asked, &flags)?;
     // Every callable's C type, for the `const` GIR's spellings drop.
-    let callables: Vec<&str> = namespace
-        .functions
-        .iter()
-        .chain(namespace.classes.iter().flat_map(|c| &c.callables))
-        .chain(namespace.records.iter().flat_map(|r| &r.callables))
-        .filter_map(|callable| callable.c_identifier.as_deref())
-        .collect();
-    (facts.prototypes, facts.volatile) =
-        facts::prototypes(&namespace.headers, &flags, &callables, &slots)?;
+    let callables = callables(namespace);
+    (facts.prototypes, facts.volatile) = facts::prototypes(&preamble, &flags, &callables, &slots)?;
     // What each pointer record's typedef points at.
     let pointers: Vec<&str> = namespace
         .records
@@ -232,7 +381,7 @@ fn namespace_facts(
         .filter(|r| r.pointer)
         .filter_map(|r| r.c_type.as_deref())
         .collect();
-    facts.pointers = facts::pointer_records(&namespace.headers, &flags, &pointers)?;
+    facts.pointers = facts::pointer_records(&preamble, &flags, &pointers)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
     let interfaces: Vec<(&str, &str)> = namespace
@@ -242,7 +391,7 @@ fn namespace_facts(
         .filter_map(|c| Some((c.c_type.as_deref()?, c.get_type.as_deref()?)))
         .collect();
     let libs = pkg_config(repository, namespace, "--libs");
-    facts.prerequisites = prerequisites::resolve(&namespace.headers, &interfaces, &flags, &libs);
+    facts.prerequisites = prerequisites::resolve(&preamble, &interfaces, &flags, &libs);
     Ok(facts)
 }
 
@@ -270,9 +419,12 @@ pub(crate) struct Generated {
 pub(crate) fn generate(
     root: &str,
     search: &[Utf8PathBuf],
+    extras: &Extras,
 ) -> Result<(Vec<Generated>, Vec<Utf8PathBuf>, Vec<String>)> {
-    let repository = parse::repository(root, search)?;
-    let command = format!("nts bind-gir {root}");
+    let mut repository = parse::repository(root, search)?;
+    apply(&mut repository, root, extras)?;
+    let repository = repository;
+    let command = command_of(root, extras);
     // Every struct tag first, because a namespace's signatures name the types
     // of the namespaces it includes. Each namespace is one clang run that
     // parses its headers, independent of the others, so they run at once.
@@ -357,9 +509,10 @@ fn bind(
     root: &str,
     search: &[Utf8PathBuf],
     out: &Utf8PathBuf,
+    extras: &Extras,
     verbose: bool,
 ) -> Result<Vec<Utf8PathBuf>> {
-    let (generated, files, missing) = generate(root, search)?;
+    let (generated, files, missing) = generate(root, search, extras)?;
     if verbose {
         for missing in &missing {
             println!("  {missing}: no GIR file found, so its types are unknown here");

@@ -120,7 +120,8 @@ impl GirPlatform {
         let mut namespaces: Vec<bind_gir::Generated> = Vec::new();
         let mut files = Vec::new();
         for root in &self.roots {
-            let (generated, read, _) = bind_gir::generate(root, &self.search)?;
+            let (generated, read, _) =
+                bind_gir::generate(root, &self.search, &bind_gir::Extras::new())?;
             for namespace in generated {
                 if !namespaces.iter().any(|known| known.stem == namespace.stem) {
                     namespaces.push(namespace);

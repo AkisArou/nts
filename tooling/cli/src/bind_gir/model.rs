@@ -26,6 +26,10 @@ pub(crate) struct Namespace {
     pub(crate) headers: Vec<String>,
     /// `<package>`: the pkg-config names whose `--cflags` reach those headers.
     pub(crate) packages: Vec<String>,
+    /// Macros defined before the headers are included: none from GIR, and
+    /// any the bind request adds (`--define Gio-2.0:G_SETTINGS_ENABLE_BACKEND`),
+    /// as `NAME` or `NAME=VALUE`.
+    pub(crate) defines: Vec<String>,
     /// `<include>`: the namespaces this one names types from, as `(name, version)`.
     pub(crate) includes: Vec<(String, String)>,
     pub(crate) classes: Vec<Class>,
