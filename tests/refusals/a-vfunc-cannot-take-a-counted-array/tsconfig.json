@@ -1,0 +1,4 @@
+{
+  "extends": "../../../runtime/gtk/tsconfig.json",
+  "include": ["src", "../../../runtime/native/libc.d.ts"]
+}
