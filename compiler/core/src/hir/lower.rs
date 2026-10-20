@@ -27887,8 +27887,52 @@ impl<'a> FuncBuilder<'a> {
         })
     }
 
+    /// A closure answering an object of **another layout** than the one the
+    /// signature it is admitted at reads.
+    ///
+    /// The same kind -- a reference -- so [`Self::result_of_another_kind`]
+    /// admits it, and the same blind read: the call site unerases the answer
+    /// at the signature's object type and reads its fields at that type's
+    /// offsets. `var o = { make() { return { a: 1, b: "x" } } }` declared again
+    /// with `make` answering `{ b: "y" }` read `b` from the second slot of a
+    /// one-field object, and the program died on SIGSEGV where node says `"y0"`
+    /// (`outcomes/a-var-redeclared-returning-another-object-layout`).
+    ///
+    /// Refused where the answer's layout is not a prefix of the read one, which
+    /// is [`Self::not_a_prefix`]'s question and its sentence; a prefix -- a
+    /// subclass, or the same shape -- reads every field where it is. Admitted,
+    /// as a value of the type is ([`Self::native_field_view`]), where the read
+    /// type is a face that carries the answer's: its reads find each carried
+    /// owner's fields wherever that owner keeps them.
+    fn result_of_another_layout(
+        &mut self,
+        id: NodeId,
+        have: &HirType,
+        want: &HirType,
+    ) -> Option<String> {
+        let (
+            HirType::Managed(ManagedType::Object(answers)),
+            HirType::Managed(ManagedType::Object(reads)),
+        ) = self.closure_results(have, want)?
+        else {
+            return None;
+        };
+        if answers == reads || self.hierarchy.access_families.carries(answers, reads) {
+            return None;
+        }
+        let why = self.not_a_prefix(id, answers, reads)?;
+        let (held, wanted) = (
+            self.type_in_a_message(answers),
+            self.type_in_a_message(reads),
+        );
+        Some(format!(
+            "a function's answer: {}",
+            why.spell(&held, &wanted)
+        ))
+    }
+
     /// What a closure answers and what the signature it is admitted at reads,
-    /// each at its representation: the pair both closure-result rules above
+    /// each at its representation: the pair the closure-result rules above
     /// compare. `None` where `have` is not a closure arriving at another type,
     /// or either answer has no representation.
     fn closure_results(&self, have: &HirType, want: &HirType) -> Option<(HirType, HirType)> {
@@ -28190,6 +28234,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &why));
             }
             if let Some(why) = self.result_of_another_kind(&have, want) {
+                return Err(self.unsupported(id, &why));
+            }
+            if let Some(why) = self.result_of_another_layout(id, &have, want) {
                 return Err(self.unsupported(id, &why));
             }
             self.record_arrival(&have, want, id);
