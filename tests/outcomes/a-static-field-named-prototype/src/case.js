@@ -18,8 +18,14 @@
 // the same global is a pointer written with 42 and never read here.
 //
 // The control is `control`: the same class with the field named
-// `proto`, whose value reads back. It is reached only if the program
-// loads at all, which today it does not: the record is the abort.
+// `proto`, whose value reads back.
+//
+// **Since 2026-10-20 the class throws that TypeError**, while it is
+// defined and before any static initializer runs, and the field has no
+// global. The record is a guard now -- both functions agreeing on the
+// JVM -- and a change that gives the field storage again shows here as
+// the VerifyError. tests/programs/a-static-member-named-prototype-throws
+// holds the method, accessor and ordering arms on every backend.
 //
 // Typed TypeScript cannot spell this (TS2699), so the case is JS.
 // Found by test262 statement class elements

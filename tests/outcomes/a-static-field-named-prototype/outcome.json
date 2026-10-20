@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "aborted",
-  "nts": "java.lang.VerifyError: Bad type on operand stack",
+  "category": "agrees",
+  "nts": "checked 58 cases across 2 function(s) | agreed on every case",
   "node": null,
-  "measured_with": "a35d4bf1c0d02829",
+  "measured_with": "51b870daa12a81ef",
   "source": "measured"
 }

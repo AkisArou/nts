@@ -4222,7 +4222,9 @@ pub const MODULE_INIT: &str = "module#init";
 /// kind of assertion that earns its keep here.
 ///
 /// A field with no initializer is storage at its zero and needs no statement,
-/// the same rule `collect_module_scope` follows for `let x: number;`.
+/// the same rule `collect_module_scope` follows for `let x: number;`. A static
+/// member named `prototype` does need one, initializer or not: defining the
+/// class throws (`FuncBuilder::static_named_prototype`).
 fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
     if !probe.kind_of(id).is_some_and(declares_a_class) {
         return false;
@@ -4249,7 +4251,7 @@ fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
                     .modifiers
                     .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
                 && matches!(probe.child_slots::<5>(member), Some([_, _, _, _, Some(_)])))
-    })
+    }) || probe.static_named_prototype(id).is_some()
 }
 
 /// Whether a node at module scope is a statement rather than a declaration.
@@ -6052,6 +6054,8 @@ fn a_synthesized_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
         || an_operator_that_can_raise(probe, at)
         || probe.iterators.close_can_raise(at)
         || an_immutable_store(probe, at)
+        || (probe.kind_of(at).is_some_and(declares_a_class)
+            && probe.static_named_prototype(at).is_some())
 }
 
 /// A write to a binding no assignment may change, which throws `TypeError`
@@ -9985,6 +9989,11 @@ fn collect_static_fields(
         let Some(field) = probe.literal_name(name_node) else {
             continue;
         };
+        // Never defined: its class throws first. See
+        // `FuncBuilder::static_named_prototype`.
+        if field == "prototype" {
+            continue;
+        }
         let class_name = probe
             .children(class)
             .into_iter()
@@ -29905,6 +29914,35 @@ impl<'a> FuncBuilder<'a> {
         Ok(())
     }
 
+    /// The static member of `class` named `prototype`, where it has one.
+    ///
+    /// Defining one throws `TypeError` -- [`Self::lower_static_fields`] throws
+    /// it -- and a field so named gets no global from `collect_static_fields`,
+    /// where it took the name of the class's own prototype: an initial value of
+    /// 42 in a slot typed as the prototype object, which the JVM's verifier
+    /// refused at load (tests/outcomes/a-static-field-named-prototype).
+    ///
+    /// Only a computed key reaches here, since `static prototype` is an early
+    /// error, and only a constant one is seen: a key the program computes is
+    /// never evaluated (tests/outcomes/a-computed-field-key-is-never-evaluated).
+    fn static_named_prototype(&self, class: NodeId) -> Option<NodeId> {
+        self.children(class).into_iter().find(|member| {
+            matches!(
+                self.kind_of(*member),
+                Some(
+                    syntax::PROPERTY_DECLARATION
+                        | syntax::METHOD_DECLARATION
+                        | syntax::GET_ACCESSOR
+                        | syntax::SET_ACCESSOR
+                )
+            ) && self
+                .node(*member)
+                .modifiers
+                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+                && self.member_name(*member).as_deref() == Some("prototype")
+        })
+    }
+
     /// A class's `static` field initializers, which run at class definition.
     ///
     /// `collect_static_fields` gives each one a global; this is where the ones
@@ -29918,6 +29956,19 @@ impl<'a> FuncBuilder<'a> {
     /// which is what makes a static field's storage indistinguishable from a
     /// module-scope `const`'s everywhere downstream.
     fn lower_static_fields(&mut self, class: NodeId) -> Result<(), Diagnostic> {
+        // **A static member named `prototype` throws before any of them runs**:
+        // the constructor's own `prototype` is neither writable nor
+        // configurable, so the class cannot be defined, and node throws while
+        // defining it -- for a method as for a field, and before the first
+        // static initializer or block. The loop below stops at the terminated
+        // block, as it does for a static element that throws.
+        if let Some(member) = self.static_named_prototype(class) {
+            self.throw_provided_error(
+                member,
+                "TypeError",
+                "Classes may not have a static property named 'prototype'",
+            )?;
+        }
         for member in self.children(class) {
             // **A static element that throws ends the class's evaluation there.**
             // `ClassDefinitionEvaluation` runs the static elements in source order
