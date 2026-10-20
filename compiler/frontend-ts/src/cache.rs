@@ -74,12 +74,22 @@ fn snapshot_in<S: SemanticSource>(
     tool: &str,
     dir: &Utf8Path,
 ) -> Result<SemanticSnapshot, SnapshotError> {
+    // **The checker is asked about the path the key names.** tsgo resolves
+    // modules by walking up the path it is given, so a symlinked spelling of
+    // this project can read a different `node_modules` -- or none -- than the
+    // canonical one the question is keyed by. A lookup that fails is never in
+    // the read manifest, so nothing else could tell the two answers apart: a
+    // run through a symlinked root without `node_modules` stored TS2307
+    // under the real tree's key, and every later run from the tree reused it
+    // (found by the Wasm lane, 2026-10-21). Asking at the canonical path makes
+    // the answer a function of what the key says, however the caller spelled
+    // it.
     let canonical = absolute(tsconfig);
     let Some(asked) = question(source, &canonical, tool) else {
-        return source.snapshot(tsconfig);
+        return source.snapshot(&canonical);
     };
     let Some(local_key) = encoded_hash(&asked) else {
-        return source.snapshot(tsconfig);
+        return source.snapshot(&canonical);
     };
     let hint_path = dir
         .join("manifests")
@@ -103,7 +113,7 @@ fn snapshot_in<S: SemanticSource>(
         }
     }
 
-    let snapshot = source.snapshot(tsconfig)?;
+    let snapshot = source.snapshot(&canonical)?;
     // Files can change while the checker runs. Never publish an answer under
     // the local question we observed before such a change.
     if question(source, &canonical, tool).as_ref() != Some(&asked) {

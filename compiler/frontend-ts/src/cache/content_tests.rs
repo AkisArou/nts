@@ -725,3 +725,81 @@ fn an_oversized_capture_returns_fresh_without_persisting_payloads() {
         "neither an oversized entry nor its hint is published"
     );
 }
+
+/// A source whose answer depends on the path it is asked at, as tsgo's module
+/// resolution does: it walks up the path it is given.
+struct PathSource {
+    asked: Vec<Utf8PathBuf>,
+    file: Utf8PathBuf,
+}
+
+impl SemanticSource for PathSource {
+    fn snapshot(&mut self, tsconfig: &Utf8Path) -> Result<SemanticSnapshot, SnapshotError> {
+        self.asked.push(tsconfig.to_owned());
+        let bytes = std::fs::read(&self.file)
+            .map_err(|error| SnapshotError::Transport(error.to_string()))?;
+        Ok(SemanticSnapshot {
+            schema_version: SCHEMA_VERSION,
+            sources: vec![SourceFile {
+                // What the answer computed: different at each spelling.
+                uri: format!("test://{tsconfig}"),
+                digest: Digest(hash_of(&bytes).to_le_bytes()),
+                display_path: self.file.clone(),
+                rewritten_by: None,
+                rewritten_map: vec![],
+            }],
+            ..SemanticSnapshot::default()
+        })
+    }
+
+    fn stats(&self) -> FrontendStats {
+        FrontendStats::default()
+    }
+    fn identity(&self) -> String {
+        "path-source-v1".into()
+    }
+    fn cache_identity(&self) -> Option<String> {
+        Some("path-source-v1".into())
+    }
+}
+
+/// **A symlinked spelling of a project is asked at the canonical path.** The
+/// key is the canonical path's, so the answer must be too: tsgo resolves
+/// modules walking up the path it is handed, and a symlinked root without
+/// `node_modules` stored TS2307 under the real tree's key, which every later
+/// run from the tree reused (found by the Wasm lane, 2026-10-21). Asked
+/// through the link first and the real path second, both get the canonical
+/// answer, and the source never sees the link.
+#[test]
+fn a_symlinked_spelling_is_answered_at_the_canonical_path() {
+    let project = Project::new("symlinked");
+    let link = project.root.join("link");
+    std::os::unix::fs::symlink(project.root.join("project"), &link).expect("a symlinked root");
+    let canonical = Utf8PathBuf::from_path_buf(
+        std::fs::canonicalize(&project.config).expect("the real config"),
+    )
+    .expect("utf8");
+    let mut source = PathSource {
+        asked: Vec::new(),
+        file: project.root.join("project/main.ts"),
+    };
+
+    let through_link = snapshot_in(
+        &mut source,
+        &link.join("tsconfig.json"),
+        "test",
+        &project.cache,
+    )
+    .expect("snapshot through the link");
+    let through_tree =
+        snapshot_in(&mut source, &project.config, "test", &project.cache).expect("snapshot");
+
+    assert_eq!(
+        source.asked,
+        vec![canonical.clone()],
+        "asked once, at the canonical path"
+    );
+    let answered = format!("test://{canonical}");
+    assert_eq!(through_link.sources[0].uri, answered);
+    assert_eq!(through_tree.sources[0].uri, answered);
+}
