@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS2006 no declaration for `Generator0#resume` to take a signature from",
+  "node": null,
+  "measured_with": "ede2da74e6348a6f",
+  "source": "measured"
+}
