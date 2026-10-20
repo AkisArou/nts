@@ -6028,10 +6028,23 @@ fn unary(
             }
             _ => format!("{out} = fcmp one {ty} {}, 0.0", name(operand)),
         },
-        UnOp::Abs if float => format!(
-            "{out} = call double @llvm.fabs.f64(double {})",
-            name(operand)
-        ),
+        // The *result* may be an integer even where the operand is not, as the
+        // rounding arm below says: specialization proves the magnitude whole
+        // and in range and types it so, and `fabs` still answers a double. The
+        // conversion is written down here as it is there. Reached once a
+        // comparison stopped joining constants (`hir::specialize`), which let
+        // `Math.abs(digits) > 0` in `tests/programs/a-tofixed-digit-count-is-truncated`
+        // specialize: "defined with type 'double' but expected 'i32'".
+        UnOp::Abs if float => {
+            let fabs = format!("call double @llvm.fabs.f64(double {})", name(operand));
+            match &func.values[value.0 as usize].ty {
+                HirType::Int { bits, signed } => {
+                    let convert = if *signed { "fptosi" } else { "fptoui" };
+                    format!("{out}.a = {fabs}\n  {out} = {convert} double {out}.a to i{bits}")
+                }
+                _ => format!("{out} = {fabs}"),
+            }
+        }
         // The same ones the C backend answers without a library call: an
         // integer is already rounded, and its magnitude is an intrinsic rather
         // than a `fabs` around two conversions.
