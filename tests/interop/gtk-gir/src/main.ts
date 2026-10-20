@@ -43,6 +43,9 @@
 //                 and the header's `GskPathPoint *` does -- moved from the
 //                 start of `M 0 0 L 10 0` to its end, 10 from the origin, and
 //                 at the end no further
+//   query GtkButton  a `GTypeQuery` the program lays out, which GObject fills:
+//                 its `type_name` member a `const char *` the program reads with
+//                 `stringFrom`, owning nothing
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -180,8 +183,10 @@ import {
   g_object_get_data,
   g_type_class_peek_parent,
   g_type_class_ref,
+  g_type_query,
   g_type_class_unref,
 } from "c:GObject-2.0";
+import type { GTypeQuery } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
 import { graphene_point_distance, graphene_point_t, graphene_point_zero } from "c:Graphene-1.0";
 import {
@@ -332,6 +337,10 @@ function boxedRecords(): void {
     const along = graphene_point_distance(position, graphene_point_zero(), null, null);
     console.log("path " + String(moved) + " " + String(along) + " " + String(gsk_path_get_next(line, point)));
   }
+  // A record GObject fills, with a string member the program reads.
+  const query = local<GTypeQuery>();
+  g_type_query(gtk_button_get_type(), query);
+  console.log("query " + (stringFrom(query.type_name) ?? "none"));
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
