@@ -69,7 +69,7 @@ impl Written {
     }
 
     fn written(&self, func: &Func, index: ValueId) -> bool {
-        constant(func, index).is_some_and(|slot| self.slots.contains(&slot))
+        constant_length(func, index).is_some_and(|slot| self.slots.contains(&slot))
             || self.at.contains(&index)
             || self.through.contains(&index)
     }
@@ -124,7 +124,11 @@ fn edges(terminator: &Terminator) -> Vec<Edge<'_>> {
     }
 }
 
-fn constant(func: &Func, id: ValueId) -> Option<u32> {
+/// The length a constant gives an array, or the index it names, when it is a
+/// whole number from 0 to 2^32 - 1. An f32 constant is the f32 it rounds to:
+/// 2^32 - 1 written as one is 2^32, and is none.
+#[must_use]
+pub fn constant_length(func: &Func, id: ValueId) -> Option<u32> {
     let op = func.value(id);
     match op.kind {
         OpKind::ConstInt(n) => u32::try_from(n).ok(),
@@ -170,7 +174,9 @@ fn readies(func: &Func, kind: &OpKind, allocation: ValueId) -> bool {
     {
         (super::fills_every_slot(name)
             || (super::sets_length(name)
-                && args.get(1).is_some_and(|id| constant(func, *id) == Some(0))))
+                && args
+                    .get(1)
+                    .is_some_and(|id| constant_length(func, *id) == Some(0))))
             && args.first() == Some(&allocation)
             && !args[1..].contains(&allocation)
     } else {
@@ -210,7 +216,7 @@ fn pending_sources(func: &Func, purpose: Purpose) -> FxHashMap<ValueId, Length> 
                     fill: ArrayFill::Holes,
                 } => Length {
                     value: Some(*length),
-                    constant: constant(func, *length),
+                    constant: constant_length(func, *length),
                 },
                 _ if !purpose.carries_arrays() => continue,
                 // ArrayFill's lowering contract guarantees source reads see
@@ -272,7 +278,7 @@ fn exits(func: &Func, from: BlockId, edge: &Edge<'_>, length: Length, written: &
     matches!((op, taken), (BinOp::Lt, false) | (BinOp::Ge, true))
         && written.below.contains(&lhs)
         && (written.length == Some(rhs)
-            || (length.constant.is_some() && constant(func, rhs) == length.constant))
+            || (length.constant.is_some() && constant_length(func, rhs) == length.constant))
 }
 
 /// Backend refusal observations keep the original local proof: passing an
@@ -319,7 +325,7 @@ fn along(
         let mut gained = Written::default();
         for (&param, &arg) in params.iter().zip(edge.args) {
             // `[0, 0)` is written of every array.
-            if written.below.contains(&arg) || constant(func, arg) == Some(0) {
+            if written.below.contains(&arg) || constant_length(func, arg) == Some(0) {
                 gained.below.insert(param);
             }
             if written.through.contains(&arg) {
@@ -374,7 +380,7 @@ fn apply(
         OpKind::ArraySet { array, index, .. }
             if array == allocation && harmless(func, kind, allocation) =>
         {
-            if let Some(slot) = constant(func, index) {
+            if let Some(slot) = constant_length(func, index) {
                 if length.constant.is_none_or(|n| slot < n) {
                     written.slots.insert(slot);
                     if length
@@ -468,8 +474,8 @@ fn transfer(
         } = *kind
         {
             for written in pending.values_mut() {
-                if (written.through.contains(&lhs) && constant(func, rhs) == Some(1))
-                    || (written.through.contains(&rhs) && constant(func, lhs) == Some(1))
+                if (written.through.contains(&lhs) && constant_length(func, rhs) == Some(1))
+                    || (written.through.contains(&rhs) && constant_length(func, lhs) == Some(1))
                 {
                     written.below.insert(id);
                 }

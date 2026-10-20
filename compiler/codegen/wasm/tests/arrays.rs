@@ -670,3 +670,103 @@ fn a_proven_access_tests_nothing_and_a_false_proof_traps() {
     assert_eq!(report["proven"], 4, "{report}");
     assert_eq!(report["falseProofTraps"], 4, "{report}");
 }
+
+/// An array of `length`, a constant `kind` of type `ty`, answering its length.
+fn constant_length(name: &str, kind: OpKind, ty: HirType) -> Func {
+    let mut f = function(name, &[], F64);
+    let mut ops = vec![];
+    let len = op(&mut f, &mut ops, kind, ty);
+    let a = op(
+        &mut f,
+        &mut ops,
+        OpKind::ArrayNew {
+            length: len,
+            fill: ArrayFill::Holes,
+        },
+        array(F64),
+    );
+    let result = op(&mut f, &mut ops, OpKind::Length(a), F64);
+    finish(f, ops, result)
+}
+
+/// The operators of the defined function `name`, by their debug names.
+fn operators(bytes: &[u8], name: &str) -> Vec<String> {
+    let names = common::function_names(bytes);
+    let mut imported = 0;
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        match payload.unwrap() {
+            wasmparser::Payload::ImportSection(reader) => {
+                imported += reader
+                    .into_imports()
+                    .filter(|import| {
+                        matches!(import.as_ref().unwrap().ty, wasmparser::TypeRef::Func(_))
+                    })
+                    .count();
+            }
+            wasmparser::Payload::CodeSectionEntry(body) => {
+                if names[imported + defined] == name {
+                    return body
+                        .get_operators_reader()
+                        .unwrap()
+                        .into_iter()
+                        .map(|op| format!("{:?}", op.unwrap()))
+                        .collect();
+                }
+                defined += 1;
+            }
+            _ => {}
+        }
+    }
+    panic!("no function `{name}` in {names:?}");
+}
+
+/// An array whose length is whole and at most 2^32 - 1 by its value -- a
+/// constant -- or by its type -- an unsigned integer of 32 bits or fewer --
+/// is allocated with no test of that length and no refusal for it; a constant
+/// that is not one keeps both, and refuses when run -- 2^32 - 1 as an f32 is
+/// 2^32, one past. A signed 32-bit length is tested for its sign alone, never
+/// against 2^32 - 1, which it cannot pass.
+#[test]
+fn a_length_whole_by_its_value_or_type_is_not_tested() {
+    let emitted = nts_codegen_wasm::emit(&program(vec![
+        constant_length("zero", OpKind::ConstInt(0), I32),
+        constant_length("three", OpKind::ConstFloat(3.0), F64),
+        constant_length("negativeZero", OpKind::ConstFloat(-0.0), F64),
+        constant_length("half", OpKind::ConstFloat(2.5), F64),
+        constant_length("negative", OpKind::ConstInt(-1), I32),
+        constant_length(
+            "roundedPast",
+            OpKind::ConstFloat(f64::from(u32::MAX)),
+            HirType::Float { bits: 32 },
+        ),
+        length("signed", I32),
+        length("unsigned", U32),
+    ]))
+    .unwrap();
+    nts_codegen_wasm::validate(&emitted.bytes).unwrap();
+    let calls = common::calls_by_name(&emitted.bytes);
+    let tested = |name: &str| {
+        calls[name]
+            .iter()
+            .any(|callee| callee.starts_with("refuse<") && callee.contains("not a whole number"))
+    };
+    for name in ["zero", "three", "negativeZero", "unsigned"] {
+        assert!(!tested(name), "{name}: {calls:?}");
+    }
+    for name in ["half", "negative", "roundedPast", "signed"] {
+        assert!(tested(name), "{name}: {calls:?}");
+    }
+    for name in ["signed", "unsigned"] {
+        let ops = operators(&emitted.bytes, name);
+        assert!(!ops.iter().any(|op| op == "F64Le"), "{name}: {ops:?}");
+    }
+    let report = common::run(
+        "array-lengths",
+        &emitted,
+        "tooling/wasm/check-array-lengths.ts",
+        &[],
+    );
+    assert_eq!(report["allocated"], 133, "{report}");
+    assert_eq!(report["refused"], 5, "{report}");
+}

@@ -228,15 +228,12 @@ pub(crate) fn within(
 }
 pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Result<(), Failure> {
     let array = storage(b, result)?;
-    whole_nonnegative(b, length)?;
-    number(b, length)?;
-    b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
-    b.instruction(&I::F64Le);
-    b.instruction(&I::I32And);
-    contract::require(
-        b,
-        "an array length that is not a whole number up to 2^32 - 1",
-    )?;
+    if length_test(b, length)? {
+        contract::require(
+            b,
+            "an array length that is not a whole number up to 2^32 - 1",
+        )?;
+    }
     let descriptor = objects::descriptor(b.m, array.descriptor)?;
     b.global_get(descriptor);
     b.instruction(&objects::UNHASHED);
@@ -252,6 +249,39 @@ pub(crate) fn new(b: &mut Body<'_, '_>, result: ValueId, length: ValueId) -> Res
     };
     b.instructions(&wrapper(array, prefix));
     Ok(())
+}
+/// Push whether `length` is one an array can have, a whole number from 0 to
+/// 2^32 - 1, and say whether there was anything to test. A constant that is
+/// one, or an unsigned integer of 32 bits or fewer, is one by its value or its
+/// type and is not tested again. A signed integer of 32 bits or fewer can fail
+/// only by its sign; a 64-bit one is tested by one unsigned comparison, which a
+/// negative one fails as a value past 2^63.
+fn length_test(b: &mut Body<'_, '_>, length: ValueId) -> Result<bool, Failure> {
+    let known = nts_core::hir::holes::constant_length(b.func, length).is_some();
+    match b.ty(length).clone() {
+        _ if known => return Ok(false),
+        HirType::Int {
+            bits: 8 | 16 | 32,
+            signed: false,
+        } => return Ok(false),
+        HirType::Int {
+            bits: 8 | 16 | 32,
+            signed: true,
+        } => whole_nonnegative(b, length)?,
+        HirType::Int { bits: 64, .. } => {
+            b.load(length)?;
+            b.instruction(&I::I64Const(i64::from(u32::MAX)));
+            b.instruction(&I::I64LeU);
+        }
+        _ => {
+            whole_nonnegative(b, length)?;
+            number(b, length)?;
+            b.instruction(&I::F64Const(f64::from(u32::MAX).into()));
+            b.instruction(&I::F64Le);
+            b.instruction(&I::I32And);
+        }
+    }
+    Ok(true)
 }
 /// A tagged template's cooked strings: one immortal object per source site,
 /// shared by every copy of the containing function, as the core asks, and
