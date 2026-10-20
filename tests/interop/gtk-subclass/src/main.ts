@@ -87,6 +87,10 @@
 //   is C|B|label|button|none  `instanceof`, which asks the type system
 //                 (`g_type_check_instance_is_a`) for a class the program wrote
 //                 and for a binding's, and narrows: `C`'s field read after it
+//   added nts-hint 8  `Actions` implements `GActionGroup`, whose
+//                 `action_added` GIO calls from `g_action_group_action_added`
+//                 with the action's name: a `const char *`, read as the
+//                 string it is, all eight characters
 import {
   GtkBox,
   GtkButton,
@@ -110,6 +114,8 @@ import {
   g_type_name_from_instance,
 } from "c:GObject-2.0";
 import {
+  type GActionGroupImplementation,
+  g_action_group_action_added,
   type GDatagramBasedImplementation,
   type GDtlsClientConnectionImplementation,
   type GDtlsConnectionImplementation,
@@ -125,6 +131,16 @@ import type { CEnum, Erased, Owned, Properties, Property, Ptr } from "c:types";
 import type { c_int, c_uint, c_size_t } from "@nts/scalars";
 import { local } from "c:memory";
 import { Badge } from "./badge.ts";
+
+// A class implementing `GActionGroup`, whose `action_added` GIO calls with
+// the action's name, a `const char *`.
+class Actions extends GObject<{}, GActionGroupImplementation> {
+  added = "none";
+
+  vfunc_action_added(action_name: string): void {
+    this.added = action_name;
+  }
+}
 
 class Counter extends GtkButton {
   // Fields: an object of the program's own that the instance holds, made by
@@ -642,6 +658,9 @@ function main(): void {
   badge.hit();
   console.log("badge " + g_type_name_from_instance(badge) + " " + String(badge.hit()));
   console.log("is " + [kind(new C({})), kind(new B({})), kind(new GtkLabel({})), kind(new GtkButton({})), kind(null)].join("|"));
+  const actions = new Actions({});
+  g_action_group_action_added(actions, "nts-hint");
+  console.log("added " + actions.added + " " + String(actions.added.length));
 }
 
 main();
