@@ -53,14 +53,15 @@ fn null_read() -> Func {
 #[test]
 fn an_unchecked_read_has_no_length_import_and_a_false_bound_traps() {
     let unchecked = nts_codegen_wasm::emit(&program(vec![read(false), null_read()])).unwrap();
-    assert!(
-        !unchecked
-            .manifest
-            .imports
-            .iter()
-            .any(|i| { i.module == "wasm:js-string" && i.name == "length" })
-    );
+    // Builtins are listed apart from ordinary imports (`Manifest::builtins`);
+    // this read `imports`, where `length` never is, until 2026-10-20.
+    let imports_length = |emitted: &nts_codegen_wasm::Emitted| {
+        emitted.manifest.builtins.iter().any(|i| i.name == "length")
+    };
+    assert!(!imports_length(&unchecked));
     let checked = nts_codegen_wasm::emit(&program(vec![read(true)])).unwrap();
+    // The control: the checked read tests its index against the length.
+    assert!(imports_length(&checked));
     let checked_path = common::write_artifact(
         "checked-string-unit",
         &checked,
