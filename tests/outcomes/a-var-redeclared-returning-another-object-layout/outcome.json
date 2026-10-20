@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "aborted",
-  "nts": "the program was killed by signal 11 without refusing anything -- a crash, not a declined case",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet | refused: NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
   "node": null,
-  "measured_with": "b0a73aa513e09a2f",
+  "measured_with": "1188b294664fb5c1",
   "source": "measured"
 }

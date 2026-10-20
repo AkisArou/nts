@@ -12,6 +12,11 @@
 //
 // The control is `sameLayout`: the same two declarations whose `make`s answer
 // one layout, which agrees.
+//
+// **Since 2026-10-20 the second literal is refused, by name**: "a function's
+// answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted".
+// The record is a guard now -- `anotherLayout` refused, `sameLayout`
+// agreeing -- and a change that admits the store again shows here as a crash.
 
 var o = { make: function () { return { a: 1, b: "x" }; } };
 var o = { make: function () { return { b: "y" }; } };
