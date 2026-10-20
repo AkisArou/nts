@@ -225,6 +225,14 @@ fn namespace_facts(
         .collect();
     (facts.prototypes, facts.volatile) =
         facts::prototypes(&namespace.headers, &flags, &callables, &slots)?;
+    // What each pointer record's typedef points at.
+    let pointers: Vec<&str> = namespace
+        .records
+        .iter()
+        .filter(|r| r.pointer)
+        .filter_map(|r| r.c_type.as_deref())
+        .collect();
+    facts.pointers = facts::pointer_records(&namespace.headers, &flags, &pointers)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
     let interfaces: Vec<(&str, &str)> = namespace

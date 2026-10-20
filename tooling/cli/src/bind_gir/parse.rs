@@ -214,6 +214,7 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 class_struct: node.attribute((GLIB, "is-gtype-struct-for")).is_some(),
                 callables: callables(node),
                 get_type: node.attribute((GLIB, "get-type")).map(str::to_owned),
+                pointer: attribute(node, "pointer") == Some("1"),
             }),
             kind @ ("enumeration" | "bitfield") => namespace.enums.push(Enum {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),

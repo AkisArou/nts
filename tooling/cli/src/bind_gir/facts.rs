@@ -74,6 +74,21 @@ pub(crate) struct Facts {
     /// The callables whose declaration spells `volatile`, which no binding
     /// spells: `g_atomic_pointer_get (const volatile void *)`.
     pub(crate) volatile: BTreeSet<String>,
+    /// `c_type -> what it points at`, for each pointer record (GIR's
+    /// `pointer="1"`): `hb_language_t` is a `const struct
+    /// hb_language_impl_t *`. Kept apart from `tags`, which a `T *` spelling
+    /// reads as the handle: the pointer record spelled bare is the handle,
+    /// and spelled `hb_language_t *` is a pointer to one.
+    pub(crate) pointers: BTreeMap<String, PointerRecord>,
+}
+
+/// A pointer record's pointee, as its typedef says.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PointerRecord {
+    /// The struct the typedef points at.
+    pub(crate) tag: String,
+    /// Whether it points at it `const`.
+    pub(crate) constant: bool,
 }
 
 impl Facts {
@@ -90,7 +105,46 @@ impl Facts {
         self.macros.extend(other.macros);
         self.prototypes.extend(other.prototypes);
         self.volatile.extend(other.volatile);
+        self.pointers.extend(other.pointers);
     }
+}
+
+/// What each pointer record's typedef points at, from the headers through
+/// the shared probe: one pointer level to a tagged struct, or no answer, and
+/// the record keeps its refusal.
+pub(crate) fn pointer_records(
+    headers: &[String],
+    cflags: &[String],
+    names: &[&str],
+) -> Result<BTreeMap<String, PointerRecord>> {
+    if names.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let preamble: Vec<String> = headers
+        .iter()
+        .map(|header| format!("#include <{header}>"))
+        .collect();
+    let mut clang_args = vec!["-std=c11".to_owned(), "-fno-spell-checking".to_owned()];
+    clang_args.extend(cflags.iter().cloned());
+    let probe = Probe {
+        preamble: &preamble,
+        clang_args: &clang_args,
+        prefix: PREFIX,
+        label: "bind-gir",
+    };
+    let typedefs = probe.typedefs(names.iter().map(|name| (*name).to_owned()).collect())?;
+    let mut pointers = BTreeMap::new();
+    for name in names {
+        let Some(text) = typedefs.get(*name) else {
+            continue;
+        };
+        if let Ok(CType::Pointer { to, constant }) = ctype::parse(text, &typedefs)
+            && let CType::Record { union: false, tag } = *to
+        {
+            pointers.insert((*name).to_owned(), PointerRecord { tag, constant });
+        }
+    }
+    Ok(pointers)
 }
 
 /// Each callable's C function type, from the headers through the probe the

@@ -1618,7 +1618,13 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &record.c_type else {
                 continue;
             };
-            let Some(tag) = self.facts.tags.get(c_type) else {
+            // A pointer record's handle is the struct its typedef points at.
+            let Some(tag) = self
+                .facts
+                .tags
+                .get(c_type)
+                .or_else(|| self.facts.pointers.get(c_type).map(|p| &p.tag))
+            else {
                 continue;
             };
             self.binding.brands.insert("Class");
@@ -3052,6 +3058,18 @@ impl<'a> Mapper<'a> {
                 ts,
                 c: Type::Pointer(pointee),
             });
+        }
+        // A pointer record's typedef holds the `*` itself: spelled bare it is
+        // the handle, as `T *` is any other record's, `const` where its
+        // typedef points `const` -- `hb_language_t` is `Const<hb_language_t>`.
+        // `hb_language_t *` is a pointer to one, which an out slot reaches here
+        // bare and nothing else does.
+        if depth == 0
+            && let Some(pointer) = self.facts.pointers.get(base).cloned()
+            && let Some(namespace) = self.c_types.get(base).copied()
+        {
+            let local = self.name_in(namespace, base);
+            return Ok(self.handle(local, &pointer.tag, pointer.constant, param.nullable));
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
@@ -4726,6 +4744,109 @@ mod tests {
             );
         }
         assert_eq!(refused("K_EXACT"), None);
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A pointer record (GIR's `pointer="1"`) spelled bare is its handle,
+    /// `const` where its typedef points `const`; spelled `q_lang_t *` as an
+    /// out slot it is a pointer to that handle, one level more and no other;
+    /// as an input it stays refused. The control: the same GIR without the
+    /// headers' answer, which stays a record passed by value.
+    #[test]
+    fn a_pointer_record_spelled_bare_is_its_handle() {
+        use super::super::facts;
+        use super::{Reason, bind};
+        use nts_core::hir::native::{Handle, Pointee, Type};
+        let dir = crate::bind_scratch::directory("gir-pointer-test").expect("fixture directory");
+        let xml = r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="q.h"/><namespace name="Q" version="1.0">
+            <record name="lang_t" c:type="q_lang_t" disguised="1" pointer="1"/>
+            <function name="lang_get" c:identifier="q_lang_get">
+            <return-value transfer-ownership="none"><type name="lang_t" c:type="q_lang_t"/></return-value>
+            </function>
+            <function name="lang_set" c:identifier="q_lang_set">
+            <return-value><type name="none" c:type="void"/></return-value>
+            <parameters><parameter name="lang"><type name="lang_t" c:type="q_lang_t"/></parameter></parameters>
+            </function>
+            <function name="lang_out" c:identifier="q_lang_out">
+            <return-value><type name="none" c:type="void"/></return-value>
+            <parameters><parameter name="lang" direction="out" caller-allocates="0" transfer-ownership="none">
+            <type name="lang_t" c:type="q_lang_t*"/></parameter></parameters>
+            </function>
+            <function name="lang_in" c:identifier="q_lang_in">
+            <return-value><type name="none" c:type="void"/></return-value>
+            <parameters><parameter name="lang"><type name="lang_t" c:type="q_lang_t*"/></parameter></parameters>
+            </function>
+            </namespace></repository>"#;
+        std::fs::write(dir.join("Q-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("Q-1.0", &[search]).expect("parse GIR");
+        let namespace = &repository.namespaces["Q"];
+        assert!(namespace.records[0].pointer);
+        let header = facts::Facts {
+            pointers: [(
+                "q_lang_t".to_owned(),
+                facts::PointerRecord {
+                    tag: "q_lang_impl".to_owned(),
+                    constant: true,
+                },
+            )]
+            .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, namespace, &header);
+        let function = |name: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == name)
+                .unwrap_or_else(|| panic!("{name} bound: {:?}", binding.refused))
+        };
+        let pointee = Pointee::Const(Box::new(Pointee::Opaque(Handle::from("q_lang_impl"))));
+        let handle = Type::Pointer(pointee.clone());
+        let get = function("q_lang_get");
+        assert_eq!(get.result.ts, "Const<q_lang_t>");
+        assert_eq!(get.result.c, handle);
+        let set = function("q_lang_set");
+        assert_eq!(set.parameters[0].1.ts, "Const<q_lang_t>");
+        assert_eq!(set.parameters[0].1.c, handle);
+        // The out slot: a pointer to the handle, exactly one level more.
+        let out = function("q_lang_out");
+        assert_eq!(
+            out.parameters[0].1.c,
+            Type::Pointer(Pointee::Pointer(Box::new(pointee))),
+            "{:?}",
+            out.parameters[0].1
+        );
+        // An input `q_lang_t *` is not a handle, and is not taken for one.
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "q_lang_in" && matches!(r, Reason::NoTag(_))),
+            "{:?}",
+            binding.refused
+        );
+        assert!(
+            binding
+                .types
+                .iter()
+                .any(|t| matches!(t, super::TypeDecl::Class { name, tag, .. } if name == "q_lang_t" && tag == "q_lang_impl"))
+        );
+        // The control: no answer from the headers, so a record by value.
+        let control = bind(&repository, namespace, &facts::Facts::default());
+        for name in ["q_lang_get", "q_lang_set"] {
+            assert!(
+                control
+                    .refused
+                    .iter()
+                    .any(|(n, r)| n == name && *r == Reason::RecordByValue),
+                "{name}: {:?}",
+                control.refused
+            );
+        }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 }

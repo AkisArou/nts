@@ -131,6 +131,10 @@ pub(crate) struct Record {
     /// `glib:get-type`: the record is a boxed type, which `GLib` copies and
     /// frees by this `GType` (`g_boxed_copy`, `g_boxed_free`).
     pub(crate) get_type: Option<String>,
+    /// `pointer="1"`: the C type is a typedef of a pointer to the record
+    /// (`typedef const struct hb_language_impl_t *hb_language_t`), so the
+    /// type spelled bare is already the handle.
+    pub(crate) pointer: bool,
 }
 
 #[derive(Debug)]
