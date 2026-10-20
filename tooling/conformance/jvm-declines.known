@@ -26,3 +26,6 @@ stateful store S2 -> CbFace	jvm-only	a-function-field-read-through-an-interface:
 # One owned stage-C feature. The source plan records each non-prefix transfer
 # as FieldView; the JVM refuses that operation, never infers a new store shape.
 interface field accessor dispatch	unmeasured	stage C: createCacheStorage RequestContext -> ResponseContext and acquireHTTPParser ParserLease -> HTTPParserLease have no method on main 2a4e53739 (lowering NTS1001 non-prefix transfer), and are newly licensed on native; a-teed-stream-read-back remains stopped on main. Retire this single row when the JVM implements field-family dispatch
+
+# A signature's call shell typed by its first filler (2026-10-20, the JVM lane).
+ClosureN.call ()Lnts/gen/ClosureN$call$frame; over ()Lnts/gen/ClosureN$call$frame;	jvm-only	a-signature-shell-typed-with-the-first-generator-frame-on-the-jvm: two generator closures fill one signature whose call shell core types with the first closure's own frame, so the second's call does not override it; C, LLVM and Wasm call through the slot and agree with node. A shell typed with the generator both frames extend would be a covariant return this backend bridges (narrows_return)

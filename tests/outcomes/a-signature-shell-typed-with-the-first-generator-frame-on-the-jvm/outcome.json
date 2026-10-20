@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS4009 `Closure2.call` is `()Lnts/gen/Closure2$call$frame;` where the method it overrides is `()Lnts/gen/Closure1$call$frame;` -- the JVM would treat these as two unrelated methods and dispatch would silently reach the wrong one",
+  "node": null,
+  "measured_with": "4d5c35084549e4c3",
+  "source": "measured"
+}
