@@ -2394,7 +2394,10 @@ impl<'a> Mapper<'a> {
     /// An out parameter whose storage the caller allocates: for a boxed
     /// record the headers size, the record itself, which the program makes
     /// with `new GtkTextIter()` and C fills -- GJS returns it instead, through
-    /// a values form. Anything else is refused.
+    /// a values form. For one the headers keep opaque there is no storage a
+    /// caller could allocate, so GIR can only mean the caller's own object:
+    /// `hb_face_collect_unicodes(face, set)` fills a set `hb_set_create()`
+    /// made, passed as the handle. Anything else is refused.
     fn caller_allocated(&mut self, param: &Param) -> Result<Mapped, Reason> {
         if !matches!(param.ty, TypeRef::Named { .. }) {
             return Err(Reason::CallerAllocates);
@@ -2408,20 +2411,19 @@ impl<'a> Mapper<'a> {
             ..param.clone()
         };
         let mapped = self.typed(&value)?;
-        match &mapped.shape {
-            Shape::Handle { class, .. }
-                if self.boxed_record(class).is_some_and(|(_, size)| size > 0) =>
-            {
-                if param.direction == Direction::Out {
-                    let class = class.clone();
-                    return Ok(Mapped {
-                        shape: Shape::Filled { class },
-                        ..mapped
-                    });
-                }
-                Ok(mapped)
+        let Shape::Handle { class, .. } = &mapped.shape else {
+            return Err(Reason::CallerAllocates);
+        };
+        match self.boxed_record(class) {
+            Some((_, size)) if size > 0 && param.direction == Direction::Out => {
+                let class = class.clone();
+                Ok(Mapped {
+                    shape: Shape::Filled { class },
+                    ..mapped
+                })
             }
-            _ => Err(Reason::CallerAllocates),
+            Some(_) => Ok(mapped),
+            None => Err(Reason::CallerAllocates),
         }
     }
 
