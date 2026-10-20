@@ -45395,6 +45395,27 @@ impl<'a> FuncBuilder<'a> {
         self.snapshot.node_types.values().any(|at| *at == ty)
     }
 
+    /// Why a call through `callee` has no function to make: what its type is
+    /// where it is called, when the checker has one. A union is spelled out
+    /// (`null | (() => string)`), since naming its shape says nothing.
+    fn called_without_a_function(&self, callee: NodeId, name: &str) -> String {
+        let Some(&ty) = self.snapshot.node_types.get(&callee) else {
+            return format!("a call through `{name}`, which names no function");
+        };
+        let spelled = match self
+            .snapshot
+            .types
+            .get(ty.0 as usize)
+            .map(|record| &record.kind)
+        {
+            Some(TypeKind::Object { .. } | TypeKind::Structured { .. }) => {
+                self.type_in_a_message(ty)
+            }
+            _ => format!("`{}`", short(self.snapshot, ty)),
+        };
+        format!("a call through `{name}`, whose type here, {spelled}, is not a function's")
+    }
+
     /// Where a type with no name is written.
     ///
     /// The counterpart of [`Self::name_of_type`] for the case that has no
@@ -66368,6 +66389,17 @@ impl<'a> FuncBuilder<'a> {
         }
         let callee = if defined {
             Callee::Direct(name)
+        } else if declaration.is_none() {
+            // **No declaration is never a C function.** A native call is to a
+            // function something declares; this is a call through a value the
+            // checker could not call a function, and what is left of it here
+            // is the variable's name. It went to `native_callee` and became a
+            // call to a C symbol of that name: undefined at link time
+            // (`probeParams` in test262's `scope-paramsbody-var-open`, a
+            // `var` a default parameter assigns, typed `null | (() => ...)`
+            // where the call is), or, for a variable named like a libc
+            // function, that function.
+            return Err(self.unsupported(id, &self.called_without_a_function(callee_node, &name)));
         } else {
             let signature = &self.snapshot.signatures[target.signature.0 as usize];
             self.native_callee(id, declaration, name, signature)?
