@@ -342,3 +342,83 @@ fn swap_strings() -> Func {
     ];
     f
 }
+
+/// `String.fromCharCode(code)` where `code` is an integer converted to
+/// `number`, as the core passes one: `(param) -> convert -> call`.
+fn from_converted(name: &str, code: HirType) -> Func {
+    let mut f = function(name, std::slice::from_ref(&code), string());
+    let param = value(&mut f, OpKind::Param(0), code);
+    let number = value(&mut f, OpKind::Convert(param), F64);
+    let out = value(
+        &mut f,
+        OpKind::Call {
+            callee: Callee::External("nts_string_from_char_code".into()),
+            args: vec![number],
+            frame: None,
+        },
+        string(),
+    );
+    f.blocks.push(block(
+        &[],
+        &[param, number, out],
+        Terminator::Return(Some(out)),
+    ));
+    f
+}
+
+/// A code converted from an integer goes to the helper as that integer, with
+/// no `ToInt32` of a double; a byte is read from the one-byte table with no
+/// call at all; and a unit past the table is the host's `String.fromCharCode`,
+/// never `wasm:js-string`'s, which V8 makes by internalizing it.
+#[test]
+fn a_char_code_is_read_by_its_integer_and_made_past_the_table_by_the_host() {
+    const U8: HirType = HirType::Int {
+        bits: 8,
+        signed: false,
+    };
+    let emitted = nts_codegen_wasm::emit(&program(vec![
+        from_converted("fromByte", U8),
+        from_converted("fromInt", common::hir::I32),
+        external("fromNumber", "nts_string_from_char_code", &[F64], string()),
+    ]))
+    .unwrap();
+    let calls = common::calls_by_name_with_imports(&emitted.bytes);
+    let calls_of = |name: &str| calls.get(name).cloned().unwrap_or_default();
+    let host = "nts:host/v1.fromCharCode";
+    assert!(calls_of("fromByte").is_empty(), "{calls:?}");
+    // The integer reaches the host, through the helper or with it inlined,
+    // and takes no `ToInt32` on the way.
+    let reaches_host = |name: &str| {
+        let direct = calls_of(name);
+        direct.iter().any(|callee| callee == host)
+            || direct.iter().any(|callee| {
+                callee == "string.fromCharCode"
+                    && calls_of(callee).iter().any(|inner| inner == host)
+            })
+    };
+    assert!(reaches_host("fromInt"), "{calls:?}");
+    assert!(
+        !calls_of("fromInt")
+            .iter()
+            .any(|callee| callee == "nts.toInt32"),
+        "{calls:?}"
+    );
+    // The control: a double does take its `ToInt32`, so its absence above is
+    // the integer's and not a path that never takes one.
+    assert!(reaches_host("fromNumber"), "{calls:?}");
+    assert!(
+        calls_of("fromNumber")
+            .iter()
+            .any(|callee| callee == "nts.toInt32"),
+        "{calls:?}"
+    );
+    assert!(
+        !emitted
+            .manifest
+            .builtins
+            .iter()
+            .any(|i| i.name == "fromCharCode"),
+        "{:?}",
+        emitted.manifest.builtins
+    );
+}

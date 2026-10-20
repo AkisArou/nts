@@ -3,7 +3,6 @@
 use crate::{
     body::Body,
     error::Failure,
-    helpers::Helper as ScalarHelper,
     ir::{self, Function},
     module::{Builder, Func, FuncKey, Global, GlobalKey},
     numeric,
@@ -37,7 +36,6 @@ pub(crate) enum Helper {
     Compare,
     Concat,
     SubstringBuiltin,
-    FromCharCodeBuiltin,
     CharCodeAt,
     CharAt,
     Substring,
@@ -62,7 +60,6 @@ impl Helper {
             Self::Compare => "compare",
             Self::Concat => "concat",
             Self::SubstringBuiltin => "substring",
-            Self::FromCharCodeBuiltin => "fromCharCode",
             Self::CharCodeAt => "string.charCodeAt",
             Self::CharAt => "string.charAt",
             Self::Substring => "string.substring",
@@ -82,7 +79,6 @@ impl Helper {
             | Self::Compare
             | Self::Concat
             | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin
             | Self::At => true,
             Self::CharCodeAt
             | Self::CharAt
@@ -102,11 +98,10 @@ impl Helper {
             }
             Self::Concat => (vec![STRING, STRING], NONNULL_STRING),
             Self::SubstringBuiltin => (vec![STRING, I32, I32], NONNULL_STRING),
-            Self::FromCharCodeBuiltin => (vec![I32], NONNULL_STRING),
             Self::CharCodeAt => (vec![STRING, F64], F64),
             Self::CharAt | Self::At => (vec![STRING, F64], STRING),
             Self::Substring | Self::Slice => (vec![STRING, F64, F64], STRING),
-            Self::FromCharCode => (vec![F64], STRING),
+            Self::FromCharCode => (vec![I32], STRING),
         }
     }
     /// A module-local adapter body; builtins have none.
@@ -119,33 +114,31 @@ impl Helper {
             | Self::Compare
             | Self::Concat
             | Self::SubstringBuiltin
-            | Self::FromCharCodeBuiltin
             | Self::At => Err(Failure::Invariant(format!(
                 "string builtin {self:?} has no module body"
             ))),
             Self::CharCodeAt | Self::CharAt => indexed(self, m),
             Self::StartsWith | Self::EndsWith => affix(self, m),
             Self::Substring | Self::Slice => substring(self, m),
-            // The code unit is `ToInt32` reduced to 16 bits, which is `ToUint16`; one
-            // below 256 is read from the one-byte table.
+            // The parameter is the code's `ToInt32` (`from_char_code`); reduced to
+            // 16 bits it is `ToUint16`. A unit below 256 is read from the one-byte
+            // table, and any other is the host's to make (`host_from_char_code`).
             Self::FromCharCode => {
-                let to_int = crate::helpers::callee(m, ScalarHelper::ToInt32)?;
-                let from = callee(m, Self::FromCharCodeBuiltin)?;
+                let host = host_from_char_code(m);
                 let (table, ty) = one_byte_strings(m)?;
-                let mut f = Function::new([ValType::I32]);
-                f.instruction(&I::LocalGet(0));
-                f.call(to_int);
+                let mut f = Function::new([]);
                 f.instructions(&[
+                    I::LocalGet(0),
                     I::I32Const(0xffff),
                     I::I32And,
-                    I::LocalTee(1),
+                    I::LocalTee(0),
                     I::I32Const(256),
                     I::I32LtU,
                     I::If(BlockType::Result(ValType::EXTERNREF)),
                 ]);
                 f.global_get(table);
-                f.instructions(&[I::LocalGet(1), I::ArrayGet(ty), I::Else, I::LocalGet(1)]);
-                f.call(from);
+                f.instructions(&[I::LocalGet(0), I::ArrayGet(ty), I::Else, I::LocalGet(0)]);
+                f.call(host);
                 f.instructions(&[I::End, I::End]);
                 Ok(f)
             }
@@ -426,6 +419,34 @@ fn at(b: &mut Body<'_, '_>, string: ValueId, index: ValueId) -> Result<(), Failu
     call(b, Helper::SubstringBuiltin)
 }
 
+/// `String.fromCharCode(code)`, from the code's integer when it was converted
+/// from one: `ToInt32` of a converted integer is its own low bits, so it goes
+/// to the helper as it is, where a double would be taken back apart. A byte is
+/// always in the one-byte table, so it is read there with no call at all.
+/// `utf8Decode` makes one for every ASCII byte it decodes,
+/// `String.fromCharCode(byte)` with `byte` a `u8` converted to `number`: 6.5%
+/// of `node-utf8` was the call, the double and its `ToInt32` (2026-10-20).
+fn from_char_code(b: &mut Body<'_, '_>, result: ValueId, code: ValueId) -> Result<(), Failure> {
+    if !is_string(b.ty(result)) {
+        return Err(format!("String.fromCharCode into a {:?}", b.ty(result)).into());
+    }
+    let code = numeric::exact_integer(b, code);
+    if *b.ty(code)
+        == (HirType::Int {
+            bits: 8,
+            signed: false,
+        })
+    {
+        let (table, ty) = one_byte_strings(b.m)?;
+        b.global_get(table);
+        b.load(code)?;
+        b.instruction(&I::ArrayGet(ty));
+        return Ok(());
+    }
+    numeric::to_i32(b, code)?;
+    call(b, Helper::FromCharCode)
+}
+
 pub(crate) fn runtime(
     b: &mut Body<'_, '_>,
     result: ValueId,
@@ -438,6 +459,9 @@ pub(crate) fn runtime(
     }
     if helper == Helper::At {
         return at(b, args[0], args[1]);
+    }
+    if helper == Helper::FromCharCode {
+        return from_char_code(b, result, args[0]);
     }
     for (&arg, expected) in args.iter().zip(params) {
         if expected == STRING && helper != Helper::Equal {
@@ -624,6 +648,27 @@ fn substring(helper: Helper, m: &mut Builder<'_>) -> Result<Function, Failure> {
     f.call(builtin);
     f.instruction(&I::End);
     Ok(f)
+}
+
+/// The host's own `String.fromCharCode`, for a code unit past the one-byte
+/// table.
+///
+/// Not `wasm:js-string`'s `fromCharCode`: V8 answers that in its runtime
+/// (`Runtime_WasmStringFromCodePoint`), which makes a unit past U+00FF by
+/// looking it up in the string table -- internalizing a one-character string
+/// on every call, about 350 instructions where JavaScript's builtin allocates
+/// it inline. The crossing to the host costs less: `node-utf8`, whose decoder
+/// builds CJK text a character at a time, 5.86% faster (2026-10-20), and its
+/// spread fell from 1.3% to 0.002% -- the string table had been its noise.
+fn host_from_char_code(m: &mut Builder<'_>) -> Func {
+    m.import(
+        FuncKey::Host("fromCharCode"),
+        "nts:host/v1",
+        "fromCharCode",
+        vec![I32],
+        Some(STRING),
+        false,
+    )
 }
 
 /// The 256 one-byte strings, U+0000 to U+00FF, as one immutable array built

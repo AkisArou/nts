@@ -132,7 +132,20 @@ pub(crate) fn function_names(bytes: &[u8]) -> Vec<String> {
 
 /// Callee names by caller name, for tests that pin an emitted entry's shape.
 pub(crate) fn calls_by_name(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<String>> {
-    let names = function_names(bytes);
+    callees(bytes, false)
+}
+
+/// [`calls_by_name`] with an imported callee named `module.field`, for a test
+/// that pins what reaches the host, which the inliner may have moved out of a
+/// helper and into its caller.
+pub(crate) fn calls_by_name_with_imports(
+    bytes: &[u8],
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    callees(bytes, true)
+}
+
+fn callees(bytes: &[u8], name_imports: bool) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut names = function_names(bytes);
     let mut function_imports = 0u32;
     let mut bodies: Vec<Vec<u32>> = Vec::new();
     for payload in wasmparser::Parser::new(0).parse_all(bytes) {
@@ -140,7 +153,13 @@ pub(crate) fn calls_by_name(bytes: &[u8]) -> std::collections::BTreeMap<String, 
             wasmparser::Payload::ImportSection(imports) => {
                 for group in imports {
                     for import in group.unwrap() {
-                        if matches!(import.unwrap().1.ty, wasmparser::TypeRef::Func(_)) {
+                        let (_, import) = import.unwrap();
+                        if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                            if name_imports {
+                                let index = function_imports as usize;
+                                names.resize_with(names.len().max(index + 1), String::new);
+                                names[index] = format!("{}.{}", import.module, import.name);
+                            }
                             function_imports += 1;
                         }
                     }
@@ -149,7 +168,13 @@ pub(crate) fn calls_by_name(bytes: &[u8]) -> std::collections::BTreeMap<String, 
             wasmparser::Payload::CodeSectionEntry(body) => {
                 let mut calls = Vec::new();
                 for operator in body.get_operators_reader().unwrap() {
-                    if let Ok(wasmparser::Operator::Call { function_index }) = operator {
+                    // A tail call is a call: the emitter makes one of a call
+                    // whose result its caller returns.
+                    if let Ok(
+                        wasmparser::Operator::Call { function_index }
+                        | wasmparser::Operator::ReturnCall { function_index },
+                    ) = operator
+                    {
                         calls.push(function_index);
                     }
                 }

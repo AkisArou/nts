@@ -104,7 +104,7 @@ pub(crate) fn call(
 /// The integer a `number` was converted from, when the conversion was exact:
 /// `ToInt32` of it is the integer's own low bits, with no float to truncate. A
 /// loop counter stored into a typed array arrives this way.
-fn exact_integer(b: &Body<'_, '_>, value: ValueId) -> ValueId {
+pub(crate) fn exact_integer(b: &Body<'_, '_>, value: ValueId) -> ValueId {
     match b.func.value(value).kind {
         nts_core::hir::OpKind::Convert(from)
             if matches!(
@@ -446,7 +446,7 @@ fn absolute(b: &mut Body<'_, '_>, operand: ValueId, out: &HirType) -> Result<(),
     Ok(())
 }
 
-fn to_i32(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+pub(crate) fn to_i32(b: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
     b.load(value)?;
     match types::value_slot(b.ty(value))? {
         Slot::I32 => {}

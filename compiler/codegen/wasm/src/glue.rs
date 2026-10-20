@@ -321,6 +321,29 @@ fn guarded(name: &str, ty: &ImportType, service: &str) -> String {
     )
 }
 
+/// A host builtin the module calls as it is, captured at load: nothing to
+/// convert and nothing it throws to translate, so no wrapper (`guarded`).
+fn builtin_import(name: &str, captures: &mut Captures) -> Option<(ImportType, String)> {
+    use ValueType::F64;
+    const STRING: ValueType = ValueType::Externref { nullable: true };
+    Some(match name {
+        "nts_parse_float" => (
+            function(&[STRING], Some(F64)),
+            captures.get("parseFloat_", "Number.parseFloat").into(),
+        ),
+        "nts_parse_int" => (
+            function(&[STRING, F64], Some(F64)),
+            captures.get("parseInt_", "Number.parseInt").into(),
+        ),
+        // A code unit past the one-byte table (`strings::host_from_char_code`).
+        "fromCharCode" => (
+            function(&[ValueType::I32], Some(STRING)),
+            captures.get("fromCharCode", "String.fromCharCode").into(),
+        ),
+        _ => return None,
+    })
+}
+
 /// A host import the glue provides: the Wasm type its JS value implements,
 /// and that value. Checked against the module's own import type, because an
 /// engine converts a JS function's arguments and result silently: a wrong
@@ -347,6 +370,9 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
         let guarded = guarded(name, &ty, &method);
         return Some((ty, guarded));
     }
+    if let Some(builtin) = builtin_import(name, captures) {
+        return Some(builtin);
+    }
     Some(match name {
         "remainder" => (number(2), "(left, right) => left % right".into()),
         "nts_number_to_string" => {
@@ -357,14 +383,6 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
                 format!("value => {apply}({to_string}, value, [])"),
             )
         }
-        "nts_parse_float" => (
-            function(&[STRING], Some(F64)),
-            captures.get("parseFloat_", "Number.parseFloat").into(),
-        ),
-        "nts_parse_int" => (
-            function(&[STRING, F64], Some(F64)),
-            captures.get("parseInt_", "Number.parseInt").into(),
-        ),
         "inputDecline" => (
             function(&[STRING, STRING], None),
             "(name, reason) => { throw new WasmInputDecline(name, reason, 'operation in'); }".into(),
