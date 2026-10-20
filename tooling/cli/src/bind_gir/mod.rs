@@ -215,6 +215,16 @@ fn namespace_facts(
         macros,
     };
     let mut facts = facts::resolve(&namespace.headers, &asked, &flags)?;
+    // Every callable's C type, for the `const` GIR's spellings drop.
+    let callables: Vec<&str> = namespace
+        .functions
+        .iter()
+        .chain(namespace.classes.iter().flat_map(|c| &c.callables))
+        .chain(namespace.records.iter().flat_map(|r| &r.callables))
+        .filter_map(|callable| callable.c_identifier.as_deref())
+        .collect();
+    (facts.prototypes, facts.volatile) =
+        facts::prototypes(&namespace.headers, &flags, &callables, &slots)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
     let interfaces: Vec<(&str, &str)> = namespace

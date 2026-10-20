@@ -24,6 +24,9 @@ use crate::bind_gir;
 const GENERATOR: u64 = fnv(&[
     include_bytes!("bind_scratch.rs"),
     include_bytes!("gir_surface.rs"),
+    include_bytes!("bind_header/ctype.rs"),
+    include_bytes!("bind_header/mod.rs"),
+    include_bytes!("bind_header/probe.rs"),
     include_bytes!("bind_gir/mod.rs"),
     include_bytes!("bind_gir/check.rs"),
     include_bytes!("bind_gir/emit.rs"),
@@ -699,17 +702,21 @@ export function made(): number {
     #[test]
     fn every_generator_file_is_hashed() {
         let this = include_str!("gir_surface.rs");
-        let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("src/bind_gir");
-        for entry in std::fs::read_dir(&dir).expect("bind_gir") {
-            let name = entry
-                .expect("entry")
-                .file_name()
-                .into_string()
-                .expect("utf-8");
-            assert!(
-                this.contains(&format!("include_bytes!(\"bind_gir/{name}\")")),
-                "bind_gir/{name} is not hashed into GENERATOR"
-            );
+        for module in ["bind_gir", "bind_header"] {
+            let dir = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src")
+                .join(module);
+            for entry in std::fs::read_dir(&dir).expect(module) {
+                let name = entry
+                    .expect("entry")
+                    .file_name()
+                    .into_string()
+                    .expect("utf-8");
+                assert!(
+                    this.contains(&format!("include_bytes!(\"{module}/{name}\")")),
+                    "{module}/{name} is not hashed into GENERATOR"
+                );
+            }
         }
     }
 }

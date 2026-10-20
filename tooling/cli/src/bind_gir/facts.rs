@@ -24,6 +24,9 @@ use std::fmt::Write;
 
 use anyhow::{Context, Result};
 
+use crate::bind_header::ctype::{self, CType};
+use crate::bind_header::probe::Probe;
+
 const PREFIX: &str = "ntsbindgir_";
 
 /// Calls so far, which name each call's scratch directory.
@@ -61,6 +64,16 @@ pub(crate) struct Facts {
     /// not list. One defined as a call (`G_TYPE_GTYPE`) is no constant, and
     /// absent.
     pub(crate) macros: BTreeMap<String, i64>,
+    /// `symbol -> C function type`, as the headers declare each callable: a
+    /// function by its C identifier, a virtual function as
+    /// `{class struct}_{member}`, the type its slot points at. GIR writes a
+    /// C spelling for every parameter too, but drops a `const` the header
+    /// has -- `g_output_stream_write`'s `const void *buffer` is GIR's `void*`
+    /// -- so the header decides qualifiers and GIR what a parameter means.
+    pub(crate) prototypes: BTreeMap<String, CType>,
+    /// The callables whose declaration spells `volatile`, which no binding
+    /// spells: `g_atomic_pointer_get (const volatile void *)`.
+    pub(crate) volatile: BTreeSet<String>,
 }
 
 impl Facts {
@@ -75,7 +88,94 @@ impl Facts {
         self.sizes.extend(other.sizes);
         self.declared.extend(other.declared);
         self.macros.extend(other.macros);
+        self.prototypes.extend(other.prototypes);
+        self.volatile.extend(other.volatile);
     }
+}
+
+/// Each callable's C function type, from the headers through the probe the
+/// Windows binder asks with too: `functions` by name, and each
+/// `(class struct, member)` slot as the function its member points at.
+/// A declaration clang cannot answer, or whose type the reader does not
+/// parse, is left out, and its callable keeps GIR's spellings.
+pub(crate) fn prototypes(
+    headers: &[String],
+    cflags: &[String],
+    functions: &[&str],
+    slots: &[(String, String)],
+) -> Result<(BTreeMap<String, CType>, BTreeSet<String>)> {
+    if functions.is_empty() && slots.is_empty() {
+        return Ok(Default::default());
+    }
+    let preamble: Vec<String> = headers
+        .iter()
+        .map(|header| format!("#include <{header}>"))
+        .collect();
+    // No spelling correction, as in `resolve`.
+    let mut clang_args = vec!["-std=c11".to_owned(), "-fno-spell-checking".to_owned()];
+    clang_args.extend(cflags.iter().cloned());
+    let probe = Probe {
+        preamble: &preamble,
+        clang_args: &clang_args,
+        prefix: PREFIX,
+        label: "bind-gir",
+    };
+    let mut questions = String::new();
+    for function in functions {
+        let _ = writeln!(questions, "__typeof__({function}) {PREFIX}fn_{function};");
+    }
+    for (class_struct, member) in slots {
+        let _ = writeln!(
+            questions,
+            "__typeof__(*(({class_struct} *)0)->{member}) {PREFIX}fn_{class_struct}_{member};"
+        );
+    }
+    let mut spelled = BTreeMap::new();
+    for answer in probe.ask(&questions)? {
+        if let Some(name) = answer.name.strip_prefix(&format!("{PREFIX}fn_")) {
+            spelled.insert(name.to_owned(), answer.desugared.unwrap_or(answer.qual));
+        }
+    }
+    let typedefs = probe.typedefs(
+        spelled
+            .values()
+            .flat_map(|text| ctype::typedef_names(text))
+            .collect(),
+    )?;
+    let mut prototypes = BTreeMap::new();
+    let mut volatile = BTreeSet::new();
+    for (name, text) in spelled {
+        if spells_volatile(&text, &typedefs) {
+            volatile.insert(name);
+        } else if let Ok(function @ CType::Function { .. }) = ctype::parse(&text, &typedefs) {
+            prototypes.insert(name, function);
+        }
+    }
+    Ok((prototypes, volatile))
+}
+
+/// Whether `volatile` is in `text`, or in a typedef it names, followed down.
+/// The reader drops the qualifier, as the Windows binder needs it to, so it
+/// is looked for before reading.
+fn spells_volatile(text: &str, typedefs: &BTreeMap<String, String>) -> bool {
+    let mut pending = vec![text];
+    let mut seen = BTreeSet::new();
+    while let Some(text) = pending.pop() {
+        if text
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .any(|word| word == "volatile")
+        {
+            return true;
+        }
+        for name in ctype::typedef_names(text) {
+            if let Some(next) = typedefs.get(&name)
+                && seen.insert(name)
+            {
+                pending.push(next);
+            }
+        }
+    }
+    false
 }
 
 /// Ask the headers what `asked` wants to know.

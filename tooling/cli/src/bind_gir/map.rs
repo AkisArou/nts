@@ -19,6 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use crate::bind_header::ctype::CType;
 use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
 
 use super::model::{
@@ -370,6 +371,12 @@ pub(crate) enum Reason {
     NoTag(String),
     /// Dropped by the self-check: the header disagrees with the mapping.
     Header(String),
+    /// The header declares a `volatile` pointee (`g_atomic_pointer_set`),
+    /// which no binding has a spelling for.
+    Volatile,
+    /// A string result C lends as `char *` (`g_strrstr`), where a lent
+    /// `string` result is C's `const char *`.
+    LentWritableString,
     /// Dropped by the self-check: in GIR, and in none of the headers GIR
     /// names (`g_access` is in `glib/gstdio.h`, which `glib.h` leaves out).
     Undeclared,
@@ -423,6 +430,14 @@ impl fmt::Display for Reason {
                 "`{c}`, which the headers do not define as a tagged struct"
             ),
             Self::Header(error) => write!(f, "the header disagrees: {error}"),
+            Self::Volatile => write!(
+                f,
+                "a `volatile` pointee in the header, which no binding spells"
+            ),
+            Self::LentWritableString => write!(
+                f,
+                "a string result lent as `char *`, where a lent string result is `const char *`"
+            ),
             Self::Undeclared => write!(f, "declared by none of the headers GIR names"),
             Self::CountedByCompiler => write!(f, "a reference count the compiler keeps itself"),
             Self::NameClash(name) => write!(
@@ -916,6 +931,154 @@ fn spelled_string(param: &Param, spelling: &str) -> Param {
 
 fn is_string(param: &Param) -> bool {
     matches!(&param.ty, TypeRef::Named { name, .. } if name == "utf8")
+}
+
+/// A string C lends as `char *`, as `g_strrstr` lends one into its argument:
+/// a `string` result is `const char *` unless the caller frees it
+/// (`@ntsFree`), so nothing spells a lent one the header's way.
+fn lends_writable_string(result: &Param, header: &CType) -> bool {
+    matches!(&result.ty, TypeRef::Named { name, .. } if name == "utf8" || name == "filename")
+        && result.transfer == Transfer::None
+        && matches!(header, CType::Pointer { constant: false, to }
+            if **to == CType::Scalar("char".to_owned()))
+}
+
+/// `callable` with each C spelling's `const` as `header` declares it: GIR's
+/// `void*` for `gio.h`'s `const void *buffer` is `const void*`. Unchanged
+/// where GIR's C slots -- the instance, each parameter, a `GError **` --
+/// are not the header's, one for one.
+fn header_qualified(callable: &Callable, header: &CType) -> Callable {
+    let CType::Function {
+        result, parameters, ..
+    } = header
+    else {
+        return callable.clone();
+    };
+    let signature = &callable.signature;
+    let slots = usize::from(signature.instance.is_some())
+        + signature
+            .parameters
+            .iter()
+            .filter(|p| !matches!(p.ty, TypeRef::Varargs))
+            .count()
+        + usize::from(signature.throws);
+    if slots != parameters.len() {
+        return callable.clone();
+    }
+    let mut qualified = callable.clone();
+    let signature = &mut qualified.signature;
+    // A trailing `GError **` is the header's last slot and GIR's none.
+    let gir = signature.instance.iter_mut().chain(
+        signature
+            .parameters
+            .iter_mut()
+            .filter(|p| !matches!(p.ty, TypeRef::Varargs)),
+    );
+    for (param, header) in gir.zip(parameters) {
+        qualify_param(param, header);
+    }
+    qualify_param(&mut signature.result, result);
+    qualified
+}
+
+fn qualify_param(param: &mut Param, header: &CType) {
+    let spelling = match &mut param.ty {
+        TypeRef::Named { c_type, .. } => c_type,
+        TypeRef::Array(array) => &mut array.c_type,
+        TypeRef::Varargs | TypeRef::Missing => return,
+    };
+    if let Some(text) = spelling
+        && let Some(requalified) = requalify(text, header)
+    {
+        *text = requalified;
+    }
+}
+
+/// GIR's C spelling of a pointer, with the `const` at each level that
+/// `header` has: `void*` as `const void*`, `gpointer` as `gconstpointer`,
+/// `const gchar*` as `gchar*`. `None` where they already agree, and where
+/// the two differ in more than that -- another depth, or a callback type's
+/// name -- which the self-check still holds to the header.
+fn requalify(spelling: &str, header: &CType) -> Option<String> {
+    // The base: its words and whether `const` is among them; then a `bool`
+    // per `*`, for a `const` written after it.
+    let (mut base_const, base, mut levels) = match spelling.trim() {
+        "gpointer" => (false, "void".to_owned(), vec![false]),
+        "gconstpointer" => (true, "void".to_owned(), vec![false]),
+        text => {
+            let spaced = text.replace('*', " * ");
+            let mut words = spaced.split_whitespace();
+            let (mut constant, mut base) = (false, Vec::new());
+            let mut levels = Vec::new();
+            for word in words.by_ref() {
+                match word {
+                    "*" => {
+                        levels.push(false);
+                        break;
+                    }
+                    "const" => constant = true,
+                    word => base.push(word),
+                }
+            }
+            for word in words {
+                match (word, levels.last_mut()) {
+                    ("*", _) => levels.push(false),
+                    ("const", Some(last)) => *last = true,
+                    _ => return None,
+                }
+            }
+            (constant, base.join(" "), levels)
+        }
+    };
+    if levels.is_empty() || base.is_empty() {
+        return None;
+    }
+    // The header's `const` per level, outermost pointer first: the first
+    // is what the parameter points at, so the base's is the last.
+    let mut consts = Vec::new();
+    let mut at = header;
+    for _ in 0..levels.len() {
+        let CType::Pointer { to, constant } = at else {
+            return None;
+        };
+        consts.push(*constant);
+        at = to;
+    }
+    if matches!(at, CType::Pointer { .. }) {
+        return None;
+    }
+    let before = (base_const, levels[..levels.len() - 1].to_vec());
+    base_const = consts[levels.len() - 1];
+    // Level `i`'s `const` qualifies the pointer one level inside the
+    // outermost, `consts[levels.len() - 2 - i]`; the outermost's own is
+    // the parameter's, which a function type does not keep.
+    for (i, level) in levels.iter_mut().enumerate().take(consts.len() - 1) {
+        *level = consts[consts.len() - 2 - i];
+    }
+    if before == (base_const, levels[..levels.len() - 1].to_vec()) {
+        return None;
+    }
+    if base == "void"
+        && levels.len() == 1
+        && matches!(spelling.trim(), "gpointer" | "gconstpointer")
+    {
+        return Some(
+            if base_const {
+                "gconstpointer"
+            } else {
+                "gpointer"
+            }
+            .to_owned(),
+        );
+    }
+    let mut text = format!("{}{base}", if base_const { "const " } else { "" });
+    for (i, constant) in levels.iter().enumerate() {
+        text.push('*');
+        if *constant && i + 1 < levels.len() {
+            text.push_str(" const");
+        }
+    }
+    Some(text)
 }
 
 /// A compare callback's `gpointer` or `gconstpointer`, for a function in
@@ -1866,6 +2029,13 @@ impl<'a> Mapper<'a> {
         if symbol == CCLOSURE_EXPRESSION.0 {
             return self.cclosure_expression(callable, owner);
         }
+        if self.facts.volatile.contains(&symbol) {
+            return Err(Reason::Volatile);
+        }
+        let header = self.facts.prototypes.get(&symbol);
+        // GIR decides what each parameter means; the header, its `const`.
+        let qualified = header.map(|header| header_qualified(callable, header));
+        let callable = qualified.as_ref().unwrap_or(callable);
         self.comparing_items = COMPARES_ITEMS.contains(&symbol.as_str());
         let signature = &callable.signature;
         let mut parameters = Vec::new();
@@ -1929,6 +2099,11 @@ impl<'a> Mapper<'a> {
             c_parameters.push(mapped.c.clone());
             omissible.extend(omitted.map(|value| (identifier(&param.name), value)));
             parameters.push((identifier(&param.name), mapped));
+        }
+        if let Some(CType::Function { result, .. }) = header
+            && lends_writable_string(&signature.result, result)
+        {
+            return Err(Reason::LentWritableString);
         }
         let (result, free) = self.result_or_bytes(callable, owner)?;
         let raw_result_owned = signature.result.transfer == Transfer::Full
@@ -4207,6 +4382,152 @@ mod tests {
         assert!(!text.contains("@ntsFree"));
         assert!(text.contains("raw_optional(slot?: Ptr<ConstPtr<void> | null> | null): void;"));
         assert!(text.contains("raw_slot(slot: Ptr<Ptr<void> | null>): void;"));
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A header and its GIR, which writes `q_write`'s buffer `void*` and
+    /// `q_take`'s value `gpointer` where the header has `const void *` and
+    /// `gconstpointer`.
+    fn const_fixture() -> (std::path::PathBuf, super::Repository) {
+        use std::fmt::Write as _;
+        let dir = crate::bind_scratch::directory("gir-const-test").expect("fixture directory");
+        std::fs::write(
+            dir.join("q.h"),
+            r"
+            #include <stddef.h>
+            typedef char gchar; typedef size_t gsize;
+            typedef void *gpointer; typedef const void *gconstpointer;
+            int q_write(const void *buffer, gsize count);
+            int q_write_plain(void *buffer, gsize count);
+            gchar *q_find(const gchar *haystack);
+            void q_take(gconstpointer value);
+            void q_atomic(volatile void *atomic);
+        ",
+        )
+        .expect("header");
+        let mut xml = String::from(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="q.h"/><namespace name="Q" version="1.0">"#,
+        );
+        for name in ["write", "write_plain"] {
+            let _ = write!(
+                xml,
+                r#"<function name="{name}" c:identifier="q_{name}">
+                <return-value><type name="gint" c:type="int"/></return-value><parameters>
+                <parameter name="buffer" transfer-ownership="none">
+                <array length="1" zero-terminated="0" c:type="void*"><type name="guint8"/></array>
+                </parameter>
+                <parameter name="count"><type name="gsize" c:type="gsize"/></parameter>
+                </parameters></function>"#
+            );
+        }
+        xml.push_str(
+            r#"<function name="find" c:identifier="q_find">
+            <return-value transfer-ownership="none" nullable="1"><type name="utf8" c:type="gchar*"/></return-value>
+            <parameters><parameter name="haystack"><type name="utf8" c:type="const gchar*"/></parameter></parameters>
+            </function>"#,
+        );
+        for name in ["take", "atomic"] {
+            let _ = write!(
+                xml,
+                r#"<function name="{name}" c:identifier="q_{name}">
+                <return-value><type name="none" c:type="void"/></return-value>
+                <parameters><parameter name="value"><type name="gpointer" c:type="gpointer"/></parameter></parameters>
+                </function>"#
+            );
+        }
+        xml.push_str("</namespace></repository>");
+        std::fs::write(dir.join("Q-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("Q-1.0", &[search]).expect("parse GIR");
+        (dir, repository)
+    }
+
+    /// GIR decides what a parameter means and the header its `const`. A
+    /// `volatile` and a lent `gchar *` result are refused by name. One
+    /// difference makes the control: the same GIR without the headers'
+    /// prototypes keeps GIR's spelling, which the self-check refuses.
+    #[test]
+    fn the_header_decides_const_and_gir_the_meaning() {
+        use super::super::{check, facts};
+        use super::{Reason, bind};
+        let (dir, repository) = const_fixture();
+        let namespace = &repository.namespaces["Q"];
+        let cflags = [format!("-I{}", dir.display())];
+        let functions = ["q_write", "q_write_plain", "q_find", "q_take", "q_atomic"];
+        let (prototypes, volatile) =
+            facts::prototypes(&namespace.headers, &cflags, &functions, &[]).expect("prototypes");
+        assert_eq!(
+            volatile.iter().map(String::as_str).collect::<Vec<_>>(),
+            ["q_atomic"]
+        );
+        let header = facts::Facts {
+            prototypes,
+            volatile,
+            ..facts::Facts::default()
+        };
+        let parameter = |binding: &super::Binding, name: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == name)
+                .map(|f| f.parameters[0].1.ts.clone())
+        };
+        let mut binding = bind(&repository, namespace, &header);
+        check::against_headers(&mut binding, &cflags).expect("header check");
+        assert!(
+            !binding
+                .refused
+                .iter()
+                .any(|(_, r)| matches!(r, Reason::Header(_))),
+            "{:?}",
+            binding.refused
+        );
+        let write = parameter(&binding, "q_write").expect("q_write bound");
+        assert!(
+            write.starts_with("Counted<CBytes<\"const void\">"),
+            "{write}"
+        );
+        let plain = parameter(&binding, "q_write_plain").expect("q_write_plain bound");
+        assert!(plain.starts_with("Counted<CBytes<\"void\">"), "{plain}");
+        assert_eq!(
+            parameter(&binding, "q_take").as_deref(),
+            Some("ConstPtr<void>")
+        );
+        // A lent `gchar *` result: a `string` result has no such spelling.
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "q_find" && *r == Reason::LentWritableString)
+        );
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(n, r)| n == "q_atomic" && *r == Reason::Volatile)
+        );
+        // The control: GIR's own spellings, which the header refuses.
+        let mut control = bind(&repository, namespace, &facts::Facts::default());
+        check::against_headers(&mut control, &cflags).expect("header check");
+        for name in ["q_write", "q_take", "q_atomic"] {
+            assert!(
+                control
+                    .refused
+                    .iter()
+                    .any(|(n, r)| n == name && matches!(r, Reason::Header(_))),
+                "{name}: {:?}",
+                control.refused
+            );
+        }
+        assert!(
+            control
+                .functions
+                .iter()
+                .any(|f| f.symbol == "q_write_plain")
+        );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 }
