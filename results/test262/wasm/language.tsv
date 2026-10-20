@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 9d4accc8c06d6e27, commit 1bbdc5df4c2bc96ccae5e027edecbfa5162c4b43, backend wasm, harness d6442dbc09f91ad0; machine at start: 23 GB available, swap 2.1/31.5 GB, load 30.6/56.5 (1m/5m), 16 cores; 4 worker(s)
+# compiler ab570b3e4d8e94c5, commit 3dd9dd8f5c32bd929f0d467a1e07ba6956dfccda, backend wasm, harness d6442dbc09f91ad0; machine at start: 20.2 GB available, swap 3.1/31.5 GB, load 55.7/57.7 (1m/5m), 16 cores; 4 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -176,6 +176,8 @@ test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/arrow-function/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/arrow-function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/arrow-function/dstr/dflt-ary-name-iter-val.js	pass	
@@ -421,6 +423,7 @@ test/language/expressions/class/decorator/syntax/valid/decorator-parenthesized-e
 test/language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/class/dstr/async-gen-meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js	pass	
 test/language/expressions/class/dstr/async-gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
@@ -456,6 +459,8 @@ test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/class/dstr/gen-meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/class/dstr/gen-meth-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-dflt-ary-name-iter-val.js	pass	
@@ -532,6 +537,8 @@ test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id-init.j
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/gen-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -608,6 +615,8 @@ test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/class/dstr/meth-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-dflt-ary-name-iter-val.js	pass	
@@ -684,6 +693,8 @@ test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pa
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/class/dstr/meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/meth-static-dflt-ary-name-iter-val.js	pass	
@@ -757,6 +768,7 @@ test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-done
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-dflt-ary-name-iter-val.js	pass	
@@ -817,6 +829,7 @@ test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-it
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-gen-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -877,6 +890,7 @@ test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-iter-done.js	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/private-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-dflt-ary-name-iter-val.js	pass	
@@ -937,6 +951,7 @@ test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-d
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/expressions/class/dstr/private-meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-empty.js	pass	
 test/language/expressions/class/dstr/private-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/class/dstr/private-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -1401,6 +1416,8 @@ test/language/expressions/function/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/function/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/function/dstr/dflt-ary-name-iter-val.js	pass	
@@ -1482,6 +1499,8 @@ test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/generators/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-empty.js	pass	
 test/language/expressions/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/generators/dstr/dflt-ary-name-iter-val.js	pass	
@@ -1766,6 +1785,7 @@ test/language/expressions/object/covered-ident-name-prop-name-literal-with-escap
 test/language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/object/dstr/async-gen-meth-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-init-undefined.js	pass	
 test/language/expressions/object/dstr/async-gen-meth-dflt-obj-ptrn-id-init-throws.js	pass	
@@ -1801,6 +1821,8 @@ test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/object/dstr/gen-meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/object/dstr/gen-meth-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-empty.js	pass	
 test/language/expressions/object/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/gen-meth-dflt-ary-name-iter-val.js	pass	
@@ -1877,6 +1899,8 @@ test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/expressions/object/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/expressions/object/dstr/meth-ary-ptrn-elision-step-err.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-empty.js	pass	
 test/language/expressions/object/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/expressions/object/dstr/meth-dflt-ary-name-iter-val.js	pass	
@@ -2642,6 +2666,7 @@ test/language/statements/async-function/try-throw-finally-throw.js	pass
 test/language/statements/async-generator/dstr/ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/async-generator/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/async-generator/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/async-generator/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/statements/async-generator/dstr/dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-init-undefined.js	pass	
 test/language/statements/async-generator/dstr/dflt-obj-ptrn-id-init-throws.js	pass	
@@ -2706,6 +2731,7 @@ test/language/statements/class/definition/setters-non-configurable-err.js	pass
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-ary-val-null.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/class/dstr/async-gen-meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-init-undefined.js	pass	
 test/language/statements/class/dstr/async-gen-meth-static-dflt-obj-ptrn-id-init-throws.js	pass	
@@ -2741,6 +2767,8 @@ test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/class/dstr/gen-meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/class/dstr/gen-meth-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-dflt-ary-name-iter-val.js	pass	
@@ -2817,6 +2845,8 @@ test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id-init.js
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/class/dstr/gen-meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/gen-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -2893,6 +2923,8 @@ test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/class/dstr/meth-ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/class/dstr/meth-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-dflt-ary-name-iter-val.js	pass	
@@ -2969,6 +3001,8 @@ test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id-init.js	pas
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/class/dstr/meth-static-ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/class/dstr/meth-static-ary-ptrn-elision-step-err.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/meth-static-dflt-ary-name-iter-val.js	pass	
@@ -3042,6 +3076,7 @@ test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-done.
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-gen-meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/private-gen-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-dflt-ary-name-iter-val.js	pass	
@@ -3102,6 +3137,7 @@ test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-ite
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-gen-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -3162,6 +3198,7 @@ test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-iter-done.js	p
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-meth-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/private-meth-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-dflt-ary-name-iter-val.js	pass	
@@ -3222,6 +3259,7 @@ test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-do
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-id-iter-val.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-obj-id-init.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-elem-obj-id.js	pass	
+test/language/statements/class/dstr/private-meth-static-ary-ptrn-elision-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-empty.js	pass	
 test/language/statements/class/dstr/private-meth-static-ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/class/dstr/private-meth-static-dflt-ary-name-iter-val.js	pass	
@@ -3928,6 +3966,8 @@ test/language/statements/function/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/function/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/function/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/function/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/function/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/statements/function/dstr/ary-ptrn-empty.js	pass	
 test/language/statements/function/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/function/dstr/dflt-ary-name-iter-val.js	pass	
@@ -4008,6 +4048,8 @@ test/language/statements/generators/dstr/ary-ptrn-elem-obj-id-init.js	pass
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-id.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-null.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-elem-obj-val-undef.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-elision-exhausted.js	pass	
+test/language/statements/generators/dstr/ary-ptrn-elision-step-err.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-empty.js	pass	
 test/language/statements/generators/dstr/ary-ptrn-rest-id-exhausted.js	pass	
 test/language/statements/generators/dstr/dflt-ary-name-iter-val.js	pass	
