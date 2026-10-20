@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGSEGV",
+  "node": "exit 1; nts: uncaught Observed: bounded=1000;unbounded=RangeError;",
+  "measured_with": "0f7dd40d41b824a4",
+  "source": "measured"
+}
