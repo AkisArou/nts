@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 79e0f733ca6cad5b, commit f8b93810dc1f9616c40461181932d58dda075e61, backend jvm, harness d6442dbc09f91ad0; machine at start: 19.8 GB available, swap 2.1/31.5 GB, load 34.9/48.8 (1m/5m), 16 cores; 4 worker(s)
+# compiler 9d4accc8c06d6e27, commit 1bbdc5df4c2bc96ccae5e027edecbfa5162c4b43, backend jvm, harness d6442dbc09f91ad0; machine at start: 21.6 GB available, swap 2.4/31.5 GB, load 65.4/75.7 (1m/5m), 16 cores; 4 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -979,9 +979,6 @@ test/language/expressions/class/dstr/private-meth-static-obj-ptrn-prop-ary-trail
 test/language/expressions/class/elements/async-private-method-static/returns-async-arrow.js	pass	
 test/language/expressions/class/elements/async-private-method-static/returns-async-function.js	pass	
 test/language/expressions/class/elements/ctor-called-after-fields-init.js	pass	
-test/language/expressions/class/elements/evaluation-error/computed-name-referenceerror.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/class/elements/evaluation-error/computed-name-tostring-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/class/elements/evaluation-error/computed-name-valueof-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/elements/fields-asi-2.js	pass	
 test/language/expressions/class/elements/fields-multiple-definitions-static-private-methods-proxy.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/elements/private-async-generator-method-name.js	pass	
@@ -2692,7 +2689,6 @@ test/language/statements/class/async-method-static/returns-async-arrow.js	pass
 test/language/statements/class/async-method-static/returns-async-function.js	pass	
 test/language/statements/class/class-name-ident-await-escaped.js	pass	
 test/language/statements/class/class-name-ident-await.js	pass	
-test/language/statements/class/classelementname-abrupt-completion.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js	pass	
 test/language/statements/class/decorator/syntax/valid/class-element-decorator-call-expr-identifier-reference.js	pass	
 test/language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-decorator-member-expr.js	pass	
@@ -3271,15 +3267,9 @@ test/language/statements/class/dstr/private-meth-static-obj-ptrn-id-trailing-com
 test/language/statements/class/dstr/private-meth-static-obj-ptrn-prop-ary-trailing-comma.js	pass	
 test/language/statements/class/elements/async-private-method-static/returns-async-arrow.js	pass	
 test/language/statements/class/elements/async-private-method-static/returns-async-function.js	pass	
-test/language/statements/class/elements/computed-property-abrupt-completition.js	fail	nts: uncaught Test262Error: computed property should have abrupt completion
 test/language/statements/class/elements/ctor-called-after-fields-init.js	pass	
-test/language/statements/class/elements/evaluation-error/computed-name-referenceerror.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/elements/evaluation-error/computed-name-tostring-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/elements/evaluation-error/computed-name-valueof-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/fields-asi-2.js	pass	
-test/language/statements/class/elements/fields-computed-name-static-computed-var-propname-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/fields-computed-name-static-propname-prototype.js	pass	
-test/language/statements/class/elements/private-accessor-is-visible-in-computed-properties.js	fail	nts: uncaught Test262Error: access to a private acessor from ordinary object
 test/language/statements/class/elements/private-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-async-method-name.js	pass	
 test/language/statements/class/elements/private-field-as-arrow-function.js	pass	
@@ -3297,7 +3287,6 @@ test/language/statements/class/elements/private-method-comparison-multiple-evalu
 test/language/statements/class/elements/private-method-comparison.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/elements/private-method-is-not-a-own-property.js	pass	
 test/language/statements/class/elements/private-method-is-not-clobbered-by-computed-property.js	pass	
-test/language/statements/class/elements/private-method-is-visible-in-computed-properties.js	fail	nts: uncaught Test262Error: access to a private method from ordinary object
 test/language/statements/class/elements/private-setter-brand-check-super-class.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/elements/private-static-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-static-async-method-name.js	pass	
@@ -3434,7 +3423,6 @@ test/language/statements/class/method-static/dflt-params-abrupt.js	pass
 test/language/statements/class/method-static/dflt-params-arg-val-undefined.js	pass	
 test/language/statements/class/method-static/dflt-params-ref-prior.js	pass	
 test/language/statements/class/name-binding/basic.js	pass	
-test/language/statements/class/static-classelementname-abrupt-completion.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/static-init-abrupt.js	pass	
 test/language/statements/class/static-init-await-binding-valid.js	pass	
 test/language/statements/class/static-init-scope-lex-close.js	pass	

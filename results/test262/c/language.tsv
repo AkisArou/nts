@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler b2733010c1af65f9, commit bff21d22ef31fefbc359ff8ea38427123cd105ef, backend c, harness d6442dbc09f91ad0; machine at start: 19.3 GB available, swap 1.9/31.5 GB, load 25.9/17.9 (1m/5m), 16 cores; 6 worker(s)
+# compiler 9d4accc8c06d6e27, commit 1bbdc5df4c2bc96ccae5e027edecbfa5162c4b43, backend c, harness d6442dbc09f91ad0; machine at start: 21.8 GB available, swap 2.3/31.5 GB, load 63.1/64.9 (1m/5m), 16 cores; 4 worker(s)
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
@@ -2023,14 +2023,11 @@ test/language/expressions/class/elements/async-private-method/await-as-identifie
 test/language/expressions/class/elements/async-private-method/await-as-identifier-reference.js	pass	
 test/language/expressions/class/elements/async-private-method/await-as-label-identifier-escaped.js	pass	
 test/language/expressions/class/elements/async-private-method/await-as-label-identifier.js	pass	
-test/language/expressions/class/elements/comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/ctor-called-after-fields-init.js	pass	
 test/language/expressions/class/elements/equality-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/equality-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/evaluation-error/computed-name-referenceerror.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/class/elements/evaluation-error/computed-name-tostring-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/expressions/class/elements/evaluation-error/computed-name-valueof-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/expressions/class/elements/fields-asi-2.js	pass	
 test/language/expressions/class/elements/fields-asi-3.js	pass	
 test/language/expressions/class/elements/fields-asi-4.js	pass	
@@ -2064,8 +2061,8 @@ test/language/expressions/class/elements/literal-name-init-err-contains-argument
 test/language/expressions/class/elements/literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/nested-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/nested-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/nested-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/nested-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/nested-equality-init-err-contains-arguments.js	pass	
 test/language/expressions/class/elements/nested-equality-init-err-contains-super.js	pass	
 test/language/expressions/class/elements/nested-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
@@ -2078,8 +2075,8 @@ test/language/expressions/class/elements/nested-private-ternary-init-err-contain
 test/language/expressions/class/elements/nested-private-ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-private-typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-private-typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/nested-static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/nested-static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/nested-static-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/nested-static-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/nested-static-literal-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-static-literal-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/nested-static-private-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
@@ -2140,8 +2137,8 @@ test/language/expressions/class/elements/regular-definitions-rs-static-method-pr
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer.js	pass	
-test/language/expressions/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/expressions/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/expressions/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/expressions/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
 test/language/expressions/class/elements/static-literal-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/expressions/class/elements/static-private-fields-proxy-default-handler-throws.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
@@ -5611,7 +5608,6 @@ test/language/statements/class/class-name-ident-static-escaped.js	fail	accepted:
 test/language/statements/class/class-name-ident-static.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/class-name-ident-yield-escaped.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/class-name-ident-yield.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/classelementname-abrupt-completion.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/decorator/syntax/class-valid/decorator-member-expr-private-identifier.js	pass	
 test/language/statements/class/decorator/syntax/valid/class-element-decorator-call-expr-identifier-reference.js	pass	
 test/language/statements/class/decorator/syntax/valid/class-element-decorator-member-expr-decorator-member-expr.js	pass	
@@ -6398,21 +6394,16 @@ test/language/statements/class/elements/async-private-method/await-as-identifier
 test/language/statements/class/elements/async-private-method/await-as-identifier-reference.js	pass	
 test/language/statements/class/elements/async-private-method/await-as-label-identifier-escaped.js	pass	
 test/language/statements/class/elements/async-private-method/await-as-label-identifier.js	pass	
-test/language/statements/class/elements/comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/computed-property-abrupt-completition.js	fail	nts: uncaught Test262Error: computed property should have abrupt completion
+test/language/statements/class/elements/comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/ctor-called-after-fields-init.js	pass	
 test/language/statements/class/elements/equality-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/equality-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/evaluation-error/computed-name-referenceerror.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/elements/evaluation-error/computed-name-tostring-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
-test/language/statements/class/elements/evaluation-error/computed-name-valueof-err.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/fields-asi-2.js	pass	
 test/language/statements/class/elements/fields-asi-3.js	pass	
 test/language/statements/class/elements/fields-asi-4.js	pass	
 test/language/statements/class/elements/fields-asi-same-line-1.js	pass	
 test/language/statements/class/elements/fields-asi-same-line-2.js	pass	
-test/language/statements/class/elements/fields-computed-name-static-computed-var-propname-prototype.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/fields-computed-name-static-propname-prototype.js	pass	
 test/language/statements/class/elements/fields-duplicate-privatenames.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/fields-literal-name-propname-constructor.js	pass	
@@ -6441,8 +6432,8 @@ test/language/statements/class/elements/literal-name-init-err-contains-arguments
 test/language/statements/class/elements/literal-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/nested-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/nested-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/nested-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/nested-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/nested-equality-init-err-contains-arguments.js	pass	
 test/language/statements/class/elements/nested-equality-init-err-contains-super.js	pass	
 test/language/statements/class/elements/nested-literal-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
@@ -6455,8 +6446,8 @@ test/language/statements/class/elements/nested-private-ternary-init-err-contains
 test/language/statements/class/elements/nested-private-ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-private-typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-private-typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/nested-static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/nested-static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/nested-static-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/nested-static-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/nested-static-literal-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-static-literal-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-static-private-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
@@ -6469,7 +6460,6 @@ test/language/statements/class/elements/nested-ternary-init-err-contains-argumen
 test/language/statements/class/elements/nested-ternary-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-typeof-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/nested-typeof-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/private-accessor-is-visible-in-computed-properties.js	fail	nts: uncaught Test262Error: access to a private acessor from ordinary object
 test/language/statements/class/elements/private-arrow-fnc-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/private-arrow-fnc-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/elements/private-async-generator-method-name.js	pass	
@@ -6491,7 +6481,6 @@ test/language/statements/class/elements/private-method-comparison-multiple-evalu
 test/language/statements/class/elements/private-method-comparison.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/elements/private-method-is-not-a-own-property.js	pass	
 test/language/statements/class/elements/private-method-is-not-clobbered-by-computed-property.js	pass	
-test/language/statements/class/elements/private-method-is-visible-in-computed-properties.js	fail	nts: uncaught Test262Error: access to a private method from ordinary object
 test/language/statements/class/elements/private-setter-brand-check-super-class.js	fail	nts: uncaught Test262Error: sameValue
 test/language/statements/class/elements/private-static-async-generator-method-name.js	pass	
 test/language/statements/class/elements/private-static-async-method-name.js	pass	
@@ -6536,8 +6525,8 @@ test/language/statements/class/elements/regular-definitions-rs-static-method-pri
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer.js	pass	
-test/language/statements/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: ran and threw Test262Error
+test/language/statements/class/elements/static-comp-name-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
+test/language/statements/class/elements/static-comp-name-init-err-contains-super.js	fail	accepted: was refused later (lowering)
 test/language/statements/class/elements/static-field-initializer-error.js	pass	
 test/language/statements/class/elements/static-fielddefinition-initializer-abrupt-completion.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/elements/static-literal-init-err-contains-arguments.js	fail	accepted: was refused later (lowering)
@@ -6819,7 +6808,6 @@ test/language/statements/class/private-non-static-getter-static-setter-early-err
 test/language/statements/class/private-non-static-setter-static-getter-early-error.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/private-static-getter-non-static-setter-early-error.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/private-static-setter-non-static-getter-early-error.js	fail	accepted: ran and threw Test262Error
-test/language/statements/class/static-classelementname-abrupt-completion.js	fail	nts: uncaught Test262Error: throws: nothing was thrown
 test/language/statements/class/static-gen-method-param-dflt-yield.js	fail	accepted: ran and threw Test262Error
 test/language/statements/class/static-init-abrupt.js	pass	
 test/language/statements/class/static-init-await-binding-valid.js	pass	
