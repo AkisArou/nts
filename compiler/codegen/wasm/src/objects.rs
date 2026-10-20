@@ -525,6 +525,20 @@ pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(
     }
     Ok(())
 }
+/// Whether a `ref.test` against `physical` may read `value` where it
+/// stands: an erased value is `anyref`, which tests against any heap type;
+/// a statically typed object validates only against a subtype of its own
+/// type. Anything else keeps the display walk.
+fn exact_applies(b: &Body<'_, '_>, value: ValueId, physical: u32) -> bool {
+    let objects = &b.types().objects;
+    match b.ty(value) {
+        HirType::Erased => true,
+        ty => objects
+            .object(ty)
+            .is_ok_and(|object| objects.subtype(physical, object.physical)),
+    }
+}
+
 pub(crate) fn instance(
     b: &mut Body<'_, '_>,
     value: ValueId,
@@ -550,17 +564,27 @@ pub(crate) fn instance(
         return Ok(());
     }
     for (at, &(identity, depth)) in tests.iter().enumerate() {
-        b.load(value)?;
-        b.instruction(&I::I32Const(identity.cast_signed()));
-        // One display read where the class sits at one depth everywhere;
-        // otherwise the scan.
-        if let Some(depth) = depth {
-            b.instruction(&I::I32Const(depth.cast_signed()));
-            let callee = instance_at(b.m)?;
-            b.call(callee);
+        if let Some(physical) = objects
+            .exact(identity)
+            .filter(|&physical| exact_applies(b, value, physical))
+        {
+            // One GC type answers this identity over the whole plan, so the
+            // test is the engine's own rather than a display walk.
+            b.load(value)?;
+            b.instruction(&I::RefTestNonNull(HeapType::Concrete(physical)));
         } else {
-            let callee = instance_of(b.m)?;
-            b.call(callee);
+            b.load(value)?;
+            b.instruction(&I::I32Const(identity.cast_signed()));
+            // One display read where the class sits at one depth everywhere;
+            // otherwise the scan.
+            if let Some(depth) = depth {
+                b.instruction(&I::I32Const(depth.cast_signed()));
+                let callee = instance_at(b.m)?;
+                b.call(callee);
+            } else {
+                let callee = instance_of(b.m)?;
+                b.call(callee);
+            }
         }
         if at != 0 {
             b.instruction(&I::I32Or);

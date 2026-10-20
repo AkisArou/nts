@@ -129,3 +129,54 @@ pub(crate) fn function_names(bytes: &[u8]) -> Vec<String> {
     }
     names
 }
+
+/// Callee names by caller name, for tests that pin an emitted entry's shape.
+pub(crate) fn calls_by_name(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<String>> {
+    let names = function_names(bytes);
+    let mut function_imports = 0u32;
+    let mut bodies: Vec<Vec<u32>> = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        match payload.unwrap() {
+            wasmparser::Payload::ImportSection(imports) => {
+                for group in imports {
+                    for import in group.unwrap() {
+                        if matches!(import.unwrap().1.ty, wasmparser::TypeRef::Func(_)) {
+                            function_imports += 1;
+                        }
+                    }
+                }
+            }
+            wasmparser::Payload::CodeSectionEntry(body) => {
+                let mut calls = Vec::new();
+                for operator in body.get_operators_reader().unwrap() {
+                    if let Ok(wasmparser::Operator::Call { function_index }) = operator {
+                        calls.push(function_index);
+                    }
+                }
+                bodies.push(calls);
+            }
+            _ => {}
+        }
+    }
+    bodies
+        .into_iter()
+        .enumerate()
+        .filter_map(|(at, calls)| {
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "a test module's function count"
+            )]
+            let index = (function_imports + at as u32) as usize;
+            let name = names.get(index)?.clone();
+            if name.is_empty() {
+                return None;
+            }
+            let callees = calls
+                .iter()
+                .filter_map(|call| names.get(*call as usize).cloned())
+                .filter(|callee| !callee.is_empty())
+                .collect();
+            Some((name, callees))
+        })
+        .collect()
+}

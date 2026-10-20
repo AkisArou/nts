@@ -1521,3 +1521,31 @@ fn existing_loops_and_bitwise_examples_agree_with_node() {
         println!("{name}: {output}");
     }
 }
+
+/// Class tests whose identity one GC type answers exactly run as the
+/// engine's own `ref.test`; the answers still agree with node across
+/// unrelated same-shape classes, subclasses, literals of a class's shape,
+/// values arriving erased, and the face-fields dispatch.
+#[test]
+fn source_instanceof_exact_agrees_with_node() {
+    let fixture = common::repository().join("tests/wasm/instanceof-exact");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "instanceof-exact",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 102, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+    // The face dispatch tests for Swapped, whose type is exact: no display
+    // walk on that path.
+    let calls = common::calls_by_name(&emitted.bytes);
+    let face = &calls["faceFields"];
+    assert!(
+        !face.iter().any(|c| c.starts_with("object.instance")),
+        "faceFields still walks the display: {face:?}"
+    );
+}

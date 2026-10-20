@@ -50,6 +50,11 @@ pub(crate) struct Plan {
     /// Each identity's position in every display that holds it, where that
     /// position is the same in all of them; `None` where it is not.
     depths: BTreeMap<u32, Option<u32>>,
+    /// Identities one GC type answers exactly: every object of that type or
+    /// a subtype carries the identity, and every object carrying it has such
+    /// a type, so `ref.test` on the type is the display walk. Identity →
+    /// physical type.
+    exact: BTreeMap<u32, u32>,
     /// The topmost storage of each family carrying a presence word, and the
     /// word's field: every storage that carries one extends exactly one.
     pub(crate) presence_tops: Vec<(u32, u32)>,
@@ -161,6 +166,7 @@ impl Plan {
                     .or_insert(depth);
             }
         }
+        plan.exact = plan.exact_types();
         Ok(plan)
     }
     pub(crate) fn object(&self, ty: &HirType) -> Result<&Object, Failure> {
@@ -175,6 +181,40 @@ impl Plan {
     /// that is one position: a class test is then one array read.
     pub(crate) fn depth(&self, identity: u32) -> Option<u32> {
         self.depths.get(&identity).copied().flatten()
+    }
+    /// The GC type answering `identity` exactly, where one does: a class
+    /// test is then one `ref.test`.
+    pub(crate) fn exact(&self, identity: u32) -> Option<u32> {
+        self.exact.get(&identity).copied()
+    }
+    /// Each identity its own objects hold under one physical type where the
+    /// type and the display agree in both directions over every object.
+    fn exact_types(&self) -> BTreeMap<u32, u32> {
+        let mut own: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
+        for object in self.objects.values() {
+            own.entry(object.identity)
+                .or_default()
+                .insert(object.physical);
+        }
+        let mut exact = BTreeMap::new();
+        for (identity, physicals) in own {
+            if physicals.len() != 1 {
+                continue;
+            }
+            let Some(&physical) = physicals.iter().next() else {
+                continue;
+            };
+            let agrees = self.objects.values().all(|object| {
+                let carries = self.descriptors[object.descriptor as usize]
+                    .ancestry
+                    .contains(&identity);
+                self.subtype(object.physical, physical) == carries
+            });
+            if agrees {
+                exact.insert(identity, physical);
+            }
+        }
+        exact
     }
     /// The identity an object of type `id` carries: its class's, or, for a
     /// structural type (an interface, a literal type), its layout's record
