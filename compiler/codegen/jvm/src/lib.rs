@@ -46,6 +46,7 @@ mod program;
 pub use program::JvmProgram;
 mod intcall;
 pub mod ops;
+pub mod split;
 mod split_faces;
 pub mod types;
 mod unbox;
@@ -56,7 +57,7 @@ use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::class::access;
 use nts_jvm_emitter::code::Code;
 use nts_jvm_emitter::{Class, ClassBuilder, Kind, Pool, VType};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 pub use body::{PROGRAM, RUNTIME, program_class};
 pub use types::DEFAULT_PACKAGE;
@@ -162,12 +163,71 @@ fn foreign_classes_refused(program: &JvmProgram<'_>) -> Vec<Diagnostic> {
 /// Emit into a named package.
 #[must_use]
 pub fn emit_into(package: &str, program: &Program) -> Emitted {
-    emit_program(package, &JvmProgram::new(program))
+    let (emitted, too_long) =
+        emit_program(package, &JvmProgram::new(program), &FxHashSet::default());
+    if too_long.is_empty() {
+        return emitted;
+    }
+    split_and_emit(package, program, &too_long).unwrap_or(emitted)
 }
 
-/// [`emit_into`], over the facts this backend derives once.
+/// The functions whose bodies came out past the class file's method-size
+/// limit, split into helpers ([`split`]), and the program emitted again --
+/// on that failure only, so a program whose every body fits pays nothing.
+///
+/// A try that leaves a body still too long (a helper, or the function
+/// itself) starts again from the program as lowered with half the run
+/// budget. A function no split helps keeps its decline, `None` when no
+/// function could be split at all.
+fn split_and_emit(package: &str, program: &Program, too_long: &[String]) -> Option<Emitted> {
+    let mut budget = split::FIRST_BUDGET;
+    let mut emitted = None;
+    for _ in 0..split::TRIES {
+        let mut taken: FxHashSet<String> = program
+            .funcs
+            .iter()
+            .map(|func| nts_codegen_common::symbols::jvm_member_name(&func.name))
+            .collect();
+        let mut split_program = program.clone();
+        let mut helpers: FxHashSet<String> = FxHashSet::default();
+        let mut added = Vec::new();
+        for func in &mut split_program.funcs {
+            if !too_long.contains(&func.name) {
+                continue;
+            }
+            if let Some((rewritten, extra)) =
+                split::split_for_method_limit(func, budget, &mut taken)
+            {
+                *func = rewritten;
+                helpers.extend(extra.iter().map(|helper| helper.name.clone()));
+                added.extend(extra);
+            }
+        }
+        if added.is_empty() {
+            break;
+        }
+        split_program.funcs.extend(added);
+        let (again, still) = emit_program(package, &JvmProgram::new(&split_program), &helpers);
+        emitted = Some(again);
+        if still.is_empty() || budget / 2 < split::MIN_BUDGET {
+            break;
+        }
+        budget /= 2;
+    }
+    emitted
+}
+
+/// [`emit_into`], over the facts this backend derives once, and the names of
+/// the functions declined only for a body past the method-size limit.
+/// `helpers` are the functions a split made: private, synthetic, and named
+/// by nothing outside the program class.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
+fn emit_program(
+    package: &str,
+    program: &JvmProgram<'_>,
+    helpers: &FxHashSet<String>,
+) -> (Emitted, Vec<String>) {
+    let mut too_long = Vec::new();
     let mut pool = Pool::new();
     let mut diagnostics = foreign_classes_refused(program);
     // An array that grows is a wrapper rather than a bare `double[]`, chosen
@@ -287,7 +347,11 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
                 } else {
                     0
                 };
-                let access = access::PUBLIC | access::STATIC | synthetic;
+                let access = if helpers.contains(&func.name) {
+                    access::PRIVATE | access::STATIC | access::SYNTHETIC
+                } else {
+                    access::PUBLIC | access::STATIC | synthetic
+                };
                 publish(
                     package,
                     &mut builder,
@@ -299,7 +363,12 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
                     rendered,
                 );
             }
-            Err(diagnostic) => declined.push((func, diagnostic)),
+            Err(refused) => {
+                if refused.too_long {
+                    too_long.push(func.name.clone());
+                }
+                declined.push((func, refused.diagnostic));
+            }
         }
     }
     // A singleton only for a closure a rendered function names. A declined
@@ -314,10 +383,13 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
         .collect();
     if let Err(error) = initialize_statics(package, program, &skipped, &mut builder, &mut pool) {
         diagnostics.push(error);
-        return Emitted {
-            classes: Vec::new(),
-            diagnostics,
-        };
+        return (
+            Emitted {
+                classes: Vec::new(),
+                diagnostics,
+            },
+            too_long,
+        );
     }
 
     // Which bound interfaces each closure is handed to; see
@@ -406,7 +478,7 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
         &mut builder,
         &mut pool,
     );
-    match builder.build(pool) {
+    let emitted = match builder.build(pool) {
         Ok(class) => {
             classes.push(class);
             Emitted {
@@ -425,7 +497,8 @@ fn emit_program(package: &str, program: &JvmProgram<'_>) -> Emitted {
                 diagnostics,
             }
         }
-    }
+    };
+    (emitted, too_long)
 }
 
 /// One class per layout: what it extends, the fields it declares, the
@@ -1614,7 +1687,7 @@ fn render(
     plan: &widen::Plan,
     pool: &mut Pool,
     templates: bool,
-) -> Result<(String, String, nts_jvm_emitter::Body), Diagnostic> {
+) -> Result<(String, String, nts_jvm_emitter::Body), body::Declined> {
     let emitter = body::Emitter::new(package, program, func, plan, templates)?;
     let signature = body::signature(package, program, func)
         .ok_or_else(|| body::refuse(func, "a signature with no representation"))?;

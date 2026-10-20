@@ -601,7 +601,7 @@ impl<'a> Emitter<'a> {
     }
 
     /// Allocate the extra slots the emission itself needs, then write the body.
-    pub fn emit(mut self, pool: &mut Pool) -> Result<Body, Diagnostic> {
+    pub fn emit(mut self, pool: &mut Pool) -> Result<Body, Declined> {
         let materializes = self.materializes();
         // Two frames' worth of question, answered before emitting rather than
         // after, because the prologue has to come first in the byte stream.
@@ -639,8 +639,10 @@ impl<'a> Emitter<'a> {
             code.bind(label);
             self.block(&mut code, pool, block, self.order.get(at + 1).copied())?;
         }
-        code.finish(pool)
-            .map_err(|error| refuse(self.func, &format!("{error}")))
+        code.finish(pool).map_err(|error| Declined {
+            too_long: matches!(error, nts_jvm_emitter::code::Error::CodeTooLong(_)),
+            diagnostic: refuse(self.func, &format!("{error}")),
+        })
     }
 
     /// Whether anything in this function has to turn a comparison into a 0 or
@@ -783,6 +785,25 @@ pub(crate) const fn comparison(op: BinOp) -> Option<Compare> {
         BinOp::Ne => Compare::Ne,
         _ => return None,
     })
+}
+
+/// Why a function was not rendered: its refusal, and whether that refusal is
+/// only that the body came out past the class file's method-size limit --
+/// the one a split into helpers can answer (`crate::split`). Typed rather than
+/// read off the message, so no rewording can make a split stop being asked.
+#[derive(Debug)]
+pub struct Declined {
+    pub diagnostic: Diagnostic,
+    pub too_long: bool,
+}
+
+impl From<Diagnostic> for Declined {
+    fn from(diagnostic: Diagnostic) -> Self {
+        Self {
+            diagnostic,
+            too_long: false,
+        }
+    }
 }
 
 /// The static method a free function becomes.

@@ -761,6 +761,16 @@ pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) ->
 /// So the rule is the JVM's *and* DEX's, and the paragraph above is now the
 /// reason the two are different rather than the reason to prefer the looser
 /// one. Anything DEX forbids that this compiler can emit belongs here.
+///
+/// # Two names can share one spelling
+///
+/// Every ASCII mark becomes `$`, `#` included, so a name the compiler makes
+/// with `#` -- which no TypeScript name can hold -- is still spelled like a
+/// name the program declares with `$`: `module#init` and `module$init` are
+/// both `module$init`. **A synthesized name picks against the spellings already
+/// taken, not against the names**: the JVM backend's method-limit helpers
+/// (`F#split<k>`, in `nts_codegen_jvm::split`) skip any `k` whose spelling a
+/// declared function has, and the next synthesized name should do the same.
 #[must_use]
 pub fn jvm_member_name(raw: &str) -> String {
     raw.chars()
