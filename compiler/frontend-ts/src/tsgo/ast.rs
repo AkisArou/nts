@@ -631,6 +631,8 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         .map(|names| names.split_whitespace().map(str::to_owned).collect());
     let libraries = leading_tag(source, "@ntsLibrary")
         .map(|names| names.split_whitespace().map(str::to_owned).collect());
+    let packages = leading_tag(source, "@ntsPackage")
+        .map(|names| names.split_whitespace().map(str::to_owned).collect());
     let vtable = leading_tag(source, "@ntsVtable");
     let hresult = leading_tag(source, "@ntsHresult");
     let factory = leading_tag(source, "@ntsFactory");
@@ -669,6 +671,7 @@ fn native_attributes(source: &str) -> Option<Box<nts_semantic_schema::NativeAttr
         protocol,
         frameworks,
         libraries,
+        packages,
         vtable,
         hresult,
         factory,
@@ -1327,6 +1330,26 @@ mod tests {
         assert_eq!(attributes.is.as_deref(), Some("nts_dom_is 5"));
         // A tag is matched whole: `@ntsIsland` is not `@ntsIs`.
         assert!(native_attributes("/** @ntsIsland x */\ninterface A {}").is_none());
+    }
+
+    /// A module names its pkg-config packages as it names its headers: on
+    /// the `declare module`, one line or several, each name once in order.
+    #[test]
+    fn a_module_names_its_packages() {
+        let source = "/**\n * @ntsHeader hb.h\n * @ntsPackage harfbuzz\n * @ntsPackage harfbuzz-gobject\n */\ndeclare module \"c:HarfBuzz-0.0\" {}";
+        let attributes = native_attributes(source).expect("tagged");
+        assert_eq!(
+            attributes.headers.as_deref(),
+            Some(&["hb.h".to_owned()][..])
+        );
+        assert_eq!(
+            attributes.packages.as_deref(),
+            Some(&["harfbuzz".to_owned(), "harfbuzz-gobject".to_owned()][..])
+        );
+        assert!(
+            native_attributes("/** @ntsHeader a.h */\ndeclare module \"c:a\" {}")
+                .is_some_and(|attributes| attributes.packages.is_none())
+        );
     }
 
     #[test]

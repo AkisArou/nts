@@ -3006,6 +3006,14 @@ pub enum FunctionName {
     Bound,
 }
 
+/// A pkg-config package a binding module names (`@ntsPackage`), and that
+/// module, as the program imports it (`c:HarfBuzz-0.0`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NativePackage {
+    pub name: String,
+    pub module: String,
+}
+
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
@@ -3218,6 +3226,10 @@ pub struct Program {
     /// order. A Linux "undefined reference" between two `@ntsLibrary` names
     /// starts here.
     pub native_libraries: Vec<String>,
+    /// The pkg-config packages (`@ntsPackage`) of the modules the program
+    /// holds a declaration from, each with the module naming it -- which a
+    /// build that cannot find one names. Sorted, and once per module.
+    pub native_packages: Vec<NativePackage>,
     /// Bound foreign members, keyed by the **foreign key** -- `owner.member:descriptor`.
     ///
     /// **On `Program` for the same reason `classes` is.** A backend turning

@@ -1823,11 +1823,13 @@ fn a_program_links_the_libraries_of_the_functions_it_calls() {
         return;
     };
     let prepared = hir::prepare(&flagged).unwrap();
+    // The source's error, said once and whole: no lowering-gap suffix.
     assert!(
-        prepared.diagnostics.iter().any(|d| d
-            .message
-            .contains("@ntsLibrary names libraries as `-l` takes them")),
-        "a flag passed as a library name was accepted: {:?}",
+        prepared.diagnostics.iter().any(|d| d.code == "NTS0005"
+            && d.message
+                == "@ntsLibrary names libraries as `-l` takes them, as in `@ntsLibrary gdi32` or \
+                    `@ntsLibrary glib-2.0` (letters, digits, `_`, `-`, `+`, `.`), and `-lfoo` is not one"),
+        "a flag passed as a library name was accepted, or refused in other words: {:?}",
         prepared.diagnostics
     );
 }

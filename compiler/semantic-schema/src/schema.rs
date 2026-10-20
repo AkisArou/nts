@@ -57,8 +57,9 @@ use crate::origin::Origin;
 /// 43: `bound_by` and `is`, a declaration bound by delegation and its
 /// `instanceof` test (`@ntsBoundBy`, `@ntsIs`), and `bound_types`, the types
 /// those bindings resolve to. 44: declaration-attached JVM contracts and their
-/// three-way parameter-retention evidence.
-pub const SCHEMA_VERSION: u32 = 44;
+/// three-way parameter-retention evidence. 45: `packages`, a module's
+/// pkg-config packages (`@ntsPackage`).
+pub const SCHEMA_VERSION: u32 = 45;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -841,6 +842,14 @@ pub struct NativeAttributes {
     /// program links only the libraries of the functions it calls.
     #[serde(default)]
     pub libraries: Option<Vec<String>>,
+    /// `@ntsPackage gtk4 harfbuzz-gobject`: the pkg-config packages a binding
+    /// **module**'s headers and symbols come from. A module tag, read where
+    /// `@ntsHeader` is: a program compiles and links against the packages of
+    /// every module it holds a declaration from -- a function it calls, a
+    /// struct it lays out -- and of no other. A module with no `@ntsHeader`
+    /// is reached by nothing, so its packages are not either.
+    #[serde(default)]
+    pub packages: Option<Vec<String>>,
     /// `@ntsVtable 6 Parse`: the declaration is a COM method, called through
     /// slot 6 of the receiver's function table rather than a symbol, and the
     /// name the metadata gives that slot -- the second half of the claim, so

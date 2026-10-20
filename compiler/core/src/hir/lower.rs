@@ -16227,7 +16227,9 @@ pub fn lower_with(
         parameter_entries,
     ));
 
-    collect_declared_facts(&mut lowered.program, snapshot);
+    lowered
+        .diagnostics
+        .extend(collect_declared_facts(&mut lowered.program, snapshot));
     super::interface_identities::collect(
         snapshot,
         &hierarchy.faces,
@@ -16709,24 +16711,22 @@ fn prune_class_tests(program: &mut Program) {
 /// Both of these read declarations the value graph does not reach -- an ambient
 /// `declare module` is never lowered -- so they are scans of the snapshot and
 /// not products of the walk above.
-fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) {
+fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) -> Vec<Diagnostic> {
     collect_class_identities(program, snapshot);
     collect_plain_records(program);
-    collect_native_headers(program, snapshot);
+    collect_native_headers(program, snapshot)
 }
 
-/// Gather the headers every native binding module declares.
-///
-/// **Every module, not only the ones this program calls into.** A binding is a
-/// claim about a header whether or not it is exercised, and a module naming a
-/// header that is not on the box should say so rather than wait for the first
-/// program that imports it. The cost of a header a program does not use is one
-/// include in a file that is compiled for its assertions.
+/// Gather the headers, macros and pkg-config packages of the native binding
+/// modules the program holds a declaration from -- a function it calls, a
+/// record it lays out -- and the frameworks and libraries of the functions it
+/// calls. A package a module names that is not one pkg-config could take is
+/// refused, at the module.
 ///
 /// A scan rather than a traversal: an ambient `declare module` is not reached
 /// by lowering, which follows values, and there is exactly one pass over the
 /// nodes here against the many a lookup would repeat.
-fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
+fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) -> Vec<Diagnostic> {
     // The modules this program actually holds a declaration from, rather than
     // every module in the snapshot. `runtime/native/libc.d.ts` declares several
     // and a program importing one of them carried all of their headers:
@@ -16774,6 +16774,7 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
         }
     }
     let (mut headers, mut defines) = (Vec::new(), Vec::new());
+    let (mut packages, mut refused) = (Vec::new(), Vec::new());
     for (at, node) in snapshot.nodes.iter().enumerate() {
         if !matches!(
             node.kind,
@@ -16794,17 +16795,70 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) {
         }
         headers.extend(native.headers.iter().flatten().cloned());
         defines.extend(native.defines.iter().flatten().cloned());
+        // The module's packages, on the same terms as its headers: a program
+        // holding any declaration of it compiles and links against them.
+        if let Some(names) = &native.packages {
+            let module = declared_module_name(snapshot, at, node.origin.location);
+            for name in names {
+                if (LinkTag::PACKAGE.valid)(name) {
+                    packages.push(super::NativePackage {
+                        name: name.clone(),
+                        module: module.clone(),
+                    });
+                } else {
+                    refused.push(Diagnostic::error(
+                        "NTS0005",
+                        format!("{}, and `{name}` is not one", LinkTag::PACKAGE.rule),
+                        node.origin.location,
+                    ));
+                }
+            }
+        }
     }
     for list in [&mut headers, &mut defines] {
         list.sort();
         list.dedup();
     }
+    packages.sort();
+    packages.dedup();
     program.native_headers = headers;
     program.native_defines = defines;
+    program.native_packages = packages;
     program.native_frameworks.sort();
     program.native_frameworks.dedup();
     program.native_libraries.sort();
     program.native_libraries.dedup();
+    refused
+}
+
+/// A module as the program imports it, `c:HarfBuzz-0.0`: the checker names a
+/// `declare module`'s symbol by its specifier, quotes and all. A file's own
+/// tags (`SOURCE_FILE`) have no such symbol, and are named by the file.
+fn declared_module_name(snapshot: &SemanticSnapshot, at: usize, location: Location) -> String {
+    let id = nts_semantic_schema::NodeId(u32::try_from(at).unwrap_or(u32::MAX));
+    snapshot
+        .symbols
+        .iter()
+        .find(|record| record.declarations.contains(&id))
+        .map(|record| record.name.trim_matches('"').to_owned())
+        .or_else(|| {
+            snapshot
+                .sources
+                .get(location.file.0 as usize)
+                .map(|source| source.display_path.to_string())
+        })
+        .unwrap_or_default()
+}
+
+/// A name as `-l` and pkg-config take one -- `glib-2.0`, `stdc++`,
+/// `harfbuzz-gobject` -- and never a flag: letters, digits, `_`, `-`, `+`,
+/// `.`, and no leading `-`.
+fn is_link_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '.'))
 }
 
 /// Every module a native type reaches a record from, following the views and
@@ -73172,10 +73226,13 @@ impl<'a> FuncBuilder<'a> {
         while let Some(id) = at {
             let node = self.node(id);
             if let Some(names) = node.native.as_ref().and_then(|n| (tag.names)(n)) {
+                // A malformed tag is the source's error, not a gap in lowering.
                 if let Some(bad) = names.iter().find(|name| !(tag.valid)(name)) {
-                    return Err(
-                        self.unsupported(call, &format!("{}, and `{bad}` is not one", tag.rule))
-                    );
+                    return Err(Diagnostic::error(
+                        "NTS0005",
+                        format!("{}, and `{bad}` is not one", tag.rule),
+                        self.location(call),
+                    ));
                 }
                 return Ok(names.clone());
             }
@@ -86133,15 +86190,17 @@ impl LinkTag {
     /// wider than an identifier (`glib-2.0`, `stdc++`).
     const LIBRARY: Self = Self {
         names: |n| n.libraries.as_ref(),
-        valid: |name| {
-            !name.is_empty()
-                && !name.starts_with('-')
-                && name
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+' | '.'))
-        },
+        valid: is_link_name,
         rule: "@ntsLibrary names libraries as `-l` takes them, as in `@ntsLibrary gdi32` or `@ntsLibrary glib-2.0` \
                (letters, digits, `_`, `-`, `+`, `.`)",
+    };
+    /// A pkg-config package, which a module names (`@ntsPackage`): what
+    /// pkg-config takes, and as `-l` takes a library, never a flag.
+    const PACKAGE: Self = Self {
+        names: |n| n.packages.as_ref(),
+        valid: is_link_name,
+        rule: "@ntsPackage names pkg-config packages as pkg-config takes them, as in \
+               `@ntsPackage gtk4 harfbuzz-gobject` (letters, digits, `_`, `-`, `+`, `.`)",
     };
 }
 
