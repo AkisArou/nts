@@ -24081,17 +24081,12 @@ impl<'a> FuncBuilder<'a> {
             .ok_or_else(|| {
                 self.unsupported(member, "a virtual function whose instance is not a handle")
             })?;
-        let defaults = self
-            .node(declaration)
-            .native
-            .as_ref()
-            .and_then(|n| n.defaults.as_deref())
-            .map(super::native::parse_defaults)
-            .transpose()
-            .map_err(|why| self.unsupported(member, &why))?
-            .unwrap_or_default();
+        // The declaration's tags, read as a call of it reads them: a slot
+        // reporting through `GError **error` is `@ntsThrows error`, and its
+        // `error?` is that slot rather than an optional some `@ntsDefault` fills.
+        let tags = self.parameter_tags(member, Some(declaration))?;
         let outs = self.vfunc_outs(declaration);
-        let (entry, has_result) = self.vfunc_entry(member, &this, signature, &defaults, &outs)?;
+        let (entry, has_result) = self.vfunc_entry(member, &this, signature, &tags, &outs)?;
         let func = self.lower_method_of(class, member, instance)?;
         // An override answering its out parameters as a tuple is reached
         // through a wrapper of the slot's C shape, built beside it.
@@ -24142,12 +24137,22 @@ impl<'a> FuncBuilder<'a> {
         member: NodeId,
         this: &super::native::Pointee,
         mut signature: nts_semantic_schema::SignatureRecord,
-        defaults: &[(String, super::native::ParameterDefault)],
+        tags: &ParameterTags,
         outs: &[bool],
     ) -> Result<(super::native::FnPointer, bool), Diagnostic> {
+        let throws = tags
+            .throws
+            .as_ref()
+            .map(|(slot, converter)| (slot.as_str(), converter.as_str()));
         let spell = |signature: &nts_semantic_schema::SignatureRecord| {
-            super::native::vfunc_signature(self.snapshot, this.clone(), signature, defaults)
-                .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))
+            super::native::vfunc_signature(
+                self.snapshot,
+                this.clone(),
+                signature,
+                throws,
+                &tags.defaults,
+            )
+            .map_err(|why| self.unsupported(member, &format!("a virtual function's {why}")))
         };
         if outs.is_empty() {
             return Ok((spell(&signature)?, false));

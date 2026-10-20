@@ -3098,12 +3098,14 @@ pub(crate) fn imp_signature(
 /// declares it: the instance, as the overridden declaration's `this` is, then
 /// its parameters exactly as a call of the declaration would pass them
 /// (`from_signature`, with its `@ntsDefault`s, so an optional out slot is the
-/// pointer it is). What a subclass's entry point is defined as, so that it is
-/// exactly the slot's type.
+/// pointer it is, and its `@ntsThrows`, so the `GError **` a failing slot
+/// reports through is that slot). What a subclass's entry point is defined as,
+/// so that it is exactly the slot's type.
 pub(crate) fn vfunc_signature(
     snapshot: &SemanticSnapshot,
     receiver: Pointee,
     signature: &nts_semantic_schema::SignatureRecord,
+    throws: Option<(&str, &str)>,
     defaults: &[(String, ParameterDefault)],
 ) -> Result<FnPointer, String> {
     let slot = Function::from_signature(
@@ -3111,7 +3113,7 @@ pub(crate) fn vfunc_signature(
         "the virtual function".to_owned(),
         signature,
         None,
-        None,
+        throws,
         defaults,
         (None, &[]),
     )?;
