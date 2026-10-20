@@ -713,11 +713,35 @@ fn number_cases(boxed: ErasedTypes) -> [HeapType; 2] {
     [HeapType::I31, HeapType::Concrete(boxed.number)]
 }
 
-/// Whether erased `value` is a number, as an i32: `tag.of(value) == number`
-/// without the rest of the tag (`tag_tests`).
-pub(crate) fn number_test(body: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+/// Whether erased `value` has tag `tag`, as an i32, without the rest of the
+/// tag (`tag_tests`): a number is an i31 or the number box (`number_cases`),
+/// and `undefined`, `null` or a boolean is a box whose first field is its tag.
+pub(crate) fn tag_test(body: &mut Body<'_, '_>, value: ValueId, tag: i32) -> Result<(), Failure> {
     let boxed = types(body.m)?;
-    is_one_of(body, value, &number_cases(boxed))
+    if tag == NUMBER {
+        return is_one_of(body, value, &number_cases(boxed));
+    }
+    if ![UNDEFINED, NULL, BOOLEAN].contains(&tag) {
+        return Err(Failure::Invariant(format!(
+            "tag {tag} has no test of its own"
+        )));
+    }
+    let tagged = HeapType::Concrete(boxed.tagged);
+    body.load(value)?;
+    body.instruction(&I::RefTestNonNull(tagged));
+    body.instruction(&I::If(BlockType::Result(ValType::I32)));
+    body.load(value)?;
+    body.instruction(&I::RefCastNonNull(tagged));
+    body.instruction(&I::StructGet {
+        struct_type_index: boxed.tagged,
+        field_index: 0,
+    });
+    body.instruction(&I::I32Const(tag));
+    body.instruction(&I::I32Eq);
+    body.instruction(&I::Else);
+    body.instruction(&I::I32Const(0));
+    body.instruction(&I::End);
+    Ok(())
 }
 
 /// The tag of an erased value. Of a typed one it is refused by name: a typed

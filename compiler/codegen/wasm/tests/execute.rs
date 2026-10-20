@@ -943,22 +943,23 @@ fn source_one_byte_strings_agree_with_node() {
 }
 
 /// `typeof v === "number"` of an erased value is its unerase's number test,
-/// not the whole tag (`tag_tests`): asked `==` and `!=` of every kind an
-/// erased value holds, beside a tag also compared with the string tag (the
-/// whole tag), and closures admitting `any` arguments as numbers, against
-/// node.
+/// and `undefined`, `null` or a boolean its box's tag field, not the whole
+/// tag (`tag_tests`): asked `==` and `!=` of every kind an erased value holds,
+/// beside a tag also compared with the string tag (the whole tag), closures
+/// admitting `any` arguments as numbers, and one with a default parameter,
+/// against node.
 #[test]
-fn source_number_tag_tests_agree_with_node() {
-    let fixture = common::repository().join("tests/wasm/number-tag-tests");
+fn source_tag_tests_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/tag-tests");
     let emitted = emit_project(&fixture);
     let output = common::run_with_node_flags(
-        "number-tag-tests",
+        "tag-tests",
         &emitted,
         "tooling/wasm/check-example.mjs",
         &[&fixture.join("src/main.ts")],
         &["--experimental-transform-types"],
     );
-    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["cases"], 153, "{output}");
     assert_eq!(output["declined"], 0, "{output}");
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }

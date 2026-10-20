@@ -1,5 +1,5 @@
-//! The `tag.of` values a function asks only whether a value is a number, so
-//! each asking is two `ref.test`s rather than the whole tag.
+//! The `tag.of` values a function asks only whether a value has one of a few
+//! tags, so each asking is that tag's own test rather than the whole tag.
 //!
 //! A closure called through an erased signature admits each argument with
 //! `tag.of(argument) == number` before unerasing it (`Closure#erased_call`).
@@ -11,19 +11,33 @@
 //! instructions/op, 2026-10-20), V8 then merging the unerase's own test into
 //! it.
 //!
-//! A `tag.of` qualifies when it is compared, `==` or `!=`, with the number
-//! tag, and that is its every use. One with any other use -- compared with
-//! another tag or with a value, stored, passed on an edge -- or with none is
-//! the whole tag, as before.
+//! `undefined`, `null`, `true` and `false` are singleton boxes whose first
+//! field is their tag, so asking for one of those tags is a `ref.test` of the
+//! box and a read of that field. A closure with a default parameter asks
+//! `tag.of(argument) == undefined` on every call, and asked that way
+//! `uniform-callback-default` cost 10.3% less (118,931 -> 106,644
+//! instructions/op by hand, 2026-10-20).
+//!
+//! A `tag.of` qualifies when it is compared, `==` or `!=`, with tags that have
+//! such a test ([`DIRECT`]), and that is its every use. One with any other use
+//! -- compared with another tag or with a value, stored, passed on an edge --
+//! or with none is the whole tag, as before.
 
 use nts_core::hir::{
     BinOp, Func, HirType, OpKind, ValueId, operands_of, operands_of_terminator, tags,
 };
 use std::collections::BTreeSet;
 
-/// The function's `tag.of` values asked only whether they are the number tag.
-pub(crate) fn number_tests(func: &Func) -> BTreeSet<ValueId> {
-    let number = |id: ValueId| matches!(func.value(id).kind, OpKind::ConstInt(tag) if tag == i128::from(tags::NUMBER));
+/// The tags asked by a test of their own (`erased::tag_test`).
+pub(crate) const DIRECT: [u32; 4] = [tags::NUMBER, tags::UNDEFINED, tags::NULL, tags::BOOLEAN];
+
+/// The function's `tag.of` values asked only whether they are tags in
+/// [`DIRECT`].
+pub(crate) fn tag_tests(func: &Func) -> BTreeSet<ValueId> {
+    let direct = |id: ValueId| {
+        matches!(func.value(id).kind,
+            OpKind::ConstInt(tag) if DIRECT.iter().any(|&known| tag == i128::from(known)))
+    };
     let mut tests: BTreeSet<ValueId> = func
         .blocks
         .iter()
@@ -42,12 +56,12 @@ pub(crate) fn number_tests(func: &Func) -> BTreeSet<ValueId> {
                     op: BinOp::Eq | BinOp::Ne,
                     lhs,
                     rhs,
-                } if number(rhs) => Some(lhs),
+                } if direct(rhs) => Some(lhs),
                 OpKind::Binary {
                     op: BinOp::Eq | BinOp::Ne,
                     lhs,
                     rhs,
-                } if number(lhs) => Some(rhs),
+                } if direct(lhs) => Some(rhs),
                 _ => None,
             };
             asked.extend(compared);

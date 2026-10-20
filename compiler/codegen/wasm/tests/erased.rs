@@ -190,10 +190,10 @@ fn the_tag_of_a_typed_value_is_refused_by_name() {
     );
 }
 
-/// `typeof x === "number"` of an erased number: its tag compared with the
-/// number tag by `op`. With `stored`, the tag is also written to global 0, a
-/// use that needs the whole tag.
-fn number_tag_test(name: &str, op: BinOp, stored: bool) -> Func {
+/// `typeof x === "number"`, `x === undefined` and the like of an erased
+/// number: its tag compared with `tag` by `op`. With `stored`, the tag is
+/// also written to global 0, a use that needs the whole tag.
+fn tag_test(name: &str, tag_value: u32, op: BinOp, stored: bool) -> Func {
     let mut f = function(name, &[F64], HirType::Bool);
     let input = value(&mut f, OpKind::Param(0), F64);
     let erased = value(
@@ -206,17 +206,17 @@ fn number_tag_test(name: &str, op: BinOp, stored: bool) -> Func {
         HirType::Erased,
     );
     let tag = value(&mut f, OpKind::TagOf { value: erased }, U32);
-    let number = value(&mut f, OpKind::ConstInt(i128::from(tags::NUMBER)), U32);
+    let compared = value(&mut f, OpKind::ConstInt(i128::from(tag_value)), U32);
     let test = value(
         &mut f,
         OpKind::Binary {
             op,
             lhs: tag,
-            rhs: number,
+            rhs: compared,
         },
         HirType::Bool,
     );
-    let mut ops = vec![input, erased, tag, number, test];
+    let mut ops = vec![input, erased, tag, compared, test];
     if stored {
         ops.push(value(
             &mut f,
@@ -233,14 +233,18 @@ fn number_tag_test(name: &str, op: BinOp, stored: bool) -> Func {
 }
 
 /// A tag asked only whether it is the number tag, `==` or `!=`, is the
-/// unerase's own number test -- no `value.tag`, and so no `wasm:js-string`
-/// `test` crossing to rule out a string first. A tag with another use is the
-/// whole tag.
+/// unerase's own number test, and one asked whether it is `undefined`, `null`
+/// or a boolean is its box's tag field -- no `value.tag`, and so no
+/// `wasm:js-string` `test` crossing to rule out a string first. A tag with
+/// another use is the whole tag.
 #[test]
-fn a_tag_asked_only_whether_it_is_a_number_is_two_ref_tests() {
+fn a_tag_asked_only_whether_it_is_one_tag_is_that_tags_test() {
     let asked = nts_codegen_wasm::emit(&program(vec![
-        number_tag_test("isNumber", BinOp::Eq, false),
-        number_tag_test("notNumber", BinOp::Ne, false),
+        tag_test("isNumber", tags::NUMBER, BinOp::Eq, false),
+        tag_test("notNumber", tags::NUMBER, BinOp::Ne, false),
+        tag_test("isUndefined", tags::UNDEFINED, BinOp::Eq, false),
+        tag_test("notNull", tags::NULL, BinOp::Ne, false),
+        tag_test("isBoolean", tags::BOOLEAN, BinOp::Eq, false),
     ]))
     .unwrap();
     let names = common::function_names(&asked.bytes);
@@ -254,8 +258,8 @@ fn a_tag_asked_only_whether_it_is_a_number_is_two_ref_tests() {
     // whole tag, so its absence above is the asking's and not a tag that is
     // never made.
     let mut both = program(vec![
-        number_tag_test("isNumber", BinOp::Eq, false),
-        number_tag_test("storedTag", BinOp::Eq, true),
+        tag_test("isNumber", tags::NUMBER, BinOp::Eq, false),
+        tag_test("storedTag", tags::NUMBER, BinOp::Eq, true),
     ]);
     both.globals.push(Global {
         name: "lastTag".into(),

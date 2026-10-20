@@ -92,9 +92,9 @@ pub(crate) struct Body<'b, 'p> {
     /// The unerases a dominating class test already answered
     /// (`guarded_casts`), by the unerase's result.
     guarded_casts: std::collections::BTreeSet<ValueId>,
-    /// The `tag.of` values asked only whether they are a number
-    /// (`tag_tests`), by the `tag.of`.
-    number_tests: std::collections::BTreeSet<ValueId>,
+    /// The `tag.of` values asked only whether they are tags with tests of
+    /// their own (`tag_tests`), by the `tag.of`.
+    tag_tests: std::collections::BTreeSet<ValueId>,
     /// The literals a loop reads, each in its own local from entry
     /// (`literals::hoisted`).
     hoisted: std::collections::BTreeSet<ValueId>,
@@ -192,7 +192,7 @@ impl<'b, 'p> Body<'b, 'p> {
         let typed_reads = crate::collections::typed_reads(func, types);
         let never_null = crate::never_null::values(func);
         let guarded_casts = crate::guarded_casts::values(func, &types.objects);
-        let number_tests = crate::tag_tests::number_tests(func);
+        let tag_tests = crate::tag_tests::tag_tests(func);
         let hoisted = crate::literals::hoisted(func, plan);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
@@ -258,7 +258,7 @@ impl<'b, 'p> Body<'b, 'p> {
             typed_reads,
             never_null,
             guarded_casts,
-            number_tests,
+            tag_tests,
             hoisted,
             scratch,
             pc,
@@ -292,11 +292,12 @@ impl<'b, 'p> Body<'b, 'p> {
     pub(crate) fn never_null(&self, value: ValueId) -> bool {
         self.never_null.contains(&value)
     }
-    /// The erased value `id` asks the number tag of, when `id` is a `tag.of`
-    /// asked only that (`tag_tests`). A typed collection's read answers its
-    /// own tag (`collections::typed_tag`), so it is never one.
-    pub(crate) fn number_tag_of(&self, id: ValueId) -> Option<ValueId> {
-        if !self.number_tests.contains(&id) {
+    /// The erased value `id` asks the tag of, when `id` is a `tag.of` asked
+    /// only whether it is tags with tests of their own (`tag_tests`). A typed
+    /// collection's read answers its own tag (`collections::typed_tag`), so it
+    /// is never one.
+    pub(crate) fn tag_test_of(&self, id: ValueId) -> Option<ValueId> {
+        if !self.tag_tests.contains(&id) {
             return None;
         }
         let OpKind::TagOf { value } = self.func.value(id).kind else {
@@ -633,9 +634,9 @@ impl<'b, 'p> Body<'b, 'p> {
                 slots,
             } => self.erase(id, *value, *absent, *slots)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
-            // Asked only whether it is a number, a tag is answered where it is
-            // asked (`binary`), and is not made at all.
-            OpKind::TagOf { .. } if self.number_tag_of(id).is_some() => return Ok(()),
+            // Asked only whether it is tags with tests of their own, a tag is
+            // answered where it is asked (`binary`), and is not made at all.
+            OpKind::TagOf { .. } if self.tag_test_of(id).is_some() => return Ok(()),
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
             OpKind::ClosureStatic => crate::callables::static_value(self, id)?,
@@ -807,9 +808,17 @@ impl<'b, 'p> Body<'b, 'p> {
         rhs: ValueId,
     ) -> Result<(), Failure> {
         if matches!(op, BinOp::Eq | BinOp::Ne)
-            && let Some(value) = self.number_tag_of(lhs).or_else(|| self.number_tag_of(rhs))
+            && let Some((value, tag)) = self
+                .tag_test_of(lhs)
+                .map(|value| (value, rhs))
+                .or_else(|| self.tag_test_of(rhs).map(|value| (value, lhs)))
         {
-            crate::erased::number_test(self, value)?;
+            let OpKind::ConstInt(tag) = self.func.value(tag).kind else {
+                return Err(Failure::Invariant("a tag test of no constant tag".into()));
+            };
+            let tag = i32::try_from(tag)
+                .map_err(|_| Failure::Invariant(format!("tag {tag} outside i32")))?;
+            crate::erased::tag_test(self, value, tag)?;
             if op == BinOp::Ne {
                 self.instruction(&I::I32Eqz);
             }
