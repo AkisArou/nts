@@ -1909,3 +1909,114 @@ export function handedOn(n: number): number {
         );
     }
 }
+
+/// A foreign declaration the emitter writes must survive a header that
+/// defines the same name as a function-like macro. glib-object.h defines
+/// `g_object_ref_sink` so, and a program holding a `GObject` while including
+/// the `GLib` headers for a struct's layout compiled `extern void
+/// *g_object_ref_sink(void *object);` as that macro's expansion: `expected
+/// identifier or '('`. Found by the Sdk lane's `local<PangoRectangle>()`
+/// witness. The control is the same header without the macros.
+#[test]
+fn a_foreign_declaration_survives_a_function_like_macro_of_its_name() {
+    let binding = r#"
+/** @ntsHeader "counted.h" */
+declare module "c:counted" {
+  import type { HostClass, Ptr, Struct } from "c:types";
+  import type { c_int } from "@nts/scalars";
+  export type Thing = HostClass<"Thing", null, "thing_ref", "thing_unref">;
+  export type Extent = Struct<{ width: c_int }, "thing_extent">;
+  export function thing_new(): Thing;
+  export function thing_size(thing: Thing): c_int;
+  /** @ntsNoEscape extent */
+  export function thing_measure(thing: Thing, extent: Ptr<Extent>): void;
+}
+"#;
+    // A handle the program holds, so the counting pair is declared; and a
+    // struct the header lays out, so the header is included (`program.c`
+    // includes the bindings' headers only to check such a layout).
+    let program = r#"import { thing_new, thing_size, thing_measure, type Extent, type Thing } from "c:counted";
+import { local } from "c:memory";
+let held: Thing | null = null;
+export function size(): number {
+  const thing = thing_new();
+  held = thing;
+  const extent = local<Extent>();
+  thing_measure(thing, extent);
+  return thing_size(thing) + extent.width;
+}
+"#;
+    let declarations = "struct Thing;\n\
+        struct thing_extent { int width; };\n\
+        void *thing_ref(void *object);\n\
+        void thing_unref(void *object);\n\
+        struct Thing *thing_new(void);\n\
+        int thing_size(struct Thing *thing);\n\
+        void thing_measure(struct Thing *thing, struct thing_extent *extent);\n";
+    // As glib-object.h spells `g_object_ref_sink`: the function, called
+    // through a parenthesised name so the macro does not recurse.
+    let macros = "#define thing_ref(object) ((void *) (thing_ref) (object))\n\
+        #define thing_unref(object) ((thing_unref) (object))\n\
+        #define thing_size(thing) ((thing_size) (thing))\n";
+    for (name, header) in [
+        (
+            "macro-named-declarations",
+            format!("{declarations}{macros}"),
+        ),
+        ("plain-declarations", declarations.to_owned()),
+    ] {
+        let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
+            eprintln!("skipped: no tsgo");
+            return;
+        };
+        let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize_utf8()
+            .unwrap();
+        let dir = ScratchDir::new(&root.join("target/native-c-tests"), name);
+        std::fs::write(
+            dir.join("tsconfig.json"),
+            format!(
+                r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts","binding.d.ts","{root}/runtime/native/libc.d.ts"]}}"#
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.join("binding.d.ts"), binding).unwrap();
+        std::fs::write(dir.join("main.ts"), program).unwrap();
+        std::fs::write(dir.join("counted.h"), &header).unwrap();
+        let snapshot = TsgoApi::for_compilation(tsgo)
+            .snapshot(&dir.join("tsconfig.json"))
+            .unwrap();
+        assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+        // A host handle needs the counting provider.
+        let options = hir::Options {
+            provider: hir::Provider::ReferenceCounting,
+            ..hir::Options::default()
+        };
+        let prepared = hir::prepare_with(&snapshot, &options)
+            .unwrap_or_else(|refused| panic!("{}", refused.render(&snapshot.sources)));
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        assert!(emitted.is_complete(), "{name}: {:?}", emitted.diagnostics);
+        let text = emitted.writer.text();
+        assert!(
+            text.contains("#include \"counted.h\"") && text.contains("thing_ref"),
+            "{name}: the binding's header is included and its counting pair declared:\n{text}"
+        );
+        std::fs::write(dir.join("program.c"), text).unwrap();
+        for file in emitted.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        let compiled = Command::new("clang")
+            .args(["-std=c11", "-fsyntax-only", "-I"])
+            .arg(dir.as_std_path())
+            .arg(dir.join("program.c").as_std_path())
+            .output()
+            .expect("clang is required for the C backend's tests");
+        assert!(
+            compiled.status.success(),
+            "{name}: {}\n--- program.c ---\n{text}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+    }
+}

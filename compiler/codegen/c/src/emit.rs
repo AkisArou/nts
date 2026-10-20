@@ -6870,13 +6870,22 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
     let held = nts_codegen_common::counting::held(program);
     let arrays = nts_codegen_common::counting::array_families(program);
     for counting in nts_codegen_common::counting::foreign(program) {
+        // **The name in parentheses**, which a function-like macro of that
+        // name does not expand. A counting pair is declared here whether or
+        // not its header is included (unlike a binding's own prototype, which
+        // the header replaces), and glib-object.h defines `g_object_ref_sink`
+        // as a macro, so a program including it for a header struct's layout
+        // read `extern void *g_object_ref_sink(void *object);` as the macro's
+        // expansion. `(name)` declares the same function, and the guarded
+        // call below may still expand the macro, which is what the header
+        // meant. The native witness spells its declarations the same way.
         writer.line(
             origin,
-            format!("extern void *{}(void *object);", counting.retain),
+            format!("extern void *({})(void *object);", counting.retain),
         );
         writer.line(
             origin,
-            format!("extern void {}(void *object);", counting.release),
+            format!("extern void ({})(void *object);", counting.release),
         );
         // A pair that does not take NULL quietly, guarded once here.
         if !counting.null_safe {
