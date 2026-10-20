@@ -374,6 +374,9 @@ pub(crate) enum Reason {
     /// The header declares a `volatile` pointee (`g_atomic_pointer_set`),
     /// which no binding has a spelling for.
     Volatile,
+    /// A constant whose value the binding cannot state: the detail says
+    /// what it is.
+    Constant(String),
     /// A string result C lends as `char *` (`g_strrstr`), where a lent
     /// `string` result is C's `const char *`.
     LentWritableString,
@@ -434,6 +437,7 @@ impl fmt::Display for Reason {
                 f,
                 "a `volatile` pointee in the header, which no binding spells"
             ),
+            Self::Constant(why) => write!(f, "a constant: {why}"),
             Self::LentWritableString => write!(
                 f,
                 "a string result lent as `char *`, where a lent string result is `const char *`"
@@ -457,6 +461,7 @@ impl Reason {
             Self::Unknown(_) => "a type this binder does not know".to_owned(),
             Self::NoTag(_) => "a type the headers do not define as a tagged struct".to_owned(),
             Self::Header(_) => "the header disagrees".to_owned(),
+            Self::Constant(_) => "a constant whose value the binding cannot state".to_owned(),
             Self::NameClash(_) => "a name the gi: surface already has".to_owned(),
             other => other.to_string(),
         }
@@ -1975,21 +1980,45 @@ impl<'a> Mapper<'a> {
     }
 
     /// The namespace's integer constants whose value GIR states exactly and
-    /// the fold holds exactly: within 2^53. Left out, since the fold would
+    /// the fold holds exactly: within 2^53. Refused, since the fold would
     /// carry a different number with nothing to say so: an integer beyond
     /// 2^53 (`G_MAXINT64`), and every floating one, which GIR writes to six
     /// digits (`G_E` is `2.718282` there). And the strings and booleans,
     /// which `@ntsConstant` does not carry: as literal initializers, the
-    /// module they are declared in is refused as one with code in it.
+    /// module they are declared in is refused as one with code in it. Each
+    /// is a row in the ledger, as everything left unbound is.
     fn constants(&mut self) {
         for constant in &self.namespace.constants {
             let Some((_, brand, _)) = SCALARS.iter().find(|(gir, _, scalar)| {
                 *gir == constant.ty
                     && !matches!(scalar, Scalar::Float | Scalar::Double | Scalar::Size)
             }) else {
+                let why = match constant.ty.as_str() {
+                    "utf8" | "filename" => {
+                        "a string, which no declaration's value carries".to_owned()
+                    }
+                    "gfloat" | "gdouble" => {
+                        format!("`{}`, a floating value GIR writes rounded", constant.value)
+                    }
+                    ty => format!("a `{ty}`, a type no constant is bound in yet"),
+                };
+                self.binding
+                    .refused
+                    .push((constant.c_name.clone(), Reason::Constant(why)));
                 continue;
             };
             let Some(value) = exact_integer(&constant.value) else {
+                let value = &constant.value;
+                let why = if value.parse::<i128>().is_ok() {
+                    format!("`{value}`, beyond the 2^53 a fold holds exactly")
+                } else if matches!(value.as_str(), "true" | "false") {
+                    "a boolean, which `@ntsConstant` does not carry".to_owned()
+                } else {
+                    format!("`{value}`, which is not an integer")
+                };
+                self.binding
+                    .refused
+                    .push((constant.c_name.clone(), Reason::Constant(why)));
                 continue;
             };
             let ts = nts_core::hir::native::as_number(brand);
@@ -4623,6 +4652,80 @@ mod tests {
                 binding.refused
             );
         }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// Every constant the binding cannot state is a row in the ledger, with
+    /// what it is. The control is the one it can: an exact integer, bound.
+    #[test]
+    fn a_constant_left_unbound_is_a_row_in_the_ledger() {
+        use super::super::facts;
+        use super::{Reason, bind};
+        use std::fmt::Write as _;
+        let dir = crate::bind_scratch::directory("gir-constants-test").expect("fixture directory");
+        let mut xml = String::from(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="k.h"/><namespace name="K" version="1.0">"#,
+        );
+        for (name, ty, value) in [
+            ("EXACT", "gint", "7"),
+            ("TEXT", "utf8", "seven"),
+            ("ROUNDED", "gdouble", "2.718282"),
+            ("WIDE", "gint64", "9223372036854775807"),
+            ("TRUTH", "gboolean", "true"),
+            ("ALIASED", "Glyph", "7"),
+        ] {
+            let _ = write!(
+                xml,
+                r#"<constant name="{name}" value="{value}" c:type="K_{name}"><type name="{ty}"/></constant>"#
+            );
+        }
+        xml.push_str("</namespace></repository>");
+        std::fs::write(dir.join("K-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("K-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["K"],
+            &facts::Facts::default(),
+        );
+        assert_eq!(
+            binding
+                .constants
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["K_EXACT"]
+        );
+        let refused = |name: &str| {
+            binding
+                .refused
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, r)| r.clone())
+        };
+        for (name, why) in [
+            ("K_TEXT", "a string, which no declaration's value carries"),
+            (
+                "K_ROUNDED",
+                "`2.718282`, a floating value GIR writes rounded",
+            ),
+            (
+                "K_WIDE",
+                "`9223372036854775807`, beyond the 2^53 a fold holds exactly",
+            ),
+            ("K_TRUTH", "a boolean, which `@ntsConstant` does not carry"),
+            ("K_ALIASED", "a `Glyph`, a type no constant is bound in yet"),
+        ] {
+            assert_eq!(
+                refused(name),
+                Some(Reason::Constant(why.to_owned())),
+                "{name}"
+            );
+        }
+        assert_eq!(refused("K_EXACT"), None);
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 }
