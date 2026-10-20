@@ -9219,6 +9219,47 @@ fn representation_word(ty: &HirType) -> &'static str {
     }
 }
 
+/// The kinds of value an erased slot's tag tells apart, where reading one
+/// kind's payload as another's is a wrong answer and not a conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnswerFamily {
+    Number,
+    Boolean,
+    BigInt,
+    String,
+    Reference,
+    Native,
+    Nothing,
+}
+
+/// Which kind of value `ty` is to a reader that unerases it, and `None` where
+/// there is nothing to compare: an erased value carries its own tag for the
+/// reader to test, and `never` is no value at all.
+///
+/// A function answering `never` does not return, so nothing ever reads its
+/// answer -- `invoke(() => { throw new Error() })` into `callback: () =>
+/// number` is TypeScript's own case, and a throw from a closure held in a
+/// field (`outcomes/a-throw-from-a-closure-held-in-a-field-escapes-a-try`) is
+/// that answer reaching a slot that reads a string. `void` is different: the
+/// function returns, with `undefined`, and a reader of a number reads that.
+///
+/// Integers and doubles are one family: a number erases as a number whatever
+/// its width, and unerasing it at another width converts. Every reference
+/// other than a string is one family too; whether two object layouts agree is
+/// a different question, with its own rule.
+const fn answer_family(ty: &HirType) -> Option<AnswerFamily> {
+    Some(match ty {
+        HirType::Int { .. } | HirType::Float { .. } => AnswerFamily::Number,
+        HirType::Bool => AnswerFamily::Boolean,
+        HirType::BigInt => AnswerFamily::BigInt,
+        HirType::Managed(ManagedType::String) => AnswerFamily::String,
+        HirType::Managed(_) => AnswerFamily::Reference,
+        HirType::NativePointer(_) => AnswerFamily::Native,
+        HirType::Void => AnswerFamily::Nothing,
+        HirType::Erased | HirType::Never => return None,
+    })
+}
+
 /// The reference half of [`representation_word`].
 fn managed_word(managed: &ManagedType) -> &'static str {
     match managed {
@@ -27791,6 +27832,66 @@ impl<'a> FuncBuilder<'a> {
     /// reading signature refused the local case too
     /// (`blockers/a-closure-returning-a-host-handle-is-refused-since-a2`).
     fn result_without_an_erased_form(&self, have: &HirType, want: &HirType) -> Option<String> {
+        let (returns, read) = self.closure_results(have, want)?;
+        if matches!(read, HirType::Void | HirType::Never) {
+            return None;
+        }
+        (!result_crosses(&returns) && returns != read).then(|| {
+            "a closure whose result has no erased form, passed where a signature reads its result: \
+             a call through the signature could not return it"
+                .to_owned()
+        })
+    }
+
+    /// A closure answering **another kind** of value than the signature it is
+    /// admitted at reads.
+    ///
+    /// The call through the slot takes the closure's erased entry, which
+    /// answers its result erased, and the call site unerases it at the
+    /// signature's representation -- unchecked, as every `Unerase` is, because
+    /// the checker said the two agree. In unchecked JavaScript they need not:
+    ///
+    /// ```text
+    /// var object = { valueOf: function () { return 1; } };
+    /// var object = { valueOf: function () { return "1"; } };
+    /// ```
+    ///
+    /// is one variable typed by the first declaration, the second literal is
+    /// built at that type, and its `valueOf` -- answering a string -- went into
+    /// a field whose signature answers a number. `object.valueOf()` read the
+    /// string pointer's bits as a double: a denormal near 4.66e-310 where node
+    /// says `"1"` (`outcomes/a-var-redeclared-at-another-function-type`).
+    ///
+    /// Refused where the two are of different [`answer_family`]s. Admitted
+    /// where the signature reads an erased value (its reader tests the tag) or
+    /// nothing (the entry drops it), where the closure answers an erased value
+    /// (the checker let `() => any` stand for anything, and the call trusts
+    /// it as TypeScript does) or `never` (it does not return, so nothing reads
+    /// an answer), and within one family: a number is a number at either
+    /// width. A parameter needs no such rule: the erased entry admits
+    /// each argument against the closure's own parameter and stops by name
+    /// when one does not fit.
+    fn result_of_another_kind(&self, have: &HirType, want: &HirType) -> Option<String> {
+        let (returns, read) = self.closure_results(have, want)?;
+        let (Some(answers), Some(reads)) = (answer_family(&returns), answer_family(&read)) else {
+            return None;
+        };
+        (answers != reads && reads != AnswerFamily::Nothing).then(|| {
+            format!(
+                "a function answering {} where a function answering {} is wanted -- a call \
+                 through the slot would read its answer as {}",
+                representation_word(&returns),
+                representation_word(&read),
+                representation_word(&read)
+            )
+        })
+    }
+
+    /// What a closure answers and what the signature it is admitted at reads,
+    /// each at its representation: the pair both closure-result rules above
+    /// compare. `None` where `have` is not a closure arriving at another type,
+    /// or either answer has no representation.
+    fn closure_results(&self, have: &HirType, want: &HirType) -> Option<(HirType, HirType)> {
         let (
             HirType::Managed(ManagedType::Object(from)),
             HirType::Managed(ManagedType::Object(to)),
@@ -27803,9 +27904,6 @@ impl<'a> FuncBuilder<'a> {
         }
         let (_, read) = signature_key(self.snapshot, *to)?;
         let read = self.represent(read)?;
-        if matches!(read, HirType::Void | HirType::Never) {
-            return None;
-        }
         let node = self.closures.get(closure_index(*from))?.node;
         let ty = *self.snapshot.node_types.get(&node)?;
         let TypeKind::Function(signature) = self.snapshot.types.get(ty.0 as usize)?.kind else {
@@ -27817,11 +27915,7 @@ impl<'a> FuncBuilder<'a> {
                 .get(signature.0 as usize)?
                 .return_type,
         )?;
-        (!result_crosses(&returns) && returns != read).then(|| {
-            "a closure whose result has no erased form, passed where a signature reads its result: \
-             a call through the signature could not return it"
-                .to_owned()
-        })
+        Some((returns, read))
     }
 
     /// Keep a closure admitted into a signature slot, for the comparison this
@@ -28093,6 +28187,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &why));
             }
             if let Some(why) = self.result_without_an_erased_form(&have, want) {
+                return Err(self.unsupported(id, &why));
+            }
+            if let Some(why) = self.result_of_another_kind(&have, want) {
                 return Err(self.unsupported(id, &why));
             }
             self.record_arrival(&have, want, id);
