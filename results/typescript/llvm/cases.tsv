@@ -1,6 +1,6 @@
 # Test262 tests/typescript cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 18e81a7e0dd40d8a, commit fa71206cb201d54df12f7065e3eec93216e35a83, backend llvm, harness f8ca0afd3c45597f; machine at start: 21 GB available, swap 5.2/31.5 GB, load 11.9/23.4 (1m/5m), 16 cores; 4 worker(s)
+# compiler 060ce4dcd389a671, commit 5b46e202ff4aa6d7a95e547d23fa2e7b3b1c2b06, backend llvm, harness f8ca0afd3c45597f; machine at start: 20.6 GB available, swap 5/31.5 GB, load 10.8/10.7 (1m/5m), 16 cores; 4 worker(s)
 tests/typescript/async/async-method.ts	pass	
 tests/typescript/async/async-recursion.ts	pass	
 tests/typescript/async/await-a-plain-value.ts	pass	
@@ -196,3 +196,4 @@ tests/typescript/unions/truthiness-narrowing.ts	pass
 tests/typescript/unions/typeof-object-includes-null.ts	pass	
 tests/typescript/unions/union-of-classes-dispatch.ts	pass	
 tests/typescript/unions/unknown-narrowing.ts	pass	
+tests/typescript/unions/user-type-guard.ts	pass	
