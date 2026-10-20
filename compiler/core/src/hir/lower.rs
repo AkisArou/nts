@@ -22269,10 +22269,12 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
-    /// The `?.` links under `id` along its chain (through each access's object
-    /// and each call's callee) whose receiver is not yet known present,
-    /// innermost first. Parentheses end a chain, as they end one in the
-    /// language: `(a?.b).c` reads `c` of whatever `a?.b` was.
+    /// The `?.` links under `id` along its chain (through each access's object,
+    /// each call's callee and each `!`'s operand) whose receiver is not yet
+    /// known present, innermost first. Parentheses end a chain, as they end one
+    /// in the language: `(a?.b).c` reads `c` of whatever `a?.b` was. A
+    /// non-null assertion does not: `a?.b!.c` is one chain, `undefined` when
+    /// `a` is absent.
     fn chain_links(&self, id: NodeId) -> Vec<NodeId> {
         let mut links = Vec::new();
         let mut at = id;
@@ -22282,6 +22284,7 @@ impl<'a> FuncBuilder<'a> {
                 syntax::PROPERTY_ACCESS_EXPRESSION
                     | syntax::ELEMENT_ACCESS_EXPRESSION
                     | syntax::CALL_EXPRESSION
+                    | syntax::NON_NULL_EXPRESSION
             )
         ) {
             let children = self.children(at);
@@ -22481,12 +22484,14 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn ends_an_optional_chain(&self, id: NodeId) -> bool {
+        // A `!` is a link of the chain it sits in, as in `chain_links`.
         if !matches!(
             self.kind_of(id),
             Some(
                 syntax::PROPERTY_ACCESS_EXPRESSION
                     | syntax::ELEMENT_ACCESS_EXPRESSION
                     | syntax::CALL_EXPRESSION
+                    | syntax::NON_NULL_EXPRESSION
             )
         ) {
             return false;
