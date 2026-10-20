@@ -2385,11 +2385,14 @@ impl<'a> Mapper<'a> {
     /// what the caller put there until the callee writes it, and `local`
     /// zeroes it. `optional` is whether the caller may pass no slot at all.
     ///
-    /// A plain record's pointer is no slot but the storage itself, whether
-    /// or not GIR says the caller allocates it: `pango_extents_to_pixels`
-    /// reads and rewrites the `PangoRectangle` the program gives it.
+    /// A record's `T *` is no slot but the storage itself, as the header's
+    /// pointer depth says: a record the callee allocated would come back
+    /// through a `T **`. So an out or inout `T *` is storage the caller
+    /// gives, whatever GIR says of caller-allocates --
+    /// `pango_extents_to_pixels` reads and rewrites the `PangoRectangle` the
+    /// program gives it, `gsk_path_get_next` the `GskPathPoint`.
     fn out(&mut self, param: &Param) -> Result<Mapped, Reason> {
-        if param.caller_allocates || self.struct_storage(param) {
+        if param.caller_allocates || self.record_storage(param) {
             return self.caller_allocated(param);
         }
         let TypeRef::Named { name, c_type } = &param.ty else {
@@ -3984,6 +3987,28 @@ impl<'a> Mapper<'a> {
         false
     }
 
+    /// Whether `param`'s header type is one `*` on a record's C type: the
+    /// record's storage, which a callee-allocated record's `T **` is not. A
+    /// pointer record's typedef holds a `*` of its own (`hb_language_t`), so
+    /// its `T *` is that `T **`: a slot, and no storage.
+    fn record_storage(&self, param: &Param) -> bool {
+        let TypeRef::Named {
+            c_type: Some(c_type),
+            ..
+        } = &param.ty
+        else {
+            return false;
+        };
+        let base = pointee_of(c_type);
+        c_type.matches('*').count() == 1
+            && self.c_types.get(base).is_some_and(|namespace| {
+                namespace
+                    .records
+                    .iter()
+                    .any(|r| !r.class_struct && !r.pointer && r.c_type.as_deref() == Some(base))
+            })
+    }
+
     /// Whether `param` is a pointer to a plain record's storage: one `*` on a
     /// `Struct`'s C type.
     fn struct_storage(&self, param: &Param) -> bool {
@@ -5049,6 +5074,87 @@ mod tests {
                 .refused
                 .iter()
                 .any(|(_, r)| *r == Reason::CallerAllocates)
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// An out or inout record whose header type is `T *` is storage the
+    /// caller gives, whatever GIR says of caller-allocates: a boxed record's
+    /// own box (`new SPoint()`), or the object an opaque one's maker made.
+    /// The control is the header's `T **`, a slot the callee writes a record
+    /// it allocated into.
+    #[test]
+    fn a_records_pointer_is_storage_by_its_header_depth() {
+        use super::super::facts;
+        use super::{Shape, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-record-storage-test").expect("fixture directory");
+        let function = |name: &str, parameter: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="none" c:type="void"/></return-value><parameters>{parameter}</parameters></function>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<record name="Point" c:type="SPoint" glib:get-type="s_point_get_type"><field name="x" writable="1"><type name="gint" c:type="gint"/></field></record>"#,
+            r#"<record name="Set" c:type="SSet" opaque="1" glib:get-type="s_set_get_type"/>"#,
+            &function(
+                "next",
+                r#"<parameter name="point" direction="inout" caller-allocates="0" transfer-ownership="none"><type name="Point" c:type="SPoint*"/></parameter>"#,
+            ),
+            &function(
+                "start",
+                r#"<parameter name="point" direction="out" caller-allocates="0" transfer-ownership="none"><type name="Point" c:type="SPoint*"/></parameter>"#,
+            ),
+            &function(
+                "collect",
+                r#"<parameter name="set" direction="out" caller-allocates="0" transfer-ownership="none"><type name="Set" c:type="SSet*"/></parameter>"#,
+            ),
+            &function(
+                "take",
+                r#"<parameter name="point" direction="out" caller-allocates="0" transfer-ownership="full"><type name="Point" c:type="SPoint**"/></parameter>"#,
+            ),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: ["SPoint", "SSet"]
+                .map(|c| (c.to_owned(), format!("_{c}")))
+                .into(),
+            sizes: [("SPoint".to_owned(), 4)].into(),
+            declared: ["s_point_get_type", "s_set_get_type"]
+                .map(str::to_owned)
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["S"], &header);
+        let parameter = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .map_or_else(
+                    || panic!("{symbol}: {:?}", binding.refused),
+                    |f| f.parameters[0].1.clone(),
+                )
+        };
+        assert_eq!(parameter("s_next").ts, "SPoint");
+        let start = parameter("s_start");
+        assert_eq!(start.ts, "SPoint");
+        assert!(matches!(start.shape, Shape::Filled { .. }), "{start:?}");
+        assert_eq!(parameter("s_collect").ts, "SSet");
+        // The header's `T **`: a slot the callee writes, never storage.
+        let take = parameter("s_take");
+        assert!(
+            !matches!(take.shape, Shape::Filled { .. }) && take.ts != "SPoint",
+            "{take:?}"
         );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
