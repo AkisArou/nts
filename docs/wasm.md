@@ -533,7 +533,9 @@ tell them apart.
 
 A Map, a Set and a string-keyed record are one structure, `collections.rs`,
 as the C runtime's `NtsMap`: an insertion-ordered table.
-- **Why native, not a JS Map.** Measured first (wasm-evidence/collections): a
+- **Why native, not a JS Map.** Measured first, before 49d4b2dbe (the probe's
+  files went with the lane's evidence directory, removed in a user-approved
+  disk cleanup on 2026-10-21): a
   JS Map behind imports never beat node (45 ns against node's 25 per
   operation), and it has no positional cursor for `nts_map_next`. A WasmGC
   table beat node for short keys (17.6 ns).
@@ -692,7 +694,9 @@ as the C runtime's `NtsMap`: an insertion-ordered table.
   - A wider one is assembled from its bytes by a module helper, and a store
     takes it apart.
   - Floats go through their bits; a float32 store rounds by `f32.demote`.
-- **Why bytes, and the measured cost** (wasm-evidence/buffers):
+- **Why bytes, and the measured cost** (measured before 2a7924535; the probe's
+  files went with the lane's evidence directory, removed in a user-approved
+  disk cleanup on 2026-10-21):
   - A typed backing holds one element type, which is wrong for a buffer
     viewed at two widths.
   - Linear memory would need a manual allocator.
@@ -1364,9 +1368,11 @@ with all targets, 33 common unit tests, 14 wasm integration tests plus the
 structurer scope-fault unit test, and the actual CLI and early JVM `--rc` tests.
 The shared HostGc gate additionally passed the full workspace checks, including
 the logical-layout and async/`for await` preparation tests. Test/build workers
-are capped at two; frontend test workers are one. Evidence logs, per-function
-route manifests and emitted modules are retained under the lane's
-`mainctl/wasm-evidence` directory.
+are capped at two; frontend test workers are one. The evidence logs,
+per-function route manifests and emitted modules were kept in the lane's
+`mainctl/wasm-evidence` directory until it was removed in a user-approved
+disk cleanup on 2026-10-21; c3b2b6bf4..d4a3bc986 rebuild them, and
+`NTS_WASM_TEST_ARTIFACTS` (d4a3bc986) keeps a crate test's modules.
 MainClaude approved M1a and its tooling reach repair. The final pinned full gate
 `20261012T013517-714631` passed: 42 PASS, 0 FAIL, one approved on-device skip,
 23 min 35 s at 24 CPU slots. All landing commits were owed-audited; the final
@@ -1699,9 +1705,22 @@ stack maps, all other attributes and runtime jars remain byte-identical. The
 reports name every changed class and method and record both line tables and
 normalized hashes. The comparator fails on unexplained bytes, status/diagnostic
 changes or lost classes/jars, and rejects the historical preflight that caught
-two `for await` refusals. Final reports and exact hashes are indexed in
-`mainctl/wasm-evidence/HOSTGC-FINAL-EVIDENCE.md`; the failed preflight is archived
-separately. Independent JVM review accepted the corrected evidence. The full
+two `for await` refusals. The final reports, their index and the failed
+preflight were in `mainctl/wasm-evidence/` until it was removed in a
+user-approved disk cleanup on 2026-10-21. The index recorded candidate
+e9fab5a27 (landed as 786f23a48) over the clean base e52ddc97e; its reports
+covered 518 examples on all four lanes (28 changed JVM projects, all
+line-table-only) and all 29 runtime modules on the JVM (17 changed, all
+line-table-only). Comparing e52ddc97e with 786f23a48 reproduces them. The
+index's SHA-256s:
+- baseline binary
+  `9dcae4df007c2489af18a602c3e58cf16bc2b38939eb00e2ca67afab5a2604a7`;
+- final binary
+  `058df473eb81301e1ae1f05842a23aae0b8d28b448b77f16698a0dfbc2273301`;
+- final applied diff
+  `16f6177b24ef0bb948266423ff929a9d3e5bbab1835258c1e929bffe8e034803`.
+
+Independent JVM review accepted the corrected evidence. The full
 core gate passed 42 checks with the approved Android device skip and the
 provider landed. The subsequent benchmark-driver artifact comparison accounts
 for all 62 cases: all 166 classes and all 62 runtime jars are byte-identical,
@@ -2382,10 +2401,12 @@ representation selection in M2; no quiet window is requested for the current
 exploratory boxing probe. The design uses i31 for small integers, with boxed f64 otherwise;
 the real M2 erasure benchmarks decide the representation's performance.
 
-Raw scripts, dumps and JSON are retained for review under
-`/home/akisarou/.cache/nts-parallel-20261004/mainctl/wasm-evidence/`:
-`node-features.mjs`, `modern-eh.mjs`, `kernels.mjs`, `kernels.json`,
-`cfg-audit.py`, `cfg-audit.json` and the named `.hir` files. Script SHA-256 for the measured kernels:
+The raw scripts, dumps and JSON -- `node-features.mjs`, `modern-eh.mjs`,
+`kernels.mjs`, `kernels.json`, `cfg-audit.py`, `cfg-audit.json` and the named
+`.hir` files -- were kept under
+`/home/akisarou/.cache/nts-parallel-20261004/mainctl/wasm-evidence/` until it
+was removed in a user-approved disk cleanup on 2026-10-21; the numbers above
+are their record. Script SHA-256 for the measured kernels:
 `71d948ea87ff828bfd34ad510e653f5a56a0ae9295d447db2fb3717599422aff`.
 These are local M0
 experiments, not compiler implementation or gate tests. The reviewed M1 work
