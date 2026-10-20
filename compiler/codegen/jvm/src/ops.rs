@@ -3249,6 +3249,14 @@ impl Emitter<'_> {
         ) else {
             return Ok(());
         };
+        // A face that promises nothing is referred to as the root
+        // (`types::root_typed`), so any object stored where it is
+        // declared is an upcast the verifier already accepts; the core
+        // licensed the store as a vacuous prefix and there is no member
+        // a later access through the face could name.
+        if types::root_typed(self.program, *target_id) {
+            return Ok(());
+        }
         // Any actual callable storage is a value of a signature
         // type: both are referred to as `types::callable_class`, which every
         // such class extends. See it for the 81 declines this answered.
@@ -5145,6 +5153,12 @@ impl Emitter<'_> {
         // class has an empty subclass and this is the one `new` allocates and
         // `instanceof` tests. A parameter or field keeps the base, which is
         // what leaves `readA(new B())` passing.
+        // A root-typed face's values are referred to as the root
+        // (`types::root_typed`); it has no class identity, so this and
+        // the `identity_of` arm below cannot both fire.
+        if types::root_typed(self.program, *id) {
+            return Ok(types::OBJECT.to_owned());
+        }
         Ok(
             crate::hierarchy::identity_of(self.program, *id).map_or_else(
                 || types::reference_class(self.shape.package, self.program, layout),

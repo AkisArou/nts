@@ -154,9 +154,71 @@ pub fn is_signature(program: &JvmProgram<'_>, layout: &Layout) -> bool {
             .any(|ty| nts_core::hir::is_closure_type(*ty))
 }
 
+/// Whether values of object type `id` are referred to as the root
+/// ([`OBJECT`], what an erased managed reference is held as), so that
+/// storing any object where the type is declared is an upcast.
+///
+/// It is a face's type promising nothing a JVM type could carry: a type an
+/// interface identity names and no class identity does, whose layout has
+/// no fields, no method slots and no layout extending it as a superclass,
+/// and through which no access family reads. `Iterable<T>` in a program
+/// that only stores a generator where it is declared is the case: the core
+/// licenses the store as a vacuous prefix and C's cast is free. There is
+/// nothing to split -- no member an interface could declare -- and no
+/// holder evidence to split it by, since receivers and families are owed
+/// to accesses through the face and there are none. A face with a field,
+/// a slot or a family keeps the split-face path.
+///
+/// **Per type, not per layout.** test262's `class C { method([]) {} }`
+/// puts `C` and its parameter's `Iterable<T>` in one empty layout, and
+/// `C`'s own type keeps the layout's class -- it is what `this` and
+/// `instanceof` name -- while the face's type, which nothing can read
+/// through, is the root. Per type is also per specialization:
+/// `Iterable<number>` and `Iterable<string>` share that layout too, and a
+/// family reading through one says nothing of the other. Only the shape --
+/// fields, slots, a subclass -- is the layout's, because it is one class.
+#[must_use]
+pub fn root_typed(program: &JvmProgram<'_>, id: nts_semantic_schema::TypeId) -> bool {
+    let Some(layout) = program.layout(id) else {
+        return false;
+    };
+    layout.fields.is_empty()
+        && layout.methods.iter().all(Option::is_none)
+        && !crate::hierarchy::extended_by_a_base(program, layout)
+        && crate::hierarchy::identity_of(program, id).is_none()
+        && program
+            .interface_identities
+            .iter()
+            .any(|identity| identity.types.contains(&id))
+        && !program
+            .interface_access
+            .families
+            .iter()
+            .any(|family| family.face == id)
+}
+
+/// The class a value of object type `id` is referred to as, in a
+/// descriptor and in a frame alike: the root for a type with no layout
+/// (see `descriptor`) or a [`root_typed`] one, and otherwise its layout's
+/// [`reference_class`]. One function, because a frame and a field that
+/// disagree about a slot do not verify.
+#[must_use]
+pub fn object_reference(
+    package: &str,
+    program: &JvmProgram<'_>,
+    id: nts_semantic_schema::TypeId,
+) -> String {
+    match program.layout(id) {
+        Some(layout) if !root_typed(program, id) => reference_class(package, program, layout),
+        _ => OBJECT.to_owned(),
+    }
+}
+
 /// The class a value of this layout's type is referred to as -- in a
 /// descriptor, a frame, a dispatch -- which is [`class_name`] except for a
-/// signature called through the uniform entries and a split face.
+/// signature called through the uniform entries and a split face. A
+/// [`root_typed`] type is referred to as the root before its layout is
+/// asked ([`object_reference`]).
 /// Constructing, declaring and naming a class still use `class_name`: a
 /// signature class is still written, and still what a closure with a
 /// signature base extends; a split face's class still holds its fields, and
@@ -753,10 +815,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // The fallback is here rather than at the field, so every `getfield`,
         // `putfield` and signature asks one question and gets one answer.
         HirType::Managed(ManagedType::Object(id)) => {
-            nts_jvm_emitter::descriptor::object(&program.layout(*id).map_or_else(
-                || OBJECT.to_owned(),
-                |layout| reference_class(shape.package, program, layout),
-            ))
+            nts_jvm_emitter::descriptor::object(&object_reference(shape.package, program, *id))
         }
         // UTF-16 code units with a compact one-byte/two-byte representation --
         // which is what `NtsString` implements by hand and what JavaScript's
@@ -968,13 +1027,10 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
             HirType::Managed(ManagedType::View(element)) => {
                 VType::Object(view_class(element)?.to_owned())
             }
-            // The same fallback as `descriptor`, and it has to be the same or the
-            // frame and the field would disagree about a slot.
+            // The same answer as `descriptor`'s, and it has to be the same or
+            // the frame and the field would disagree about a slot.
             HirType::Managed(ManagedType::Object(id)) => {
-                VType::Object(program.layout(*id).map_or_else(
-                    || OBJECT.to_owned(),
-                    |l| reference_class(shape.package, program, l),
-                ))
+                VType::Object(object_reference(shape.package, program, *id))
             }
             HirType::Managed(ManagedType::Date) => VType::Object(DATE.to_owned()),
             HirType::Managed(ManagedType::Symbol) => VType::Object(SYMBOL.to_owned()),

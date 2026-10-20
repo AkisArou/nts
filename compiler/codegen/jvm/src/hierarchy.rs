@@ -305,7 +305,7 @@ pub fn extended(program: &JvmProgram<'_>, layout: &Layout) -> bool {
 
 /// Whether another layout's JVM superclass is this one. A layout not in the
 /// program answers yes, as `extended` always has: final is the claim to prove.
-fn extended_by_a_base(program: &JvmProgram<'_>, layout: &Layout) -> bool {
+pub(crate) fn extended_by_a_base(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     let Some(mine) = program.layouts.iter().position(|c| std::ptr::eq(c, layout)) else {
         return true;
     };
