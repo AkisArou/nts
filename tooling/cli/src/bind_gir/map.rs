@@ -1411,6 +1411,27 @@ impl<'a> Mapper<'a> {
         found
     }
 
+    /// The C type of the class or record `qualified` names, where its handle
+    /// is declared, for erasing to `void *`: a class's always, and a record's
+    /// where the typed `T *` path would declare it -- a struct the headers
+    /// tag, not a class struct.
+    fn erased_handle(&self, qualified: &str) -> Option<(&'a Namespace, String)> {
+        let repository: &'a Repository = self.repository;
+        let (ns, local) = qualified.split_once('.')?;
+        let namespace = repository.namespaces.get(ns)?;
+        if let Some(class) = namespace.classes.iter().find(|c| c.name == local) {
+            return Some((namespace, class.c_type.clone()?));
+        }
+        let c_type = namespace
+            .records
+            .iter()
+            .find(|r| r.name == local)?
+            .c_type
+            .clone()?;
+        (self.c_types.contains_key(c_type.as_str()) && self.facts.tags.contains_key(&c_type))
+            .then_some((namespace, c_type))
+    }
+
     fn resolve(&self, qualified: &str) -> Option<Resolved<'a>> {
         let repository: &'a Repository = self.repository;
         let (ns, local) = qualified.split_once('.')?;
@@ -2966,14 +2987,24 @@ impl<'a> Mapper<'a> {
         // as `gpointer` -- `gtk_list_item_get_item`, `g_list_model_get_item`
         // -- which the program holds as the handle GIR names, counted, and
         // owned where GIR says so. (A result is the one `Out` reaching here:
-        // `out` rewrites an out parameter's slot to `In`.)
-        if c_type == "gpointer"
-            && let Some(Resolved::Class(namespace, class)) = self.resolve(&qualified)
-            && let Some(class_type) = class.c_type.clone()
+        // `out` rewrites an out parameter's slot to `In`.) A record's handle
+        // too (`g_type_class_ref`'s `GTypeClass`), and as `gconstpointer`,
+        // `Const<Erased<GBytes>>` and `const void *` (`g_bytes_equal`).
+        if matches!(c_type, "gpointer" | "gconstpointer")
+            && let Some((namespace, handle_type)) = self.erased_handle(&qualified)
         {
-            let local = self.name_in(namespace, &class_type);
+            let local = self.name_in(namespace, &handle_type);
             self.binding.brands.insert("Erased");
-            let ts = format!("Erased<{local}>");
+            let erased = format!("Erased<{local}>");
+            let (ts, pointee) = if c_type == "gconstpointer" {
+                self.binding.brands.insert("Const");
+                (
+                    format!("Const<{erased}>"),
+                    Pointee::Const(Box::new(Pointee::Void)),
+                )
+            } else {
+                (erased, Pointee::Void)
+            };
             let ts = if param.nullable {
                 format!("{ts} | null")
             } else {
@@ -2990,7 +3021,7 @@ impl<'a> Mapper<'a> {
             return Ok(Mapped {
                 shape,
                 ts,
-                c: Type::Pointer(Pointee::Void),
+                c: Type::Pointer(pointee),
             });
         }
         if depth == 1
@@ -4528,6 +4559,70 @@ mod tests {
                 .iter()
                 .any(|f| f.symbol == "q_write_plain")
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A record C takes as `gconstpointer` or answers as `gpointer` is its
+    /// handle erased: `Const<Erased<GBytes>>` and `Erased<GBytes>`, as a
+    /// class's is. One difference makes the control: the same shapes for a
+    /// record the headers do not tag, which stays refused.
+    #[test]
+    fn a_record_c_erases_is_its_erased_handle() {
+        use super::super::facts;
+        use super::{Reason, bind};
+        use nts_core::hir::native::{Pointee, Type};
+        use std::fmt::Write as _;
+        let dir = crate::bind_scratch::directory("gir-erased-test").expect("fixture directory");
+        let mut xml = String::from(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="e.h"/><namespace name="E" version="1.0">
+            <record name="Bytes" c:type="GBytes"/><record name="Loose" c:type="GLoose"/>"#,
+        );
+        for record in ["Bytes", "Loose"] {
+            let lower = record.to_lowercase();
+            let _ = write!(
+                xml,
+                r#"<function name="{lower}_equal" c:identifier="e_{lower}_equal">
+                <return-value><type name="gboolean" c:type="gboolean"/></return-value>
+                <parameters><parameter name="a"><type name="{record}" c:type="gconstpointer"/></parameter></parameters>
+                </function>
+                <function name="{lower}_peek" c:identifier="e_{lower}_peek">
+                <return-value transfer-ownership="none"><type name="{record}" c:type="gpointer"/></return-value>
+                </function>"#
+            );
+        }
+        xml.push_str("</namespace></repository>");
+        std::fs::write(dir.join("E-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("E-1.0", &[search]).expect("parse GIR");
+        let namespace = &repository.namespaces["E"];
+        let header = facts::Facts {
+            tags: [("GBytes".to_owned(), "_GBytes".to_owned())].into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, namespace, &header);
+        let function = |name: &str| binding.functions.iter().find(|f| f.symbol == name);
+        let equal = function("e_bytes_equal").expect("e_bytes_equal bound");
+        assert_eq!(equal.parameters[0].1.ts, "Const<Erased<GBytes>>");
+        assert_eq!(
+            equal.parameters[0].1.c,
+            Type::Pointer(Pointee::Const(Box::new(Pointee::Void)))
+        );
+        let peek = function("e_bytes_peek").expect("e_bytes_peek bound");
+        assert_eq!(peek.result.ts, "Erased<GBytes>");
+        assert_eq!(peek.result.c, Type::Pointer(Pointee::Void));
+        for name in ["e_loose_equal", "e_loose_peek"] {
+            assert!(
+                binding
+                    .refused
+                    .iter()
+                    .any(|(n, r)| n == name && *r == Reason::RecordByValue),
+                "{name}: {:?}",
+                binding.refused
+            );
+        }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 }
