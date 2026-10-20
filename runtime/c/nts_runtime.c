@@ -15,6 +15,11 @@
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+/* XSI on top: the stack-overflow handler's `sigaltstack` and `SA_ONSTACK`
+ * are not in the POSIX base. */
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 700
+#endif
 /* Darwin reads `_POSIX_C_SOURCE` as "hide everything POSIX does not name",
  * and `malloc/malloc.h` -- which `cutils.h` includes on Apple for
  * `malloc_size` -- then uses `malloc_zone_t` before the typedef it just hid.
@@ -25,6 +30,12 @@
 #endif
 
 #include "nts_runtime.h"
+
+#if !defined(_WIN32)
+#include <signal.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9611,10 +9622,78 @@ static void nts_process_ticks_and_rejections(void) {
 #define NTS_HEAP_BLOCK_LIMIT (32 * 1024 * 1024)
 #endif
 
+#if !defined(_WIN32)
+/* Unbounded recursion, ended by name.
+ *
+ * JavaScript ends it with a RangeError ("Maximum call stack size exceeded").
+ * Compiled code has no limit of its own, so the stack runs into the kernel's
+ * guard gap below it and the process died of SIGSEGV with nothing said
+ * (`tests/outcomes/unbounded-recursion-is-a-range-error`). This says what
+ * happened, and costs a call nothing: the fault is the test, as in Rust's
+ * runtime, where a check on entry to every recursive function would be one
+ * more compare and branch per call and would end a leaf's shrink-wrapping.
+ * A RangeError the program can catch is not this: catching needs the raise
+ * to start in the function itself, which only an entry check can give.
+ *
+ * Only the main thread's stack, the only one compiled code runs on: the
+ * runtime starts no thread. A stack with no limit grows until memory runs
+ * out and never faults, so it gets no handler. */
+static const char *nts_stack_top;
+static size_t nts_stack_size;
+static struct sigaction nts_fault_before[2];
+static char nts_fault_stack[64 << 10];
+
+static void nts_on_fault(int signal, siginfo_t *info, void *context) {
+  (void)context;
+  const char *address = info->si_addr;
+  /* The stack holds `[top - size, top]` and an overflow faults just below it,
+   * in the guard gap (Linux keeps 1 MiB); `top` is this process's start, a
+   * little under the true top, which only widens the window. A fault inside
+   * the window is the stack's, since nothing else is mapped there. */
+  if (address <= nts_stack_top &&
+      (size_t)(nts_stack_top - address) <= nts_stack_size + ((size_t)2 << 20)) {
+    static const char message[] =
+        NTS_REFUSED "the call stack is exhausted: unbounded recursion, which "
+                    "JavaScript ends with a RangeError this program cannot "
+                    "catch\n";
+    (void)!write(2, message, sizeof message - 1);
+    abort();
+  }
+  /* Any other fault is whoever handled it before -- the default, or a
+   * sanitizer's report: put that back and let the instruction fault again. */
+  sigaction(signal, &nts_fault_before[signal == SIGBUS], 0);
+}
+
+static void nts_name_stack_overflow(void) {
+  struct rlimit limit;
+  if (getrlimit(RLIMIT_STACK, &limit) != 0 || limit.rlim_cur == RLIM_INFINITY) {
+    return;
+  }
+  nts_stack_top = __builtin_frame_address(0);
+  nts_stack_size = (size_t)limit.rlim_cur;
+  /* The handler runs on a stack of its own: the one that faulted has no room
+   * left for its frame. */
+  stack_t alternate = {.ss_sp = nts_fault_stack,
+                       .ss_size = sizeof nts_fault_stack};
+  if (sigaltstack(&alternate, 0) != 0) {
+    return;
+  }
+  struct sigaction action = {.sa_sigaction = nts_on_fault,
+                             .sa_flags = SA_SIGINFO | SA_ONSTACK};
+  sigemptyset(&action.sa_mask);
+  sigaction(SIGSEGV, &action, &nts_fault_before[0]);
+  /* Darwin reports a guard-page fault as SIGBUS. */
+  sigaction(SIGBUS, &action, &nts_fault_before[1]);
+}
+#endif
+
 void nts_process_start(void) {
 #if defined(__GLIBC__)
   mallopt(M_MMAP_THRESHOLD, NTS_HEAP_BLOCK_LIMIT);
   mallopt(M_TOP_PAD, NTS_HEAP_TOP_KEPT);
+#endif
+#if !defined(_WIN32)
+  nts_name_stack_overflow();
 #endif
 }
 
