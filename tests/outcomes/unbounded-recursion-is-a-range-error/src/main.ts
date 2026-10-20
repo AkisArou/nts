@@ -1,7 +1,9 @@
 // Unbounded recursion ends in a RangeError ("Maximum call stack size
-// exceeded"), which a program can catch: node does. nts has no stack guard,
-// so on C the stack overflows into its guard page and the program dies of
-// SIGSEGV instead, catch or no catch.
+// exceeded"), which a program can catch: node does. nts stops it by name
+// instead (`nts: refused: the call stack is exhausted`), catch or no catch:
+// the runtime recognises the fault in the stack's guard gap, which costs a
+// call nothing and gives no RangeError to catch. Before that the program died
+// of SIGSEGV with nothing said.
 //
 // It is also what a recursion-depth bound on a parameter would rest on
 // (~/.cache/nts-scratch/compiler/queens-design.md): `placeQueen(c + 1)` keeps
