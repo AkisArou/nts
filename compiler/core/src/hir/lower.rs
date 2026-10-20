@@ -4224,7 +4224,9 @@ pub const MODULE_INIT: &str = "module#init";
 /// A field with no initializer is storage at its zero and needs no statement,
 /// the same rule `collect_module_scope` follows for `let x: number;`. A static
 /// member named `prototype` does need one, initializer or not: defining the
-/// class throws (`FuncBuilder::static_named_prototype`).
+/// class throws (`FuncBuilder::static_named_prototype`). So does a member whose
+/// name the program computes, so the class is refused where it is evaluated
+/// (`FuncBuilder::member_named_at_run_time`).
 fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
     if !probe.kind_of(id).is_some_and(declares_a_class) {
         return false;
@@ -4252,6 +4254,7 @@ fn runs_a_static_initializer(probe: &FuncBuilder, id: NodeId) -> bool {
                     .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
                 && matches!(probe.child_slots::<5>(member), Some([_, _, _, _, Some(_)])))
     }) || probe.static_named_prototype(id).is_some()
+        || probe.member_named_at_run_time(id).is_some()
 }
 
 /// Whether a node at module scope is a statement rather than a declaration.
@@ -5912,6 +5915,21 @@ fn names_a_body(kind: Option<u16>) -> bool {
                 // conformance lane's private-static-getter and -setter files. Found
                 // by running the emitted C, because the read is not a call node and
                 // no census sees a program that compiles.
+                | syntax::GET_ACCESSOR
+                | syntax::SET_ACCESSOR
+        )
+    )
+}
+
+/// Whether a class body's child is an element defined under a name: a field, a
+/// method or an accessor, as against a constructor, a static block or an
+/// index signature.
+fn names_a_class_element(kind: Option<u16>) -> bool {
+    matches!(
+        kind,
+        Some(
+            syntax::PROPERTY_DECLARATION
+                | syntax::METHOD_DECLARATION
                 | syntax::GET_ACCESSOR
                 | syntax::SET_ACCESSOR
         )
@@ -29927,19 +29945,34 @@ impl<'a> FuncBuilder<'a> {
     /// never evaluated (tests/outcomes/a-computed-field-key-is-never-evaluated).
     fn static_named_prototype(&self, class: NodeId) -> Option<NodeId> {
         self.children(class).into_iter().find(|member| {
-            matches!(
-                self.kind_of(*member),
-                Some(
-                    syntax::PROPERTY_DECLARATION
-                        | syntax::METHOD_DECLARATION
-                        | syntax::GET_ACCESSOR
-                        | syntax::SET_ACCESSOR
-                )
-            ) && self
-                .node(*member)
-                .modifiers
-                .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
+            names_a_class_element(self.kind_of(*member))
+                && self
+                    .node(*member)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::STATIC)
                 && self.member_name(*member).as_deref() == Some("prototype")
+        })
+    }
+
+    /// The first member of `class` whose name the program computes, static or
+    /// not: `[prefix + n]`, a key no checker can name, as against `["k"]`, a
+    /// literal-typed `const` or a `unique symbol` such as `Symbol.iterator`,
+    /// each of which names one member ([`Self::names_one_member`]).
+    ///
+    /// Evaluating the class evaluates the key, once, and defines the member
+    /// under whatever it answers -- which no layout here can hold. A field so
+    /// keyed was dropped with no diagnostic, and its key never evaluated
+    /// (tests/outcomes/a-computed-field-key-is-never-evaluated); a method so
+    /// keyed refused only its own function, while the function evaluating
+    /// the class ran on with the key's effect dropped.
+    fn member_named_at_run_time(&self, class: NodeId) -> Option<NodeId> {
+        self.children(class).into_iter().find(|member| {
+            names_a_class_element(self.kind_of(*member))
+                && self
+                    .name_node(*member)
+                    .filter(|name| self.kind_of(*name) == Some(syntax::COMPUTED_PROPERTY_NAME))
+                    .and_then(|name| self.children(name).first().copied())
+                    .is_some_and(|key| !self.names_one_member(key))
         })
     }
 
@@ -29956,6 +29989,9 @@ impl<'a> FuncBuilder<'a> {
     /// which is what makes a static field's storage indistinguishable from a
     /// module-scope `const`'s everywhere downstream.
     fn lower_static_fields(&mut self, class: NodeId) -> Result<(), Diagnostic> {
+        if let Some(member) = self.member_named_at_run_time(class) {
+            return Err(self.unsupported(member, "a member whose name the program computes"));
+        }
         // **A static member named `prototype` throws before any of them runs**:
         // the constructor's own `prototype` is neither writable nor
         // configurable, so the class cannot be defined, and node throws while

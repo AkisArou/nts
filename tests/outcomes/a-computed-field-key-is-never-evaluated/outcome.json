@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 87 cases across 3 function(s) | Error: 58 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a member whose name the program computes is not supported by this lowering yet | refused: NTS1001 a member whose name the program computes is not supported by this lowering yet",
   "node": null,
-  "measured_with": "4a788f874c642d31",
+  "measured_with": "d99595a777b6baac",
   "source": "measured"
 }
