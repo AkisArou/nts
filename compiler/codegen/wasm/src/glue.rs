@@ -340,6 +340,19 @@ fn builtin_import(name: &str, captures: &mut Captures) -> Option<(ImportType, St
             function(&[ValueType::I32], Some(STRING)),
             captures.get("fromCharCode", "String.fromCharCode").into(),
         ),
+        // `String(n)`. V8 knows `toString` bound to `call`, imported at
+        // `(f64) -> externref`, as its own builtin and calls that from the
+        // module with no JS between; behind an arrow, the crossing and the
+        // number's box were most of `number-format`'s instructions.
+        "nts_number_to_string" => (
+            function(&[F64], Some(STRING)),
+            captures
+                .get(
+                    "numberToStringCall",
+                    "Function.prototype.call.bind(Number.prototype.toString)",
+                )
+                .into(),
+        ),
         _ => return None,
     })
 }
@@ -375,14 +388,6 @@ fn host_import(name: &str, captures: &mut Captures) -> Option<(ImportType, Strin
     }
     Some(match name {
         "remainder" => (number(2), "(left, right) => left % right".into()),
-        "nts_number_to_string" => {
-            let apply = captures.get("apply", "Reflect.apply");
-            let to_string = captures.get("numberToString", "Number.prototype.toString");
-            (
-                function(&[F64], Some(STRING)),
-                format!("value => {apply}({to_string}, value, [])"),
-            )
-        }
         "inputDecline" => (
             function(&[STRING, STRING], None),
             "(name, reason) => { throw new WasmInputDecline(name, reason, 'operation in'); }".into(),
@@ -966,7 +971,7 @@ mod tests {
     use super::{Host, glue};
     use crate::{Import, ImportType, Manifest, ValueType};
 
-    fn generate(name: &str, ty: ImportType) -> Result<(), String> {
+    fn generate(name: &str, ty: ImportType) -> Result<super::Glue, String> {
         let manifest = Manifest {
             abi: 3,
             host: "js".into(),
@@ -982,12 +987,39 @@ mod tests {
             features: vec![],
             functions: vec![],
         };
-        glue(&manifest, Host::Node).map(|_| ())
+        glue(&manifest, Host::Node)
     }
     fn number(params: usize) -> ImportType {
         ImportType::Function {
             params: vec![ValueType::F64; params],
             result: Some(ValueType::F64),
+        }
+    }
+
+    /// `String(n)` is V8's own builtin, called from the module with no JS
+    /// between, only while the import is `Number.prototype.toString` bound to
+    /// `call` itself: any function around it -- the arrow that applied it --
+    /// is a crossing and a boxed number per conversion, half of
+    /// `number-format`'s instructions.
+    #[test]
+    fn number_text_is_the_bound_builtin_itself() {
+        let glue = generate(
+            "nts_number_to_string",
+            ImportType::Function {
+                params: vec![ValueType::F64],
+                result: Some(ValueType::Externref { nullable: true }),
+            },
+        )
+        .unwrap();
+        for wanted in [
+            "\"nts_number_to_string\": numberToStringCall",
+            "const numberToStringCall = Function.prototype.call.bind(Number.prototype.toString);",
+        ] {
+            assert!(
+                glue.instance.contains(wanted),
+                "{wanted}\n{}",
+                glue.instance
+            );
         }
     }
 
