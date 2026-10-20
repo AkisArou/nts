@@ -30,6 +30,9 @@
 //                 and released by the binding's `g_strfreev`
 //   sha256=ba7816bf  the bytes "abc", from offset 1 of a larger `Uint8Array`,
 //                 borrowed in place as `const guint8 *` with their length
+//   write 3 abc   the same bytes lent as the `const void *` the header
+//                 declares (GIR writes `void*`) to `g_output_stream_write`,
+//                 read back from its memory stream
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
@@ -101,6 +104,10 @@ import {
   g_application_quit,
   g_application_run,
   g_file_new_for_path,
+  g_memory_output_stream_new_resizable,
+  g_memory_output_stream_steal_as_bytes,
+  g_output_stream_close,
+  g_output_stream_write,
   GThemedIcon,
 } from "c:Gio-2.0";
 import {
@@ -223,6 +230,17 @@ function outParameters(): void {
   // An enum member as it is: the parameter is `CEnum<GChecksumType, c_uint>`.
   const digest = g_compute_checksum_for_data(ChecksumType.SHA256, abc);
   console.log("sha256=" + (digest === null ? "none" : digest.slice(0, 8)));
+
+  // The header's `const`, where GIR's spelling drops it: the same view lent
+  // to `g_output_stream_write` as `const void *` (GIR writes `void*`), read
+  // back from the memory stream it went into.
+  const sink = g_memory_output_stream_new_resizable();
+  const wrote = g_output_stream_write(sink, abc);
+  g_output_stream_close(sink);
+  const written = g_memory_output_stream_steal_as_bytes(sink).get_data();
+  let readBack = "";
+  for (let at = 0; at < written.length; at++) readBack += String.fromCharCode(written[at]);
+  console.log("write " + String(wrote) + " " + readBack);
 }
 
 // A handle, awaited: `query_info_async`'s `_finish` returns a `GFileInfo *`,
