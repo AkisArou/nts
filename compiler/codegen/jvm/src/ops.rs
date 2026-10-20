@@ -3278,6 +3278,10 @@ impl Emitter<'_> {
         if types::root_typed(self.program, *target_id) {
             return Ok(());
         }
+        // And the other way it is not: see `stored_out_of_the_root`.
+        if types::root_typed(self.program, *source_id) {
+            return Err(self.stored_out_of_the_root(*source_id, *target_id));
+        }
         // Any actual callable storage is a value of a signature
         // type: both are referred to as `types::callable_class`, which every
         // such class extends. See it for the 81 declines this answered.
@@ -3337,6 +3341,52 @@ impl Emitter<'_> {
                  does not, so the JVM would refuse the class{held}"
             ),
         ))
+    }
+
+    /// Why a value of a root-typed face cannot be stored where a type that is
+    /// not one is declared.
+    ///
+    /// It is held as the root, not as its layout's class, so the ancestry
+    /// `assignable_types` reads from the layout would call storing it into a
+    /// class on that layout free: `box.e = it`, with an `Iterable<number>`
+    /// beside an empty class `E`, became a `putfield` of an Object into a
+    /// field typed as the layout's class, and the verifier refused the whole
+    /// program. A cast would not do either: the value need not be an instance
+    /// of that class (here it is a generator), so a program C and node agree
+    /// on would throw `ClassCastException`. It is declined, as it was before
+    /// such a face was the root.
+    fn stored_out_of_the_root(
+        &self,
+        source_id: nts_semantic_schema::TypeId,
+        target_id: nts_semantic_schema::TypeId,
+    ) -> Diagnostic {
+        let layout_name = |id| {
+            self.program
+                .layout(id)
+                .map_or("?", |layout| layout.name.as_str())
+        };
+        let source_name = self
+            .program
+            .interface_type_name(source_id)
+            .unwrap_or_else(|| layout_name(source_id));
+        // The class's own name: it shares the face's layout, so the layout's
+        // name may be a third type's.
+        let target_name = self
+            .program
+            .interface_type_name(target_id)
+            .or_else(|| {
+                crate::hierarchy::identity_of(self.program, target_id)
+                    .map(|class| class.name.as_str())
+            })
+            .unwrap_or_else(|| layout_name(target_id));
+        refuse(
+            self.func,
+            &format!(
+                "storing a `{source_name}` where a `{target_name}` is declared -- a face that \
+                 promises nothing is held as java/lang/Object here, and `{target_name}` is a \
+                 class its values need not be instances of"
+            ),
+        )
     }
 
     /// Container arguments may already be boxed, but boxing does not change

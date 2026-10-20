@@ -26,10 +26,10 @@ use std::process::Command;
 
 mod common;
 
-fn prepared() -> Program {
+fn prepared(fixture: &str) -> Program {
     let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/empty-face/tsconfig.json")
+        .join(format!("tests/{fixture}/tsconfig.json"))
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
@@ -83,7 +83,7 @@ fn disassembled(disassembler: &Path, classpath: &str, signature: &str) -> String
 
 #[test]
 fn each_specialization_is_root_typed_on_its_own_facts() {
-    let program = prepared();
+    let program = prepared("empty-face");
     let facts = nts_codegen_jvm::JvmProgram::new(&program);
 
     // One layout for the class and both specializations: what made the
@@ -115,7 +115,7 @@ fn each_specialization_is_root_typed_on_its_own_facts() {
 
 #[test]
 fn a_store_into_an_empty_face_is_a_verified_upcast() {
-    let emitted = nts_codegen_jvm::emit(&prepared());
+    let emitted = nts_codegen_jvm::emit(&prepared("empty-face"));
     assert!(
         emitted.diagnostics.is_empty(),
         "{:?}",
@@ -187,5 +187,74 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
     );
     // What node prints for the fixture's `answer()`.
     assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "4.0");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// The other direction, and the invariant behind it: no value of a
+/// root-typed face reaches a place typed as a class on its layout. Each
+/// such store declines -- a field, a return, an array element, a captured
+/// variable -- where it was a free store of an Object typed as the
+/// layout's class, which the verifier refused. What is emitted beside them
+/// (an argument the core specializes, a store into the face) verifies and
+/// answers as node does.
+#[test]
+fn a_store_out_of_an_empty_face_into_a_class_declines() {
+    const HELD: &str = "a face that promises nothing is held as java/lang/Object here";
+    let emitted = nts_codegen_jvm::emit(&prepared("empty-face-store-out"));
+    let mut sites: Vec<&str> = emitted
+        .diagnostics
+        .iter()
+        .map(|d| {
+            assert!(d.message.contains(HELD), "another decline: {}", d.message);
+            d.message
+                .rsplit_once("(in `")
+                .map_or("", |(_, site)| site.trim_end_matches("`)"))
+        })
+        .collect();
+    sites.sort_unstable();
+    assert_eq!(sites.len(), 4, "{sites:?}");
+    assert!(
+        sites[0].ends_with("#call"),
+        "the captured store is the closure's: {sites:?}"
+    );
+    assert_eq!(&sites[1..], ["H#element", "H#field", "H#returned"]);
+
+    let (Some(compiler), Some(vm)) = (common::tool("javac"), common::tool("java")) else {
+        eprintln!("SKIP empty_face: no JDK, so the verifier has not been asked");
+        return;
+    };
+    let dir = std::env::temp_dir().join(format!("nts-empty-face-out-{}", std::process::id()));
+    let classpath = written(&emitted, &dir);
+    std::fs::write(
+        dir.join("Drive.java"),
+        "public class Drive { public static void main(String[] a) {\n\
+           nts.gen.Program.module$init();\n\
+           System.out.println(nts.gen.Program.stores());\n\
+         } }\n",
+    )
+    .unwrap();
+    let built = Command::new(&compiler)
+        .args(["-cp", &classpath, "-d"])
+        .arg(&dir)
+        .arg(dir.join("Drive.java"))
+        .output()
+        .unwrap();
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let ran = Command::new(&vm)
+        .args(["-Xverify:all", "-cp", &classpath, "Drive"])
+        .output()
+        .unwrap();
+    assert!(
+        ran.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&ran.stdout),
+        String::from_utf8_lossy(&ran.stderr)
+    );
+    // What node prints for the fixture's `stores()`.
+    assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "104.0");
     std::fs::remove_dir_all(&dir).unwrap();
 }
