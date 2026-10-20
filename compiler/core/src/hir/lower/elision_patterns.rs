@@ -37,7 +37,39 @@ pub(super) fn elisions_only(probe: &FuncBuilder<'_>, pattern: NodeId) -> bool {
 /// wrote, and a `try` around a call to the function needs its raising copy to
 /// catch it.
 pub(super) fn steps_what_arrives(probe: &FuncBuilder<'_>, pattern: NodeId) -> bool {
-    elisions_only(probe, pattern) && probe.type_of(pattern) == Some(HirType::Erased)
+    elisions_only(probe, pattern)
+        && (probe.type_of(pattern) == Some(HirType::Erased)
+            || probe
+                .syntactic_parent(pattern)
+                .is_some_and(|parameter| takes_any_iterable(probe, parameter)))
+}
+
+/// Whether `parameter` is an elision pattern nothing annotates:
+/// `function f([,])`, unchecked JavaScript's commonest spelling.
+///
+/// Its checker type is the pattern's own `[any?]` -- the same type id an
+/// explicit `[any?]` has, so the type cannot tell the two apart -- and a
+/// caller is free to pass any iterable: test262's `ary-ptrn-elision-exhausted`
+/// passes a generator to every kind of function and method. Represented as
+/// the array that type names, a generator arrived where an array was wanted.
+/// So the declaration decides: such a parameter is erased, in the function
+/// (`lower_param_binding`) and at every direct call (`parameter_representation`),
+/// and [`FuncBuilder::step_what_arrived`] steps what came.
+///
+/// Not with a default, whose own path erases the parameter already, and not a
+/// rest, which collects rather than steps.
+pub(super) fn takes_any_iterable(probe: &FuncBuilder<'_>, parameter: NodeId) -> bool {
+    if probe.kind_of(parameter) != Some(syntax::PARAMETER)
+        || probe.annotated(parameter)
+        || probe.default_of(parameter).is_some()
+    {
+        return false;
+    }
+    let children = probe.children(parameter);
+    !children
+        .iter()
+        .any(|child| probe.kind_of(*child) == Some(syntax::DOT_DOT_DOT_TOKEN))
+        && children.iter().any(|child| elisions_only(probe, *child))
 }
 
 impl FuncBuilder<'_> {

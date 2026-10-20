@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "refused",
-  "nts": "not emitted: NTS4001 storing an object where an array of erased values is declared -- an object type and an array are classes neither of which extends the other, so the JVM would refuse the class (in `patternOverAGenerator`)",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case",
   "node": null,
-  "measured_with": "fb1cb03eff9c3d75",
+  "measured_with": "f73c85fd0aaabc3e",
   "source": "measured"
 }

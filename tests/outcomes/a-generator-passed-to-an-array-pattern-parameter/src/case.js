@@ -19,6 +19,12 @@
 // which differs in one thing: the argument is an array.
 //
 // Found on 2026-10-15 by the JVM lane's first test262 parity run.
+//
+// **Since 2026-10-20 the parameter is erased**, as an elision pattern
+// nothing annotates (`elision_patterns::takes_any_iterable`), so the call
+// erases the generator and `skip` steps it once. The record is a guard on
+// the JVM; a change that declares the parameter as an array again shows here
+// as the refused store.
 
 function* nothing() {}
 

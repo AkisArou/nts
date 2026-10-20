@@ -29117,6 +29117,14 @@ impl<'a> FuncBuilder<'a> {
         {
             return Some(HirType::Erased);
         }
+        // The callee erased an elision pattern nothing annotates, whatever its
+        // checker type says; the argument is erased to meet it.
+        if self
+            .declared_parameter(call, at)
+            .is_some_and(|(parameter, _)| elision_patterns::takes_any_iterable(self, parameter))
+        {
+            return Some(HirType::Erased);
+        }
         if let Some(bound) = self
             .structural_calls
             .get(&call)
@@ -35174,13 +35182,20 @@ impl<'a> FuncBuilder<'a> {
     /// [`Self::omitted_after`] gives. The one answer both an omitted argument
     /// and a passed `undefined` take their default from.
     fn declared_default(&self, call: NodeId, at: usize) -> Option<(NodeId, NodeId)> {
+        let (parameter, callee) = self.declared_parameter(call, at)?;
+        Some((self.default_of(parameter)?, callee))
+    }
+
+    /// The callee's parameter at `at`, and the callee, from the
+    /// implementation's parameter list.
+    fn declared_parameter(&self, call: NodeId, at: usize) -> Option<(NodeId, NodeId)> {
         let callee = self.argument_callee(call)?;
         let parameter = self
             .children(self.implementation_of(callee))
             .into_iter()
             .filter(|child| self.kind_of(*child) == Some(syntax::PARAMETER))
             .nth(at)?;
-        Some((self.default_of(parameter)?, callee))
+        Some((parameter, callee))
     }
 
     fn omitted_after(&self, call: NodeId, provided: usize) -> Vec<Omitted> {
@@ -36077,9 +36092,13 @@ impl<'a> FuncBuilder<'a> {
             .clone()
             .unwrap_or_else(|| format!("arg{index}"));
         // The rest case has already decided, and for a tuple union it decided
-        // something `type_of` cannot say.
+        // something `type_of` cannot say. **An elision pattern nothing annotates
+        // takes any iterable**: its type is the pattern's own `[any?]`, which says
+        // nothing about what a caller passes, so it is erased -- as every direct
+        // call to it is told. See [`elision_patterns::takes_any_iterable`].
         let ty = match rest_array {
             Some(array) => array,
+            None if elision_patterns::takes_any_iterable(self, id) => HirType::Erased,
             None => self
                 .type_of(name_node)
                 .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?,

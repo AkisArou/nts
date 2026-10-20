@@ -9,4 +9,10 @@
 // `ary-ptrn-elision-exhausted` and its relatives. The control,
 // tests/programs/an-elision-pattern-over-an-array, differs only in passing
 // an array.
+//
+// **Since 2026-10-20 the elision steps the generator**: an unannotated
+// elision parameter is erased (`elision_patterns::takes_any_iterable`), and
+// an elision over an erased value steps whatever arrived. The record is a
+// guard now; a change that gives the parameter its pattern's array type again
+// shows here.
 export { probe } from "./case.js";
