@@ -160,8 +160,8 @@ impl Store {
     /// # Errors
     /// The binder's, or the filesystem's.
     pub fn ensure(&self, binder: &dyn Binder) -> Result<Installed> {
-        let identity = self.root.join(slug(&binder.identity()));
-        let version = identity.join(slug(&binder.version()));
+        let identity = self.root.join(entry(&binder.identity()));
+        let version = identity.join(entry(&binder.version()));
         let directory = version.join(fingerprint(&binder.inputs()));
         let manifest = directory.join("manifest.json");
         let installed = if let Ok(installed) = read_manifest(&manifest, &directory) {
@@ -344,7 +344,31 @@ fn fnv(bytes: &[u8]) -> u64 {
     })
 }
 
-/// An identity as a directory name.
+/// The longest name [`entry`] writes whole. A directory's name is one path
+/// component, which a filesystem caps at 255 bytes (`NAME_MAX`), and an
+/// identity has no bound of its own: it names every root a project imports,
+/// and a GIR project's `girExtras` request beside them. gtk-gir's came to 248
+/// bytes, and one more header made `nts build` fail with `File name too
+/// long`.
+const ENTRY: usize = 200;
+
+/// A binder's string as the store's directory for it: its slug, whole when
+/// it fits in [`ENTRY`] bytes -- so every entry made before this keeps its
+/// name -- and otherwise its first `ENTRY - 17` bytes and the FNV-1a of the
+/// whole string, so two that share a long prefix are two entries and the
+/// listing still says what each is. Every directory the store names from a
+/// binder is named here.
+fn entry(identity: &str) -> String {
+    let slug = slug(identity);
+    if slug.len() <= ENTRY {
+        return slug;
+    }
+    // `slug` writes ASCII only, so every byte is a character's boundary.
+    format!("{}-{:016x}", &slug[..ENTRY - 17], fnv(identity.as_bytes()))
+}
+
+/// A string as a directory name, each character outside `[A-Za-z0-9.-]` --
+/// a multi-byte one too -- one `_`.
 fn slug(identity: &str) -> String {
     identity
         .chars()
@@ -562,5 +586,84 @@ mod tests {
                 .join("node_modules/@nts/test-one/index.d.ts")
                 .is_file()
         );
+    }
+
+    /// A binder whose identity is given, generating one package.
+    struct Named(String, Utf8PathBuf);
+
+    impl Binder for Named {
+        fn identity(&self) -> String {
+            self.0.clone()
+        }
+        fn version(&self) -> String {
+            "1".to_owned()
+        }
+        fn inputs(&self) -> Vec<Utf8PathBuf> {
+            vec![self.1.clone()]
+        }
+        fn generate(&self) -> Result<Vec<Package>> {
+            Ok(vec![Package {
+                name: "@nts/test-named".to_owned(),
+                surface: Surface::Objc,
+                declarations: "declare module \"objc:Named\" {}\n".to_owned(),
+                values: None,
+            }])
+        }
+    }
+
+    /// An identity's directory is its slug while that fits in [`ENTRY`]
+    /// bytes -- the name every entry already has -- and past it a prefix and
+    /// the whole identity's hash, so a long identity is one directory and two
+    /// that differ only past the cut are two.
+    #[test]
+    fn a_long_identity_is_one_directory_of_its_own() {
+        assert_eq!(
+            entry("gtk 4.24.1 x86_64 Gtk-4.0"),
+            "gtk_4.24.1_x86_64_Gtk-4.0"
+        );
+        let exactly = "a".repeat(ENTRY);
+        assert_eq!(entry(&exactly), exactly, "a slug of ENTRY bytes is cut");
+        let over = "a".repeat(ENTRY + 1);
+        let cut = entry(&over);
+        assert_eq!(cut.len(), ENTRY);
+        assert!(cut.starts_with(&"a".repeat(ENTRY - 17)), "{cut}");
+        assert_eq!(
+            cut,
+            format!("{}-{:016x}", "a".repeat(ENTRY - 17), fnv(over.as_bytes()))
+        );
+        let shared = "x".repeat(300);
+        assert_ne!(
+            entry(&format!("{shared} one")),
+            entry(&format!("{shared} two")),
+            "identities differing past the cut share a directory"
+        );
+        // A character `slug` replaces is one `_` whatever its bytes, so a
+        // cut is always on a character's boundary.
+        let wide = "é".repeat(ENTRY);
+        assert_eq!(slug(&wide).len(), ENTRY);
+        let wider = entry(&"é".repeat(ENTRY + 1));
+        assert!(wider.is_ascii() && wider.len() == ENTRY, "{wider}");
+    }
+
+    /// The store installs and finds again a binder whose identity is longer
+    /// than a directory's name can be.
+    #[test]
+    fn a_long_identity_installs_and_is_found_again() {
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-long-identity-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let input = root.join("input.txt");
+        std::fs::write(&input, "a").unwrap();
+        let store = Store::new(root.join("store"));
+        let long = Named(
+            "gtk 4.24.1 x86_64 Gtk-4.0 --header GLib-2.0:glib/gstdio.h ".repeat(20),
+            input,
+        );
+        let installed = store.ensure(&long).unwrap();
+        assert!(installed.files().iter().all(|file| file.is_file()));
+        assert_eq!(store.ensure(&long).unwrap().files(), installed.files());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

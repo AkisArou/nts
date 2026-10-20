@@ -328,7 +328,9 @@ packages on every build and leave each other's projects linked to nothing.
 **Where packages come from: two modes, one layout.** Published to npm where the
 inputs may be redistributed; generated locally, once per SDK, into
 `~/.cache/nts/types/<identity>/<version>/<inputs>` and linked into the project, where
-they may not. Which is which is read from each input's licence, not assumed:
+they may not. An identity names every root a project imports, and its `girExtras`
+request; past 200 bytes its directory is the first 183 and the whole identity's
+hash, since a directory's name has a limit and an identity does not. Which is which is read from each input's licence, not assumed:
 GIR and Win32 metadata are likely publishable; Apple's SDKs, the Windows SDK's
 WinRT metadata and the Windows App SDK are local until their terms are read. So
 every lane builds the local mode first. The layout is identical, so a project
