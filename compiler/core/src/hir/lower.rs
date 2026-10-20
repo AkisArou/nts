@@ -21343,6 +21343,12 @@ struct FuncBuilder<'a> {
     /// Body function bindings which parameter expressions separate from the
     /// parameter of the same name, even when the checker merges their symbol.
     parameter_body_functions: std::collections::BTreeMap<u32, NodeId>,
+    /// The parameter properties of the constructor being lowered, waiting for
+    /// its class's own fields: [`FuncBuilder::initialize_own_fields`] stores
+    /// them right after those fields are made, which is where JavaScript puts
+    /// them -- after `super()` in a derived class, and after the field
+    /// initialisers in every class.
+    pending_parameter_properties: Vec<(NodeId, u32)>,
     /// The object each member read was made on, by the read's node
     /// ([`Self::member_of`]): the `this` a call of what it read passes, which
     /// `o.f?.()` needs after lowering `o.f` as a value.
@@ -21656,6 +21662,7 @@ impl<'a> FuncBuilder<'a> {
             parameter_types: std::collections::BTreeMap::new(),
             parameter_cut: None,
             parameter_body_functions: std::collections::BTreeMap::new(),
+            pending_parameter_properties: Vec::new(),
             read_from: rustc_hash::FxHashMap::default(),
             super_send: None,
             forced_slot: None,
@@ -26443,7 +26450,24 @@ impl<'a> FuncBuilder<'a> {
         }
 
         self.start_bound_body(member)?;
-        self.store_parameter_properties(&declared)?;
+        // Stored once the class's own fields are made, not here: before
+        // `super()` a derived class's store was overwritten by the base's own
+        // initialiser of the same name (`constructor(override readonly sides)`
+        // over `sides = 0` answered 0), and before the field initialisers each
+        // initialiser saw the parameter already assigned.
+        //
+        // A class over a native base keeps the order it had: its `super()` is
+        // the native constructor's (`lower_objc_super_init`, `gobject_super`,
+        // `com_super`), which makes none of this class's fields, so nothing
+        // after it would store them.
+        if self.objc_construct.is_some()
+            || self.gobject_construct.is_some()
+            || self.com_construct.is_some()
+        {
+            self.store_parameter_properties(&declared)?;
+        } else {
+            self.pending_parameter_properties = declared;
+        }
 
         let body = self.method_body(member, is_abstract)?;
 
@@ -80772,12 +80796,18 @@ impl<'a> FuncBuilder<'a> {
         chain
     }
 
+    /// A class's own fields, made where JavaScript makes them, and then the
+    /// parameter properties its constructor declares: under define semantics
+    /// each is a field holding `undefined` until the constructor assigns it,
+    /// after every field initialiser has run.
     fn initialize_own_fields(&mut self, id: NodeId, receiver: ValueId) -> Result<(), Diagnostic> {
         let HirType::Managed(ManagedType::Object(class)) = self.values[receiver.0 as usize].ty
         else {
             return Ok(());
         };
-        self.initialize_fields(id, receiver, class, &[class])
+        self.initialize_fields(id, receiver, class, &[class])?;
+        let pending = std::mem::take(&mut self.pending_parameter_properties);
+        self.store_parameter_properties(&pending)
     }
 
     /// `super.m(args)` in a method of a class the program writes over an
