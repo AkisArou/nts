@@ -6051,6 +6051,21 @@ fn a_synthesized_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
     probe.module.initialization.can_raise_at(at)
         || an_operator_that_can_raise(probe, at)
         || probe.iterators.close_can_raise(at)
+        || an_immutable_store(probe, at)
+}
+
+/// A write to a binding no assignment may change, which throws `TypeError`
+/// (`Place::Unwritable`): `fixed = 2` on a `const`, `Named = 1` in a function
+/// expression's own body, or a pattern naming one.
+fn an_immutable_store(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
+    let Some(target) = probe.written_target(at) else {
+        return false;
+    };
+    let mut names = Vec::new();
+    probe.target_names(target, &mut names);
+    names
+        .into_iter()
+        .any(|symbol| probe.immutable_binding(symbol))
 }
 
 fn walk_one_declaration(
@@ -36808,7 +36823,29 @@ impl<'a> FuncBuilder<'a> {
         // total = total + v;` answered 0 where node answers 10, with no
         // diagnostic on the export and nothing in a published-name count able
         // to see it.
-        let written = match self.kind_of(root) {
+        let written = self.written_target(root);
+
+        // Only a bare name is carried. `box.cell = c` and `xs[i] = c` write
+        // *through* a reference and leave the reference itself alone, so they
+        // need no loop parameter -- and taking the target's symbol anyway would
+        // pick up the class member `cell`, a symbol no local scope declares,
+        // which then looks like an assignment to a name from an enclosing scope
+        // and gets the loop refused.
+        if let Some(target) = written {
+            self.target_names(target, into);
+        }
+
+        for child in &self.node(root).children {
+            self.assigned_symbols(*child, into);
+        }
+    }
+
+    /// The target a node writes itself -- the left of an assignment, compound
+    /// or logical, or the operand of `++`/`--` -- and `None` for any other node.
+    /// Its subtree is not asked: [`Self::assigned_symbols`] walks that, and the
+    /// throwing walk visits it node by node.
+    fn written_target(&self, root: NodeId) -> Option<NodeId> {
+        match self.kind_of(root) {
             Some(syntax::BINARY_EXPRESSION) => {
                 let children = self.children(root);
                 match children.as_slice() {
@@ -36833,7 +36870,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Some(syntax::PREFIX_UNARY_EXPRESSION) => {
                 let NodeData::Children { small, .. } = self.node(root).data else {
-                    return;
+                    return None;
                 };
                 matches!(
                     small & syntax::prefix_operator::MASK,
@@ -36845,20 +36882,6 @@ impl<'a> FuncBuilder<'a> {
             // Every postfix operator is a step, so no operator check is needed.
             Some(syntax::POSTFIX_UNARY_EXPRESSION) => self.children(root).first().copied(),
             _ => None,
-        };
-
-        // Only a bare name is carried. `box.cell = c` and `xs[i] = c` write
-        // *through* a reference and leave the reference itself alone, so they
-        // need no loop parameter -- and taking the target's symbol anyway would
-        // pick up the class member `cell`, a symbol no local scope declares,
-        // which then looks like an assignment to a name from an enclosing scope
-        // and gets the loop refused.
-        if let Some(target) = written {
-            self.target_names(target, into);
-        }
-
-        for child in &self.node(root).children {
-            self.assigned_symbols(*child, into);
         }
     }
 
@@ -48676,6 +48699,30 @@ impl<'a> FuncBuilder<'a> {
     /// one node whose symbol is the **property's**, and the variable's comes
     /// from [`Self::shorthand_value_symbol`]. Both paths answer "where does
     /// this name write" and there is one derivation of it.
+    /// A binding no assignment may change: a `const` or `using` declaration, or
+    /// the name a function or class *expression* gives itself -- a binding only
+    /// its own body sees, and immutable there.
+    fn immutable_binding(&self, symbol: u32) -> bool {
+        self.snapshot
+            .symbols
+            .get(symbol as usize)
+            .is_some_and(|record| {
+                record.declarations.iter().any(|declaration| {
+                    matches!(
+                        self.kind_of(*declaration),
+                        Some(syntax::FUNCTION_EXPRESSION | syntax::CLASS_EXPRESSION)
+                    ) || matches!(
+                        self.variable_kind(*declaration),
+                        Some(
+                            nts_semantic_schema::VariableKind::Const
+                                | nts_semantic_schema::VariableKind::Using
+                                | nts_semantic_schema::VariableKind::AwaitUsing
+                        )
+                    )
+                })
+            })
+    }
+
     fn place_for_symbol(
         &mut self,
         target: NodeId,
@@ -48692,6 +48739,20 @@ impl<'a> FuncBuilder<'a> {
                 declaration,
             });
         }
+        // **An immutable binding throws, after the uninitialized check and
+        // before any store.** A `const` was refused here ("assigning to a
+        // `const`"), and one held as a module global was not even that: the
+        // store below wrote it. A function expression's own name took the
+        // ordinary binding path and was rebound to whatever was assigned,
+        // unerased into the function's type unchecked. Node throws `TypeError`
+        // for each, in strict code, which every module is.
+        if self.immutable_binding(symbol.0) {
+            return Ok(Place::Unwritable {
+                at: target,
+                symbol: symbol.0,
+                why: Unwritable::Immutable,
+            });
+        }
         // No alias resolution here, unlike the read: assigning to an imported
         // binding is a type error, so an alias symbol cannot be the target of
         // an assignment in a program that got this far.
@@ -48703,9 +48764,7 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(Place::Global(global));
         }
-        if self.module.constants.contains_key(&symbol.0)
-            || self.module.native_constants.contains_key(&symbol.0)
-        {
+        if self.module.native_constants.contains_key(&symbol.0) {
             return Err(self.unsupported(target, "assigning to a `const`"));
         }
         if self.module.bound.contains_key(&symbol.0) {
@@ -48734,6 +48793,32 @@ impl<'a> FuncBuilder<'a> {
                 "an assignment to a function declaration's own name, which every read of it answers with the \
                  function",
             ));
+        }
+        // **A class declaration's name.** A class binding is a mutable one in
+        // JavaScript, and this compiler keeps it as the class: a write took a
+        // fresh `Binding` held erased, and every later read narrowed it back to
+        // the class's own object type with no tag to say so. `C = 44; C === 44`
+        // compared a pointer with a double -- C that does not compile -- where
+        // node answers `true`. Stopped by name where the store would land, not
+        // widened: making the binding hold anything is a whole-program decision
+        // for an unchecked edge (TypeScript rejects the assignment, TS2629), the
+        // ruling a redeclared `var` had. See [`Unwritable::ClassName`] for why
+        // the stop is at run time.
+        if self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)
+            .is_some_and(|record| {
+                record.declarations.iter().any(|declaration| {
+                    self.kind_of(*declaration) == Some(syntax::CLASS_DECLARATION)
+                })
+            })
+        {
+            return Ok(Place::Unwritable {
+                at: target,
+                symbol: symbol.0,
+                why: Unwritable::ClassName,
+            });
         }
         // From the target, which is where the checker gives the *declared*
         // type: the left of an assignment is not narrowed by what came before
@@ -48867,6 +48952,8 @@ impl<'a> FuncBuilder<'a> {
     fn read_place(&mut self, id: NodeId, place: &Place) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         Ok(match *place {
+            // The name's own read: `x += 1` on a `const` reads `x`, then throws.
+            Place::Unwritable { at, .. } => self.lower_expression(at)?,
             Place::UninitializedBinding {
                 at,
                 symbol,
@@ -49751,7 +49838,9 @@ impl<'a> FuncBuilder<'a> {
             }
             // A table has no slot until a key is written, so there is no
             // declared width to coerce toward -- `write_place` erases instead.
-            Place::Entry { .. } | Place::UninitializedBinding { .. } => None,
+            Place::Entry { .. } | Place::UninitializedBinding { .. } | Place::Unwritable { .. } => {
+                None
+            }
             Place::Global(global) => self.module.types.get(global as usize).cloned(),
             // A binding is an SSA value rather than a slot, and it still has a
             // declared type that every assignment has to keep: `let held:
@@ -50055,6 +50144,41 @@ impl<'a> FuncBuilder<'a> {
         if let Place::UninitializedBinding { at, symbol, .. } = *place {
             return self.check_initialized(at, symbol);
         }
+        // The value was evaluated -- `fixed = sideEffect()` runs the call -- and
+        // the binding is asked whether it is initialized, as any store to it
+        // asks: a closure writing a `const` or a class before its declaration
+        // ran throws `ReferenceError`, which comes first. Only then the stop.
+        if let Place::Unwritable { at, symbol, why } = *place {
+            self.check_initialized(at, symbol)?;
+            if let Some(cell) = self
+                .cell_of(symbol)
+                .and(self.bindings.get(&symbol).copied())
+            {
+                self.check_lexical_cell_ready(at, symbol, cell)?;
+            }
+            if !self.bindings.contains_key(&symbol)
+                && let Some(global) = self.module.variables.get(&symbol).copied()
+            {
+                self.check_initialized_place(at, global)?;
+            }
+            let origin = self.origin(at);
+            let always = self.push(OpKind::ConstBool(true), HirType::Bool, origin);
+            return match why {
+                // So a `try` around it catches node's TypeError.
+                Unwritable::Immutable => {
+                    self.refuse_when(at, always, "TypeError", "Assignment to constant variable.")
+                }
+                Unwritable::ClassName => {
+                    self.stop_when(
+                        at,
+                        always,
+                        "an assignment to a class declaration's name, which this compiler keeps \
+                         as the class",
+                    );
+                    Ok(())
+                }
+            };
+        }
         if let Place::Checked { guard, key, .. } = place {
             access::require(self, id, guard, key, true)?;
         }
@@ -50077,6 +50201,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(
                     self.unsupported(id, "an uninitialized lexical reference reached storage")
                 );
+            }
+            Place::Unwritable { .. } => {
+                return Err(self.unsupported(id, "an unwritable name reached storage"));
             }
             Place::Checked { ref place, .. } => {
                 return self.write_place(id, place, value);
@@ -66071,6 +66198,31 @@ impl<'a> FuncBuilder<'a> {
         }
         self.switch_to(carry_on);
         Ok(())
+    }
+
+    /// [`Self::refuse_when`]'s shape for a stop no program can catch: where
+    /// `condition` holds, the program ends with `nts: refused at run time:
+    /// {what}`, naming a construct this compiler cannot carry past this point.
+    fn stop_when(&mut self, id: NodeId, condition: ValueId, what: &str) {
+        let origin = self.origin(id);
+        let stopping = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: condition,
+            then_target: stopping,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(stopping);
+        let what = self.push(
+            OpKind::ConstString(what.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![what], HirType::Void, origin);
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(carry_on);
     }
 
     /// A detached buffer, refused in the `DataView` constructor's own words.
@@ -83926,6 +84078,25 @@ enum Omitted {
     Absent,
 }
 
+/// Why a name is [`Place::Unwritable`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Unwritable {
+    /// A binding no assignment may change -- a `const`, a `using`, or the name
+    /// a function or class *expression* gives itself. The store throws
+    /// `TypeError`, as `PutValue` on an immutable binding does in strict code,
+    /// which a module's is.
+    Immutable,
+    /// A class declaration's name. A class binding is mutable in JavaScript,
+    /// and this compiler keeps it as the class -- every read is the class's
+    /// own object type -- so a store that would land stops at run time, by
+    /// name, where node would have stored it. Not at compile time: a store
+    /// from a closure that runs before the class is defined throws
+    /// `ReferenceError` and never lands, and refusing it took a program that
+    /// agreed with node (`tests/programs/a-lexical-assignment-before-
+    /// initialization`'s `capturedClass`).
+    ClassName,
+}
+
 /// Where an assignment writes.
 ///
 /// Named rather than re-derived, because a compound assignment reads and writes
@@ -83939,6 +84110,16 @@ enum Place {
         at: NodeId,
         symbol: u32,
         declaration: NodeId,
+    },
+    /// A name this compiler will not store to, for the reason [`Unwritable`]
+    /// gives. Reading it is reading the name. Storing to it first asks what a
+    /// store to the binding always asks -- whether it is initialized, which
+    /// throws `ReferenceError` before anything else does -- and only then
+    /// stops.
+    Unwritable {
+        at: NodeId,
+        symbol: u32,
+        why: Unwritable,
     },
     /// A nullable receiver, checked at the read or store, after its operands.
     Checked {
