@@ -1,12 +1,20 @@
 //! A program function's cold regions, moved out of line.
 //!
-//! An `if` arm that ends in `unreachable` never returns to the function: it
-//! refuses, or throws past every caller. Its code is still the function's
-//! bytes, and V8 inlines by bytes: AWFY's towers spent its time in
+//! An `if` arm that control never leaves by its end never returns to the
+//! function: it refuses, or throws past every caller. Its code is still the
+//! function's bytes, and V8 inlines by bytes: AWFY's towers spent its time in
 //! `moveTopDisk`, 525 bytes once its two callees were inlined into it, over
 //! V8's 500 because of the two `throw new Error(...)` arms they brought. An arm
 //! large enough to matter becomes a helper of its own, given the locals it
 //! reads before writing, and the arm a call to it.
+//!
+//! Whether an arm falls out is its structure's answer, not its last
+//! instruction's (`diverges`). A `!` assertion's arm builds its `TypeError`'s
+//! message in an inner `if`/`else` and raises from both, so it ends in that
+//! `end`: read as falling out, queens' `getRowColumn` and `setRowColumn` kept
+//! three such arms each, 698 and 896 bytes that V8 declined to inline at every
+//! call, and moved out they cost the row 15.4% less (889,731 -> 752,535
+//! instructions/op, 2026-10-20).
 //!
 //! Only an arm that is a region of its own: no `return`, no branch or catch
 //! label out of it, and not inside a `try_table`, where a throw could come back
@@ -132,10 +140,7 @@ fn regions(body: &ir::Function) -> Vec<(usize, usize)> {
                     let end = ends[at];
                     let arm_end = else_of(insts, at + 1, end).unwrap_or(end);
                     let arm = &insts[at + 1..arm_end];
-                    if matches!(arm.last(), Some(Inst::Op(I::Unreachable)))
-                        && contained(arm)
-                        && bytes(arm) >= COLD_BYTES
-                    {
+                    if contained(arm) && diverges(arm) && bytes(arm) >= COLD_BYTES {
                         found.push((at + 1, arm_end));
                         covered = arm_end;
                     }
@@ -166,6 +171,116 @@ fn else_of(insts: &[Inst], from: usize, end: usize) -> Option<usize> {
         }
     }
     None
+}
+
+/// Whether control never reaches the end of `arm`, which `contained` keeps to
+/// itself: it ends in `unreachable` or a throw, or in a structure it opened
+/// that nothing leaves by its end -- an `if` neither of whose arms falls out
+/// and after which no branch lands.
+fn diverges(arm: &[Inst]) -> bool {
+    /// What an open structure is: a branch to a loop lands at its start, and
+    /// an `if` with no `else` falls out whenever it is entered.
+    #[derive(PartialEq)]
+    enum Shape {
+        Block,
+        Loop,
+        If,
+        IfElse,
+    }
+    /// An open structure: whether control reaches its end by a branch or by
+    /// falling out of an arm, and whether control reached the structure.
+    struct Open {
+        shape: Shape,
+        reached: bool,
+        entered: bool,
+    }
+    fn land(open: &mut [Open], label: u32) {
+        if let Some(at) = open.len().checked_sub(1 + label as usize)
+            && open[at].shape != Shape::Loop
+        {
+            open[at].reached = true;
+        }
+    }
+    let mut open: Vec<Open> = Vec::new();
+    let mut live = true;
+    for inst in arm {
+        let op = match inst {
+            Inst::Throw(_) => {
+                live = false;
+                continue;
+            }
+            Inst::Op(op) => op,
+            _ => continue,
+        };
+        match op {
+            I::Block(_) | I::Loop(_) | I::If(_) | I::TryTable(..) => {
+                if let I::TryTable(_, catches) = op
+                    && live
+                {
+                    for catch in catches.iter() {
+                        let (wasm_encoder::Catch::One { label, .. }
+                        | wasm_encoder::Catch::OneRef { label, .. }
+                        | wasm_encoder::Catch::All { label }
+                        | wasm_encoder::Catch::AllRef { label }) = catch;
+                        land(&mut open, *label);
+                    }
+                }
+                open.push(Open {
+                    shape: match op {
+                        I::Loop(_) => Shape::Loop,
+                        I::If(_) => Shape::If,
+                        _ => Shape::Block,
+                    },
+                    reached: false,
+                    entered: live,
+                });
+            }
+            I::Else => {
+                if let Some(top) = open.last_mut() {
+                    top.reached |= live;
+                    top.shape = Shape::IfElse;
+                    live = top.entered;
+                }
+            }
+            I::End => {
+                if let Some(top) = open.pop() {
+                    live = live || top.reached || (top.shape == Shape::If && top.entered);
+                }
+            }
+            I::Br(label) => {
+                if live {
+                    land(&mut open, *label);
+                }
+                live = false;
+            }
+            I::BrIf(label)
+            | I::BrOnNull(label)
+            | I::BrOnNonNull(label)
+            | I::BrOnCast {
+                relative_depth: label,
+                ..
+            }
+            | I::BrOnCastFail {
+                relative_depth: label,
+                ..
+            } => {
+                if live {
+                    land(&mut open, *label);
+                }
+            }
+            I::BrTable(targets, default) => {
+                if live {
+                    for label in targets.iter().chain(std::iter::once(default)) {
+                        land(&mut open, *label);
+                    }
+                }
+                live = false;
+            }
+            I::Unreachable | I::Return | I::ThrowRef => live = false,
+            _ => {}
+        }
+    }
+    !live
 }
 
 /// Whether control leaves `arm` only by its end: no `return`, and every branch
@@ -343,6 +458,43 @@ mod tests {
         body.code.insts.extend(inner.code.insts);
         body.code.instructions(&[I::End]);
         assert!(regions(&body).is_empty());
+    }
+
+    /// `throwing`'s work, then an `if`/`else` on local 0 whose arms are `then`
+    /// and `otherwise`: the shape of a `!` assertion's `TypeError` arm.
+    fn ending_in_if(then: &[I<'static>], otherwise: &[I<'static>]) -> Vec<I<'static>> {
+        let mut arm = throwing();
+        arm.truncate(arm.len() - 2);
+        arm.extend([I::LocalGet(0), I::If(BlockType::Empty)]);
+        arm.extend_from_slice(then);
+        arm.push(I::Else);
+        arm.extend_from_slice(otherwise);
+        arm.push(I::End);
+        arm
+    }
+
+    #[test]
+    fn an_arm_whose_last_if_raises_on_both_arms_is_a_region() {
+        let arm = ending_in_if(&[I::Call(0), I::Unreachable], &[I::Call(0), I::Unreachable]);
+        let end = 2 + arm.len();
+        assert_eq!(regions(&body_with(&arm)), vec![(2, end)]);
+    }
+
+    #[test]
+    fn an_arm_whose_last_if_can_fall_out_is_not() {
+        let arm = ending_in_if(&[I::Call(0), I::Unreachable], &[I::Nop]);
+        assert!(regions(&body_with(&arm)).is_empty());
+    }
+
+    /// Both arms raise, but a branch leaves the inner `if` before either does,
+    /// so control can reach its end and fall out of the arm.
+    #[test]
+    fn an_arm_a_branch_leaves_an_inner_if_of_is_not() {
+        let arm = ending_in_if(
+            &[I::LocalGet(1), I::BrIf(0), I::Call(0), I::Unreachable],
+            &[I::Call(0), I::Unreachable],
+        );
+        assert!(regions(&body_with(&arm)).is_empty());
     }
 
     #[test]
