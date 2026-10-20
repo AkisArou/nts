@@ -1590,21 +1590,13 @@ fn read_body(m: &mut Builder<'_>, expected: i32, read: Read) -> Result<Function,
             f.call(number);
         }
         Read::Boolean => {
-            let boolean = erased::callee(m, erased::Helper::Boolean)?;
-            f.instructions(&[
-                I::LocalGet(value),
-                I::RefTestNonNull(HeapType::Concrete(erased_types.boolean)),
-                I::I32Eqz,
-                I::If(BlockType::Empty),
-            ]);
-            contract::refuse_in(
-                &mut f,
-                m,
-                1,
-                "a boolean from a promise holding something else",
-            )?;
-            f.instructions(&[I::End, I::LocalGet(value)]);
-            f.call(boolean);
+            // A typed boolean promise settles through the number channel
+            // (`nts_promise_fulfill_number`, as 0 or 1) and an erased one
+            // with a tagged boolean: truthiness reads both, as C's
+            // combinator store does (`nts_value_truthy`).
+            let truthy = erased::callee(m, erased::Helper::Truthy)?;
+            f.instruction(&I::LocalGet(value));
+            f.call(truthy);
         }
         Read::String | Read::Reference(_) => read_reference(&mut f, m, read, value, tag)?,
     }

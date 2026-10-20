@@ -1549,3 +1549,20 @@ fn source_instanceof_exact_agrees_with_node() {
         "faceFields still walks the display: {face:?}"
     );
 }
+
+/// `Promise.all` over each element kind: a boolean settlement is read by
+/// truthiness, since a typed boolean promise settles as 0 or 1 through
+/// the number channel while an erased one settles as a tagged boolean.
+#[test]
+fn source_promise_all_kinds_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/promise-all-kinds");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "promise-all-kinds",
+        &emitted,
+        "tooling/wasm/check-promise-all-kinds.ts",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 20, "{output}");
+}
