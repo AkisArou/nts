@@ -4683,26 +4683,28 @@ fn build_c(
     cache_dir: Option<&Utf8Path>,
     needs: &nts_build::dependencies::Resolution,
 ) -> Result<usize> {
-    // The platform loop this target offers a program: GLib's where the link
-    // has it, the main CFRunLoop on macOS. Whether the program uses it is
-    // the program's to say (see `Emission::host`).
-    let host = if needs.libs.iter().any(|flag| flag == "-lglib-2.0") {
-        nts_codegen_c::LoopHost::Glib
-    } else if matches!(target.os.as_str(), "macos" | "ios") {
-        nts_codegen_c::LoopHost::CoreFoundation
-    } else if target.os == "windows" {
-        nts_codegen_c::LoopHost::Win32
-    } else {
-        nts_codegen_c::LoopHost::Libuv
-    };
-    let wrote = emit_c(
-        tsconfig,
+    let mut report = EmissionReport::live();
+    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
+    // What the program's bindings name (`@ntsPackage`), beside the project's
+    // own dependencies: what it compiles and links against -- and so whether
+    // GLib's loop is there to drive it, which preparing it needs to know. A
+    // program on GTK's bindings gets that loop without naming gtk4.
+    let packages: Vec<(String, String)> = input
+        .raw
+        .native_packages()
+        .iter()
+        .map(|package| (package.name.clone(), package.module.clone()))
+        .collect();
+    let needs = &needs.with_packages(&packages)?;
+    let wrote = emit_c_opened(
+        input,
         Some(out),
         Emission {
-            host,
+            host: loop_host(needs, target),
             abi: native_abi(&target.os, target.arch.as_deref().unwrap_or(host_arch())),
             ..emission
         },
+        &mut report,
     )?;
     let artifact = link_c(name, product, out, &wrote, native, cache_dir, target, needs)?;
     println!("  {artifact}");
@@ -8968,14 +8970,42 @@ impl Wrote {
 
 fn emit_c(tsconfig: &Utf8Path, out: Option<&Utf8Path>, emission: Emission) -> Result<Wrote> {
     let mut report = EmissionReport::live();
+    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
+    emit_c_opened(input, out, emission, &mut report)
+}
+
+/// An opened program, prepared for `emission`'s backend and written.
+fn emit_c_opened(
+    input: EmissionInput,
+    out: Option<&Utf8Path>,
+    emission: Emission,
+    report: &mut EmissionReport,
+) -> Result<Wrote> {
     let backend = if emission.llvm.is_some() {
         nts_codegen_common::Backend::Llvm
     } else {
         nts_codegen_common::Backend::C
     };
-    let input = EmissionInput::open(tsconfig, emission, &mut report)?;
-    let (prepared, metadata) = input.prepare(emission, backend, &mut report)?;
-    emit_c_prepared(prepared, &metadata.sources, out, emission, &mut report)
+    let (prepared, metadata) = input.prepare(emission, backend, report)?;
+    emit_c_prepared(prepared, &metadata.sources, out, emission, report)
+}
+
+/// The platform loop this target offers a program: `GLib`'s where the link
+/// has it, the main `CFRunLoop` on macOS. Whether the program uses it is the
+/// program's to say (see `Emission::host`).
+fn loop_host(
+    needs: &nts_build::dependencies::Resolution,
+    target: &nts_build::config::Target,
+) -> nts_codegen_c::LoopHost {
+    if needs.libs.iter().any(|flag| flag == "-lglib-2.0") {
+        nts_codegen_c::LoopHost::Glib
+    } else if matches!(target.os.as_str(), "macos" | "ios") {
+        nts_codegen_c::LoopHost::CoreFoundation
+    } else if target.os == "windows" {
+        nts_codegen_c::LoopHost::Win32
+    } else {
+        nts_codegen_c::LoopHost::Libuv
+    }
 }
 
 fn emit_c_prepared(

@@ -5553,6 +5553,15 @@ impl RawProgram {
         }
     }
 
+    /// The pkg-config packages of the binding modules the program holds a
+    /// declaration from, known before it is prepared: a build resolves them
+    /// first, since what they link -- `GLib`'s loop -- is a preparation
+    /// option.
+    #[must_use]
+    pub fn native_packages(&self) -> &[NativePackage] {
+        &self.lowered.program.native_packages
+    }
+
     /// Prepare an independent copy, leaving the raw program pristine.
     ///
     /// # Errors

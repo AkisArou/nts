@@ -94,6 +94,9 @@ pub struct Resolution {
     /// nothing looked at, and "a field that parses must do something" is not
     /// satisfied by a silent success.
     pub notes: Vec<String>,
+    /// The pkg-config packages these flags are of, so a later resolution of
+    /// the same packages -- a binding's `@ntsPackage` -- is not asked again.
+    pub packages: Vec<String>,
 }
 
 impl Resolution {
@@ -104,6 +107,49 @@ impl Resolution {
         self.classpath.extend(other.classpath);
         self.native.extend(other.native);
         self.notes.extend(other.notes);
+        self.packages.extend(other.packages);
+    }
+
+    /// This resolution and the pkg-config packages a program's binding
+    /// modules name (`@ntsPackage`), as `(package, module)`: what the
+    /// program compiles and links against. A package this already resolved
+    /// -- the project's own claim of it -- is not asked again, and a flag
+    /// this already holds is not added twice; both sides are this machine's
+    /// pkg-config, so they repeat and never disagree. A package pkg-config
+    /// has not is an error naming the module whose tag asked for it.
+    pub fn with_packages(&self, packages: &[(String, String)]) -> Result<Self> {
+        let mut wanted: Vec<&(String, String)> = Vec::new();
+        for named in packages {
+            if !self.packages.contains(&named.0) && !wanted.iter().any(|w| w.0 == named.0) {
+                wanted.push(named);
+            }
+        }
+        let mut total = self.clone();
+        if wanted.is_empty() {
+            return Ok(total);
+        }
+        for (package, module) in &wanted {
+            if !installed(package).with_context(|| {
+                format!("`{module}`'s `@ntsPackage {package}` needs pkg-config, which did not run")
+            })? {
+                bail!(
+                    "`{module}`'s `@ntsPackage {package}` names a pkg-config package that is not \
+                     installed on this machine. Install its development package -- the one \
+                     carrying `{package}.pc` -- or add the directory holding that file to \
+                     PKG_CONFIG_PATH"
+                )
+            }
+        }
+        let names: Vec<String> = wanted.iter().map(|(package, _)| package.clone()).collect();
+        for (list, what) in [(&mut total.cflags, "--cflags"), (&mut total.libs, "--libs")] {
+            for flag in flags(what, &names)? {
+                if !list.contains(&flag) {
+                    list.push(flag);
+                }
+            }
+        }
+        total.packages.extend(names);
+        Ok(total)
     }
 
     /// Whether anything was contributed at all.
@@ -114,6 +160,7 @@ impl Resolution {
             && self.classpath.is_empty()
             && self.native.is_empty()
             && self.notes.is_empty()
+            && self.packages.is_empty()
     }
 }
 
@@ -301,11 +348,7 @@ fn pkg_config(id: &str, claim: &Dependencies) -> Result<Resolution> {
         )
     }
     for package in packages {
-        let known = Command::new("pkg-config")
-            .args(["--exists", package])
-            .status()
-            .with_context(|| format!("asking pkg-config about `{package}`"))?;
-        if !known.success() {
+        if !installed(package)? {
             bail!(
                 "`dependencies.{id}` claims the pkg-config package `{package}`, which is not \
                  installed on this machine. Install its development package -- the one \
@@ -317,8 +360,18 @@ fn pkg_config(id: &str, claim: &Dependencies) -> Result<Resolution> {
     Ok(Resolution {
         cflags: flags("--cflags", packages)?,
         libs: flags("--libs", packages)?,
+        packages: packages.to_vec(),
         ..Resolution::default()
     })
+}
+
+/// Whether pkg-config knows `package` on this machine.
+fn installed(package: &str) -> Result<bool> {
+    Ok(Command::new("pkg-config")
+        .args(["--exists", package])
+        .status()
+        .with_context(|| format!("asking pkg-config about `{package}`"))?
+        .success())
 }
 
 /// One `pkg-config` invocation for every package, because it is one question.

@@ -2033,6 +2033,34 @@ both backends and providers: atoms 0, 1 and 65535, the 65536 boundary, the high
 bit and every bit -- none of which may be read through -- and real stack, heap
 and static addresses, whose differences match C's pointer arithmetic.
 
+## A binding names what it is compiled and linked against
+
+A binding module says what its declarations need at link time: Apple's
+`@ntsFramework Foundation`, Windows' `@ntsLibrary user32` (per function, so a
+program links only what it calls), and for a pkg-config world -- GIR's -- the
+packages its headers and symbols come from:
+
+    /**
+     * @ntsHeader harfbuzz/hb-gobject.h
+     * @ntsPackage harfbuzz harfbuzz-gobject
+     */
+    declare module "c:HarfBuzz-0.0" { ... }
+
+`@ntsPackage` is a module tag, read where `@ntsHeader` is and on the same
+terms: a program compiles and links against the packages of every module it
+holds a declaration from -- a function it calls, a struct it lays out -- and of
+no other (`collect_native_headers`). A name is one pkg-config takes and never a
+flag (letters, digits, `_`, `-`, `+`, `.`, no leading `-`); one that is not is
+refused at the module.
+
+The build resolves them after lowering and before preparing: a package the
+project's own `dependencies` already claims is not asked again, a flag already
+held is not added twice, and one pkg-config does not know fails naming the
+module whose tag asked for it. Before preparing, because what they link
+decides the loop host -- GLib's, which preparation reads -- so a program on
+GTK's bindings gets that loop without its project naming gtk4.
+`tests/interop/gtk-gir` names no `dependencies` at all.
+
 ## Direction for the next executable slices
 
 1. **More native storage and header-derived bindings.** `void *`, const-qualified

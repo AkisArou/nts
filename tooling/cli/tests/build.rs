@@ -3306,6 +3306,128 @@ fn a_pkg_config_dependency_reaches_the_link_and_its_absence_does_not() {
     );
 }
 
+/// A project whose program calls zlib's `zlibCompileFlags` through a binding
+/// module of its own, `c:zlib`, tagged `@ntsPackage {package}` -- or with no
+/// such tag where `package` is `None`.
+fn binding_fixture(name: &str, config: &str, package: Option<&str>) -> PathBuf {
+    let project = fixture(name, config);
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("the repository");
+    std::fs::write(
+        project.join("tsconfig.json"),
+        format!(
+            r#"{{"extends":"{}","include":["src/**/*","{}"]}}"#,
+            repo.join("tsconfig.fixtures.json").display(),
+            repo.join("runtime/native/libc.d.ts").display()
+        ),
+    )
+    .expect("tsconfig");
+    let tag = package.map_or_else(String::new, |package| format!(" * @ntsPackage {package}\n"));
+    std::fs::write(
+        project.join("src/zlib.d.ts"),
+        format!(
+            "/**\n * @ntsHeader zlib.h\n{tag} */\ndeclare module \"c:zlib\" {{\n  \
+             import type {{ c_ulong }} from \"@nts/scalars\";\n  \
+             export function zlibCompileFlags(): c_ulong;\n}}\n"
+        ),
+    )
+    .expect("binding");
+    std::fs::write(
+        project.join("src/main.ts"),
+        "import { zlibCompileFlags } from \"c:zlib\";\n\
+         export function zlibFlags(): number {\n  return Number(zlibCompileFlags());\n}\n",
+    )
+    .expect("entry");
+    std::fs::remove_file(project.join("src/internal.ts")).expect("sibling");
+    project
+}
+
+/// A binding module's `@ntsPackage` reaches the link as a `dependencies`
+/// claim of the package does, and the project need not repeat it.
+///
+/// **Four arms, each one difference from the first.** The tag with no claim
+/// links libz; the same module without the tag leaves `zlibCompileFlags`
+/// undefined, which the link refuses, so the tag is what brought it; a tag
+/// naming a package nobody has fails before linking, naming the tag and its
+/// module; and the package both tagged and claimed is asked once and linked
+/// once.
+#[test]
+fn a_binding_modules_package_reaches_the_link() {
+    let has = Command::new("pkg-config")
+        .args(["--exists", "zlib"])
+        .status()
+        .is_ok_and(|status| status.success());
+    if !available() || !has {
+        skip("clang, the tsgo frontend and zlib's pkg-config entry");
+        return;
+    }
+    let needed = |project: &Path| {
+        let artifact = project.join(".nts/build/acme/linux-gnu-x86_64/libacme.so");
+        let shown = Command::new("readelf")
+            .arg("-d")
+            .arg(&artifact)
+            .output()
+            .expect("readelf");
+        String::from_utf8_lossy(&shown.stdout)
+            .lines()
+            .filter(|line| line.contains("libz.so"))
+            .count()
+    };
+
+    let tagged = binding_fixture("build-binding-package", SHARED, Some("zlib"));
+    let run = build(&tagged, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    assert_eq!(
+        needed(&tagged),
+        1,
+        "the tag did not reach the link:\n{}",
+        run.stdout
+    );
+
+    // Without the tag nothing brings zlib, and the library's link refuses the
+    // symbol it leaves undefined.
+    let untagged = binding_fixture("build-binding-package-untagged", SHARED, None);
+    let run = build(&untagged, &[]);
+    let said = format!("{}{}", run.stdout, run.stderr);
+    assert!(
+        !run.ok && said.contains("undefined reference to `zlibCompileFlags'"),
+        "the untagged control linked, so the assertion above is not about the tag:\n{said}"
+    );
+
+    let missing = binding_fixture(
+        "build-binding-package-missing",
+        SHARED,
+        Some("a-library-nobody-has"),
+    );
+    let run = build(&missing, &[]);
+    assert!(
+        !run.ok,
+        "a tag naming a missing package built anyway:\n{}",
+        run.stdout
+    );
+    assert!(
+        run.stderr
+            .contains("`c:zlib`'s `@ntsPackage a-library-nobody-has`"),
+        "the refusal does not name the tag and its module:\n{}",
+        run.stderr
+    );
+
+    let both = binding_fixture(
+        "build-binding-package-claimed",
+        ZLIB_DEPENDENCY,
+        Some("zlib"),
+    );
+    let run = build(&both, &[]);
+    assert!(run.ok, "the build failed:\n{}{}", run.stdout, run.stderr);
+    assert_eq!(
+        needed(&both),
+        1,
+        "zlib, tagged and claimed, is not linked once"
+    );
+}
+
 const MISSING_PACKAGE: &str = r#"
 import { defineConfig, library, target } from "@nts/config";
 export default defineConfig({
