@@ -17,6 +17,13 @@
 //
 // The control is `control`: the same elision over an array, where there is no
 // step to take, and it agrees.
+//
+// **Since 2026-10-20 the elision steps the generator**: an elision pattern
+// over an erased value asks what arrived -- a built-in iterable takes no step,
+// a generator is resumed once per hole, anything else throws a TypeError
+// (`FuncBuilder::step_what_arrived`). The record is a guard now, both
+// functions agreeing; a change that skips the step again shows here.
+// tests/programs/an-elision-over-any-steps-what-arrives holds every arm.
 let steps = 0;
 
 function* counted(seed: number): Generator<number> {

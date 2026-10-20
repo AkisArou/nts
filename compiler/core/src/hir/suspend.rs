@@ -399,9 +399,51 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
         program.funcs.remove(index);
     }
     program.funcs.extend(added);
+    answer_for_frames(program, &layouts);
     program.layouts.extend(layouts);
     declare_resumptions(program);
     refusals
+}
+
+/// Let an `instanceof` naming an abstract generator answer for its frames.
+///
+/// A test made where a value's type says nothing -- an elision pattern over an
+/// erased value asking whether it holds a generator -- names the abstract
+/// `Generator<T, …>`, the class every frame yielding `T` extends. The lowering
+/// cannot name the frames: their layouts are made here, after
+/// `drop_classes_without_layouts` has kept only the ids a layout claims. So the
+/// pass that makes a frame adds it to every test of the class it extends, as
+/// `classes_under` lists a subclass for a declared class.
+fn answer_for_frames(program: &mut Program, frames: &[Layout]) {
+    let mut extending: rustc_hash::FxHashMap<TypeId, Vec<TypeId>> =
+        rustc_hash::FxHashMap::default();
+    for frame in frames {
+        if let (Some(base), Some(&id)) = (frame.base, frame.types.first()) {
+            extending.entry(base).or_default().push(id);
+        }
+    }
+    if extending.is_empty() {
+        return;
+    }
+    for func in &mut program.funcs {
+        for op in &mut func.values {
+            let OpKind::InstanceOf { classes, .. } = &mut op.kind else {
+                continue;
+            };
+            let added: Vec<TypeId> = classes
+                .iter()
+                .filter_map(|class| extending.get(class))
+                .flatten()
+                .copied()
+                .collect();
+            if added.is_empty() {
+                continue;
+            }
+            classes.extend(added);
+            classes.sort_unstable_by_key(|class| class.0);
+            classes.dedup();
+        }
+    }
 }
 
 /// Give every abstract generator a resumption to dispatch through.

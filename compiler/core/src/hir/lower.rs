@@ -18948,7 +18948,9 @@ fn in_javascript(probe: &FuncBuilder, node: NodeId) -> bool {
 fn a_parameter_pattern_can_throw(probe: &FuncBuilder, parameter: NodeId) -> bool {
     let mut pending = probe.children(parameter);
     while let Some(at) = pending.pop() {
-        if a_pattern_that_requires_coercion(probe, at) {
+        if a_pattern_that_requires_coercion(probe, at)
+            || elision_patterns::steps_what_arrives(probe, at)
+        {
             return true;
         }
         if matches!(
@@ -64114,6 +64116,14 @@ impl<'a> FuncBuilder<'a> {
             }
             None => value,
         };
+        // **Elisions over an erased value step whatever arrived** -- nothing for an array,
+        // once per hole for a generator. See [`Self::step_what_arrived`].
+        if !object
+            && self.values[value.0 as usize].ty == HirType::Erased
+            && elision_patterns::elisions_only(self, pattern)
+        {
+            return self.step_what_arrived(pattern, value, scope);
+        }
         // **An array pattern over a generator is a step per element**, elisions included,
         // because a hole still asks the iterator for one. See
         // [`Self::bind_array_pattern_by_stepping`] -- including why an *array* source does not
@@ -64171,21 +64181,7 @@ impl<'a> FuncBuilder<'a> {
                 Some(parts) => parts,
                 None => return Err(self.unsupported(element, "a binding of unexpected shape")),
             };
-            let nested = matches!(
-                self.kind_of(binding),
-                Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
-            );
-            if !nested && self.kind_of(binding) != Some(syntax::IDENTIFIER) {
-                return Err(self.unsupported(element, "a binding of unexpected shape"));
-            }
-            let symbol = if nested {
-                None
-            } else {
-                match self.node(binding).symbol {
-                    Some(symbol) => Some(symbol),
-                    None => return Err(self.unsupported(element, "an unresolved binding")),
-                }
-            };
+            let symbol = self.binding_element_symbol(element, binding)?;
 
             // **A promise capability has no fields to read.** `{ promise,
             // resolve, reject }` over a `PromiseWithResolvers<T>` destructures
@@ -64284,6 +64280,23 @@ impl<'a> FuncBuilder<'a> {
             }
         }
         Ok(())
+    }
+
+    /// The symbol a binding element's `binding` declares: its identifier's, or
+    /// none for a nested pattern, whose names are declared one level down.
+    fn binding_element_symbol(
+        &self,
+        element: NodeId,
+        binding: NodeId,
+    ) -> Result<Option<SymbolId>, Diagnostic> {
+        match self.kind_of(binding) {
+            Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN) => Ok(None),
+            Some(syntax::IDENTIFIER) => match self.node(binding).symbol {
+                Some(symbol) => Ok(Some(symbol)),
+                None => Err(self.unsupported(element, "an unresolved binding")),
+            },
+            _ => Err(self.unsupported(element, "a binding of unexpected shape")),
+        }
     }
 
     /// One slot of `const { promise, resolve, reject } = Promise.withResolvers()`.
@@ -85887,6 +85900,7 @@ mod access_family_sites;
 mod assertions;
 mod bigint;
 mod closure_context;
+mod elision_patterns;
 mod field_initialization;
 mod function_names;
 mod gobject;

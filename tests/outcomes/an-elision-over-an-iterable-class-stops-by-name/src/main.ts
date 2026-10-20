@@ -9,6 +9,13 @@
 // whose steps nothing observes, and which agrees. Wasm's outcome
 // an-elision-over-a-generator-does-not-step-it is the same defect for a
 // generator.
+//
+// **Since 2026-10-20 it stops by name**, at run time, when such an object
+// arrives: "an array pattern stepping an object through its own
+// `[Symbol.iterator]`". Those calls are user code that the implicit-call
+// analysis does not know this site reaches, so the step is not compiled yet,
+// and a stop is honest where the silent no-step was not. Everything before it
+// agrees. A change that steps the protocol turns this into agreement.
 let made = 0;
 let stepped = 0;
 

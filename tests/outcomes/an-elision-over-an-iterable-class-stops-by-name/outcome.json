@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: before=0;control=2;made=0;stepped=0;",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused at run time: an array pattern stepping an object through its own `[Symbol.iterator]`",
   "node": "exit 1; nts: uncaught Observed: before=0;control=2;made=1;stepped=1;",
-  "measured_with": "891cec3cb4e75dac",
+  "measured_with": "bd1e4df0d635a66b",
   "source": "measured"
 }
