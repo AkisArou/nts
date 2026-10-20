@@ -50,3 +50,22 @@ export function linear(n: number): string {
   for (let i = 0; i < n % 5; i++) out += String.fromCharCode(97 + i);
   return out;
 }
+
+// An append inside `try`, a call that throws, and a `catch` that returns the
+// value before the append: the handler is reached by an edge the reachability
+// walk has to see.
+function mayThrow(n: number): void {
+  if (n > 2) throw new Error("thrown");
+}
+
+export function caught(n: number): string {
+  let out = "";
+  for (let i = 0; i < n % 3; i++) out += "a";
+  try {
+    const more = out + "!";
+    mayThrow(n);
+    return more;
+  } catch {
+    return out;
+  }
+}

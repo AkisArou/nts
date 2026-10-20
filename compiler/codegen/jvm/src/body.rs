@@ -739,7 +739,36 @@ impl<'a> Emitter<'a> {
             .ok_or_else(|| refuse(self.func, &format!("a value of type {:?}", self.ty(value))))
     }
 
+    /// A value as the program means it.
+    ///
+    /// A string accumulator is held as a `StringBuilder` (`builder`), and every
+    /// read that is not the builder's own -- an append, an edge, `.length`,
+    /// which call [`Self::load_held`] -- sees the `String` it stands for, made
+    /// here. So a builder never escapes its function, whatever reads it, and a
+    /// new kind of read cannot forget to materialise one.
     pub(crate) fn load(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        value: ValueId,
+    ) -> Result<(), Diagnostic> {
+        self.load_held(code, pool, value)?;
+        if self.accumulated.contains(&value) {
+            let origin = self.func.values[value.0 as usize].origin.clone();
+            code.invoke_virtual(
+                &origin,
+                pool,
+                crate::builder::BUILDER,
+                "toString",
+                "()Ljava/lang/String;",
+            );
+        }
+        Ok(())
+    }
+
+    /// A value in the representation it is held in: an accumulator's builder
+    /// itself.
+    pub(crate) fn load_held(
         &self,
         code: &mut Code,
         pool: &mut Pool,

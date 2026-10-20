@@ -45,19 +45,51 @@
 //!
 //! # What this pass may not assume
 //!
-//! A builder is a different object from what it replaces and the only thing
-//! that makes the substitution invisible is that nothing observes the
-//! accumulator between appends. So a class survives only if **every** use of
-//! **every** member is either the left operand of a concatenation inside the
-//! same class or the function's return -- and the return is the one
-//! materialisation this version allows.
+//! A builder is a different object from what it replaces, and the
+//! substitution is invisible only while nothing observes the builder itself.
+//! Every use of a member is one of three things ([`Use`]):
 //!
-//! Requiring a return rather than counting materialisation points is the
-//! conservative half. A single read anywhere else would also be correct if it
-//! ran once, and nothing here knows whether it does: a `toString` inside a loop
-//! copies the accumulator every iteration and reintroduces exactly the quadratic
-//! this pass exists to remove. A return runs once per call by construction,
-//! which is a proof rather than a guess, and it is the shape the row has.
+//! - it **consumes** the builder: appends to it (the left operand of a
+//!   concatenation in the class), returns it, or hands it across an edge to a
+//!   parameter in the class;
+//! - it **measures** it: `.length`, which `StringBuilder.length()` answers in
+//!   UTF-16 units, as JavaScript does;
+//! - or it **materialises** it: any other read -- an argument, a field store,
+//!   an erase, a comparison, the right operand of another concatenation --
+//!   sees the `String` a `toString` makes there (`Emitter::load`), so a
+//!   builder never escapes its function, whatever reads it.
+//!
+//! The reads below are for a class that **accumulates** ([`accumulating`]):
+//! one of its appends can run again before a seed -- a literal in the class,
+//! where the builder is constructed -- makes a fresh one. That is the
+//! quadratic. A straight line keeps record 0166's rule: held only where
+//! nothing but appends, edges and its return use it. As a builder a straight
+//! line saves copies in proportion to its appends -- `json-stringify-typed`'s
+//! `serializeRow` makes twenty, and as concatenations the row allocated 80%
+//! more -- and it costs a `toString` and bytecode, which a two-piece error
+//! message on a cold path does not repay: given the reads, `awfy-queens` held
+//! one in each of its hot accessors. Which straight lines a builder pays for
+//! is a question of its own, and an exact-size concatenation is its likely
+//! answer.
+//!
+//! Three rules keep that invisible, and linear:
+//!
+//! 1. **One consumer** ([`shared`]): every consumer of a member is its last
+//!    use, by core's liveness. A member consumed twice, or read after it was
+//!    consumed, would show the second use the first's characters.
+//! 2. **One materialisation a lifetime** ([`repeated`]): a `toString` copies the
+//!    whole accumulator, so one inside a loop that keeps the same builder
+//!    copies it every iteration and reintroduces the quadratic this pass exists
+//!    to remove. Every builder starts at a literal seed, so a materialisation
+//!    is allowed only where every way back to it runs one of its class's
+//!    seeds. A return needs no rule: it runs once a call.
+//! 3. **No prepend**: `out = piece + out` reads the accumulator as the right
+//!    operand of its own class's concatenation, which a builder does not make
+//!    linear.
+//!
+//! Record 0166 held only an accumulator whose one other use was the return;
+//! `json-build-append` and `json-serialize` build a fresh one per round and
+//! read its `.length`, which that version refused.
 //!
 //! Values are joined into classes by block-parameter edges, for the reason
 //! `unbox` joins them, and by the concatenation itself: `out = out + piece`
@@ -166,8 +198,8 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
     };
 
     let mut refused: FxHashSet<u32> = FxHashSet::default();
-    // A class is only worth anything if something in it accumulates.
-    let mut accumulating: FxHashSet<u32> = FxHashSet::default();
+    // Classes something is appended to: the candidates.
+    let mut appended: FxHashSet<u32> = FxHashSet::default();
 
     for (at, op) in func.values.iter().enumerate() {
         let value = ValueId(u32::try_from(at).unwrap_or(0));
@@ -186,7 +218,7 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
                 lhs,
                 ..
             } if classes.find(lhs.0) == root => {
-                accumulating.insert(root);
+                appended.insert(root);
             }
             // A block parameter arrives on an edge and its arguments carry
             // the obligation; a literal is the seed the accumulation starts
@@ -199,199 +231,312 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
         }
     }
 
-    // Uses. Anything not listed here observes the accumulator, and an observed
-    // accumulator has to be a `String` -- which is the right default for a
-    // representation change.
-    for op in &func.values {
-        match &op.kind {
-            // The left operand is the accumulator itself and is not a read of
-            // it; the right operand is appended and is an ordinary use.
-            OpKind::Binary {
-                op: BinOp::Concat,
-                lhs,
-                rhs,
-            } => {
-                if string(*rhs) {
-                    refused.insert(classes.find(rhs.0));
-                }
-                let _ = lhs;
-            }
-            other => {
-                for operand in operands_of(other) {
-                    if string(operand) {
-                        refused.insert(classes.find(operand.0));
-                    }
-                }
-            }
-        }
-    }
-
-    // A terminator's operands leave the function or cross an edge. Edges are
-    // already joined, and a return is the one materialisation allowed -- see
-    // the note above for why it is a return rather than a count.
-    for block in &func.blocks {
-        match &block.terminator {
-            Terminator::Return(_) => {}
-            other => {
-                for value in nts_core::hir::operands_of_terminator(other) {
-                    if string(value) {
-                        // Joined already where it is an edge argument; anything
-                        // else leaves the function by a route this cannot see.
-                        if !matches!(other, Terminator::Jump { .. } | Terminator::Branch { .. }) {
-                            refused.insert(classes.find(value.0));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Linearity, which everything above assumes: see `reconsumed`.
     let roots: Vec<u32> = (0..count)
         .map(|at| classes.find(u32::try_from(at).unwrap_or(0)))
         .collect();
-    let shared = {
+
+    // Rule 3: a prepend reads the accumulator as the right operand of its own
+    // class's concatenation.
+    for (at, op) in func.values.iter().enumerate() {
+        if let OpKind::Binary {
+            op: BinOp::Concat,
+            rhs,
+            ..
+        } = &op.kind
+            && string(*rhs)
+            && roots[rhs.0 as usize] == roots[at]
+        {
+            refused.insert(roots[at]);
+        }
+    }
+
+    // Worth a builder, then rules 1 and 2, over the classes still standing.
+    let uses = uses(func, &string);
+    let seeds = seeds(func, &roots);
+    let accumulating = accumulating(func, &uses, &roots, &seeds, &|root| {
+        appended.contains(&root) && !refused.contains(&root)
+    });
+    // A straight line is held only if nothing reads it but its return.
+    for (value, sites) in &uses {
+        let root = roots[value.0 as usize];
+        if !accumulating.contains(&root) && sites.iter().any(|site| site.does != Use::Consumes) {
+            refused.insert(root);
+        }
+    }
+    let broken: Vec<ValueId> = {
         let member = |value: ValueId| {
             let root = roots[value.0 as usize];
-            accumulating.contains(&root) && !refused.contains(&root)
+            appended.contains(&root) && !refused.contains(&root)
         };
-        reconsumed(func, &member)
+        shared(func, &uses, &member)
+            .into_iter()
+            .chain(repeated(func, &uses, &member, &roots, &seeds))
+            .collect()
     };
-    for value in shared {
+    for value in broken {
         refused.insert(roots[value.0 as usize]);
     }
 
     let mut keep = FxHashSet::default();
     for (at, op) in func.values.iter().enumerate() {
-        let value = ValueId(u32::try_from(at).unwrap_or(0));
-        let root = classes.find(value.0);
+        let root = roots[at];
         if matches!(op.ty, HirType::Managed(ManagedType::String))
-            && accumulating.contains(&root)
+            && appended.contains(&root)
             && !refused.contains(&root)
         {
-            keep.insert(value);
+            keep.insert(ValueId(u32::try_from(at).unwrap_or(0)));
         }
     }
     keep
 }
 
-/// Where a member is consumed: an append to it, or a terminator that returns
-/// it or hands it across an edge.
-struct Consumer {
+/// What a use does with the builder it reads; see the module note.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Use {
+    /// Appended to, returned, or handed across an edge: the builder moves on.
+    Consumes,
+    /// `.length`, which the builder answers and leaves as it was.
+    Measures,
+    /// Anything else, which sees the `String` a `toString` makes there.
+    Materialises,
+}
+
+/// One use of a string value, and where it is.
+struct Site {
     block: usize,
     /// Its place in the block: an op's index, or the block's length for the
     /// terminator, which runs after every op.
     at: usize,
-    /// Where control goes once it has run: the block's successors after an
-    /// op, the edges that carry the member after a terminator.
+    does: Use,
+    /// The blocks a terminator hands the value to, for a consumer that is an
+    /// edge; empty otherwise.
     onward: Vec<BlockId>,
 }
 
-/// Members whose builder one consumer would let another see.
-///
-/// # Linearity
-///
-/// A builder appends in place, so it stands in for a string only while each
-/// member is *consumed* -- appended to, returned, or handed across an edge --
-/// once between its definition running and running again. Two consumers one
-/// run can reach in turn share one builder, and the second sees the first's
-/// characters: `a = s + "x"; b = s + "y"` answered `twice(0)` "xyz" where node
-/// answers "xz", and `more = out + "!"; return out` answered `after(4)` "aa!"
-/// where node answers "aa" (tests/programs/a-string-accumulator-appended-twice).
-///
-/// **Counting consumers cannot say this, in either direction.** A loop's
-/// header parameter is consumed by the body's append and by the exit edge, and
-/// only one of them runs per arrival, so a count refuses every accumulator;
-/// one append inside a loop that does not redefine its operand is one consumer
-/// that runs once an iteration, so a count admits it. What decides it is
-/// reachability: a consumer conflicts with one it can reach, or with itself,
-/// along a path that does not run the definition again. The walk stops at the
-/// defining block, because arriving there makes a new value.
-fn reconsumed(func: &Func, member: &impl Fn(ValueId) -> bool) -> Vec<ValueId> {
-    let mut defined_in = vec![usize::MAX; func.values.len()];
+/// Every use of every string value, by block and place.
+fn uses(func: &Func, string: &impl Fn(ValueId) -> bool) -> FxHashMap<ValueId, Vec<Site>> {
+    let mut uses: FxHashMap<ValueId, Vec<Site>> = FxHashMap::default();
     for (index, block) in func.blocks.iter().enumerate() {
-        for value in block.params.iter().chain(&block.ops) {
-            defined_in[value.0 as usize] = index;
-        }
-    }
-
-    let mut consumers: FxHashMap<ValueId, Vec<Consumer>> = FxHashMap::default();
-    let mut shared = FxHashSet::default();
-    for (index, block) in func.blocks.iter().enumerate() {
-        for (at, op) in block.ops.iter().enumerate() {
-            if let OpKind::Binary {
-                op: BinOp::Concat,
-                lhs,
-                ..
-            } = &func.values[op.0 as usize].kind
-                && member(*lhs)
-            {
-                consumers.entry(*lhs).or_default().push(Consumer {
+        let mut note = |value: ValueId, at: usize, does: Use, onward: Vec<BlockId>| {
+            if string(value) {
+                uses.entry(value).or_default().push(Site {
                     block: index,
                     at,
-                    onward: block.terminator.successors(),
+                    does,
+                    onward,
                 });
             }
+        };
+        for (at, op) in block.ops.iter().enumerate() {
+            match &func.values[op.0 as usize].kind {
+                OpKind::Binary {
+                    op: BinOp::Concat,
+                    lhs,
+                    rhs,
+                } => {
+                    note(*lhs, at, Use::Consumes, Vec::new());
+                    note(*rhs, at, Use::Materialises, Vec::new());
+                }
+                OpKind::Length(of) => note(*of, at, Use::Measures, Vec::new()),
+                other => {
+                    for operand in operands_of(other) {
+                        note(operand, at, Use::Materialises, Vec::new());
+                    }
+                }
+            }
+        }
+
+        // A terminator hands a value on once however many of its edges carry
+        // it, because only one of them runs. One edge handing it to two
+        // parameters makes two names for one builder: two consumers.
+        let end = block.ops.len();
+        if let Terminator::Return(Some(value)) = &block.terminator {
+            note(*value, end, Use::Consumes, Vec::new());
         }
         let mut handed: Vec<(ValueId, Vec<BlockId>)> = Vec::new();
-        if let Terminator::Return(Some(value)) = &block.terminator
-            && member(*value)
-        {
-            handed.push((*value, Vec::new()));
-        }
         for (target, args) in outgoing(&block.terminator) {
             for (position, arg) in args.iter().enumerate() {
-                if !member(*arg) {
-                    continue;
-                }
-                // One edge handing a member to two parameters makes two
-                // names for one builder.
                 if args[..position].contains(arg) {
-                    shared.insert(*arg);
+                    note(*arg, end, Use::Consumes, vec![target]);
                 }
                 match handed.iter_mut().find(|(value, _)| value == arg) {
-                    Some((_, targets)) => targets.push(target),
+                    Some((_, targets)) if !targets.contains(&target) => targets.push(target),
+                    Some(_) => {}
                     None => handed.push((*arg, vec![target])),
                 }
             }
         }
         for (value, onward) in handed {
-            consumers.entry(value).or_default().push(Consumer {
-                block: index,
-                at: block.ops.len(),
-                onward,
-            });
+            note(value, end, Use::Consumes, onward);
         }
     }
+    uses
+}
 
-    for (value, uses) in &consumers {
-        let barrier = defined_in[value.0 as usize];
-        for (index, consumer) in uses.iter().enumerate() {
-            let reached = reach(func, &consumer.onward, barrier);
-            let conflicts = reached[consumer.block]
-                || uses.iter().enumerate().any(|(other, next)| {
-                    other != index
-                        && ((next.block == consumer.block && next.at > consumer.at)
-                            || reached[next.block])
+/// Rule 1: members whose builder one consumer would let another use see.
+///
+/// A builder appends in place, so it stands in for a string only while every
+/// consumer of a member is that member's **last use**: nothing reads it after
+/// it was appended to, returned or handed on, until its definition runs again.
+/// Two consumers one run can reach in turn share one builder, and the second
+/// sees the first's characters: `a = s + "x"; b = s + "y"` answered `twice(0)`
+/// "xyz" where node answers "xz", and `more = out + "!"; return out` answered
+/// `after(4)` "aa!" where node answers "aa"
+/// (tests/programs/a-string-accumulator-appended-twice). A `.length` or a
+/// `toString` after an append is the same mistake, read rather than written.
+///
+/// **Counting consumers cannot say this, in either direction.** A loop's
+/// header parameter is consumed by the body's append and by the exit edge, and
+/// only one of them runs per arrival, so a count refuses every accumulator;
+/// one append inside a loop that does not redefine its operand is one consumer
+/// that runs once an iteration, so a count admits it. Liveness says both:
+/// core's (`liveness::analyze`, the analysis reference counting releases by),
+/// asked after each consumer -- the rest of its block, then `live_out` after
+/// an op, or the `live_in` of each target an edge hands the member to. Where
+/// that analysis keeps a value live longer than its reads (a frame object's
+/// names, a counted handle's views), this refuses more, never less.
+fn shared(
+    func: &Func,
+    uses: &FxHashMap<ValueId, Vec<Site>>,
+    member: &impl Fn(ValueId) -> bool,
+) -> Vec<ValueId> {
+    if !uses.keys().any(|value| member(*value)) {
+        return Vec::new();
+    }
+    let live = nts_core::hir::liveness::analyze(func);
+
+    let mut shared = Vec::new();
+    for (value, sites) in uses {
+        if !member(*value) {
+            continue;
+        }
+        let conflicts = sites
+            .iter()
+            .enumerate()
+            .filter(|(_, site)| site.does == Use::Consumes)
+            .any(|(index, consumer)| {
+                let later = sites.iter().enumerate().any(|(other, next)| {
+                    other != index && next.block == consumer.block && next.at >= consumer.at
                 });
-            if conflicts {
-                shared.insert(*value);
-                break;
-            }
+                let block = BlockId(u32::try_from(consumer.block).unwrap_or(u32::MAX));
+                let beyond = if consumer.at == func.blocks[consumer.block].ops.len() {
+                    consumer
+                        .onward
+                        .iter()
+                        .any(|target| live.live_in(*target).contains(value))
+                } else {
+                    live.live_out(block).contains(value)
+                };
+                later || beyond
+            });
+        if conflicts {
+            shared.push(*value);
         }
     }
-    let mut shared: Vec<ValueId> = shared.into_iter().collect();
-    shared.sort_unstable_by_key(|value| value.0);
     shared
 }
 
-/// The blocks control can reach from `from` without entering `barrier`.
-fn reach(func: &Func, from: &[BlockId], barrier: usize) -> Vec<bool> {
+/// Rule 2: members materialised more than once in one builder's lifetime.
+///
+/// A `toString` copies the whole accumulator, so one that runs again on the
+/// same builder after more appends is the quadratic this pass removes, put
+/// back one copy at a time. A builder's lifetime starts at a seed -- a literal
+/// in its class, where `string_operation` constructs one -- so a
+/// materialisation is allowed only where every way back to it runs one of its
+/// class's seeds. That is what lets `json-build-append` keep a builder: its
+/// accumulator is seeded fresh each round, and read once a round, after the
+/// appends.
+///
+/// This is the plan's first statement of the rule ("no loop containing the use
+/// carries the class through its header") said without dominators: a loop
+/// carries the builder round exactly when some way round it misses every seed.
+fn repeated(
+    func: &Func,
+    uses: &FxHashMap<ValueId, Vec<Site>>,
+    member: &impl Fn(ValueId) -> bool,
+    roots: &[u32],
+    seeds: &Seeds,
+) -> Vec<ValueId> {
+    let unseeded = FxHashSet::default();
+    let mut repeated = Vec::new();
+    for (value, sites) in uses {
+        if !member(*value) {
+            continue;
+        }
+        let seeded = seeds.get(&roots[value.0 as usize]).unwrap_or(&unseeded);
+        if sites
+            .iter()
+            .any(|site| site.does == Use::Materialises && runs_again(func, site.block, seeded))
+        {
+            repeated.push(*value);
+        }
+    }
+    repeated
+}
+
+/// Each class's seeds: the blocks holding a literal in it, where
+/// `string_operation` constructs a builder afresh.
+type Seeds = FxHashMap<u32, FxHashSet<usize>>;
+
+fn seeds(func: &Func, roots: &[u32]) -> Seeds {
+    let mut seeds = Seeds::default();
+    for (index, block) in func.blocks.iter().enumerate() {
+        for op in &block.ops {
+            if matches!(func.values[op.0 as usize].kind, OpKind::ConstString(_)) {
+                seeds.entry(roots[op.0 as usize]).or_default().insert(index);
+            }
+        }
+    }
+    seeds
+}
+
+/// Whether a block can run again before its class's builder is made afresh:
+/// some way from it back to itself misses every one of the class's seeds.
+fn runs_again(func: &Func, block: usize, seeded: &FxHashSet<usize>) -> bool {
+    let onward = func.blocks[block].terminator.successors();
+    reach(func, &onward, |at| seeded.contains(&at))[block]
+}
+
+/// The classes that accumulate: an append can run again in one builder's
+/// lifetime. See the module note for what a class that does not may be.
+fn accumulating(
+    func: &Func,
+    uses: &FxHashMap<ValueId, Vec<Site>>,
+    roots: &[u32],
+    seeds: &Seeds,
+    candidate: &impl Fn(u32) -> bool,
+) -> FxHashSet<u32> {
+    let unseeded = FxHashSet::default();
+    let mut accumulating = FxHashSet::default();
+    for (value, sites) in uses {
+        let root = roots[value.0 as usize];
+        if accumulating.contains(&root) || !candidate(root) {
+            continue;
+        }
+        let seeded = seeds.get(&root).unwrap_or(&unseeded);
+        let appends_again = sites.iter().any(|site| {
+            site.does == Use::Consumes
+                && site.at < func.blocks[site.block].ops.len()
+                && runs_again(func, site.block, seeded)
+        });
+        if appends_again {
+            accumulating.insert(root);
+        }
+    }
+    accumulating
+}
+
+/// The blocks control can reach from `from` without entering one `stop` names.
+///
+/// Rule 2's question alone; rule 1's is liveness, which core answers. Core's
+/// own walks (`loops::in_a_cycle`, `verify::reachable_blocks`) ask about every
+/// path, and this asks about the paths that miss a set of blocks.
+fn reach(func: &Func, from: &[BlockId], stop: impl Fn(usize) -> bool) -> Vec<bool> {
     let mut seen = vec![false; func.blocks.len()];
     let mut stack = from.to_vec();
     while let Some(block) = stack.pop() {
         let index = block.0 as usize;
-        if index == barrier || seen[index] {
+        if stop(index) || seen[index] {
             continue;
         }
         seen[index] = true;

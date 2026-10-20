@@ -1,12 +1,17 @@
 //! Which string values the JVM holds as a `StringBuilder` (`builder.rs`).
 //!
-//! A builder appends in place, so it stands in for a string only while each
-//! value is consumed once between its definition running and running again
-//! (`builder::reconsumed`). Each function in the fixture is one shape, and
-//! what is asserted is the representation `javap` shows: a held accumulator
-//! constructs a `java/lang/StringBuilder` and calls no `String.concat`, and a
-//! refused one is the reverse. What the shapes answer is
-//! `tests/programs/a-string-accumulator-appended-twice`'s business, on every
+//! Each function in the fixture is one shape, and what is asserted is the
+//! representation `javap` shows: a held accumulator constructs a
+//! `java/lang/StringBuilder` and calls no `String.concat`, and a refused one is
+//! the reverse. Each of the module note's refusals has an arm here -- a
+//! straight line read by more than its return (`straight`), one consumer
+//! (`twice`, `after`, `inLoop`, `measuredAfter`), one materialisation a
+//! lifetime (`perIteration`), no prepend (`prepended`) -- beside the held
+//! shapes they must not cost: `linear`, `perRound` (measured by the builder,
+//! `json-build-append`'s shape), `argument` (materialised once) and `returned`
+//! (a straight line read only by its return). What the shapes answer is the
+//! business of `tests/programs/a-string-accumulator-appended-twice` and
+//! `tests/programs/a-string-accumulator-read-once-a-lifetime`, on every
 //! backend.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -38,7 +43,7 @@ fn bodies(listing: &str) -> Vec<(String, String)> {
 }
 
 #[test]
-fn an_accumulator_is_held_only_while_each_value_is_consumed_once() {
+fn an_accumulator_is_held_only_where_the_three_rules_allow() {
     let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/accumulators/tsconfig.json")
@@ -89,10 +94,31 @@ fn an_accumulator_is_held_only_while_each_value_is_consumed_once() {
         )
     };
 
-    let held = body("linear");
-    assert!(held.contains("java/lang/StringBuilder"), "linear:\n{held}");
-    assert!(!held.contains("java/lang/String.concat"), "linear:\n{held}");
-    for refused in ["twice", "after", "inLoop"] {
+    for kept in ["linear", "perRound", "argument", "returned"] {
+        let held = body(kept);
+        assert!(held.contains("java/lang/StringBuilder"), "{kept}:\n{held}");
+        assert!(!held.contains("java/lang/String.concat"), "{kept}:\n{held}");
+    }
+    // The two reads a held accumulator allows, each in its own spelling.
+    let measured = body("perRound");
+    assert!(
+        measured.contains("java/lang/StringBuilder.length:()I"),
+        "perRound:\n{measured}"
+    );
+    let materialised = body("argument");
+    assert!(
+        materialised.contains("java/lang/StringBuilder.toString:()Ljava/lang/String;"),
+        "argument:\n{materialised}"
+    );
+    for refused in [
+        "straight",
+        "twice",
+        "after",
+        "inLoop",
+        "measuredAfter",
+        "perIteration",
+        "prepended",
+    ] {
         let listing = body(refused);
         assert!(
             !listing.contains("java/lang/StringBuilder"),

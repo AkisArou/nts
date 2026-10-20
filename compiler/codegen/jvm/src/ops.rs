@@ -4942,6 +4942,14 @@ impl Emitter<'_> {
                 Ok(Placed::OnStack)
             }
 
+            // An accumulator's length is the builder's: `StringBuilder` counts
+            // UTF-16 units, as JavaScript does, and reading it copies nothing.
+            OpKind::Length(of) if self.accumulated.contains(of) => {
+                self.load_held(code, pool, *of)?;
+                code.invoke_virtual(origin, pool, crate::builder::BUILDER, "length", "()I");
+                self.adapt_to(code, Kind::Int, value, origin)?;
+                Ok(Placed::OnStack)
+            }
             OpKind::Length(of) if matches!(self.ty(*of), HirType::Managed(ManagedType::String)) => {
                 self.load(code, pool, *of)?;
                 code.invoke_virtual(origin, pool, types::STRING, "length", "()I");
@@ -5513,7 +5521,7 @@ impl Emitter<'_> {
                         && let [unit] = args.as_slice()
                     {
                         let unit = *unit;
-                        self.load(code, pool, lhs)?;
+                        self.load_held(code, pool, lhs)?;
                         self.push_as(code, pool, unit, Kind::Double, &origin)?;
                         code.invoke_static(
                             &origin,
@@ -5524,7 +5532,7 @@ impl Emitter<'_> {
                         );
                         return Ok(Some(Placed::OnStack));
                     }
-                    self.load(code, pool, lhs)?;
+                    self.load_held(code, pool, lhs)?;
                     self.load(code, pool, rhs)?;
                     code.invoke_virtual(
                         &origin,
@@ -7833,23 +7841,9 @@ impl Emitter<'_> {
                         // type with no `Kind`.
                         let kind = types::kind(&self.func.return_type)
                             .map_or_else(|| self.kind_of(*value), Ok)?;
-                        // The one place an accumulator becomes a string. It is
-                        // a return rather than any read because a return runs
-                        // once per call by construction, and a `toString` that
-                        // ran per iteration would reintroduce the quadratic
-                        // this representation exists to remove.
-                        if self.accumulated.contains(value) {
-                            self.load(code, pool, *value)?;
-                            code.invoke_virtual(
-                                &origin,
-                                pool,
-                                crate::builder::BUILDER,
-                                "toString",
-                                "()Ljava/lang/String;",
-                            );
-                        } else {
-                            self.push_as(code, pool, *value, kind, &origin)?;
-                        }
+                        // An accumulator leaves as the `String` it stands
+                        // for: `load` materialises it.
+                        self.push_as(code, pool, *value, kind, &origin)?;
                         code.ret(&origin, Some(kind));
                     }
                     None => code.ret(&origin, None),
@@ -8007,7 +8001,7 @@ impl Emitter<'_> {
                     self.assignable(from, to)?;
                     let kind = self.kind_of(from)?;
                     let origin = self.func.values[from.0 as usize].origin.clone();
-                    self.load(code, pool, from)?;
+                    self.load_held(code, pool, from)?;
                     let Some(slot) = self.slot(to) else {
                         return Err(refuse(self.func, "a block parameter with no storage"));
                     };
@@ -8016,7 +8010,7 @@ impl Emitter<'_> {
                 Copy::Save { temp, from } => {
                     let kind = self.kind_of(from)?;
                     let origin = self.func.values[from.0 as usize].origin.clone();
-                    self.load(code, pool, from)?;
+                    self.load_held(code, pool, from)?;
                     let Some(&slot) = self.temps.get(&(temp, kind as u8)) else {
                         return Err(refuse(self.func, "a copy cycle with no scratch slot"));
                     };
