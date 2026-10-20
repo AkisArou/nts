@@ -3132,8 +3132,20 @@ fn emit_object_types(
     }
     // Every object type is forward-declared first, so a field may point at a
     // type declared later -- or at its own, which a linked structure does.
+    let mut spelled: std::collections::HashMap<String, &str> = std::collections::HashMap::new();
     for layout in &program.layouts {
         let name = object_type_name(layout);
+        if let Some(previous) = spelled.insert(name.clone(), &layout.name) {
+            diagnostics.push(Diagnostic::error(
+                "NTS2004",
+                format!(
+                    "`{}` and `{previous}` both need the C name `{name}`",
+                    layout.name
+                ),
+                origin.location,
+            ));
+            continue;
+        }
         writer.line(origin, format!("typedef struct {name} {name};"));
     }
     if !program.layouts.is_empty() {
@@ -4054,12 +4066,29 @@ fn descriptor_for(
 
 /// The physical C type spelling shared by the program and its addon wrappers.
 /// The prefix makes a layout named after a C keyword an ordinary identifier.
+///
+/// ASCII punctuation is `_`, which keeps the names a generic instantiation or
+/// a frame gets readable in the header (`Box<number>` is `NtsObj_Box_number_`).
+/// `$` and every other character that is neither alphanumeric nor ASCII
+/// punctuation are escaped as `c_identifier` escapes them, `_uXXXX_`: both had
+/// been `_`, so the frames of `static async #$`, `#_` and `#\u2118` were all
+/// `NtsObj_Type47____frame`, and clang refused the redefinition -- eight of
+/// test262's private-name cases. Two layouts that still spell one name are
+/// refused by name in `emit_object_types`.
 #[must_use]
 pub fn object_type_name(layout: &nts_core::hir::Layout) -> String {
-    format!(
-        "NtsObj_{}",
-        layout.name.replace(|c: char| !c.is_alphanumeric(), "_")
-    )
+    use std::fmt::Write as _;
+    let mut name = String::from("NtsObj_");
+    for c in layout.name.chars() {
+        if c.is_alphanumeric() {
+            name.push(c);
+        } else if (c.is_ascii_punctuation() && c != '$') || c == ' ' {
+            name.push('_');
+        } else {
+            let _ = write!(name, "_u{:04x}_", c as u32);
+        }
+    }
+    name
 }
 
 /// The C spelling of an array's element type.
