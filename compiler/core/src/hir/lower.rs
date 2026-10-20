@@ -29867,9 +29867,11 @@ impl<'a> FuncBuilder<'a> {
             // declaration's position -- so `var x = 1; … var x = 2;` set `x` to
             // 2 twice.
             if !self.module.deferred.contains_key(&symbol.0) {
-                // Folding the value must preserve evaluation's exceptions.
-                if let Some(initializer) =
-                    declaration_initializer(&children, *name, |c| self.kind_of(c))
+                // Folding the value must preserve evaluation's exceptions, and
+                // a class expression, which has no value to store, is evaluated.
+                let initializer = declaration_initializer(&children, *name, |c| self.kind_of(c));
+                if !self.evaluate_a_class_initializer(initializer)?
+                    && let Some(initializer) = initializer
                     && self.module.initialization.can_raise_at(initializer)
                 {
                     self.lower_expression(initializer)?;
@@ -62762,6 +62764,27 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::Unary { op, operand: value }, ty, origin))
     }
 
+    /// Whether a binding's initializer is a class expression, which is
+    /// evaluated here: its static fields and blocks run, in order, as a class
+    /// declaration's do where it stands.
+    ///
+    /// The binding holds nothing (see `lower_variable_statement`), and both
+    /// sites that lower one -- a local and a module-scope declaration -- once
+    /// skipped it, so nothing evaluated the class: `const E = class { static {
+    /// bump(); } }` never called `bump`, silently.
+    fn evaluate_a_class_initializer(
+        &mut self,
+        initializer: Option<NodeId>,
+    ) -> Result<bool, Diagnostic> {
+        let Some(class) =
+            initializer.filter(|node| self.kind_of(*node) == Some(syntax::CLASS_EXPRESSION))
+        else {
+            return Ok(false);
+        };
+        self.lower_static_fields(class)?;
+        Ok(true)
+    }
+
     fn lower_variable_statement(&mut self, id: NodeId) -> Result<(), Diagnostic> {
         // A `VariableDeclarationList` is an ordinary syntax node, not a NodeList,
         // so `children` does not flatten it away — the declarations sit one level
@@ -62794,15 +62817,17 @@ impl<'a> FuncBuilder<'a> {
             // the class sits, and `new C()` resolves through the checker's
             // type rather than through this binding, so there is nothing left
             // for the binding to hold. Module scope gives the same answer by
-            // allocating no global for one, and a local `class L { … }`
-            // statement lowers to nothing for the same reason.
+            // allocating no global for one. The class is evaluated all the
+            // same ([`Self::evaluate_a_class_initializer`]).
             //
             // Naming the class -- `const C = class L { … }` -- changes none of
             // that. The name is in scope inside the class body and nowhere
             // else, which is a fact about the checker's scopes and not about
             // storage.
-            if initializer.is_some_and(|node| self.kind_of(node) == Some(syntax::CLASS_EXPRESSION))
-            {
+            if self.evaluate_a_class_initializer(initializer)? {
+                if self.is_terminated() {
+                    return Ok(());
+                }
                 continue;
             }
             // **`var v;` after `v = 2` must leave `v` alone.** A `var` binding
