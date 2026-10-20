@@ -1,6 +1,6 @@
 # Test262 test/built-ins cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 3e9cd79ec4cc9b2c, commit 362b32f135f3c4e7c50aba7cfa04ac4f20d1f9f6, backend jvm, harness d6442dbc09f91ad0; machine at start: 23.3 GB available, swap 2.1/31.5 GB, load 55.5/54.4 (1m/5m), 16 cores; 8 worker(s)
+# compiler a92a7367f3d8306d, commit f3fa503b7d6cef0554273d350e28a41a3733f022, backend jvm, harness d6442dbc09f91ad0; machine at start: 17.8 GB available, swap 2.3/31.5 GB, load 71/40.8 (1m/5m), 16 cores; 4 worker(s)
 test/built-ins/AggregateError/errors-iterabletolist-failures.js	fail	nts: uncaught Test262Error: get Symbol.iterator
 test/built-ins/Array/S15.4.2.1_A1.3_T1.js	pass	
 test/built-ins/Array/from/from-array.js	pass	
@@ -38,6 +38,7 @@ test/built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T2.js	pass
 test/built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T1.js	pass	
 test/built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T2.js	pass	
 test/built-ins/Array/prototype/sort/stability-11-elements.js	pass	
+test/built-ins/Array/prototype/sort/stability-2048-elements.js	pass	
 test/built-ins/Array/prototype/sort/stability-5-elements.js	pass	
 test/built-ins/Array/prototype/sort/stability-513-elements.js	pass	
 test/built-ins/Array/prototype/splice/15.4.4.12-9-a-1.js	pass	
