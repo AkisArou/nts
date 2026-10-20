@@ -234,6 +234,7 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         module: module_of(&namespace.name),
         headers: binding.headers.clone(),
         defines: binding.defines.clone(),
+        packages: binding.packages.clone(),
         brands: binding.brands.clone(),
         refused: binding.refused.clone(),
         deprecated: binding.deprecated.clone(),

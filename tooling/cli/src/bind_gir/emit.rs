@@ -26,6 +26,11 @@ fn preamble(binding: &Binding, command: &str) -> String {
     for define in &binding.defines {
         let _ = writeln!(out, " * @ntsDefine {define}");
     }
+    // What a program using the module compiles and links against, so the
+    // project need not name it again.
+    if !binding.packages.is_empty() {
+        let _ = writeln!(out, " * @ntsPackage {}", binding.packages.join(" "));
+    }
     out.push_str(" */\n");
     let _ = writeln!(out, "declare module \"{}\" {{", binding.module);
     out.push_str(&crate::bind::vocabulary_imports(

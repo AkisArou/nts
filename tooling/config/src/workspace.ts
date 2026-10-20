@@ -120,8 +120,9 @@ export interface Config {
    * What a GIR namespace's binding adds to what its GIR names, keyed
    * `Name-Version` as `nts bind-gir` spells it (`"HarfBuzz-0.0"`): headers its
    * `<c:include>` does not reach, the pkg-config packages they need, and macros
-   * defined before them. A package added here is the binding's; the program
-   * names it in `dependencies` too, to compile and link against it.
+   * defined before them. A package added here is the binding's: the module
+   * names it (`@ntsPackage`), and a program using the module compiles and
+   * links against it without naming it in `dependencies`.
    */
   readonly girExtras?: Readonly<Record<string, GirExtra>>;
 

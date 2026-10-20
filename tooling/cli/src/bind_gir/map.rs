@@ -86,6 +86,9 @@ pub(crate) struct Binding {
     pub(crate) headers: Vec<String>,
     /// Macros defined before `headers`, as `@ntsDefine` writes them.
     pub(crate) defines: Vec<String>,
+    /// The pkg-config packages the headers and symbols come from, as
+    /// `@ntsPackage` names them: GIR's `<package>`, and the request's.
+    pub(crate) packages: Vec<String>,
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,
     pub(crate) enums: Vec<EnumDecl>,
@@ -666,6 +669,7 @@ pub(crate) fn bind<'a>(
         binding: Binding {
             module: module_of(namespace),
             headers: namespace.headers.clone(),
+            packages: namespace.packages.clone(),
             defines: namespace.defines.clone(),
             ..Binding::default()
         },
