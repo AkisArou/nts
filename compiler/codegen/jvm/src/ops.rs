@@ -4625,6 +4625,14 @@ impl Emitter<'_> {
     /// the view's element count in place of `arraylength`. The accessor then
     /// checks again, which is a redundant compare on the path that was already
     /// the slow one.
+    ///
+    /// An `i64` index cannot be fractional, but it can be past the `int` range,
+    /// where narrowing it first would wrap it into range; it takes
+    /// `bounds(int, long)` rather than the `double` form. That is
+    /// `checked_subscript`'s `awfy-nbody` lesson (9d94160db), whose `long`
+    /// bound went (a768b1fc8) when no subscript was wide: `utf8Write`'s output
+    /// cursor is one again, and a bare array's checked subscript is not, so the
+    /// form is back for a view alone.
     fn view_subscript(
         &mut self,
         code: &mut Code,
@@ -4633,7 +4641,8 @@ impl Emitter<'_> {
         checked: bool,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        if !checked || self.kind_of(index)? == Kind::Int {
+        let kind = self.kind_of(index)?;
+        if !checked || kind == Kind::Int {
             return self.subscript(code, pool, index, origin);
         }
         code.dup(origin);
@@ -4644,8 +4653,13 @@ impl Emitter<'_> {
             "elements",
             &format!("(L{};)I", types::VIEW_BASE),
         );
-        self.push_as(code, pool, index, Kind::Double, origin)?;
-        code.invoke_static(origin, pool, RUNTIME, "bounds", "(ID)I");
+        let (wanted, descriptor) = if kind == Kind::Long {
+            (Kind::Long, "(IJ)I")
+        } else {
+            (Kind::Double, "(ID)I")
+        };
+        self.push_as(code, pool, index, wanted, origin)?;
+        code.invoke_static(origin, pool, RUNTIME, "bounds", descriptor);
         Ok(())
     }
 

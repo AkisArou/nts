@@ -1409,7 +1409,70 @@ public final class RuntimeRegression {
         testValueToNumber(); System.out.println("Number() of every tag passed");
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
         testPresenceHas(); System.out.println("presenceHas passed");
+        testIntegerViewStores(); System.out.println("integer view stores passed");
         System.out.println("PASS " + checks + " assertions");
+    }
+
+    /** ToInt32 from its definition, by exact arithmetic rather than the runtime's. */
+    private static int specToInt32(double x) {
+        if (Double.isNaN(x) || Double.isInfinite(x)) { return 0; }
+        return new BigDecimal(x).toBigInteger().mod(BigInteger.ONE.shiftLeft(32)).intValue();
+    }
+
+    /**
+     * Both of an integer view's store doors keep the specification's rule:
+     * `setInt` for a value already an `int`, and `setAt` for a `double`, which
+     * converts it (ToInt32, or the clamp) and stores through `setInt`. Checked
+     * against the rule written out here rather than one door against the other,
+     * because one now goes through the other.
+     */
+    private static void testIntegerViewStores() {
+        int[] ints = {0, 1, 127, 128, 255, 256, 300, -1, -128, -129, 0x1ff, 32767, 32768,
+            65535, 65536, -0x8001, Integer.MAX_VALUE, Integer.MIN_VALUE};
+        double[] numbers = {Double.NaN, 0.5, 1.5, 2.5, -1.5, 254.5, 300.7, -0.0,
+            4294967296.0 * 3 + 300, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY,
+            1e21, -2147483649.0, 2147483648.0};
+        NtsViewI8 i8 = NtsViewI8.of(1);
+        NtsViewU8 u8 = NtsViewU8.of(1);
+        NtsViewU8C u8c = NtsViewU8C.of(1);
+        NtsViewI16 i16 = NtsViewI16.of(1);
+        NtsViewU16 u16 = NtsViewU16.of(1);
+        NtsViewI32 i32 = NtsViewI32.of(1);
+        NtsViewU32 u32 = NtsViewU32.of(1);
+        for (int v : ints) {
+            NtsViewI8.setInt(i8, 0, v);
+            number(NtsViewI8.getAt(i8, 0), (byte) v, "Int8Array, int " + v);
+            NtsViewU8.setInt(u8, 0, v);
+            number(NtsViewU8.getAt(u8, 0), v & 0xff, "Uint8Array, int " + v);
+            NtsViewU8C.setInt(u8c, 0, v);
+            number(NtsViewU8C.getAt(u8c, 0), v < 0 ? 0 : Math.min(v, 255), "Uint8ClampedArray, int " + v);
+            NtsViewI16.setInt(i16, 0, v);
+            number(NtsViewI16.getAt(i16, 0), (short) v, "Int16Array, int " + v);
+            NtsViewU16.setInt(u16, 0, v);
+            number(NtsViewU16.getAt(u16, 0), v & 0xffff, "Uint16Array, int " + v);
+            NtsViewI32.setInt(i32, 0, v);
+            number(NtsViewI32.getAt(i32, 0), v, "Int32Array, int " + v);
+            NtsViewU32.setInt(u32, 0, v);
+            number(NtsViewU32.getAt(u32, 0), v & 0xffffffffL, "Uint32Array, int " + v);
+        }
+        for (double x : numbers) {
+            int bits = specToInt32(x);
+            NtsViewI8.setAt(i8, 0, x);
+            number(NtsViewI8.getAt(i8, 0), (byte) bits, "Int8Array, double " + x);
+            NtsViewU8.setAt(u8, 0, x);
+            number(NtsViewU8.getAt(u8, 0), bits & 0xff, "Uint8Array, double " + x);
+            NtsViewU8C.setAt(u8c, 0, x);
+            double clamped = Double.isNaN(x) || x <= 0 ? 0 : x >= 255 ? 255 : Math.rint(x);
+            number(NtsViewU8C.getAt(u8c, 0), clamped, "Uint8ClampedArray, double " + x);
+            NtsViewI16.setAt(i16, 0, x);
+            number(NtsViewI16.getAt(i16, 0), (short) bits, "Int16Array, double " + x);
+            NtsViewU16.setAt(u16, 0, x);
+            number(NtsViewU16.getAt(u16, 0), bits & 0xffff, "Uint16Array, double " + x);
+            NtsViewI32.setAt(i32, 0, x);
+            number(NtsViewI32.getAt(i32, 0), bits, "Int32Array, double " + x);
+            NtsViewU32.setAt(u32, 0, x);
+            number(NtsViewU32.getAt(u32, 0), bits & 0xffffffffL, "Uint32Array, double " + x);
+        }
     }
 
     /**

@@ -94,12 +94,15 @@ public final class NtsViewU8C extends NtsView {
     }
 
     /**
-     * <p>Through `setAt`, so the ECMAScript store conversion stays in one
-     * place: `u8[i] = 300` stores 44 and `u8[i] = NaN` stores 0, and those are
-     * the runtime's rules rather than the backend's.
+     * <p>The store, for a value already held as an `int`: ToUint8Clamp of an
+     * integer is the clamp, with nothing to round. `setAt` keeps the `double`
+     * rule, rounding half to even, so `u8c[i] = 300` stores 255 by either door
+     * and only `setAt` has a fraction or a NaN to settle.
      */
     public static void setInt(NtsViewU8C view, int index, int value) {
-        setAt(view, index, value);
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) (value < 0 ? 0 : value > 255 ? 255 : value);
     }
 
     public static NtsViewU8C subarray(NtsViewU8C view, double begin, double end) {

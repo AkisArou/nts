@@ -71,9 +71,7 @@ public final class NtsViewU32 extends NtsView {
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static void setAt(NtsViewU32 view, int index, double v) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+        setInt(view, index, NtsRuntime.toInt32(v));
     }
 
     /** A view of the same buffer, not a copy. */
@@ -94,12 +92,15 @@ public final class NtsViewU32 extends NtsView {
     }
 
     /**
-     * <p>Through `setAt`, and correct for the wrapped representation: a
-     * negative `int` widens to a negative `double`, and `setAt` applies
-     * ToUint32, which lands on exactly the bytes it came from.
+     * <p>The store, for a value already held as an `int`, which for this view
+     * is the wrapped representation: a `u32` above 2^31 is the negative `int`
+     * with its bits, and those bits are the four bytes stored. `setAt` converts
+     * a `double` with ToInt32 -- ToUint32's bits -- and stores here.
      */
     public static void setInt(NtsViewU32 view, int index, int value) {
-        setAt(view, index, value);
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) value; b[a + 1] = (byte) (value >> 8); b[a + 2] = (byte) (value >> 16); b[a + 3] = (byte) (value >> 24);
     }
 
     public static NtsViewU32 subarray(NtsViewU32 view, double begin, double end) {

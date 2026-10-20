@@ -1805,6 +1805,18 @@ public final class NtsRuntime {
     }
     public static int bounds(int length, int index) {
         return index >= 0 && index < length ? index : outside(index, length);
+    }
+    /**
+     * An `i64` subscript, which cannot be fractional either, and must not be
+     * narrowed first: past the `int` range an `l2i` would wrap it into range.
+     *
+     * <p>Deleted once (a768b1fc8) when no subscript was wide any more, so that
+     * a wide one took the `double` form -- correct, and an `l2d` and two
+     * floating compares per element. A view's is wide again: `node-utf8`'s
+     * encoder writes through an `i64` cursor, ten stores a character.
+     */
+    public static int bounds(int length, long index) {
+        return index >= 0 && index < length ? (int) index : outside(index, length);
     }    /**
      * The refusal an out-of-range subscript raises, callable from the array
      * classes so their reads need one call rather than two.

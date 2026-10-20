@@ -71,9 +71,7 @@ public final class NtsViewI16 extends NtsView {
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static void setAt(NtsViewI16 view, int index, double v) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8);
+        setInt(view, index, NtsRuntime.toInt32(v));
     }
 
     /** A view of the same buffer, not a copy. */
@@ -94,12 +92,18 @@ public final class NtsViewI16 extends NtsView {
     }
 
     /**
-     * <p>Through `setAt`, so the ECMAScript store conversion stays in one
-     * place: `u8[i] = 300` stores 44 and `u8[i] = NaN` stores 0, and those are
-     * the runtime's rules rather than the backend's.
+     * <p>The store, for a value already held as an `int`; `setAt` converts a
+     * `double` with ToInt32 and stores here, so the conversion stays in one
+     * place. An `int`'s own low bits are what ToInt32 then the element's
+     * width keep -- `u8[i] = 300` stores 44 by either door, and only `setAt`
+     * has a NaN to make 0. This used to widen the `int` and go through
+     * `setAt`, which ran ToInt32 on every element a second time: `node-utf8`'s
+     * encoder stores ten bytes a character this way.
      */
     public static void setInt(NtsViewI16 view, int index, int value) {
-        setAt(view, index, value);
+        int a = atInt(view, index);
+        byte[] b = view.buffer.bytes;
+        b[a] = (byte) value; b[a + 1] = (byte) (value >> 8);
     }
 
     public static NtsViewI16 subarray(NtsViewI16 view, double begin, double end) {
