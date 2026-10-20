@@ -66,9 +66,9 @@
 
 use nts_codegen_common::destruct::outgoing;
 use nts_core::hir::{
-    BinOp, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId, operands_of,
+    BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId, operands_of,
 };
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Disjoint sets over `ValueId`, by index.
 struct Classes {
@@ -121,18 +121,10 @@ pub(crate) fn held_as(
 /// The class a string accumulator is held in.
 pub(crate) const BUILDER: &str = "java/lang/StringBuilder";
 
-/// String values this backend can hold as a `StringBuilder`.
-#[must_use]
-pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
-    let count = func.values.len();
-    let mut classes = Classes::new(count);
-
-    let string = |value: ValueId| {
-        matches!(
-            func.values.get(value.0 as usize).map(|it| &it.ty),
-            Some(HirType::Managed(ManagedType::String))
-        )
-    };
+/// Values that are one storage location, for the reasons the module note
+/// gives.
+fn locations(func: &Func) -> Classes {
+    let mut classes = Classes::new(func.values.len());
 
     // A block parameter and every argument that reaches it are one location.
     for block in &func.blocks {
@@ -157,6 +149,21 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
             classes.union(u32::try_from(at).unwrap_or(0), lhs.0);
         }
     }
+    classes
+}
+
+/// String values this backend can hold as a `StringBuilder`.
+#[must_use]
+pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
+    let count = func.values.len();
+    let mut classes = locations(func);
+
+    let string = |value: ValueId| {
+        matches!(
+            func.values.get(value.0 as usize).map(|it| &it.ty),
+            Some(HirType::Managed(ManagedType::String))
+        )
+    };
 
     let mut refused: FxHashSet<u32> = FxHashSet::default();
     // A class is only worth anything if something in it accumulates.
@@ -239,6 +246,21 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
         }
     }
 
+    // Linearity, which everything above assumes: see `reconsumed`.
+    let roots: Vec<u32> = (0..count)
+        .map(|at| classes.find(u32::try_from(at).unwrap_or(0)))
+        .collect();
+    let shared = {
+        let member = |value: ValueId| {
+            let root = roots[value.0 as usize];
+            accumulating.contains(&root) && !refused.contains(&root)
+        };
+        reconsumed(func, &member)
+    };
+    for value in shared {
+        refused.insert(roots[value.0 as usize]);
+    }
+
     let mut keep = FxHashSet::default();
     for (at, op) in func.values.iter().enumerate() {
         let value = ValueId(u32::try_from(at).unwrap_or(0));
@@ -251,6 +273,131 @@ pub(crate) fn accumulators(func: &Func) -> FxHashSet<ValueId> {
         }
     }
     keep
+}
+
+/// Where a member is consumed: an append to it, or a terminator that returns
+/// it or hands it across an edge.
+struct Consumer {
+    block: usize,
+    /// Its place in the block: an op's index, or the block's length for the
+    /// terminator, which runs after every op.
+    at: usize,
+    /// Where control goes once it has run: the block's successors after an
+    /// op, the edges that carry the member after a terminator.
+    onward: Vec<BlockId>,
+}
+
+/// Members whose builder one consumer would let another see.
+///
+/// # Linearity
+///
+/// A builder appends in place, so it stands in for a string only while each
+/// member is *consumed* -- appended to, returned, or handed across an edge --
+/// once between its definition running and running again. Two consumers one
+/// run can reach in turn share one builder, and the second sees the first's
+/// characters: `a = s + "x"; b = s + "y"` answered `twice(0)` "xyz" where node
+/// answers "xz", and `more = out + "!"; return out` answered `after(4)` "aa!"
+/// where node answers "aa" (tests/programs/a-string-accumulator-appended-twice).
+///
+/// **Counting consumers cannot say this, in either direction.** A loop's
+/// header parameter is consumed by the body's append and by the exit edge, and
+/// only one of them runs per arrival, so a count refuses every accumulator;
+/// one append inside a loop that does not redefine its operand is one consumer
+/// that runs once an iteration, so a count admits it. What decides it is
+/// reachability: a consumer conflicts with one it can reach, or with itself,
+/// along a path that does not run the definition again. The walk stops at the
+/// defining block, because arriving there makes a new value.
+fn reconsumed(func: &Func, member: &impl Fn(ValueId) -> bool) -> Vec<ValueId> {
+    let mut defined_in = vec![usize::MAX; func.values.len()];
+    for (index, block) in func.blocks.iter().enumerate() {
+        for value in block.params.iter().chain(&block.ops) {
+            defined_in[value.0 as usize] = index;
+        }
+    }
+
+    let mut consumers: FxHashMap<ValueId, Vec<Consumer>> = FxHashMap::default();
+    let mut shared = FxHashSet::default();
+    for (index, block) in func.blocks.iter().enumerate() {
+        for (at, op) in block.ops.iter().enumerate() {
+            if let OpKind::Binary {
+                op: BinOp::Concat,
+                lhs,
+                ..
+            } = &func.values[op.0 as usize].kind
+                && member(*lhs)
+            {
+                consumers.entry(*lhs).or_default().push(Consumer {
+                    block: index,
+                    at,
+                    onward: block.terminator.successors(),
+                });
+            }
+        }
+        let mut handed: Vec<(ValueId, Vec<BlockId>)> = Vec::new();
+        if let Terminator::Return(Some(value)) = &block.terminator
+            && member(*value)
+        {
+            handed.push((*value, Vec::new()));
+        }
+        for (target, args) in outgoing(&block.terminator) {
+            for (position, arg) in args.iter().enumerate() {
+                if !member(*arg) {
+                    continue;
+                }
+                // One edge handing a member to two parameters makes two
+                // names for one builder.
+                if args[..position].contains(arg) {
+                    shared.insert(*arg);
+                }
+                match handed.iter_mut().find(|(value, _)| value == arg) {
+                    Some((_, targets)) => targets.push(target),
+                    None => handed.push((*arg, vec![target])),
+                }
+            }
+        }
+        for (value, onward) in handed {
+            consumers.entry(value).or_default().push(Consumer {
+                block: index,
+                at: block.ops.len(),
+                onward,
+            });
+        }
+    }
+
+    for (value, uses) in &consumers {
+        let barrier = defined_in[value.0 as usize];
+        for (index, consumer) in uses.iter().enumerate() {
+            let reached = reach(func, &consumer.onward, barrier);
+            let conflicts = reached[consumer.block]
+                || uses.iter().enumerate().any(|(other, next)| {
+                    other != index
+                        && ((next.block == consumer.block && next.at > consumer.at)
+                            || reached[next.block])
+                });
+            if conflicts {
+                shared.insert(*value);
+                break;
+            }
+        }
+    }
+    let mut shared: Vec<ValueId> = shared.into_iter().collect();
+    shared.sort_unstable_by_key(|value| value.0);
+    shared
+}
+
+/// The blocks control can reach from `from` without entering `barrier`.
+fn reach(func: &Func, from: &[BlockId], barrier: usize) -> Vec<bool> {
+    let mut seen = vec![false; func.blocks.len()];
+    let mut stack = from.to_vec();
+    while let Some(block) = stack.pop() {
+        let index = block.0 as usize;
+        if index == barrier || seen[index] {
+            continue;
+        }
+        seen[index] = true;
+        stack.extend(func.blocks[index].terminator.successors());
+    }
+    seen
 }
 
 /// `out += String.fromCharCode(c)` where `out` is a builder: the one-character
