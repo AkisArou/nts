@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler ab570b3e4d8e94c5, commit 3dd9dd8f5c32bd929f0d467a1e07ba6956dfccda, backend wasm, harness d6442dbc09f91ad0; machine at start: 20.2 GB available, swap 3.1/31.5 GB, load 55.7/57.7 (1m/5m), 16 cores; 4 worker(s)
+# compiler ed12bc7156294402, commit d5469510bc08147f816e31114362e54d81953365, backend wasm, harness d6442dbc09f91ad0; machine at start: 23.4 GB available, swap 2.2/31.5 GB, load 19.6/17.1 (1m/5m), 16 cores; 4 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -2067,19 +2067,27 @@ test/language/expressions/optional-chaining/iteration-statement-for-in.js	pass
 test/language/expressions/optional-chaining/iteration-statement-while.js	pass	
 test/language/expressions/optional-chaining/punctuator-decimal-lookahead.js	pass	
 test/language/expressions/postfix-decrement/S11.3.2_A3_T4.js	pass	
+test/language/expressions/postfix-decrement/S11.3.2_A3_T5.js	pass	
 test/language/expressions/postfix-decrement/S11.3.2_A4_T4.js	pass	
+test/language/expressions/postfix-decrement/S11.3.2_A4_T5.js	pass	
 test/language/expressions/postfix-decrement/target-cover-id.js	pass	
 test/language/expressions/postfix-decrement/whitespace.js	pass	
 test/language/expressions/postfix-increment/S11.3.1_A3_T4.js	pass	
+test/language/expressions/postfix-increment/S11.3.1_A3_T5.js	pass	
 test/language/expressions/postfix-increment/S11.3.1_A4_T4.js	pass	
+test/language/expressions/postfix-increment/S11.3.1_A4_T5.js	pass	
 test/language/expressions/postfix-increment/target-cover-id.js	pass	
 test/language/expressions/postfix-increment/whitespace.js	pass	
 test/language/expressions/prefix-decrement/S11.4.5_A3_T4.js	pass	
+test/language/expressions/prefix-decrement/S11.4.5_A3_T5.js	pass	
 test/language/expressions/prefix-decrement/S11.4.5_A4_T4.js	pass	
+test/language/expressions/prefix-decrement/S11.4.5_A4_T5.js	pass	
 test/language/expressions/prefix-decrement/target-cover-id.js	pass	
 test/language/expressions/prefix-decrement/whitespace.js	pass	
 test/language/expressions/prefix-increment/S11.4.4_A3_T4.js	pass	
+test/language/expressions/prefix-increment/S11.4.4_A3_T5.js	pass	
 test/language/expressions/prefix-increment/S11.4.4_A4_T4.js	pass	
+test/language/expressions/prefix-increment/S11.4.4_A4_T5.js	pass	
 test/language/expressions/prefix-increment/target-cover-id.js	pass	
 test/language/expressions/prefix-increment/whitespace.js	pass	
 test/language/expressions/property-accessors/S8.12.3_A3.js	pass	
