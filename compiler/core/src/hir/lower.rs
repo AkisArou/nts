@@ -21518,6 +21518,18 @@ struct FuncBuilder<'a> {
 static NO_FOREIGN: std::sync::OnceLock<super::runtime::ForeignTable> = std::sync::OnceLock::new();
 
 /// What a foreign declaration's tags say about its parameters.
+/// Which `ToNumber` an erased operand is converted for: the operator's, and
+/// so what a value `nts_value_to_number` cannot answer becomes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NumberHint {
+    /// Unary `+` and every implicit `ToNumber`: a bigint is a `TypeError`.
+    Number,
+    /// `++`, `--` and unary `-`, which are `ToNumeric`: a bigint is kept.
+    Numeric,
+    /// `Number(x)`, which converts a bigint.
+    Explicit,
+}
+
 struct ParameterTags {
     /// `@ntsThrows error convert`: the slot parameter and the converter.
     throws: Option<(String, String)>,
@@ -21924,6 +21936,20 @@ impl<'a> FuncBuilder<'a> {
 
     fn node(&self, id: NodeId) -> &'a nts_semantic_schema::NodeRecord {
         &self.snapshot.nodes[id.0 as usize]
+    }
+
+    /// Whether `id` is in a file the program runs, not a declaration file's
+    /// (`lib.d.ts`'s `valueOf` is every object's and no program's).
+    fn declared_in_program_source(&self, id: NodeId) -> bool {
+        self.snapshot
+            .nodes
+            .get(id.0 as usize)
+            .and_then(|node| {
+                self.snapshot
+                    .sources
+                    .get(node.origin.location.file.0 as usize)
+            })
+            .is_some_and(|source| !is_a_declaration_path(&source.uri))
     }
 
     fn origin(&self, id: NodeId) -> Origin {
@@ -50585,6 +50611,9 @@ impl<'a> FuncBuilder<'a> {
         // stated argument that lowering never emits the call where an object can
         // arrive -- so making it reachable would turn a documented unreachable
         // case into a silent one for an array. That is its own commit.
+        //
+        // Where the program declares no conversion of its own, the tag decides
+        // instead (`erased_to_number`), and a bigint stops by name there.
         let convertible = match self.values[current.0 as usize].ty {
             HirType::BigInt => false,
             HirType::Erased => self.only_primitives(target),
@@ -50592,6 +50621,9 @@ impl<'a> FuncBuilder<'a> {
         };
         let current = if convertible {
             self.coerce_to_number(id, target, current)?
+        } else if self.values[current.0 as usize].ty == HirType::Erased {
+            self.erased_to_number(id, current, NumberHint::Numeric)?
+                .unwrap_or(current)
         } else {
             current
         };
@@ -61593,6 +61625,148 @@ impl<'a> FuncBuilder<'a> {
         Ok(self.push(OpKind::ConstFloat(f64::NAN), HirType::NUMBER, origin))
     }
 
+    /// `ToNumber` of an erased value whose type admits an object, read off its
+    /// tag, where the program declares no conversion of its own; `None` where
+    /// it does, and the caller keeps its own answer.
+    ///
+    /// An object's `ToNumber` is `ToPrimitive` first: `valueOf`, then
+    /// `toString`. With no program `valueOf` or `[Symbol.toPrimitive]`
+    /// anywhere, every object's `valueOf` is `Object.prototype`'s, which
+    /// answers the object itself and is skipped, so its number is its text
+    /// parsed: the printer's text, which is what `toString` answers --
+    /// `[5]` is "5" and 5, `[]` is "" and 0, `{}` is "[object Object]" and
+    /// NaN. A function and a C library's handle are objects too. Everything
+    /// else keeps `nts_value_to_number`'s tag switch.
+    ///
+    /// A symbol stops by name, as does a bigint under `++`, `--` and unary
+    /// `-`, which keep one: both are answers this conversion cannot give.
+    /// JavaScript throws a `TypeError` for the symbol. A throw here would make
+    /// every function stepping an `any` one that can raise, which is its own
+    /// change.
+    fn erased_to_number(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        hint: NumberHint,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        if self.iterators.declares_a_conversion() {
+            return Ok(None);
+        }
+        let origin = self.origin(id);
+        let unsigned = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let tag = self.push(OpKind::TagOf { value }, unsigned, origin.clone());
+        let symbol = self.compare_tag(tag, BinOp::Eq, super::tags::SYMBOL, &origin);
+        self.stop_when(
+            id,
+            symbol,
+            "a conversion to a number of a symbol held as `any`, which is a TypeError",
+        );
+        if hint == NumberHint::Numeric {
+            let bigint = self.compare_tag(tag, BinOp::Eq, super::tags::BIGINT, &origin);
+            self.stop_when(
+                id,
+                bigint,
+                "an increment, decrement or negation of a bigint held as `any`",
+            );
+        }
+        let object = self.new_block();
+        let other = self.new_block();
+        let merge = self.new_block();
+        let number = self.push_block_param(merge, HirType::NUMBER, origin.clone());
+        self.branch_on_an_object_tag(tag, object, other, &origin);
+        self.switch_to(object);
+        let text = self.printer_text(id, value)?;
+        let parsed = self.call_runtime("nts_str_to_number", vec![text], HirType::NUMBER, &origin);
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![parsed],
+        });
+        self.switch_to(other);
+        let helper = if hint == NumberHint::Explicit {
+            "nts_value_to_number_explicit"
+        } else {
+            "nts_value_to_number"
+        };
+        let primitive = self.call_runtime(helper, vec![value], HirType::NUMBER, &origin);
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![primitive],
+        });
+        self.switch_to(merge);
+        Ok(Some(number))
+    }
+
+    /// `tag op wanted`, a tag against one of [`super::tags`]'s.
+    fn compare_tag(&mut self, tag: ValueId, op: BinOp, wanted: u32, origin: &Origin) -> ValueId {
+        let wanted = self.push(
+            OpKind::ConstInt(i128::from(wanted)),
+            HirType::Int {
+                bits: 32,
+                signed: false,
+            },
+            origin.clone(),
+        );
+        self.push(
+            OpKind::Binary {
+                op,
+                lhs: tag,
+                rhs: wanted,
+            },
+            HirType::Bool,
+            origin.clone(),
+        )
+    }
+
+    /// Branch to `object` where `tag` is an object's -- `OBJECT`, `FUNCTION`
+    /// or the handle block -- and to `other` for the rest. `NULL` sits between
+    /// `OBJECT` and the block and is a primitive here, whose number is 0.
+    fn branch_on_an_object_tag(
+        &mut self,
+        tag: ValueId,
+        object: BlockId,
+        other: BlockId,
+        origin: &Origin,
+    ) {
+        for wanted in [super::tags::OBJECT, super::tags::FUNCTION] {
+            let is = self.compare_tag(tag, BinOp::Eq, wanted, origin);
+            let next = self.new_block();
+            self.terminate(Terminator::Branch {
+                cond: is,
+                then_target: object,
+                then_args: Vec::new(),
+                else_target: next,
+                else_args: Vec::new(),
+            });
+            self.switch_to(next);
+        }
+        let from_block = self.compare_tag(tag, BinOp::Ge, super::tags::HANDLE_BLOCK, origin);
+        let below_block = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: from_block,
+            then_target: below_block,
+            then_args: Vec::new(),
+            else_target: other,
+            else_args: Vec::new(),
+        });
+        self.switch_to(below_block);
+        let in_block = self.compare_tag(
+            tag,
+            BinOp::Lt,
+            super::tags::HANDLE_BLOCK + super::tags::HANDLE_BLOCK_SIZE,
+            origin,
+        );
+        self.terminate(Terminator::Branch {
+            cond: in_block,
+            then_target: object,
+            then_args: Vec::new(),
+            else_target: other,
+            else_args: Vec::new(),
+        });
+    }
+
     /// `ToNumber(v)`, which `Number(x)` and unary `+` are both spellings of.
     ///
     /// One function because they are one operation. Unary `+` used to be
@@ -61631,6 +61805,12 @@ impl<'a> FuncBuilder<'a> {
             HirType::Erased if self.only_primitives(argument) => {
                 Ok(self.call_runtime("nts_value_to_number", vec![value], HirType::NUMBER, &origin))
             }
+            // One whose type admits an object: by its tag, where the program
+            // declares no conversion of its own.
+            HirType::Erased => match self.erased_to_number(id, value, NumberHint::Number)? {
+                Some(number) => Ok(number),
+                None => Err(self.unsupported(id, "a conversion to number from this type")),
+            },
             // A string, which is a *parse* and not a conversion: the
             // specification's StringToNumber trims, accepts three radix
             // prefixes C does not and rejects three spellings C does, and
@@ -61665,6 +61845,10 @@ impl<'a> FuncBuilder<'a> {
                 HirType::NUMBER,
                 &origin,
             )),
+            HirType::Erased => match self.erased_to_number(id, value, NumberHint::Explicit)? {
+                Some(number) => Ok(number),
+                None => self.coerce_to_number(id, argument, value),
+            },
             _ => self.coerce_to_number(id, argument, value),
         }
     }
@@ -62845,7 +63029,17 @@ impl<'a> FuncBuilder<'a> {
             //
             // A `bigint` is the arm `ToNumeric` keeps: `-1n` is a bigint and
             // `ToNumber` of one is a `TypeError`, so it is negated as it is.
-            self.coerce_to_number(id, *operand, value)?
+            // One held erased stops by name instead (`erased_to_number`).
+            let erased_object = self.values[value.0 as usize].ty == HirType::Erased
+                && !self.only_primitives(*operand);
+            match erased_object
+                .then(|| self.erased_to_number(id, value, NumberHint::Numeric))
+                .transpose()?
+                .flatten()
+            {
+                Some(number) => number,
+                None => self.coerce_to_number(id, *operand, value)?,
+            }
         } else {
             value
         };

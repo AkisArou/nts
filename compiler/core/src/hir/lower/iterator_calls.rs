@@ -100,6 +100,11 @@ pub(super) struct Plan {
     /// The types whose chain declares a program `valueOf`, sorted: asked by
     /// every conversion whose operand's type has none, so it is found once.
     value_of: Vec<TypeId>,
+    /// Whether the program's own source declares a `valueOf` or a
+    /// `[Symbol.toPrimitive]` anywhere -- on a class, an object literal or
+    /// a function value. Without one, `ToPrimitive` of every object the
+    /// program makes is `toString`'s answer, which its printer gives.
+    declares_a_conversion: bool,
 }
 
 impl Plan {
@@ -114,6 +119,13 @@ impl Plan {
                     .is_some_and(|method| !method.targets.is_empty())
             })
             .collect();
+        plan.declares_a_conversion = probe.snapshot.symbols.iter().any(|symbol| {
+            (symbol.name == "valueOf" || symbol.name.starts_with("__@toPrimitive@"))
+                && symbol
+                    .declarations
+                    .iter()
+                    .any(|&declaration| probe.declared_in_program_source(declaration))
+        });
         let mut closes = FxHashMap::default();
         for at in 0..probe.snapshot.nodes.len() {
             let Ok(at) = u32::try_from(at) else { break };
@@ -223,6 +235,12 @@ impl Plan {
     /// The types whose chain declares a program `valueOf`.
     pub(super) fn declaring_value_of(&self) -> &[TypeId] {
         &self.value_of
+    }
+
+    /// Whether the program's source declares a `valueOf` or a
+    /// `[Symbol.toPrimitive]` anywhere.
+    pub(super) fn declares_a_conversion(&self) -> bool {
+        self.declares_a_conversion
     }
 
     pub(super) fn closes_at(&self, at: NodeId) -> Option<Rc<super::iterator_close::Selection>> {
