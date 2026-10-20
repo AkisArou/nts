@@ -24,6 +24,11 @@
 //   hb en-us true  HarfBuzz's `hb_language_t`, a pointer record -- itself a
 //                 `const struct hb_language_impl_t *` -- held as its handle:
 //                 "en-US" read back as HarfBuzz writes it, a more specific "en"
+//   reach access=0 ot=en backend=true print=true  what GIR describes and its
+//                 headers do not include, through nts.config.ts's `girExtras`:
+//                 g_access (glib/gstdio.h), the language OpenType tags `ENG `
+//                 (hb-ot.h), a null settings backend (gsettingsbackend.h, under
+//                 its macro) and the unix print dialog's type
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -102,6 +107,7 @@ import {
   GtkTextBuffer,
   GtkTextIter,
   gtk_button_get_type,
+  gtk_print_unix_dialog_get_type,
   GtkEntry,
   GtkEntryBuffer,
   GtkLabel,
@@ -119,6 +125,7 @@ import {
   g_memory_output_stream_new_resizable,
   g_memory_output_stream_steal_as_bytes,
   g_io_error_quark,
+  g_null_settings_backend_new,
   g_output_stream_close,
   g_output_stream_flush,
   g_output_stream_write,
@@ -141,6 +148,7 @@ import {
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
+  g_access,
   g_set_error_literal,
   g_strsplit,
   g_timeout_add_full,
@@ -161,7 +169,12 @@ import {
   g_type_class_unref,
 } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
-import { hb_language_from_string, hb_language_matches, hb_language_to_string } from "c:HarfBuzz-0.0";
+import {
+  hb_language_from_string,
+  hb_language_matches,
+  hb_language_to_string,
+  hb_ot_tag_to_language,
+} from "c:HarfBuzz-0.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CBool, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
@@ -233,6 +246,17 @@ function boxedRecords(): void {
   const english = hb_language_from_string(new Uint8Array([101, 110]));
   const american = hb_language_from_string(new Uint8Array([101, 110, 45, 85, 83]));
   console.log("hb " + hb_language_to_string(american) + " " + String(hb_language_matches(english, american) !== 0));
+  // What GIR describes and its own headers do not include, reached through
+  // nts.config.ts's `girExtras`: glib/gstdio.h's g_access, HarfBuzz's
+  // OpenType API, Gio's settings backend behind G_SETTINGS_ENABLE_BACKEND,
+  // and GTK's unix-print types.
+  const tagged = hb_ot_tag_to_language(0x454e4720);
+  console.log(
+    "reach access=" + String(g_access("/", 0)) +
+      " ot=" + (tagged === null ? "none" : hb_language_to_string(tagged)) +
+      " backend=" + String(g_null_settings_backend_new() !== null) +
+      " print=" + String(gtk_print_unix_dialog_get_type() !== 0n),
+  );
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
