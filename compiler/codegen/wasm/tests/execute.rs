@@ -1571,3 +1571,21 @@ fn source_promise_all_kinds_agree_with_node() {
     );
     assert_eq!(output["cases"], 20, "{output}");
 }
+
+/// Boolean map and set keys: their own storage kind, hashed apart and
+/// compared by value, read back in insertion order.
+#[test]
+fn source_bool_keys_agree_with_node() {
+    let fixture = common::repository().join("tests/wasm/bool-keys");
+    let emitted = emit_project(&fixture);
+    let output = common::run_with_node_flags(
+        "bool-keys",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 51, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}

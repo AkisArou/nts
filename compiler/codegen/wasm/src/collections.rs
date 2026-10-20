@@ -152,6 +152,7 @@ fn key_storage(key: KeyKind) -> HirType {
     match key {
         KeyKind::String => HirType::Managed(ManagedType::String),
         KeyKind::Number => HirType::NUMBER,
+        KeyKind::Bool => HirType::Bool,
         KeyKind::Erased | KeyKind::Reference => HirType::Erased,
     }
 }
@@ -159,6 +160,7 @@ fn key_physical(key: KeyKind) -> Physical {
     match key {
         KeyKind::String => strings::STRING,
         KeyKind::Number => Physical::Scalar(Slot::F64),
+        KeyKind::Bool => Physical::Scalar(Slot::I32),
         KeyKind::Erased | KeyKind::Reference => Physical::Reference(RefType::ANYREF),
     }
 }
@@ -190,7 +192,7 @@ fn value_physical(c: &Collection) -> Option<Physical> {
     })
 }
 const fn reference_keys(c: &Collection) -> bool {
-    !matches!(c.key, KeyKind::Number)
+    !matches!(c.key, KeyKind::Number | KeyKind::Bool)
 }
 fn reference_values(c: &Collection) -> bool {
     matches!(value_physical(c), Some(Physical::Reference(_)))
@@ -712,6 +714,9 @@ fn key_operand(b: &mut Body<'_, '_>, c: &Collection, key: ValueId) -> Result<(),
             erased::unerase_to(b, key, &HirType::NUMBER)?;
             b.instruction(&I::F64Const(0.0.into()));
             b.instruction(&I::F64Add);
+        }
+        KeyKind::Bool => {
+            erased::unerase_to(b, key, &HirType::Bool)?;
         }
     }
     Ok(())
@@ -1764,6 +1769,7 @@ fn hash(m: &mut Builder<'_>, kind: KeyKind) -> Result<Function, Failure> {
     let mut f = match kind {
         KeyKind::String => hash_string(m)?,
         KeyKind::Number => hash_number(),
+        KeyKind::Bool => hash_bool(),
         KeyKind::Erased => return hash_erased(m),
         KeyKind::Reference => return hash_reference(m),
     };
@@ -1815,6 +1821,14 @@ fn hash_string(m: &mut Builder<'_>) -> Result<Function, Failure> {
 
 /// A number's bits, -0 as +0 and every NaN alike, folded and spread, before
 /// the zero test.
+/// A boolean's hash, before the zero test: one more than the value, so
+/// the two keys hash apart and neither is the hole's zero.
+fn hash_bool() -> Function {
+    let mut f = Function::new([ValType::I32]);
+    f.instructions(&[I::LocalGet(0), I::I32Const(1), I::I32Add]);
+    f
+}
+
 fn hash_number() -> Function {
     let (bits, h) = (2, 3);
     let mut f = Function::new([ValType::I64, ValType::I32]);
@@ -1941,6 +1955,7 @@ const fn hash_local(kind: KeyKind) -> u32 {
     match kind {
         KeyKind::String => 4,
         KeyKind::Number | KeyKind::Erased | KeyKind::Reference => 3,
+        KeyKind::Bool => 2,
     }
 }
 
@@ -1981,6 +1996,7 @@ fn equal(m: &mut Builder<'_>, kind: KeyKind) -> Result<Function, Failure> {
             I::I32And,
             I::I32Or,
         ]),
+        KeyKind::Bool => f.instructions(&[I::LocalGet(0), I::LocalGet(1), I::I32Eq]),
         KeyKind::Reference => f.instructions(&[
             I::LocalGet(0),
             I::RefCastNullable(RefType::EQREF.heap_type),

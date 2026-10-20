@@ -256,6 +256,8 @@ pub(crate) enum KeyKind {
     Number,
     /// An erased value, hashed and compared by its tag.
     Erased,
+    /// A boolean, stored as the i32 it already is and compared by value.
+    Bool,
     /// An object, an array or a function, hashed by its identity hash and
     /// compared by reference.
     Reference,
@@ -276,6 +278,7 @@ pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
     match key {
         HirType::Managed(ManagedType::String) => Ok(KeyKind::String),
         HirType::Float { bits: 64 } => Ok(KeyKind::Number),
+        HirType::Bool => Ok(KeyKind::Bool),
         HirType::Erased => Ok(KeyKind::Erased),
         HirType::Managed(
             ManagedType::Object(_)
@@ -2044,6 +2047,7 @@ impl<'a> Builder<'a> {
         let key_storage = match shape.key {
             KeyKind::String => HirType::Managed(ManagedType::String),
             KeyKind::Number => HirType::NUMBER,
+            KeyKind::Bool => HirType::Bool,
             KeyKind::Erased | KeyKind::Reference => HirType::Erased,
         };
         let keys = self.plain_array(&key_storage)?;
