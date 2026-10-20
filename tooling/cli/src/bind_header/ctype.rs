@@ -54,6 +54,12 @@ impl CType {
                         parameter_list(parameters, *variadic)
                     )
                 }
+                // A `const` pointer is qualified after its `*`: `char *const *`.
+                inner @ Self::Pointer { .. } => format!(
+                    "{}{} *",
+                    inner.spelled(),
+                    if *constant { " const" } else { "" }
+                ),
                 inner => format!(
                     "{}{} *",
                     if *constant { "const " } else { "" },
@@ -191,6 +197,30 @@ fn trailing_parameters(spelling: &str) -> Option<usize> {
     None
 }
 
+/// A pointer's pointee, `T` of `T *`, and whether it is `const`: where the
+/// qualifier is on that whole type -- after it, for a pointer
+/// (`char *const *`), and among a base's words (`const char *`) only once no
+/// `*` is left, since `const char **` points at a plain `const char *`.
+fn pointee(inner: &str) -> (&str, bool) {
+    let qualified_pointer = inner
+        .strip_suffix("const")
+        .map(str::trim_end)
+        .filter(|rest| rest.ends_with('*'));
+    if let Some(rest) = qualified_pointer {
+        (rest, true)
+    } else if inner.contains('*') {
+        (inner, false)
+    } else {
+        match inner.strip_prefix("const ") {
+            Some(rest) => (rest.trim(), true),
+            None => match inner.strip_suffix(" const") {
+                Some(rest) => (rest.trim(), true),
+                None => (inner, false),
+            },
+        }
+    }
+}
+
 /// Parse one spelling, leaving typedef names for `resolve` to look up.
 pub(crate) fn parse(spelling: &str, typedefs: &BTreeMap<String, String>) -> Result<CType> {
     parse_depth(&strip_attributes(spelling), typedefs, 0)
@@ -258,14 +288,7 @@ fn parse_depth(spelling: &str, typedefs: &BTreeMap<String, String>, depth: u32) 
         .or(Some(spelling))
         .and_then(|s| s.strip_suffix('*'))
     {
-        let inner = inner.trim();
-        let (inner, constant) = match inner.strip_prefix("const ") {
-            Some(rest) => (rest.trim(), true),
-            None => match inner.strip_suffix(" const") {
-                Some(rest) => (rest.trim(), true),
-                None => (inner, false),
-            },
-        };
+        let (inner, constant) = pointee(inner.trim());
         return Ok(CType::Pointer {
             to: Box::new(parse_depth(inner, typedefs, depth)?),
             constant,
@@ -339,4 +362,61 @@ pub(crate) fn typedef_names(spelling: &str) -> Vec<String> {
         names.push(word.to_owned());
     }
     names
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::{CType, parse};
+
+    /// `[const] char *[const]...`: `levels[i]` is the `const` written after
+    /// the `i`th `*`, which qualifies the pointer the next one points at.
+    fn char_at(levels: &[bool], base_const: bool) -> CType {
+        let mut ty = CType::Scalar("char".into());
+        for i in 0..levels.len() {
+            ty = CType::Pointer {
+                to: Box::new(ty),
+                constant: if i == 0 { base_const } else { levels[i - 1] },
+            };
+        }
+        ty
+    }
+
+    /// Each `const` qualifies the type it is written on, at every level: the
+    /// leading one of `const char **` is the characters', not the pointer's
+    /// it points at, and `char *const *` points at a `const` pointer.
+    #[test]
+    fn const_is_read_and_spelled_at_every_pointer_level() {
+        let none = std::collections::BTreeMap::new();
+        for (spelling, expected, spelled) in [
+            ("const char *", char_at(&[false], true), "const char *"),
+            ("char const *", char_at(&[false], true), "const char *"),
+            (
+                "const char **",
+                char_at(&[false, false], true),
+                "const char * *",
+            ),
+            (
+                "char *const *",
+                char_at(&[true, false], false),
+                "char * const *",
+            ),
+            (
+                "const char *const *",
+                char_at(&[true, false], true),
+                "const char * const *",
+            ),
+            ("char **const", char_at(&[false, false], false), "char * *"),
+        ] {
+            let parsed = parse(spelling, &none).unwrap();
+            assert_eq!(parsed, expected, "{spelling}");
+            assert_eq!(parsed.spelled(), spelled, "{spelling}");
+            assert_eq!(
+                parse(&parsed.spelled(), &none).unwrap(),
+                expected,
+                "{spelling}"
+            );
+        }
+    }
 }
