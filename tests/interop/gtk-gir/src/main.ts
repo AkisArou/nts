@@ -38,6 +38,10 @@
 //   write 3 abc   the same bytes lent as the `const void *` the header
 //                 declares (GIR writes `void*`) to `g_output_stream_write`,
 //                 read back from its memory stream
+//   vfunc flushed=true count=2 thrown=flushed once  `Flusher`'s TypeScript
+//                 `flush`, a virtual function reporting through `GError **`,
+//                 which GIO calls from `g_output_stream_flush`: answered once,
+//                 then refused through its `error` slot and thrown at the caller
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
@@ -111,9 +115,14 @@ import {
   g_file_new_for_path,
   g_memory_output_stream_new_resizable,
   g_memory_output_stream_steal_as_bytes,
+  g_io_error_quark,
   g_output_stream_close,
+  g_output_stream_flush,
   g_output_stream_write,
+  GOutputStream,
   GThemedIcon,
+  IOErrorEnum,
+  type GCancellable,
 } from "c:Gio-2.0";
 import {
   g_compute_checksum_for_data,
@@ -129,6 +138,7 @@ import {
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
+  g_set_error_literal,
   g_strsplit,
   g_timeout_add_full,
   ChecksumType,
@@ -149,12 +159,27 @@ import {
 } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
-import type { Ptr } from "c:types";
+import type { CBool, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
 import { local, stringFrom, bytesFrom } from "c:memory";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0;
+
+// A `GOutputStream` whose `flush` is TypeScript, a virtual function that
+// reports through `GError **`, reached through `g_output_stream_flush`: the
+// first flush is answered, the second refused through the override's `error`
+// slot, which the caller -- passing no slot of its own -- sees thrown.
+class Flusher extends GOutputStream {
+  flushes = 0;
+
+  vfunc_flush(cancellable?: GCancellable | null, error?: Ptr<GError | null> | null): CBool<c_int> {
+    this.flushes++;
+    if (this.flushes === 1) return true;
+    g_set_error_literal(error ?? null, g_io_error_quark(), IOErrorEnum.FAILED, "flushed once");
+    return false;
+  }
+}
 
 // Out parameters, `GError **` among them: slots on this function's stack that
 // C writes through during the call, read once it returns.
@@ -270,6 +295,16 @@ function outParameters(): void {
   let readBack = "";
   for (let at = 0; at < written.length; at++) readBack += String.fromCharCode(written[at]);
   console.log("write " + String(wrote) + " " + readBack);
+
+  const flusher = new Flusher();
+  const flushed = g_output_stream_flush(flusher);
+  let refused = "none";
+  try {
+    g_output_stream_flush(flusher);
+  } catch (e) {
+    refused = (e as Error).message;
+  }
+  console.log("vfunc flushed=" + String(flushed) + " count=" + String(flusher.flushes) + " thrown=" + refused);
 }
 
 // A handle, awaited: `query_info_async`'s `_finish` returns a `GFileInfo *`,
