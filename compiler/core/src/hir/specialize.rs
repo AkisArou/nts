@@ -148,6 +148,17 @@ pub fn specialize(
             // of the loop because it does not change.
             && !is_parameter(func, *lhs)
             && !is_parameter(func, *rhs)
+            // ...or a constant. A constant is no storage location: each
+            // comparison can have it at its own type (`comparison_type` brings
+            // it there, or compares in doubles where it does not fit), so it
+            // has no reason to agree with anything. Joining it made it carry
+            // its other comparisons' constants into this class. `new
+            // Uint8Array(length)` checks `length` against -1 and 2^53, and 2^53
+            // is no integer, so a `const length = 4096` that also bounds `for
+            // (i < length)` sank the loop's counter to a double: the `bytes`
+            // row's inner loop, 47% of its count on Wasm (2.13x node to 1.13x).
+            && !is_constant(func, *lhs)
+            && !is_constant(func, *rhs)
         {
             classes.union(lhs.0, rhs.0);
         }
@@ -185,11 +196,20 @@ pub fn specialize(
     // unprovable operand sink the other -- so an operand sits in a class of its
     // own, and judging that class on its own contents says it has nothing to
     // gain. It has: the conversion at the use is the thing being avoided.
+    //
+    // A constant pays by itself. Its conversions cost nothing -- `convert`
+    // makes a constant of the wanted type rather than an instruction -- so
+    // an integral one is an integer wherever an integer is wanted and a
+    // double wherever a double is, use by use. Comparisons no longer join it
+    // to anything (above), and without this a constant compared somewhere
+    // stayed a double at every other use: an array length, a loop bound
+    // read past its comparison (`growth-fixed`'s 2048, +67% on Wasm until
+    // this).
     let mut worthwhile: FxHashMap<u32, bool> = FxHashMap::default();
     for (index, value) in func.values.iter().enumerate() {
         let pays = match &value.kind {
             OpKind::Binary { op, .. } => !op.is_comparison(),
-            OpKind::Unary { .. } | OpKind::BlockParam(_) => true,
+            OpKind::Unary { .. } | OpKind::BlockParam(_) | OpKind::ConstFloat(_) => true,
             _ => false,
         };
         if !pays {
@@ -1435,6 +1455,22 @@ fn comparison_type(func: &Func, analysis: &Analysis, lhs: ValueId, rhs: ValueId)
         HirType::Int { .. } => analysis.is_integral_within(value, facts::SAFE_MIN, facts::SAFE_MAX),
         _ => false,
     };
+
+    // **A constant meets the other side**, whichever that is: converting a
+    // constant makes a constant (`convert`), while converting the other side
+    // is an instruction at every evaluation. A double compared with `0` is
+    // compared in doubles against `0.0`, not truncated to meet an integer
+    // `0`. With a constant's type decided use by use, preferring the integer
+    // side put that truncation in `node-utf8`'s decoder, 7 comparisons, +1.2%
+    // on Wasm.
+    for (constant, other, other_type) in [(rhs, lhs, &left), (lhs, rhs, &right)] {
+        if is_constant(func, constant)
+            && !is_constant(func, other)
+            && (matches!(other_type, HirType::Float { .. }) || fits(constant, other_type))
+        {
+            return other_type.clone();
+        }
+    }
     if matches!(left, HirType::Int { .. }) && fits(rhs, &left) {
         return left;
     }
@@ -1559,6 +1595,15 @@ fn unsigned_classes(
     unsigned
 }
 
+/// Whether `value` is a numeric constant, which a comparison can have at
+/// whatever type it compares in.
+fn is_constant(func: &Func, value: ValueId) -> bool {
+    matches!(
+        func.values[value.0 as usize].kind,
+        OpKind::ConstFloat(_) | OpKind::ConstInt(_)
+    )
+}
+
 /// A value of the wanted type, converting if it is not already.
 fn convert(
     func: &mut Func,
@@ -1629,8 +1674,10 @@ fn convert(
             #[allow(clippy::cast_possible_truncation)]
             OpKind::ConstInt(*value as i128)
         }
+        // Only to a double: every backend spells a float constant as one, and
+        // a narrower float is reached through a `Convert` as it always was.
         #[allow(clippy::cast_precision_loss)]
-        (OpKind::ConstInt(value), HirType::Float { .. }) => OpKind::ConstFloat(*value as f64),
+        (OpKind::ConstInt(value), HirType::Float { bits: 64 }) => OpKind::ConstFloat(*value as f64),
         // Crossing the erased boundary is not a coercion, and a `Convert` is
         // emitted as a C cast -- `(double)v` on a sixteen-byte struct, and
         // `(NtsValue)v` on a double, neither of which is C. The IR already has

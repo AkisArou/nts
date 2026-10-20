@@ -33,8 +33,11 @@ fn pattern_parameters_keep_narrowing_guards_and_ownership_on_actual_inputs() {
         vec![hir::ValueId(0), hir::ValueId(3), hir::ValueId(4)]
     );
     assert!(
-        matches!(combine.values[1].kind, OpKind::ConstFloat(_)),
-        "the binding index is not an argument"
+        matches!(
+            combine.values[1].kind,
+            OpKind::ConstFloat(_) | OpKind::ConstInt(_)
+        ),
+        "the binding index is a constant, not an argument"
     );
     for func in &program.funcs {
         if func.abstract_declaration {
