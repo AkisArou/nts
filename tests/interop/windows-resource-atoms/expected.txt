@@ -1,1 +1,3 @@
 cursor=true icon=true text/text=2 text/atom=2 atom/text=2 atom/atom=2
+plain: types=NTS_TYPE,#23 NTS_TYPE/NTS_NAMED@1033 NTS_TYPE/#32512@1033 #23/NTS_HTML@1033 #23/#32512@1033
+ex: types=NTS_TYPE,#23 NTS_TYPE/NTS_NAMED@1033 NTS_TYPE/#32512@1033 #23/NTS_HTML@1033 #23/#32512@1033

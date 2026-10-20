@@ -8,4 +8,7 @@ int main(void) {
   assert(surrogateCall() == 0xD83D);
   assert(typeUtilityCall() == 66);
   puts("atom=32512 text=65 wide=916 surrogate=55357 last-overload=66");
+  assert(enumerated() == 4);
+  puts("callback: #23/NTS_NAMED #0/#1 U+0394U+D83D/#65535 NTS_NAMED/#32512, no "
+       "atom read through");
 }

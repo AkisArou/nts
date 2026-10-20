@@ -51,7 +51,7 @@ for provider in nogc rc; do
       "$source/overloads/consumer/caller.c" "$built/lib$product.a" -lm -o "$build/$product-consumer"
     "$build/$product-consumer" >"$build/$product.txt"
     diff -u "$source/overloads/expected.txt" "$build/$product.txt"
-    echo "windows-resource-atoms ($product, $provider): atom bits and UTF-16 conversion, run on host"
+    echo "windows-resource-atoms ($product, $provider): atom bits, UTF-16 conversion and an atom-carrying callback, run on host"
   done
   for product in resources resourcesLlvm; do
     built="$build/$product/windows-x86_64"
@@ -62,7 +62,7 @@ for provider in nogc rc; do
     set -e
     case $status in
       0) diff -u "$source/expected.txt" "$build/$product.txt"
-         echo "windows-resource-atoms ($product, $provider): shared cursor/icon and four resource overloads, run on Windows" ;;
+         echo "windows-resource-atoms ($product, $provider): shared cursor/icon, four resource overloads and the four enumerations, run on Windows" ;;
       77) echo "SKIP windows-resource-atoms ($product, $provider): not run -- no Windows reachable" ;;
       *) echo "windows-resource-atoms ($product, $provider): exited $status" >&2; exit 1 ;;
     esac
