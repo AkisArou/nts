@@ -573,7 +573,7 @@ pub(crate) fn unerase_to(
             projection_guard(
                 body,
                 value,
-                &[HeapType::I31, HeapType::Concrete(boxed.number)],
+                &number_cases(boxed),
                 "an erased value read as a number, which it is not",
             )?;
             body.load(value)?;
@@ -690,6 +690,12 @@ pub(crate) fn projection_guard(
     cases: &[HeapType],
     why: &str,
 ) -> Result<(), Failure> {
+    is_one_of(body, value, cases)?;
+    contract::require(body, why)
+}
+
+/// Whether `value` is one of `cases`, as an i32.
+fn is_one_of(body: &mut Body<'_, '_>, value: ValueId, cases: &[HeapType]) -> Result<(), Failure> {
     for (at, case) in cases.iter().enumerate() {
         body.load(value)?;
         body.instruction(&I::RefTestNonNull(*case));
@@ -697,7 +703,21 @@ pub(crate) fn projection_guard(
             body.instruction(&I::I32Or);
         }
     }
-    contract::require(body, why)
+    Ok(())
+}
+
+/// What an erased number is: an i31, or the number box. One list, so what an
+/// unerase admits as a number and what a tag test answers is one cannot
+/// drift apart.
+fn number_cases(boxed: ErasedTypes) -> [HeapType; 2] {
+    [HeapType::I31, HeapType::Concrete(boxed.number)]
+}
+
+/// Whether erased `value` is a number, as an i32: `tag.of(value) == number`
+/// without the rest of the tag (`tag_tests`).
+pub(crate) fn number_test(body: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+    let boxed = types(body.m)?;
+    is_one_of(body, value, &number_cases(boxed))
 }
 
 /// The tag of an erased value. Of a typed one it is refused by name: a typed

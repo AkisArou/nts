@@ -3,7 +3,7 @@
 mod common;
 
 use common::hir::{F64, U32, block, function, origin, program, value};
-use nts_core::hir::{Absent, Func, Global, HirType, ManagedType, OpKind, Terminator};
+use nts_core::hir::{Absent, BinOp, Func, Global, HirType, ManagedType, OpKind, Terminator, tags};
 
 fn roundtrip(name: &str, ty: HirType, tag: bool) -> Func {
     let mut f = function(
@@ -187,5 +187,96 @@ fn the_tag_of_a_typed_value_is_refused_by_name() {
             && d.message
                 .contains("the tag of a typed Managed(String) value")),
         "{ds:?}"
+    );
+}
+
+/// `typeof x === "number"` of an erased number: its tag compared with the
+/// number tag by `op`. With `stored`, the tag is also written to global 0, a
+/// use that needs the whole tag.
+fn number_tag_test(name: &str, op: BinOp, stored: bool) -> Func {
+    let mut f = function(name, &[F64], HirType::Bool);
+    let input = value(&mut f, OpKind::Param(0), F64);
+    let erased = value(
+        &mut f,
+        OpKind::Erase {
+            value: input,
+            absent: Absent::Impossible,
+            slots: Absent::Impossible,
+        },
+        HirType::Erased,
+    );
+    let tag = value(&mut f, OpKind::TagOf { value: erased }, U32);
+    let number = value(&mut f, OpKind::ConstInt(i128::from(tags::NUMBER)), U32);
+    let test = value(
+        &mut f,
+        OpKind::Binary {
+            op,
+            lhs: tag,
+            rhs: number,
+        },
+        HirType::Bool,
+    );
+    let mut ops = vec![input, erased, tag, number, test];
+    if stored {
+        ops.push(value(
+            &mut f,
+            OpKind::GlobalSet {
+                global: 0,
+                value: tag,
+            },
+            HirType::Void,
+        ));
+    }
+    f.blocks
+        .push(block(&[], &ops, Terminator::Return(Some(test))));
+    f
+}
+
+/// A tag asked only whether it is the number tag, `==` or `!=`, is the
+/// unerase's own number test -- no `value.tag`, and so no `wasm:js-string`
+/// `test` crossing to rule out a string first. A tag with another use is the
+/// whole tag.
+#[test]
+fn a_tag_asked_only_whether_it_is_a_number_is_two_ref_tests() {
+    let asked = nts_codegen_wasm::emit(&program(vec![
+        number_tag_test("isNumber", BinOp::Eq, false),
+        number_tag_test("notNumber", BinOp::Ne, false),
+    ]))
+    .unwrap();
+    let names = common::function_names(&asked.bytes);
+    assert!(!names.iter().any(|name| name == "value.tag"), "{names:?}");
+    assert!(
+        !asked.manifest.builtins.iter().any(|i| i.name == "test"),
+        "{:?}",
+        asked.manifest.builtins
+    );
+    // The control: the same comparison of a tag that is also stored keeps the
+    // whole tag, so its absence above is the asking's and not a tag that is
+    // never made.
+    let mut both = program(vec![
+        number_tag_test("isNumber", BinOp::Eq, false),
+        number_tag_test("storedTag", BinOp::Eq, true),
+    ]);
+    both.globals.push(Global {
+        name: "lastTag".into(),
+        ty: U32,
+        written: None,
+        constant: false,
+        initial: 0.0,
+        exported: false,
+        deferred: false,
+        origin: origin(),
+    });
+    let emitted = nts_codegen_wasm::emit(&both).unwrap();
+    let calls = common::calls_by_name(&emitted.bytes);
+    assert!(
+        !calls["isNumber"].iter().any(|callee| callee == "value.tag"),
+        "{calls:?}"
+    );
+    assert!(
+        calls["storedTag"]
+            .iter()
+            .any(|callee| callee == "value.tag"),
+        "{calls:?}"
     );
 }

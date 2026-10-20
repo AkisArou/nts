@@ -11,7 +11,9 @@ use crate::{
     types::{Physical, Slot},
 };
 use nts_codegen_common::{Copy, edge_copies};
-use nts_core::hir::{BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId};
+use nts_core::hir::{
+    BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
+};
 use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, Instruction as I};
 
@@ -90,6 +92,9 @@ pub(crate) struct Body<'b, 'p> {
     /// The unerases a dominating class test already answered
     /// (`guarded_casts`), by the unerase's result.
     guarded_casts: std::collections::BTreeSet<ValueId>,
+    /// The `tag.of` values asked only whether they are a number
+    /// (`tag_tests`), by the `tag.of`.
+    number_tests: std::collections::BTreeSet<ValueId>,
     /// The literals a loop reads, each in its own local from entry
     /// (`literals::hoisted`).
     hoisted: std::collections::BTreeSet<ValueId>,
@@ -187,6 +192,7 @@ impl<'b, 'p> Body<'b, 'p> {
         let typed_reads = crate::collections::typed_reads(func, types);
         let never_null = crate::never_null::values(func);
         let guarded_casts = crate::guarded_casts::values(func, &types.objects);
+        let number_tests = crate::tag_tests::number_tests(func);
         let hoisted = crate::literals::hoisted(func, plan);
         let mut live = std::collections::BTreeSet::new();
         for block in &plan.order {
@@ -252,6 +258,7 @@ impl<'b, 'p> Body<'b, 'p> {
             typed_reads,
             never_null,
             guarded_casts,
+            number_tests,
             hoisted,
             scratch,
             pc,
@@ -284,6 +291,18 @@ impl<'b, 'p> Body<'b, 'p> {
     /// Whether `value` cannot be null.
     pub(crate) fn never_null(&self, value: ValueId) -> bool {
         self.never_null.contains(&value)
+    }
+    /// The erased value `id` asks the number tag of, when `id` is a `tag.of`
+    /// asked only that (`tag_tests`). A typed collection's read answers its
+    /// own tag (`collections::typed_tag`), so it is never one.
+    pub(crate) fn number_tag_of(&self, id: ValueId) -> Option<ValueId> {
+        if !self.number_tests.contains(&id) {
+            return None;
+        }
+        let OpKind::TagOf { value } = self.func.value(id).kind else {
+            return None;
+        };
+        self.typed_get(value).is_none().then_some(value)
     }
     /// Whether the unerase answering `result` is guarded by its class test.
     pub(crate) fn guarded_cast(&self, result: ValueId) -> bool {
@@ -614,6 +633,9 @@ impl<'b, 'p> Body<'b, 'p> {
                 slots,
             } => self.erase(id, *value, *absent, *slots)?,
             OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
+            // Asked only whether it is a number, a tag is answered where it is
+            // asked (`binary`), and is not made at all.
+            OpKind::TagOf { .. } if self.number_tag_of(id).is_some() => return Ok(()),
             OpKind::TagOf { value } => crate::erased::tag(self, id, *value)?,
             OpKind::ObjectNew { frame } => crate::objects::new(self, id, *frame)?,
             OpKind::ClosureStatic => crate::callables::static_value(self, id)?,
@@ -784,7 +806,16 @@ impl<'b, 'p> Body<'b, 'p> {
         lhs: ValueId,
         rhs: ValueId,
     ) -> Result<(), Failure> {
-        if crate::bigints::is_bigint(self.ty(lhs)) || crate::bigints::is_bigint(self.ty(rhs)) {
+        if matches!(op, BinOp::Eq | BinOp::Ne)
+            && let Some(value) = self.number_tag_of(lhs).or_else(|| self.number_tag_of(rhs))
+        {
+            crate::erased::number_test(self, value)?;
+            if op == BinOp::Ne {
+                self.instruction(&I::I32Eqz);
+            }
+            Ok(())
+        } else if crate::bigints::is_bigint(self.ty(lhs)) || crate::bigints::is_bigint(self.ty(rhs))
+        {
             crate::bigints::binary(self, op, lhs, rhs)
         } else if self.ty(lhs) == &nts_core::hir::HirType::Erased
             || self.ty(rhs) == &nts_core::hir::HirType::Erased

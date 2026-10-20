@@ -59,6 +59,7 @@ mod string_split;
 mod strings;
 mod support;
 mod symbols;
+mod tag_tests;
 mod tail;
 mod timers;
 mod transfer;
