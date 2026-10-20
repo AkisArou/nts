@@ -37215,6 +37215,26 @@ impl<'a> FuncBuilder<'a> {
     /// a `return` — which is what the source says.
     fn enter_loop(&mut self, record: &Loop, condition: Option<NodeId>) -> Result<(), Diagnostic> {
         match condition {
+            // **A connective as jumps, as `if` lowers one.** Merged into a
+            // boolean first, `while (at < s.length && s.charCodeAt(at) !== 32)
+            // at++` reached the body through one branch on the merge, so the
+            // range analysis never saw `at < s.length` on an edge into it:
+            // `at++` was unbounded there, widening sent the cursor to
+            // infinity, and json-scan's every cursor was a double on all four
+            // backends (`tests/programs/a-string-scan-cursor-stays-integral` is
+            // the reduction). Each test is an edge now. Every false edge goes
+            // to the exit with the loop's carried values, which a condition
+            // that assigns nothing holds unchanged at each of its tests.
+            Some(condition) if self.connective(condition).is_some() && !self.assigns(condition) => {
+                let (exit, _) = self.exit_of(record.depth);
+                let reached = self.carried_now(&record.carried);
+                let mut tests = Vec::new();
+                self.lower_jumps(
+                    condition,
+                    ((record.body, &[]), (exit, &reached)),
+                    &mut tests,
+                )?;
+            }
             Some(condition) => {
                 let cond = self.lower_expression(condition)?;
                 let cond = self.truthy(condition, cond);
@@ -50583,7 +50603,11 @@ impl<'a> FuncBuilder<'a> {
             let then_block = self.new_block();
             let (else_block, preallocated) = else_target(self);
             let mut tests = Vec::new();
-            self.lower_jumps(condition, (then_block, else_block), &mut tests)?;
+            self.lower_jumps(
+                condition,
+                ((then_block, &[]), (else_block, &[])),
+                &mut tests,
+            )?;
             return Ok((then_block, else_block, preallocated, tests));
         }
         let cond = self.lower_expression(condition)?;
@@ -50614,19 +50638,19 @@ impl<'a> FuncBuilder<'a> {
     fn lower_jumps(
         &mut self,
         condition: NodeId,
-        (when_true, when_false): (BlockId, BlockId),
+        (when_true, when_false): (JumpTarget<'_>, JumpTarget<'_>),
         tests: &mut Vec<BlockId>,
     ) -> Result<(), Diagnostic> {
         match self.connective(condition) {
             Some(Connective::And(left, right)) => {
                 let next = self.new_block();
-                self.lower_jumps(left, (next, when_false), tests)?;
+                self.lower_jumps(left, ((next, &[]), when_false), tests)?;
                 self.switch_to(next);
                 self.lower_jumps(right, (when_true, when_false), tests)
             }
             Some(Connective::Or(left, right)) => {
                 let next = self.new_block();
-                self.lower_jumps(left, (when_true, next), tests)?;
+                self.lower_jumps(left, (when_true, (next, &[])), tests)?;
                 self.switch_to(next);
                 self.lower_jumps(right, (when_true, when_false), tests)
             }
@@ -50640,10 +50664,10 @@ impl<'a> FuncBuilder<'a> {
                     tests.push(self.current);
                     self.terminate(Terminator::Branch {
                         cond,
-                        then_target: when_true,
-                        then_args: Vec::new(),
-                        else_target: when_false,
-                        else_args: Vec::new(),
+                        then_target: when_true.0,
+                        then_args: when_true.1.to_vec(),
+                        else_target: when_false.0,
+                        else_args: when_false.1.to_vec(),
                     });
                 }
                 Ok(())
@@ -83801,6 +83825,10 @@ enum Place {
         ty: Option<HirType>,
     },
 }
+
+/// A branch target and the arguments its block takes: what [`FuncBuilder::lower_jumps`]
+/// sends each test's outcome to.
+type JumpTarget<'a> = (BlockId, &'a [ValueId]);
 
 /// A condition's own logical connective, which [`FuncBuilder::lower_jumps`]
 /// lowers as branches.
