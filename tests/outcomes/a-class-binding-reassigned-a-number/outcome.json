@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: invalid operands to binary == (have 'NtsObj_Fn__N *' and 'double')",
+  "node": "exit 1; nts: uncaught Observed: construct control=33;reassigned=true;",
+  "measured_with": "3e9cd79ec4cc9b2c",
+  "source": "measured"
+}
