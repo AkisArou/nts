@@ -1,6 +1,6 @@
 # Test262 tests/typescript cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 060ce4dcd389a671, commit 5b46e202ff4aa6d7a95e547d23fa2e7b3b1c2b06, backend llvm, harness f8ca0afd3c45597f; machine at start: 20.6 GB available, swap 5/31.5 GB, load 10.8/10.7 (1m/5m), 16 cores; 4 worker(s)
+# compiler 3a9d99c7cfd13c9b, commit d67bbff34f11c4cb7fdc63a20e56591c3c573ac4, backend llvm, harness f8ca0afd3c45597f; machine at start: 23.1 GB available, swap 2.4/31.5 GB, load 33.7/35.4 (1m/5m), 16 cores; 4 worker(s)
 tests/typescript/async/async-method.ts	pass	
 tests/typescript/async/async-recursion.ts	pass	
 tests/typescript/async/await-a-plain-value.ts	pass	
@@ -70,7 +70,7 @@ tests/typescript/expressions/exponent-operator.ts	pass
 tests/typescript/expressions/increment-returns-old-value.ts	pass	
 tests/typescript/expressions/non-null-assignment-target.ts	pass	
 tests/typescript/expressions/non-null-has-no-check.ts	fail	nts: uncaught Test262Error: sameValue
-tests/typescript/expressions/non-null-in-optional-chain.ts	fail	nts: uncaught TypeError: Cannot read properties of undefined (reading 'label')
+tests/typescript/expressions/non-null-in-optional-chain.ts	pass	
 tests/typescript/expressions/satisfies-is-erased.ts	pass	
 tests/typescript/functions/closure-captures-mutation.ts	pass	
 tests/typescript/functions/closure-counter.ts	pass	
@@ -118,7 +118,6 @@ tests/typescript/interfaces/declaration-merging.ts	pass
 tests/typescript/interfaces/extends-class.ts	pass	
 tests/typescript/interfaces/extends-several.ts	pass	
 tests/typescript/interfaces/getter-implements-property.ts	pass	
-tests/typescript/interfaces/string-index-signature.ts	fail	nts: uncaught Test262Error: sameValue
 tests/typescript/iteration/labelled-loops.ts	pass	
 tests/typescript/literal-types/enum-like-object.ts	pass	
 tests/typescript/literal-types/satisfies-keeps-literals.ts	pass	
@@ -168,7 +167,6 @@ tests/typescript/typed-paths/int32-operators.ts	pass
 tests/typescript/typed-paths/interface-one-holder.ts	pass	
 tests/typescript/typed-paths/interface-several-holders.ts	pass	
 tests/typescript/typed-paths/math-edge-cases.ts	pass	
-tests/typescript/typed-paths/missing-record-key.ts	fail	nts: uncaught Test262Error: sameValue
 tests/typescript/typed-paths/nan-in-typed-numbers.ts	pass	
 tests/typescript/typed-paths/negative-zero.ts	pass	
 tests/typescript/typed-paths/number-field-integer-then-fraction.ts	pass	
