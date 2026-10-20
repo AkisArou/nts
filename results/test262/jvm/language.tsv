@@ -1,6 +1,6 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 9d4accc8c06d6e27, commit 1bbdc5df4c2bc96ccae5e027edecbfa5162c4b43, backend jvm, harness d6442dbc09f91ad0; machine at start: 21.6 GB available, swap 2.4/31.5 GB, load 65.4/75.7 (1m/5m), 16 cores; 4 worker(s)
+# compiler 1e417780029f17b8, commit 2635d136b45714c6a6ca5daf0e17949f7ec38c08, backend jvm, harness d6442dbc09f91ad0; machine at start: 19.3 GB available, swap 2.8/31.5 GB, load 59.9/54.9 (1m/5m), 16 cores; 4 worker(s)
 test/language/asi/S7.9.2_A1_T2.js	pass	
 test/language/asi/S7.9.2_A1_T4.js	pass	
 test/language/asi/S7.9.2_A1_T5.js	pass	
@@ -1014,8 +1014,8 @@ test/language/expressions/class/elements/regular-definitions-rs-privatename-iden
 test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier-initializer.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-privatename-identifier.js	pass	
-test/language/expressions/class/elements/regular-definitions-rs-static-async-method-privatename-identifier-alt.js	fail	nts: uncaught Test262Error: sameValue
-test/language/expressions/class/elements/regular-definitions-rs-static-async-method-privatename-identifier.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/elements/regular-definitions-rs-static-async-method-privatename-identifier-alt.js	pass	
+test/language/expressions/class/elements/regular-definitions-rs-static-async-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-method-privatename-identifier-alt.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
@@ -1059,8 +1059,8 @@ test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier
 test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-privatename-identifier.js	pass	
-test/language/expressions/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier-alt.js	fail	nts: uncaught Test262Error: sameValue
-test/language/expressions/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier.js	fail	nts: uncaught Test262Error: sameValue
+test/language/expressions/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier-alt.js	pass	
+test/language/expressions/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier-alt.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier.js	pass	
 test/language/expressions/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
@@ -3316,8 +3316,8 @@ test/language/statements/class/elements/regular-definitions-rs-privatename-ident
 test/language/statements/class/elements/regular-definitions-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-privatename-identifier-initializer.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-privatename-identifier.js	pass	
-test/language/statements/class/elements/regular-definitions-rs-static-async-method-privatename-identifier-alt.js	fail	nts: uncaught Test262Error: sameValue
-test/language/statements/class/elements/regular-definitions-rs-static-async-method-privatename-identifier.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/elements/regular-definitions-rs-static-async-method-privatename-identifier-alt.js	pass	
+test/language/statements/class/elements/regular-definitions-rs-static-async-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-method-privatename-identifier-alt.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/regular-definitions-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
@@ -3365,8 +3365,8 @@ test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-
 test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer-alt.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier-initializer.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-privatename-identifier.js	pass	
-test/language/statements/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier-alt.js	fail	nts: uncaught Test262Error: sameValue
-test/language/statements/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier.js	fail	nts: uncaught Test262Error: sameValue
+test/language/statements/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier-alt.js	pass	
+test/language/statements/class/elements/wrapped-in-sc-rs-static-async-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier-alt.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-method-privatename-identifier.js	pass	
 test/language/statements/class/elements/wrapped-in-sc-rs-static-privatename-identifier-initializer-alt-by-classname.js	pass	
