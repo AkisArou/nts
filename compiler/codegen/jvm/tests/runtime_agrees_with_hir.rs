@@ -91,6 +91,89 @@ fn published() -> Option<BTreeSet<String>> {
     Some(out)
 }
 
+/// `Promise.all`'s entries, one per kind of values array and per program shape
+/// (`ops::promise_all_external`): each is a call some lowering emits, so all of
+/// them must be real, not one of them as for a width the name does not carry.
+fn promise_all_spellings() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for holds in ["D", "Z", "L", "V"] {
+        for grows in [false, true] {
+            let (owner, method, descriptor) =
+                nts_codegen_jvm::ops::promise_all_external(holds, grows);
+            out.push((
+                format!("{owner}.{method}:{descriptor}"),
+                format!(
+                    "promise-all/{holds}/{}",
+                    if grows { "growable" } else { "bare" }
+                ),
+            ));
+        }
+    }
+    out
+}
+
+#[test]
+fn every_promise_all_spelling_names_a_method_the_jar_has() {
+    let Some(published) = published() else {
+        eprintln!("SKIP runtime_agrees_with_hir: no JAVA_HOME/javap");
+        return;
+    };
+    let missing: Vec<String> = promise_all_spellings()
+        .into_iter()
+        .filter(|(member, _)| !published.contains(member))
+        .map(|(member, kind)| format!("{kind}: {member}"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "Promise.all spellings the runtime jar does not publish:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
+/// What a call site could resolve `name` to: the array helpers need to be
+/// told what the array holds, since the name alone does not say, so this tries
+/// each width as a call site does, one at a time.
+fn resolve(name: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    if let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::external(name) {
+        found.push((
+            format!("{owner}.{method}:{descriptor}"),
+            "external".to_owned(),
+        ));
+    }
+    for holds in ["D", "Z", "L"] {
+        if let Some((owner, method, descriptor)) =
+            nts_codegen_jvm::ops::growable_external(name, holds)
+        {
+            found.push((
+                format!("{owner}.{method}:{descriptor}"),
+                format!("growable/{holds}"),
+            ));
+        }
+        if let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::array_external(name, holds)
+        {
+            found.push((
+                format!("{owner}.{method}:{descriptor}"),
+                format!("array/{holds}"),
+            ));
+        }
+    }
+    if name == "nts_promise_all" {
+        found.extend(promise_all_spellings());
+    }
+    // A view's helpers are told its class as an array's are told what it
+    // holds. Not trying them counted every one as refused -- `length` and
+    // `byteLength` among them, which this lane renders on every typed
+    // array.
+    let float64 = nts_core::hir::HirType::Float { bits: 64 };
+    if let Some(class) = nts_codegen_jvm::types::view_class(&float64)
+        && let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::view_external(name, class)
+    {
+        found.push((format!("{owner}.{method}:{descriptor}"), "view".to_owned()));
+    }
+    found
+}
+
 #[test]
 fn every_name_this_lane_renders_names_a_method_the_jar_has() {
     let Some(published) = published() else {
@@ -103,48 +186,6 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
          probably wrong, and a parse that finds nothing makes every assertion below vacuous",
         published.len()
     );
-
-    // The array helpers need to be told what the array holds; the name alone
-    // does not say. Trying each is what a call site does, one width at a time.
-    let resolve = |name: &str| -> Vec<(String, String)> {
-        let mut found = Vec::new();
-        if let Some((owner, method, descriptor)) = nts_codegen_jvm::ops::external(name) {
-            found.push((
-                format!("{owner}.{method}:{descriptor}"),
-                "external".to_owned(),
-            ));
-        }
-        for holds in ["D", "Z", "L"] {
-            if let Some((owner, method, descriptor)) =
-                nts_codegen_jvm::ops::growable_external(name, holds)
-            {
-                found.push((
-                    format!("{owner}.{method}:{descriptor}"),
-                    format!("growable/{holds}"),
-                ));
-            }
-            if let Some((owner, method, descriptor)) =
-                nts_codegen_jvm::ops::array_external(name, holds)
-            {
-                found.push((
-                    format!("{owner}.{method}:{descriptor}"),
-                    format!("array/{holds}"),
-                ));
-            }
-        }
-        // A view's helpers are told its class as an array's are told what it
-        // holds. Not trying them counted every one as refused -- `length` and
-        // `byteLength` among them, which this lane renders on every typed
-        // array.
-        let float64 = nts_core::hir::HirType::Float { bits: 64 };
-        if let Some(class) = nts_codegen_jvm::types::view_class(&float64)
-            && let Some((owner, method, descriptor)) =
-                nts_codegen_jvm::ops::view_external(name, class)
-        {
-            found.push((format!("{owner}.{method}:{descriptor}"), "view".to_owned()));
-        }
-        found
-    };
 
     let mut rendered = 0usize;
     let mut refused = 0usize;

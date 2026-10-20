@@ -228,13 +228,19 @@ public final class NtsPromise {
         promise.waitingCount = n + 1;
     }
 
+    /**
+     * One {@code Promise.all}: how many inputs are still pending, what it
+     * resolves with, and -- the one thing each kind supplies -- how a settled
+     * value is stored at its input's index. The kinds are the values array's
+     * element kinds, chosen statically by the emitter
+     * ({@code ops::promise_all_external}), the rule C's
+     * {@code nts_combinator_settled} stores by.
+     */
     private abstract static class All {
         int remaining;
-        All(int remaining) { this.remaining = remaining; }
-        abstract void store(int index, NtsValue value);
         /**
-         * The array this group fills, which is what {@code Promise.all}
-         * resolves *with*.
+         * What {@code Promise.all} resolves *with*: the values array as the
+         * program holds it, bare or in its growable wrapper.
          *
          * <p>Both settle paths used to answer {@code UNDEFINED_VALUE}, so
          * {@code reference()} on the result was null. A caller holding the
@@ -242,19 +248,40 @@ public final class NtsPromise {
          * `Promise.all([])` and reads the resolved value, and got a
          * {@code NullPointerException} on `arraylength`.
          */
-        abstract Object values();
+        final Object values;
+        All(Object values) { this.values = values; }
+        abstract void store(int index, NtsValue value);
     }
     private static final class AllNumbers extends All {
-        private final double[] values;
-        AllNumbers(int count, double[] values) { super(count); this.values = values; }
-        @Override void store(int index, NtsValue value) { values[index] = value.num; }
-        @Override Object values() { return values; }
+        private final double[] items;
+        AllNumbers(double[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.num; }
+    }
+    /**
+     * A typed boolean settles through the number channel as 0 or 1, and
+     * {@link NtsValue#ofBoolean} carries 1.0 or 0.0: either way true is a
+     * nonzero {@code num}. There was no boolean entry at all, so every
+     * {@code Promise.all} over booleans was a {@code NoSuchMethodError}.
+     */
+    private static final class AllBooleans extends All {
+        private final boolean[] items;
+        AllBooleans(boolean[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.num != 0; }
     }
     private static final class AllReferences extends All {
-        private final Object[] values;
-        AllReferences(int count, Object[] values) { super(count); this.values = values; }
-        @Override void store(int index, NtsValue value) { values[index] = value.ref; }
-        @Override Object values() { return values; }
+        private final Object[] items;
+        AllReferences(Object[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.ref; }
+    }
+    /**
+     * An erased array keeps the whole tagged value. Stored as a reference
+     * array's payload, a number was lost to null and a string was an
+     * {@code ArrayStoreException} on the {@code NtsValue[]}.
+     */
+    private static final class AllValues extends All {
+        private final Object[] items;
+        AllValues(Object[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value; }
     }
     private static final class Waiting implements NtsResumable {
         private final NtsPromise element;
@@ -276,18 +303,19 @@ public final class NtsPromise {
                 // Input position, not settlement order. Duplicated inputs get distinct indices.
                 group.store(index, element.settled);
                 if (--group.remaining == 0) {
-                    settle(result, FULFILLED, NtsValue.ofObject(group.values()));
+                    settle(result, FULFILLED, NtsValue.ofObject(group.values));
                 }
             }
         }
     }
     private static NtsPromise combine(NtsPromise[] promises, All group) {
         NtsPromise result = new NtsPromise();
+        if (group != null) { group.remaining = promises.length; }
         if (promises.length == 0) {
             // An empty `Promise.all` resolves immediately, and with the array
             // rather than with nothing: `(await Promise.all([])).length` is 0,
             // not a read of `undefined`.
-            if (group != null) { settle(result, FULFILLED, NtsValue.ofObject(group.values())); }
+            if (group != null) { settle(result, FULFILLED, NtsValue.ofObject(group.values)); }
             return result;
         }
         for (int i = 0; i < promises.length; i++) {
@@ -296,10 +324,38 @@ public final class NtsPromise {
         return result;
     }
     public static NtsPromise all(NtsPromise[] promises, double[] values) {
-        return combine(promises, new AllNumbers(promises.length, values));
+        return combine(promises, new AllNumbers(values, values));
+    }
+    public static NtsPromise all(NtsPromise[] promises, boolean[] values) {
+        return combine(promises, new AllBooleans(values, values));
     }
     public static NtsPromise all(NtsPromise[] promises, Object[] values) {
-        return combine(promises, new AllReferences(promises.length, values));
+        return combine(promises, new AllReferences(values, values));
+    }
+    public static NtsPromise allValues(NtsPromise[] promises, NtsValue[] values) {
+        return combine(promises, new AllValues(values, values));
+    }
+    // A growable program's arrays are wrappers: the promises in an NtsArrayL,
+    // the values in the wrapper of their kind, which is what the program reads
+    // back. The wrapper's `items` are filled in place through the same groups:
+    // nothing else holds the values array until the group resolves with it, so
+    // nothing can grow it and replace them first.
+    public static NtsPromise all(NtsArrayL promises, NtsArrayD values) {
+        return combine(promisesOf(promises), new AllNumbers(values.items, values));
+    }
+    public static NtsPromise all(NtsArrayL promises, NtsArrayZ values) {
+        return combine(promisesOf(promises), new AllBooleans(values.items, values));
+    }
+    public static NtsPromise all(NtsArrayL promises, NtsArrayL values) {
+        return combine(promisesOf(promises), new AllReferences(values.items, values));
+    }
+    public static NtsPromise allValues(NtsArrayL promises, NtsArrayL values) {
+        return combine(promisesOf(promises), new AllValues(values.items, values));
+    }
+    private static NtsPromise[] promisesOf(NtsArrayL promises) {
+        NtsPromise[] out = new NtsPromise[promises.length];
+        for (int i = 0; i < out.length; i++) { out[i] = (NtsPromise) promises.items[i]; }
+        return out;
     }
     public static NtsPromise race(NtsPromise[] promises) { return combine(promises, null); }
 }

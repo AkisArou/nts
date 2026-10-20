@@ -234,6 +234,36 @@ pub fn growable_external(name: &str, holds: &str) -> Option<(String, &'static st
     Some((class.to_owned(), method, signature))
 }
 
+/// `Promise.all`'s entry point, one per kind of *values* array: the array the
+/// compiler allocated for the results, whose element type says how a settled
+/// value is stored there -- C's `nts_combinator_settled` stores by the same
+/// rule. So this dispatches on the second argument rather than the first.
+///
+/// `holds` is `"D"`, `"Z"` or `"L"`, as for [`array_external`], or `"V"` for
+/// an erased array, which keeps the whole tagged value where a reference
+/// array keeps only its payload. That one is its own member, `allValues`,
+/// because in a growable program its wrapper is `NtsArrayL`, the reference
+/// array's class, so no descriptor could tell the two apart. A growable
+/// program's promises arrive in an `NtsArrayL` too.
+#[must_use]
+pub fn promise_all_external(holds: &str, grows: bool) -> (&'static str, &'static str, String) {
+    let member = if holds == "V" { "allValues" } else { "all" };
+    let arrays = match (grows, holds) {
+        (false, "D") => "[Lnts/rt/NtsPromise;[D",
+        (false, "Z") => "[Lnts/rt/NtsPromise;[Z",
+        (false, "V") => "[Lnts/rt/NtsPromise;[Lnts/rt/NtsValue;",
+        (false, _) => "[Lnts/rt/NtsPromise;[Ljava/lang/Object;",
+        (true, "D") => "Lnts/rt/NtsArrayL;Lnts/rt/NtsArrayD;",
+        (true, "Z") => "Lnts/rt/NtsArrayL;Lnts/rt/NtsArrayZ;",
+        (true, _) => "Lnts/rt/NtsArrayL;Lnts/rt/NtsArrayL;",
+    };
+    (
+        types::PROMISE,
+        member,
+        format!("({arrays})Lnts/rt/NtsPromise;"),
+    )
+}
+
 /// The array helpers, which need one entry point per element width.
 ///
 /// `element` is `"D"`, `"Z"` or `"L"` -- the two primitive widths that appear
@@ -253,15 +283,6 @@ pub fn array_external(name: &str, element: &str) -> Option<(&'static str, &'stat
         ),
     };
     Some(match name {
-        // `Promise.all`'s *values* array is the one the compiler allocated, and
-        // its element type is what says whether a payload is a double or a
-        // reference -- so this dispatches on the second argument rather than
-        // the first, which is why it is here rather than in `external`.
-        "nts_promise_all" => (
-            types::PROMISE,
-            "all",
-            format!("([Lnts/rt/NtsPromise;{array})Lnts/rt/NtsPromise;"),
-        ),
         "nts_array_index_of" | "nts_array_index_of_ref" => {
             (RUNTIME, "arrayIndexOf", format!("({array}{one})D"))
         }
@@ -3779,7 +3800,20 @@ impl Emitter<'_> {
         let element = subject
             .as_ref()
             .and_then(|ty| self.array_element_descriptor(ty));
-        let found = if self.shape.grows {
+        let found = if name == "nts_promise_all" {
+            // An erased array is a reference array to every other helper,
+            // and here the one that must keep the tag.
+            let erased = matches!(
+                subject.as_ref(),
+                Some(HirType::Managed(ManagedType::Array(holds))) if **holds == HirType::Erased
+            );
+            let holds = if erased {
+                "V"
+            } else {
+                element.as_deref().unwrap_or("L")
+            };
+            Some(promise_all_external(holds, self.shape.grows))
+        } else if self.shape.grows {
             // A growable program has no bare arrays, so every array
             // helper is a method on a wrapper and the element-width
             // overloads below do not apply.

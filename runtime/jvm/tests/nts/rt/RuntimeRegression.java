@@ -705,8 +705,82 @@ public final class RuntimeRegression {
         number(NtsPromise.number(fulfilled), 17, "rejection cannot overwrite fulfillment");
         NtsEnv.drain(NtsEnv.current());
     }
+    /**
+     * `Promise.all` stores each settled value by its values array's kind, bare
+     * and in a growable program's wrappers, at its input's index whatever the
+     * settlement order. Booleans had no entry (NoSuchMethodError), an erased
+     * array stored only the payload (ArrayStoreException on a string), and a
+     * growable program had no entry for any kind.
+     */
+    private static NtsPromise[] pending(int n) {
+        NtsPromise[] out = new NtsPromise[n];
+        for (int i = 0; i < n; i++) { out[i] = NtsPromise.newPromise(); }
+        return out;
+    }
+    private static NtsArrayL wrapped(NtsPromise[] promises) {
+        NtsArrayL out = NtsArrayL.of(promises.length);
+        System.arraycopy(promises, 0, out.items, 0, promises.length);
+        return out;
+    }
+    private static void settleKinds(NtsPromise[] numbers, NtsPromise[] booleans, NtsPromise[] references,
+                                    NtsPromise[] values, NtsValue text) {
+        // Last input first, so an index taken from settlement order would show.
+        NtsPromise.fulfillNumber(numbers[1], 2);
+        NtsPromise.fulfillNumber(numbers[0], 1);
+        NtsPromise.fulfillValue(booleans[1], NtsValue.ofBoolean(false));
+        NtsPromise.fulfillNumber(booleans[0], 1);
+        NtsPromise.fulfillValue(booleans[2], NtsValue.ofBoolean(true));
+        NtsPromise.fulfillReference(references[1], "b");
+        NtsPromise.fulfillReference(references[0], "a");
+        NtsPromise.fulfillValue(values[2], NtsValue.ofBoolean(true));
+        NtsPromise.fulfillValue(values[1], text);
+        NtsPromise.fulfillNumber(values[0], 7);
+        NtsEnv.drain(NtsEnv.current());
+    }
+    private static void testPromiseAllKinds() {
+        NtsValue text = NtsValue.ofString("s");
+        NtsPromise[] numbers = pending(2), booleans = pending(3), references = pending(2), values = pending(3);
+        double[] numbered = new double[2];
+        boolean[] truths = new boolean[3];
+        String[] texts = new String[2];
+        NtsValue[] tagged = new NtsValue[3];
+        NtsPromise[] all = {
+            NtsPromise.all(numbers, numbered), NtsPromise.all(booleans, truths),
+            NtsPromise.all(references, texts), NtsPromise.allValues(values, tagged),
+        };
+        settleKinds(numbers, booleans, references, values, text);
+        check(NtsPromise.reference(all[0]) == numbered && numbered[0] == 1 && numbered[1] == 2, "all: numbers by index");
+        check(NtsPromise.reference(all[1]) == truths && truths[0] && !truths[1] && truths[2], "all: booleans by truth");
+        check(NtsPromise.reference(all[2]) == texts && "a".equals(texts[0]) && "b".equals(texts[1]), "all: references");
+        check(NtsPromise.reference(all[3]) == tagged && tagged[0].tag == NtsValue.NUMBER && tagged[0].num == 7
+              && tagged[1] == text && tagged[2].tag == NtsValue.BOOLEAN, "allValues: the whole tagged value");
+
+        numbers = pending(2); booleans = pending(3); references = pending(2); values = pending(3);
+        NtsArrayD grownNumbers = NtsArrayD.of(2);
+        NtsArrayZ grownTruths = NtsArrayZ.of(3);
+        NtsArrayL grownTexts = NtsArrayL.of(2), grownTagged = NtsArrayL.ofValues(3);
+        all = new NtsPromise[] {
+            NtsPromise.all(wrapped(numbers), grownNumbers), NtsPromise.all(wrapped(booleans), grownTruths),
+            NtsPromise.all(wrapped(references), grownTexts), NtsPromise.allValues(wrapped(values), grownTagged),
+        };
+        settleKinds(numbers, booleans, references, values, text);
+        check(NtsPromise.reference(all[0]) == grownNumbers && grownNumbers.items[0] == 1 && grownNumbers.items[1] == 2,
+              "all: growable numbers resolve with the wrapper");
+        check(NtsPromise.reference(all[1]) == grownTruths && grownTruths.items[0] && !grownTruths.items[1]
+              && grownTruths.items[2], "all: growable booleans");
+        check(NtsPromise.reference(all[2]) == grownTexts && "a".equals(grownTexts.items[0])
+              && "b".equals(grownTexts.items[1]), "all: growable references");
+        check(NtsPromise.reference(all[3]) == grownTagged && grownTagged.items[1] == text
+              && ((NtsValue) grownTagged.items[0]).num == 7, "allValues: growable tagged values");
+
+        NtsArrayD none = NtsArrayD.of(0);
+        NtsPromise empty = NtsPromise.all(wrapped(new NtsPromise[0]), none);
+        NtsEnv.drain(NtsEnv.current());
+        check(NtsPromise.reference(empty) == none, "all: an empty growable group resolves with its wrapper");
+    }
     private static void testPromises() {
         testRejectedValues();
+        testPromiseAllKinds();
         final StringBuilder out = new StringBuilder();
         NtsPromise p = NtsPromise.newPromise();
         for (int i = 0; i < 100; ++i) { NtsPromise.subscribe(p, record(out, i + ",")); }
