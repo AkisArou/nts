@@ -1383,6 +1383,8 @@ fn vfunc_tuple(function: &mut Function) -> Vec<(String, bool)> {
 enum StructMember {
     /// A value of the type GIR names, qualified.
     Value(String),
+    /// A string's `char *`, `const` where the header's is.
+    String { constant: bool },
     /// Another plain record, held by value, by its C type.
     Nested(String),
 }
@@ -4069,10 +4071,10 @@ impl<'a> Mapper<'a> {
     }
 
     /// What a record's member is to a `Struct`: a value `typed` spells -- a
-    /// scalar, an enum, a `void *` -- by its type's qualified name, or
-    /// another plain record held by value, by its C type. `None` for what no
-    /// `Struct` spells here: a bit-field, a `volatile` member, a string, a
-    /// handle, an array, a callback, a union.
+    /// scalar, an enum, a `void *` -- by its type's qualified name; a
+    /// string's raw `char *`; or another plain record held by value, by its
+    /// C type. `None` for what no `Struct` spells here: a bit-field, a
+    /// `volatile` member, a handle, an array, a callback, a union.
     fn member(&self, namespace: &Namespace, field: &Field, depth: usize) -> Option<StructMember> {
         if field.bits {
             return None;
@@ -4088,6 +4090,16 @@ impl<'a> Mapper<'a> {
         let target = self.alias_target(&name).unwrap_or_else(|| name.clone());
         if matches!(target.as_str(), "gpointer" | "gconstpointer") {
             return Some(StructMember::Value(name));
+        }
+        if matches!(target.as_str(), "utf8" | "filename") {
+            let compact: String = c_type.split_whitespace().collect();
+            return match compact.as_str() {
+                "gchar*" | "char*" => Some(StructMember::String { constant: false }),
+                "constgchar*" | "constchar*" | "gcharconst*" | "charconst*" => {
+                    Some(StructMember::String { constant: true })
+                }
+                _ => None,
+            };
         }
         if c_type.contains('*') || matches!(c_type, "bool" | "_Bool") {
             return None;
@@ -4110,6 +4122,13 @@ impl<'a> Mapper<'a> {
         let mut fields = Vec::new();
         for field in &record.fields {
             let ts = match self.member(self.namespace, field, 0)? {
+                // The member's bytes, which the program reads with
+                // `stringFrom`: nothing here owns or frees them.
+                StructMember::String { constant } => {
+                    let brand = if constant { "ConstPtr" } else { "Ptr" };
+                    self.binding.brands.extend([brand, "c_char"]);
+                    format!("{brand}<c_char> | null")
+                }
                 StructMember::Nested(c_type) => {
                     let owner = self.c_types.get(c_type.as_str()).copied()?;
                     self.name_in(owner, &c_type)
@@ -4969,6 +4988,8 @@ mod tests {
         let rect = [
             ints.as_str(),
             &field("stamp", "gint64", "gint64"),
+            &field("name", "utf8", "const gchar*"),
+            &field("label", "utf8", "gchar*"),
             r#"<field name="reserved" readable="0" private="1"><type name="gpointer" c:type="gpointer"/></field>"#,
         ]
         .concat();
@@ -4982,6 +5003,7 @@ mod tests {
             &record("Volatile", &field("state", "gint", "volatile gint")),
             &record("Root", &field("type", "GType", "GType")),
             &record("Unsized", &ints),
+            &record("Holder", &field("rect", "Rect", "SRect*")),
             r#"<record name="ThingClass" c:type="SThingClass" glib:is-gtype-struct-for="Thing">"#,
             &field("root", "Root", "SRoot"),
             "</record>",
@@ -5003,11 +5025,12 @@ mod tests {
     }
 
     /// A record with no `GType`, whose members the headers lay out, is a
-    /// `Struct` -- private members too, a 64-bit one as its brand -- and a
-    /// pointer to one is the program's storage, in, out or both. The
-    /// controls differ from it in one thing each and stay handles: a
-    /// `volatile` member, a record a class struct embeds first, one the
-    /// headers do not complete.
+    /// `Struct` -- private members too, a 64-bit one as its brand, a string
+    /// as its raw `char *` -- and a pointer to one is the program's storage,
+    /// in, out or both. The controls differ from it in one thing each and
+    /// stay handles: a `volatile` member, a record a class struct embeds
+    /// first, one the headers do not complete, one holding a pointer to
+    /// another record.
     #[test]
     fn a_plain_record_is_a_struct_and_its_pointer_is_storage() {
         use super::super::facts;
@@ -5018,12 +5041,17 @@ mod tests {
         let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
         let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
         let header = facts::Facts {
-            tags: ["SRect", "SVolatile", "SRoot", "SUnsized"]
+            tags: ["SRect", "SVolatile", "SRoot", "SUnsized", "SHolder"]
                 .map(|c| (c.to_owned(), format!("_{c}")))
                 .into(),
-            sizes: [("SRect", 32), ("SVolatile", 4), ("SRoot", 8)]
-                .map(|(c, size)| (c.to_owned(), size))
-                .into(),
+            sizes: [
+                ("SRect", 48),
+                ("SVolatile", 4),
+                ("SRoot", 8),
+                ("SHolder", 8),
+            ]
+            .map(|(c, size)| (c.to_owned(), size))
+            .into(),
             ..facts::Facts::default()
         };
         let binding = bind(&repository, &repository.namespaces["S"], &header);
@@ -5044,10 +5072,12 @@ mod tests {
                 ("x", "c_int"),
                 ("y", "c_int"),
                 ("stamp", "BigInt64"),
+                ("name", "ConstPtr<c_char> | null"),
+                ("label", "Ptr<c_char> | null"),
                 ("reserved", "Ptr<void> | null"),
             ]
         );
-        for control in ["SVolatile", "SRoot", "SUnsized"] {
+        for control in ["SVolatile", "SRoot", "SUnsized", "SHolder"] {
             assert!(
                 binding
                     .types
