@@ -984,9 +984,20 @@ fn entry_point(
             "a GObject virtual function taking or returning a record by value",
         ));
     }
+    // A `string` the slot answers is one GTK holds past the call, and nothing
+    // yet says whose copy that is.
+    if nts_core::hir::native::lent_string(&method.signature.result, &compiled.return_type) {
+        return Err(refuse(
+            compiled,
+            "a GObject virtual function answering a string",
+        ));
+    }
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     let mut body = String::new();
+    // What the entry makes inside the callback and gives back before leaving
+    // it, as the C backend's entry and both closure bridges do.
+    let (mut copies, mut releases) = (String::new(), String::new());
     for (slot, (foreign, want)) in method
         .signature
         .parameters
@@ -997,6 +1008,17 @@ fn entry_point(
         let from = foreign.abi(platform.abi);
         let from_ty = ty_of(&from, compiled)?;
         parameters.push(format!("{from_ty} %a{slot}"));
+        // A string GTK lends: copied in for the call, given back after it.
+        // Read as the method's `NtsString *` it is bytes taken for a header.
+        if nts_core::hir::native::lent_string(foreign, &want.ty) {
+            let _ = writeln!(
+                copies,
+                "  %s{slot} = call ptr @nts_string_from_cstring(ptr %a{slot})"
+            );
+            let _ = writeln!(releases, "  call void @nts_release(ptr %s{slot})");
+            arguments.push(format!("ptr %s{slot}"));
+            continue;
+        }
         let to_ty = ty_of(&want.ty, compiled)?;
         // One handle as another -- the slot's `GtkWidget *` as the method's
         // `GtkButton *` `this`, which is what the instance is, since GTK
@@ -1041,7 +1063,7 @@ fn entry_point(
         out.push_str(&body);
         let _ = writeln!(
             out,
-            "  call void @nts_callback_enter()\n  {call}\n  call void @nts_callback_leave()\n  ret void\n}}"
+            "  call void @nts_callback_enter()\n{copies}  {call}\n{releases}  call void @nts_callback_leave()\n  ret void\n}}"
         );
     } else {
         let want_ty = ty_of(&want, compiled)?;
@@ -1053,7 +1075,7 @@ fn entry_point(
         out.push_str(&body);
         let _ = writeln!(
             out,
-            "  call void @nts_callback_enter()\n  %r = {call}\n  call void @nts_callback_leave()"
+            "  call void @nts_callback_enter()\n{copies}  %r = {call}\n{releases}  call void @nts_callback_leave()"
         );
         // And back: the method's `GtkLabel *` as the slot's `gpointer`
         // (`GListModelInterface get_item`) is the same pointer.

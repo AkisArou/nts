@@ -74,8 +74,14 @@ pub(super) fn classes(
                 .split_whitespace()
                 .nth(2)
                 .ok_or_else(|| refuse("a GObject virtual function whose slot has no offset"))?;
+            // A `string` the slot answers is one GTK holds past the call, and
+            // nothing yet says whose copy that is.
+            if nts_core::hir::native::lent_string(&method.signature.result, &compiled.return_type) {
+                return Err(refuse("a GObject virtual function answering a string"));
+            }
             let mut parameters = Vec::new();
             let mut arguments = Vec::new();
+            let (mut copies, mut releases) = (String::new(), String::new());
             for (slot, (ty, want)) in method
                 .signature
                 .parameters
@@ -84,6 +90,15 @@ pub(super) fn classes(
                 .enumerate()
             {
                 parameters.push(format!("{} a{slot}", ty.c_type()));
+                if let Some(copy) = super::native_memory::lent_string(
+                    ty,
+                    &want.ty,
+                    slot,
+                    (&mut copies, &mut releases),
+                ) {
+                    arguments.push(copy);
+                    continue;
+                }
                 arguments.push(format!(
                     "({})a{slot}",
                     c_type_of(program, &want.ty, &want.origin)?
@@ -93,10 +108,10 @@ pub(super) fn classes(
             let entry = format!("nts_gobject_{name}_{at}");
             let returns = method.signature.result.c_type();
             let body = if matches!(*method.signature.result, Type::Void) {
-                format!("nts_callback_enter(); {call}; nts_callback_leave();")
+                format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
             } else {
                 format!(
-                    "nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;"
+                    "nts_callback_enter();{copies} {returns} r = ({returns}){call};{releases} nts_callback_leave(); return r;"
                 )
             };
             writer.line(

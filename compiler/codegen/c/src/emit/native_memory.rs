@@ -1194,14 +1194,8 @@ fn bridge_argument(
         }
         return Ok(format!("h{at}"));
     }
-    // A string C lends: copied in for the call, given back after it.
-    if nts_core::hir::native::lent_string(ty, &param.ty) {
-        let _ = write!(
-            copies,
-            " NtsString *s{at} = nts_string_from_cstring({slot});"
-        );
-        let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
-        return Ok(format!("s{at}"));
+    if let Some(copy) = lent_string(ty, &param.ty, at, (copies, releases)) {
+        return Ok(copy);
     }
     // An `NSString` a block is given: its text, copied in the same way.
     if nts_core::hir::native::lent_ns_string(ty, &param.ty) {
@@ -1213,6 +1207,28 @@ fn bridge_argument(
         return Ok(format!("s{at}"));
     }
     Ok(format!("({want}){slot}"))
+}
+
+/// A string C lends to an entry point, argument `a{at}`: copied in for the
+/// call, given back after it. Both entry points C calls take one so -- a
+/// closure's bridge and a `GObject` virtual function's -- and casting the C
+/// string to `NtsString *` instead hands the compiled function bytes it
+/// reads as a header.
+pub(super) fn lent_string(
+    foreign: &nts_core::hir::native::Type,
+    compiled: &HirType,
+    at: usize,
+    (copies, releases): (&mut String, &mut String),
+) -> Option<String> {
+    if !nts_core::hir::native::lent_string(foreign, compiled) {
+        return None;
+    }
+    let _ = write!(
+        copies,
+        " NtsString *s{at} = nts_string_from_cstring(a{at});"
+    );
+    let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
+    Some(format!("s{at}"))
 }
 
 /// Every C function pointer typedef this program's foreign signatures need.
