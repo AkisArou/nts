@@ -284,3 +284,24 @@ fn a_tag_asked_only_whether_it_is_one_tag_is_that_tags_test() {
         "{calls:?}"
     );
 }
+
+/// Whether an erased value is `null` or `undefined` is asked of its box --
+/// those are singletons whose first field is their tag -- not of two whole
+/// tags. Unerasing an absence to a string keeps one `value.tag`, its string
+/// test, and the returned `tag.of` another: two, where asking the absence by
+/// whole tags made four.
+#[test]
+fn an_absence_is_asked_of_its_box_not_of_the_whole_tag() {
+    let emitted = nts_codegen_wasm::emit(&program(vec![nullable_unerasure(
+        "unboxedNullTag",
+        OpKind::ConstNull,
+        Absent::Null,
+    )]))
+    .unwrap();
+    let calls = common::calls_by_name(&emitted.bytes);
+    let tags = calls["unboxedNullTag"]
+        .iter()
+        .filter(|callee| *callee == "value.tag")
+        .count();
+    assert_eq!(tags, 2, "{calls:?}");
+}

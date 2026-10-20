@@ -72,3 +72,24 @@ export function callWithDefault(seed: number): number {
   for (let i = 0; i < 6; i++) total += listeners[i & 1]!(values[i % 3]);
   return total;
 }
+
+// The shape that measured absence (`optional-chain`): an optional field of a
+// function, read and called through `?.` with `??` behind it, absent every
+// other round.
+interface Held {
+  fn?: (x: number) => number;
+}
+
+function plusOne(x: number): number {
+  return x + 1;
+}
+
+export function optionalCall(rounds: number): number {
+  let total = 0;
+  for (let i = 0; i < Math.min(Math.abs(rounds | 0), 64); i++) {
+    const h: Held = {};
+    if ((total & 1) === 0) h.fn = plusOne;
+    total = total + (h.fn?.(total & 7) ?? 1);
+  }
+  return total;
+}

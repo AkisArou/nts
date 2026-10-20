@@ -671,17 +671,13 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
 }
 
 /// Whether erased `value` is null or undefined, as an i32 left on the stack.
+/// Whether erased `value` is `null` or `undefined`, as an i32: one of the two
+/// singleton boxes (`box_tag_is`), not two whole tags. An optional field read
+/// as an object asked it twice per absent read, each `value.tag` opening with
+/// a `wasm:js-string` `test` crossing: `optional-chain`, 23.3% of the row by
+/// hand (2026-10-20).
 fn nullish(body: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
-    body.load(value)?;
-    call(body, Helper::Tag)?;
-    body.instruction(&I::I32Const(NULL));
-    body.instruction(&I::I32Eq);
-    body.load(value)?;
-    call(body, Helper::Tag)?;
-    body.instruction(&I::I32Const(UNDEFINED));
-    body.instruction(&I::I32Eq);
-    body.instruction(&I::I32Or);
-    Ok(())
+    box_tag_is(body, value, &[NULL, UNDEFINED])
 }
 
 pub(crate) fn projection_guard(
@@ -726,18 +722,30 @@ pub(crate) fn tag_test(body: &mut Body<'_, '_>, value: ValueId, tag: i32) -> Res
             "tag {tag} has no test of its own"
         )));
     }
-    let tagged = HeapType::Concrete(boxed.tagged);
+    box_tag_is(body, value, &[tag])
+}
+
+/// Whether erased `value` is a box whose tag, its first field, is one of
+/// `tags`, as an i32. `undefined`, `null` and the booleans are such boxes, and
+/// nothing else an erased value holds is a box with their tags.
+fn box_tag_is(body: &mut Body<'_, '_>, value: ValueId, tags: &[i32]) -> Result<(), Failure> {
+    let tagged = types(body.m)?.tagged;
     body.load(value)?;
-    body.instruction(&I::RefTestNonNull(tagged));
+    body.instruction(&I::RefTestNonNull(HeapType::Concrete(tagged)));
     body.instruction(&I::If(BlockType::Result(ValType::I32)));
-    body.load(value)?;
-    body.instruction(&I::RefCastNonNull(tagged));
-    body.instruction(&I::StructGet {
-        struct_type_index: boxed.tagged,
-        field_index: 0,
-    });
-    body.instruction(&I::I32Const(tag));
-    body.instruction(&I::I32Eq);
+    for (at, tag) in tags.iter().enumerate() {
+        body.load(value)?;
+        body.instruction(&I::RefCastNonNull(HeapType::Concrete(tagged)));
+        body.instruction(&I::StructGet {
+            struct_type_index: tagged,
+            field_index: 0,
+        });
+        body.instruction(&I::I32Const(*tag));
+        body.instruction(&I::I32Eq);
+        if at != 0 {
+            body.instruction(&I::I32Or);
+        }
+    }
     body.instruction(&I::Else);
     body.instruction(&I::I32Const(0));
     body.instruction(&I::End);
