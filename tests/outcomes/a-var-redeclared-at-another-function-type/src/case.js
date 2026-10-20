@@ -9,6 +9,11 @@
 //
 // The control is `sameType`: the same two declarations whose `valueOf`s
 // answer one type, which agrees.
+//
+// **Since 2026-10-20 the second literal is refused, by name**: "a function
+// answering a string where a function answering a number is wanted". The
+// record is a guard now -- `redeclared` refused, `sameType` agreeing -- and a
+// change that admits the store again shows here as a wrong answer.
 
 var object = { valueOf: function () { return 1; } };
 var object = { valueOf: function () { return "1"; } };

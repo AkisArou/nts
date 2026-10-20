@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 58 cases across 2 function(s) | Error: 29 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet | refused: NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
   "node": null,
-  "measured_with": "e5641995cac070d2",
+  "measured_with": "0afd6bdd30e3bb56",
   "source": "measured"
 }
