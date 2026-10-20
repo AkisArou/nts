@@ -21,6 +21,9 @@
 //                 `const void *` -- and `GtkButton`'s class struct, which C
 //                 answers and takes as `gpointer`: referenced, its parent's
 //                 peeked, released
+//   hb en-us true  HarfBuzz's `hb_language_t`, a pointer record -- itself a
+//                 `const struct hb_language_impl_t *` -- held as its handle:
+//                 "en-US" read back as HarfBuzz writes it, a more specific "en"
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -158,6 +161,7 @@ import {
   g_type_class_unref,
 } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
+import { hb_language_from_string, hb_language_matches, hb_language_to_string } from "c:HarfBuzz-0.0";
 import { pango_context_new, pango_font_description_from_string, pango_parse_markup } from "c:Pango-1.0";
 import type { CBool, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
@@ -223,6 +227,12 @@ function boxedRecords(): void {
     "erased bytes=" + String(g_bytes_equal(left, right)) + " hash=" + String(g_bytes_hash(left) === g_bytes_hash(right)) +
       " rgba=" + String(gdk_rgba_equal(rgba, same)) + " parent=" + String(parentClass !== null),
   );
+  // A pointer record: HarfBuzz's `hb_language_t` is itself a `const struct
+  // hb_language_impl_t *`, held as the handle it is. "en-US" comes back as
+  // HarfBuzz writes it, and is a more specific "en".
+  const english = hb_language_from_string(new Uint8Array([101, 110]));
+  const american = hb_language_from_string(new Uint8Array([101, 110, 45, 85, 83]));
+  console.log("hb " + hb_language_to_string(american) + " " + String(hb_language_matches(english, american) !== 0));
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
