@@ -1,4 +1,4 @@
-// expect: emits-c v2 = 5;
+// expect: emits-c v1 = 5;
 //
 // The assertion is the **body of the undecorated method**, because that is the
 // defect: `Thing__value` computes 5 where the decorator makes it 10. Pinned to
@@ -21,11 +21,15 @@
 //
 //     static int32_t Thing__value(NtsObj_Thing * v0) {
 //         (void)v0;
-//         v2 = 5;
-//         return v2;
+//         v1 = 5;
+//         return v1;
 //     }
 //
 // Five. The decorator is not applied, not refused, and not mentioned.
+//
+// (`v1` since 2026-10-21, when a constant became typed by its use: the `5` is
+// an `i32` constant where it was a `double` and a conversion, `v2` here
+// before. The method still answers five, so the fixture still reproduces.)
 //
 // # Why nothing caught it
 //
