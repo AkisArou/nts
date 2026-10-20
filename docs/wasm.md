@@ -253,6 +253,29 @@ Wasm slices reconcile without any outcome changes: 5,132 cases, comprising
 4,820 strict passes and 312 retained failures, with zero refusals or
 no-verdict results.
 
+### Tag tests by the box (2026-10-20)
+
+`value.tag` makes an erased value's whole tag, and opens with a
+`wasm:js-string` `test` crossing to rule out a string. Most questions need
+less. `tag_tests`, planned once per function like `never_null`, answers them
+without it:
+
+- **A tag compared only with the number tag** (`==` or `!=`) is
+  `erased::number_test`: an i31 or the number box, from the one list the
+  unerase's own guard reads (`number_cases`), so the two cannot disagree about
+  what a number is (f2cc9533c: uniform-callback-arguments -19.50%,
+  uniform-callback -12.13%).
+- **A tag compared only with tags in `DIRECT`** (number, undefined, null,
+  boolean) asks the box: `undefined`, `null`, `true` and `false` are singleton
+  boxes whose first field is their tag, so each is a `ref.test` of the box root
+  and a read of that field (`erased::tag_test`; f3fa503b7:
+  uniform-callback-default -11.49%).
+- **An unerase's absence test** (`erased::nullish`) is the same question,
+  `box_tag_is(value, [NULL, UNDEFINED])` (41c9e5541: optional-chain -23.27%,
+  1.325x -> 1.017x node).
+
+A tag compared with the string tag, or used any other way, is the whole tag.
+
 ### Numeric box webs (2026-10-16)
 
 After inlining and the roundtrip pass, `box_web.rs` carries a nonescaping
@@ -311,6 +334,31 @@ that check while agreeing on all 192 value cases. The clean folded pin
 passes 547/547 comparable programs (10 partial, 12 without comparisons),
 and all 5,084 recorded Wasm test262 outcomes reconcile unchanged across the
 five slices, including their 313 known failures.
+
+### Module passes after lowering (2026-10-15 to 10-20)
+
+Each function is lowered on its own; then five passes rewrite the module's
+bodies, in this order (`module::emit`), over finished instructions with every
+HIR fact already spent:
+
+- **`outline`** (bbe747689, 84d45f368): an `if` arm control cannot leave by its
+  end -- it refuses or throws -- and large enough to matter becomes a helper of
+  its own, called from the arm. V8 inlines a callee by its bytes, so a cold arm
+  kept a hot function out of its callers. Whether an arm falls out is its
+  structure's answer (`diverges`): a `!` assertion's arm raises from both arms
+  of an inner `if`/`else`. awfy-queens 889,150 -> 683,391 instructions/op
+  (-23.14%, 2026-10-20).
+- **`inline`** (90390ac4e, c8930138b): a direct call to a program function that
+  is not exported, not recursive and at most 500 bytes is inlined, until the
+  caller reaches three times its own size or 1,200 bytes. Nothing between this
+  backend and V8 optimises the module: towers spent 72% of its time in two
+  six-line methods.
+- **`roundtrip`** (87df9fdce): an integer widened to f64 and truncated back,
+  which inlining exposes at a call boundary, folds.
+- **`box_web`** (9037a37b9): above.
+- **`tail`** (4a7212305): a call in tail position becomes `return_call`. It is
+  last, so the inliner still sees every call; test262's `tco-*` recurse
+  100,000 deep.
 
 ### Arrays (1e)
 
@@ -391,6 +439,14 @@ three builtin record deltas already occur identically on clean main from
 `b54b3ad15`. The full builtin refresh landed separately as `119bf4ca1`;
 all 846 refreshed rows reconcile unchanged against the optimized compiler.
 
+- **An access the core proved is not tested again** (dde8b1953).
+  `checked: false` means the core proved the index whole and inside the array,
+  which C stores through bare (`slot_expression`), so `get` and `set` test only
+  a checked access. A proven one still converts its index, and the backing's
+  own `array.get`/`array.set` traps past its storage, so a false proof -- a
+  compiler bug on every backend -- cannot reach past it. A refusal per proven
+  write had made a module-scope literal of 2048 records take 480 MB in V8's
+  baseline compiler (57 MB after); arrays counted 39.4% fewer instructions.
 - **`nts_array_element`**, the erased read that answers `undefined` past the
   end, under `noUncheckedIndexedAccess` and in JS destructuring:
   - The C runtime asks the descriptor what the slots hold. Where the call
@@ -928,6 +984,13 @@ HIR value, with no allocation (`Slot::V128`).
   A host exception (a radix the lowering's NaN-blind test let through)
   becomes the named refusal C gives, never an exception unwinding through
   compiled frames.
+- **Builtins the module calls as they are** (`builtin_import`), captured at
+  load with nothing to convert and nothing they throw: `parseFloat`,
+  `parseInt`, and `String.fromCharCode` for a code unit past the one-byte
+  table. V8 answers `wasm:js-string`'s own `fromCharCode` by internalizing the
+  one-character string, about 350 instructions; a unit below 256 is read from
+  the module's one-byte table with no call (85b29c293: node-utf8 2,023,681 ->
+  1,718,749 instructions/op, -15.07%).
 - **`s[i]`** with an index the lowering did not prove refuses unless `i` is
   a whole number inside the string, as C's `nts_str_at` does. node answers
   undefined there, never a character.
