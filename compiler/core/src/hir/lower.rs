@@ -26421,10 +26421,14 @@ impl<'a> FuncBuilder<'a> {
         // found: None }`, invalid HIR, on a program `eb92ee8f9` had just started
         // compiling. The same move `lower_function` makes, for the same reason.
         //
-        // `begin_async` and `finish_params` stay below: the first allocates the
-        // promise before the body runs and the second needs the bound parameters.
+        // `finish_params` stays below, because it needs the bound parameters.
         self.returns = return_type.clone();
         self.return_elements = self.written_tuple_return(member);
+        // **And the promise before the parameters too**, as `lower_function`
+        // allocates it: binding them is part of the call the promise answers, so
+        // a pattern's TypeError rejects it rather than reaching `nts_uncaught`
+        // before any promise exists.
+        let asynchronous = self.begin_async(member, &return_type)?;
 
         let mut declared = Vec::new();
         for child in self.children(member) {
@@ -26458,7 +26462,6 @@ impl<'a> FuncBuilder<'a> {
         // that honestly as a store followed by `__builtin_unreachable()` --
         // which the C compiler reads as a licence to compute anything at all
         // in the caller.
-        let asynchronous = self.begin_async(member, &return_type)?;
         let return_type = self.finish_params(&mut params, return_type, &origin)?;
         // A class with no base has no `super()`, so its own field initialisers
         // go at the top of its constructor. A derived class's go immediately
@@ -30571,6 +30574,17 @@ impl<'a> FuncBuilder<'a> {
         {
             self.this = Some(self.receive_this(id, this_argument)?);
         }
+        // An `async` function allocates its promise before the body runs, so
+        // that every `return` has one to settle -- and so that the allocation
+        // happens once rather than on each path out.
+        //
+        // **And before its parameters are bound**, because binding them is part
+        // of the call the promise answers: a pattern's TypeError, or a default
+        // that throws, rejects the promise the call returns
+        // (EvaluateAsyncFunctionBody), where binding first sent that throw to
+        // `nts_uncaught` with no promise in existence to reject. A generator's
+        // `begin_async` answers nothing, and its binding throws at the call.
+        let asynchronous = self.begin_async(id, &return_type)?;
         for child in &children {
             if self.kind_of(*child) != Some(syntax::PARAMETER) {
                 continue;
@@ -30579,10 +30593,6 @@ impl<'a> FuncBuilder<'a> {
         }
 
         self.start_bound_body(id)?;
-        // An `async` function allocates its promise before the body runs, so
-        // that every `return` has one to settle -- and so that the allocation
-        // happens once rather than on each path out.
-        let asynchronous = self.begin_async(id, &return_type)?;
         // **The body's `this` is the call's**, proven at the declared type, as a
         // closure's is ([`Self::receive_this`]).
         if self.parameter_entry.is_none()
@@ -30930,6 +30940,34 @@ impl<'a> FuncBuilder<'a> {
     /// lane counts at 460 of the corpus's ~800 no-verdict rows. Written as a
     /// function the three share rather than as a third clause, so a fourth path
     /// gets it by calling this.
+    /// **An authored `async` closure's promise comes before its parameters**, as
+    /// an `async` function's does (see `lower_function`): binding them is part of
+    /// the call the promise answers, so a pattern's `TypeError` rejects it. Its
+    /// return type does not wait on the inputs -- only a generator's parameter
+    /// entry answers one early, and an `async` closure that is not a generator
+    /// has none. `None` for every other closure, which allocates after.
+    #[expect(
+        clippy::type_complexity,
+        reason = "the three things lower_closure takes back"
+    )]
+    fn promise_before_inputs(
+        &mut self,
+        id: NodeId,
+        info: &ClosureInfo,
+    ) -> Result<Option<(Option<super::GeneratorFrame>, HirType, Option<AsyncResult>)>, Diagnostic>
+    {
+        let modifiers = self.node(id).modifiers;
+        if !matches!(info.source, ClosureSource::Authored)
+            || !modifiers.contains(DeclarationModifiers::ASYNC)
+            || modifiers.contains(DeclarationModifiers::GENERATOR)
+        {
+            return Ok(None);
+        }
+        let (generated, return_type) = self.reserved_return_type(id)?;
+        let asynchronous = self.begin_async(id, &return_type)?;
+        Ok(Some((generated, return_type, asynchronous)))
+    }
+
     fn reserved_return_type(
         &mut self,
         id: NodeId,
@@ -31043,6 +31081,7 @@ impl<'a> FuncBuilder<'a> {
         // proof about every value arriving through the uniform callable slot.
         // Keep the wrapper's identity and layout at `id`, while deriving the
         // forwarded values and their facts from the body it actually calls.
+        let promised = self.promise_before_inputs(id, info)?;
         let parameter_entries::ClosureInputs {
             params,
             forwarded,
@@ -31109,13 +31148,17 @@ impl<'a> FuncBuilder<'a> {
         // arms I measured that change with contained a method handed out as a
         // value**, which is why the recorded test262 set is the population for a
         // lowering change and `runtime/` is the narrow corpus.
-        let (generated, return_type) = if let Some(result) = early_return {
-            result
-        } else if matches!(info.source, ClosureSource::Authored) {
-            self.reserved_return_type(id)?
-        } else {
-            (None, self.return_type_of(id)?)
-        };
+        let (generated, return_type, promised) =
+            if let Some((generated, ty, asynchronous)) = promised {
+                (generated, ty, Some(asynchronous))
+            } else if let Some((generated, ty)) = early_return {
+                (generated, ty, None)
+            } else if matches!(info.source, ClosureSource::Authored) {
+                let (generated, ty) = self.reserved_return_type(id)?;
+                (generated, ty, None)
+            } else {
+                (None, self.return_type_of(id)?, None)
+            };
 
         // **An `async` arrow allocates its promise before its body runs**, for
         // the two reasons an `async` function does: every `return` needs one to
@@ -31142,7 +31185,10 @@ impl<'a> FuncBuilder<'a> {
         // No state is saved around this: closures get a builder each, so an
         // `async` arrow inside a synchronous function cannot leak its result
         // into the function around it.
-        let asynchronous = self.begin_async(id, &return_type)?;
+        let asynchronous = match promised {
+            Some(asynchronous) => asynchronous,
+            None => self.begin_async(id, &return_type)?,
+        };
 
         // A wrapper has no body of its own. It forwards to the function it
         // stands for, which keeps that function's one definition the only one:
@@ -43632,10 +43678,39 @@ impl<'a> FuncBuilder<'a> {
             return Ok(());
         }
 
+        // An `async` function's `throw` rejects the promise it already owns and
+        // hands it back, which is exactly what its `return` does with `settle`.
+        // Without this it ended the program: node rejects, and every caller
+        // awaiting it sees a rejection rather than a dead process.
+        //
+        // The erased value, whatever was thrown: a reason is a tagged slot
+        // (`nts_promise_reject_value`), so `throw 1` rejects with 1 and a
+        // thrown `null` stays `null`. The reference-only `nts_promise_reject`
+        // this once called refused a number outright and read a null
+        // reference as `undefined`.
+        //
+        // **Before the raising arm, in every copy.** An `async` callable never
+        // raises synchronously -- its promise exists before its parameters are
+        // bound -- so a raising copy of one (a closure called through a raising
+        // entry has one) rejects as the ordinary copy does. Checked second, a
+        // parameter pattern's TypeError in `async ({}) => {}`'s raising copy
+        // raised and returned no promise: `ReturnType { expected:
+        // Managed(Promise(..)), found: None }`, invalid HIR.
+        if let Some(result) = self.async_result.clone() {
+            self.runtime_call(
+                "nts_promise_reject_value",
+                vec![result.promise, erased],
+                HirType::Void,
+                origin,
+            );
+            self.terminate(Terminator::Return(Some(result.promise)));
+            return Ok(());
+        }
+
         // **A raising copy records it and returns**, which is the whole of what
         // the copy is for. See [`Self::raises`].
         //
-        // The same shape as the `async` arm below -- record the reason on
+        // The same shape as the `async` arm above -- record the reason on
         // something the caller will look at, then leave by an ordinary
         // `Return` -- and for the same reason: an ordinary return is an edge
         // [`super::rc`] already emits releases for, where a jump out of the
@@ -43647,27 +43722,6 @@ impl<'a> FuncBuilder<'a> {
             self.runtime_call("nts_raise", vec![erased], HirType::Void, origin.clone());
             let value = self.raised_return(&origin);
             self.terminate(Terminator::Return(value));
-            return Ok(());
-        }
-
-        // An `async` function's `throw` rejects the promise it already owns and
-        // hands it back, which is exactly what its `return` does with `settle`.
-        // Without this it ended the program: node rejects, and every caller
-        // awaiting it sees a rejection rather than a dead process.
-        //
-        // The erased value, whatever was thrown: a reason is a tagged slot
-        // (`nts_promise_reject_value`), so `throw 1` rejects with 1 and a
-        // thrown `null` stays `null`. The reference-only `nts_promise_reject`
-        // this once called refused a number outright and read a null
-        // reference as `undefined`.
-        if let Some(result) = self.async_result.clone() {
-            self.runtime_call(
-                "nts_promise_reject_value",
-                vec![result.promise, erased],
-                HirType::Void,
-                origin,
-            );
-            self.terminate(Terminator::Return(Some(result.promise)));
             return Ok(());
         }
 
