@@ -87,6 +87,27 @@ impl FuncBuilder<'_> {
             .parameter_entries
             .append(&mut self.arrivals.parameter_entries);
     }
+
+    /// The records this builder keeps by its function's name, moved to `to`:
+    /// for a body renamed after it was finished, which is how a method's
+    /// raising copy gets its suffix ([`raising_method`]).
+    fn rename_arrivals(&mut self, from: &str, to: &str) {
+        for site in &mut self.arrivals.uniform_sites {
+            if site.function == from {
+                to.clone_into(&mut site.function);
+            }
+        }
+        for check in &mut self.arrivals.printer_checks {
+            if check.function == from {
+                to.clone_into(&mut check.function);
+            }
+        }
+        for split in &mut self.arrivals.parameter_entries {
+            if split.name == from {
+                to.clone_into(&mut split.name);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -6366,11 +6387,27 @@ fn throwing_symbols(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> Throwin
             // already routes it -- `tests/programs/async-catch` is eight functions
             // of exactly this and every one of them works -- so admitting an
             // async callee here would refuse a shape that is not broken.
+            //
+            // **Except an `async` generator's parameter patterns**, which are
+            // bound at the call, before its generator object exists, and throw
+            // there -- synchronously, as a generator's do. Only the patterns:
+            // its body's `throw` rejects a step's promise, as an `async`
+            // function's does, so the body is not walked; a pattern can always
+            // throw (`null` destructured), so the declaration simply joins the
+            // set.
             if probe
                 .node(*declaration)
                 .modifiers
                 .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
             {
+                if probe
+                    .node(*declaration)
+                    .modifiers
+                    .contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
+                    && probe.needs_parameter_entry(*declaration)
+                {
+                    throws.insert(symbol);
+                }
                 continue;
             }
             let base = declared_base_class(snapshot, probe, *declaration);
@@ -6550,10 +6587,9 @@ fn why_it_cannot_be_copied(
         })
         .unwrap_or_default();
     if declarations.iter().any(|declaration| {
-        probe
-            .node(*declaration)
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        let modifiers = probe.node(*declaration).modifiers;
+        modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+            && !modifiers.contains(nts_semantic_schema::DeclarationModifiers::GENERATOR)
     }) {
         "is `async`, so its `throw` rejects a promise rather than raising"
     } else if declarations
@@ -6595,12 +6631,20 @@ fn why_it_cannot_be_copied(
 /// [`the_constructor_declared_by`] is the one mapping from the one to the other, and
 /// it resolves through [`FuncBuilder::implementation_of`] because the first
 /// `constructor` child of an overloaded one is a signature `lower_class` skips.
+///
+/// **Not of an `async` function**, which never raises: its promise exists before
+/// its parameters are bound. **An `async` generator is copied**, because it binds
+/// its parameter patterns at the call and throws there, as a generator does
+/// ([`throwing_symbols`] puts it in the set for exactly that) -- and a copy
+/// refused here left a call through it as a value, inside a `try`, refused as
+/// having no raising copy.
 fn a_copy_can_be_made_of(
     snapshot: &SemanticSnapshot,
     probe: &FuncBuilder,
     declaration: NodeId,
 ) -> bool {
     let kind = probe.kind_of(declaration);
+    let modifiers = probe.node(declaration).modifiers;
     matches!(
         kind,
         Some(
@@ -6611,10 +6655,8 @@ fn a_copy_can_be_made_of(
                 | syntax::CONSTRUCTOR
         )
     ) && (!is_generic_function(snapshot, declaration) || kind == Some(syntax::FUNCTION_DECLARATION))
-        && !probe
-            .node(declaration)
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+        && (!modifiers.contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
+            || modifiers.contains(nts_semantic_schema::DeclarationModifiers::GENERATOR))
 }
 
 /// Whether a symbol has any declaration a copy can be made of, which is the
@@ -11507,6 +11549,7 @@ fn lower_object_literal_members(
             Some(instance),
             &Substitution::default(),
             &super::generics::Sources::default(),
+            wanted,
         );
         // A member the type lays out as storage is a closure, emitted through
         // `used_closures` from the literal that builds it like every other;
@@ -11747,6 +11790,7 @@ fn raising_method(
     instance: Option<TypeId>,
     substitution: &Substitution,
     sources: &super::generics::Sources,
+    wanted: &mut std::collections::BTreeSet<usize>,
 ) {
     // **And its raising copy, where a `try` can reach it.** Lowered a
     // second time with `raises` set, named with the suffix, and
@@ -11759,9 +11803,18 @@ fn raising_method(
     // Renamed after the fact rather than threaded through
     // `lower_method_of`, because the name is built from the class and
     // the member there and a second spelling of that is how this file
-    // has gone wrong before. Nothing reads the name during lowering: a
-    // layout's method table holds the *ordinary* entry, which is what
-    // a virtual dispatch needs and what this copy is deliberately not.
+    // has gone wrong before. A layout's method table holds the
+    // *ordinary* entry, which is what a virtual dispatch needs and what
+    // this copy is deliberately not.
+    //
+    // **What the builder recorded under the name moves with it, and is
+    // harvested as the ordinary copy's is.** It was not harvested at
+    // all, and the name it recorded was the ordinary one: a generator
+    // method's parameter entry (`parameter_entries::Split`) was lost, so
+    // the raising copy -- the one every call inside a `try` names --
+    // bound its parameters at the first `next()` instead of at the call,
+    // and test262's `assert.throws` around `c.method(null)` saw nothing
+    // thrown (140 recorded cases across the destructuring families).
     if !shared.naming.raising.contains(&member) {
         return;
     }
@@ -11769,7 +11822,9 @@ fn raising_method(
     let mut second = shared.builder(snapshot, foreign, copy);
     match second.lower_method_of(class, member, instance) {
         Ok(mut raising) => {
-            raising.name = format!("{}{RAISING_SUFFIX}", raising.name);
+            let ordinary = std::mem::take(&mut raising.name);
+            raising.name = format!("{ordinary}{RAISING_SUFFIX}");
+            second.rename_arrivals(&ordinary, &raising.name);
             // **Unless that name is taken**, which only an *object literal* can do: two
             // literals built at one named type each declaring the member are two
             // implementations with one name, and the ordinary member is refused by name
@@ -11785,6 +11840,7 @@ fn raising_method(
                 .any(|known| known.name == raising.name)
             {
                 lowered.program.funcs.push(raising);
+                second.harvest(wanted, &mut lowered.arrivals);
             }
         }
         // Its diagnostics are the ordinary body's a second time, under a name no
@@ -11944,6 +12000,7 @@ fn lower_class(
                 instance,
                 &substitution,
                 &sources,
+                wanted,
             );
             match builder.lower_method_of(class, member, instance) {
                 Ok(func) => lowered.program.funcs.push(func),

@@ -90,16 +90,16 @@ impl FuncBuilder<'_> {
             && self.closures.needs_parameter_entry(callable)
     }
 
+    /// A generator binds its parameter patterns at the call, before its
+    /// generator object exists: a pattern's `TypeError` is the call's, not the
+    /// first `next()`'s. An `async` generator too -- it throws synchronously,
+    /// as a generator does, where an `async` function rejects its promise.
     pub(super) fn needs_parameter_entry(&self, callable: NodeId) -> bool {
         self.owns_parameter_defaults(callable)
             || (self
                 .node(callable)
                 .modifiers
                 .contains(DeclarationModifiers::GENERATOR)
-                && !self
-                    .node(callable)
-                    .modifiers
-                    .contains(DeclarationModifiers::ASYNC)
                 && super::parameters_of(self, callable)
                     .into_iter()
                     .any(|parameter| {
