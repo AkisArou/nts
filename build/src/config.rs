@@ -302,6 +302,22 @@ pub struct Resolved {
     /// installed: `gi:gtk` is `Gtk-4.0` where `Gtk-3.0` is installed beside it.
     #[serde(default)]
     pub gi: BTreeMap<String, String>,
+    /// What a GIR namespace's binding adds to what its GIR names, by
+    /// `Name-Version`: `nts bind-gir`'s `--header`, `--package` and `--define`.
+    #[serde(default, rename = "girExtras")]
+    pub gir_extras: BTreeMap<String, GirExtra>,
+}
+
+/// One namespace's `girExtras` in `nts.config.ts`.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GirExtra {
+    #[serde(default)]
+    pub headers: Vec<String>,
+    #[serde(default)]
+    pub packages: Vec<String>,
+    #[serde(default)]
+    pub defines: Vec<String>,
 }
 
 /// `react` in `nts.config.ts`.
@@ -511,6 +527,7 @@ mod tests {
             targets: None,
             react: None,
             gi: BTreeMap::new(),
+            gir_extras: BTreeMap::new(),
             products: names
                 .iter()
                 .map(|name| {
@@ -668,5 +685,34 @@ mod tests {
             header: None,
         };
         assert!(everywhere.covers("windows", None));
+    }
+
+    /// `girExtras` reaches the build as written, keyed `Name-Version`; a
+    /// list that is not one, or a field it does not have, is an error rather
+    /// than a request quietly read as empty.
+    #[test]
+    fn gir_extras_read_as_written_and_refuse_what_they_cannot_mean() {
+        let resolved: Resolved = serde_json::from_str(
+            r#"{"girExtras": {"Gio-2.0": {"defines": ["G_SETTINGS_ENABLE_BACKEND"],
+                "headers": ["gio/gsettingsbackend.h"]}, "Gtk-4.0": {"packages": ["gtk4-unix-print"]}}}"#,
+        )
+        .expect("a girExtras block");
+        assert_eq!(
+            resolved.gir_extras["Gio-2.0"],
+            GirExtra {
+                headers: vec!["gio/gsettingsbackend.h".to_owned()],
+                packages: Vec::new(),
+                defines: vec!["G_SETTINGS_ENABLE_BACKEND".to_owned()],
+            }
+        );
+        assert_eq!(resolved.gir_extras["Gtk-4.0"].packages, ["gtk4-unix-print"]);
+        let none: Resolved = serde_json::from_str("{}").expect("no girExtras");
+        assert!(none.gir_extras.is_empty());
+        for wrong in [
+            r#"{"girExtras": {"Gio-2.0": {"headers": "gio/gsettingsbackend.h"}}}"#,
+            r#"{"girExtras": {"Gio-2.0": {"header": ["gio/gsettingsbackend.h"]}}}"#,
+        ] {
+            assert!(serde_json::from_str::<Resolved>(wrong).is_err(), "{wrong}");
+        }
     }
 }

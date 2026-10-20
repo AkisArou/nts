@@ -63,7 +63,16 @@ pub(crate) type Extras = BTreeMap<String, Extra>;
 
 /// The command that reproduces a binding, extras and all, for its header.
 fn command_of(root: &str, extras: &Extras) -> String {
-    let mut command = format!("nts bind-gir {root}");
+    format!("nts bind-gir {root}{}", request_of(extras))
+}
+
+/// A request as `nts bind-gir`'s flags, each led by a space: namespaces in
+/// order, each one's values in the order given, which is the order its
+/// headers are included in. Empty without extras. What the generated files'
+/// first line records, and what names the request wherever two requests must
+/// not be taken for one.
+pub(crate) fn request_of(extras: &Extras) -> String {
+    let mut request = String::new();
     for (namespace, extra) in extras {
         for (flag, values) in [
             ("--package", &extra.packages),
@@ -71,11 +80,11 @@ fn command_of(root: &str, extras: &Extras) -> String {
             ("--header", &extra.headers),
         ] {
             for value in values {
-                let _ = write!(command, " {flag} {namespace}:{value}");
+                let _ = write!(request, " {flag} {namespace}:{value}");
             }
         }
     }
-    command
+    request
 }
 
 /// The request's extras added to the closure, each checked: the namespace is

@@ -116,6 +116,15 @@ export interface Config {
    */
   readonly gi?: Readonly<Record<string, string>>;
 
+  /**
+   * What a GIR namespace's binding adds to what its GIR names, keyed
+   * `Name-Version` as `nts bind-gir` spells it (`"HarfBuzz-0.0"`): headers its
+   * `<c:include>` does not reach, the pkg-config packages they need, and macros
+   * defined before them. A package added here is the binding's; the program
+   * names it in `dependencies` too, to compile and link against it.
+   */
+  readonly girExtras?: Readonly<Record<string, GirExtra>>;
+
   readonly build?: {
     readonly cache?: { readonly local?: boolean; readonly directory?: string };
   };
@@ -137,3 +146,13 @@ export interface Config {
  * config-time dependency for a compiler that is otherwise Rust.
  */
 export const defineConfig = (config: Config): Config => config;
+
+/** One namespace's `girExtras`: each list as `nts bind-gir` takes it. */
+export interface GirExtra {
+  /** Headers to include beside the namespace's own: `"gtk/gtkunixprint.h"`. */
+  readonly headers?: readonly string[];
+  /** pkg-config packages whose flags reach them: `"gtk4-unix-print"`. */
+  readonly packages?: readonly string[];
+  /** Macros defined before every include, `NAME` or `NAME=VALUE`. */
+  readonly defines?: readonly string[];
+}

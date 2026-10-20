@@ -1436,7 +1436,24 @@ fn for_project(mut source: TsgoApi, tsconfig: &Utf8Path) -> Result<TsgoApi> {
     source = if windows {
         source.with_generated(Box::new(windows_surface::WindowsBindings::default()))
     } else if apple.is_empty() {
-        source.with_generated(Box::new(gir_surface::GirBindings::new(resolved.gi.clone())))
+        let extras: bind_gir::Extras = resolved
+            .gir_extras
+            .iter()
+            .map(|(namespace, extra)| {
+                (
+                    namespace.clone(),
+                    bind_gir::Extra {
+                        headers: extra.headers.clone(),
+                        packages: extra.packages.clone(),
+                        defines: extra.defines.clone(),
+                    },
+                )
+            })
+            .collect();
+        source.with_generated(Box::new(gir_surface::GirBindings::new(
+            resolved.gi.clone(),
+            extras,
+        )))
     } else {
         let package = config.parent().unwrap_or_else(|| Utf8Path::new("."));
         let native = resolved

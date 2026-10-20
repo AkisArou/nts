@@ -67,6 +67,9 @@ pub(crate) struct GirPlatform {
     /// The namespaces bound with their closures: `Gtk-4.0`, `Adw-1`.
     pub(crate) roots: BTreeSet<String>,
     pub(crate) search: Vec<Utf8PathBuf>,
+    /// `girExtras`, by root: each root's only the namespaces its closure
+    /// binds, so one root's request cannot name what another's lacks.
+    pub(crate) extras: std::collections::BTreeMap<String, bind_gir::Extras>,
 }
 
 impl GirPlatform {
@@ -80,12 +83,16 @@ impl GirPlatform {
     /// A module another root's closure already binds is not a root of its
     /// own: a program importing `c:Gtk-4.0` and `c:GLib-2.0` has the store
     /// entry of one importing `c:Gtk-4.0` alone, which binds `GLib` with it.
-    pub(crate) fn for_modules(modules: &BTreeSet<String>, search: &[Utf8PathBuf]) -> Self {
+    pub(crate) fn for_modules(
+        modules: &BTreeSet<String>,
+        search: &[Utf8PathBuf],
+        extras: &bind_gir::Extras,
+    ) -> Self {
         let closures: Vec<(&String, Vec<String>)> = modules
             .iter()
             .map(|module| (module, bind_gir::closure_namespaces(module, search)))
             .collect();
-        let roots = modules
+        let roots: BTreeSet<String> = modules
             .iter()
             .filter(|module| {
                 !closures
@@ -94,10 +101,47 @@ impl GirPlatform {
             })
             .cloned()
             .collect();
+        let mut by_root = std::collections::BTreeMap::new();
+        for (module, closure) in &closures {
+            if !roots.contains(*module) {
+                continue;
+            }
+            let own: bind_gir::Extras = extras
+                .iter()
+                .filter(|(namespace, _)| closure.contains(*namespace))
+                .map(|(namespace, extra)| (namespace.clone(), extra.clone()))
+                .collect();
+            if !own.is_empty() {
+                by_root.insert((*module).clone(), own);
+            }
+        }
+        // A namespace no root reaches: the config is the project's, and can
+        // name one this program's imports do not -- said, not refused.
+        for namespace in extras.keys() {
+            if !closures
+                .iter()
+                .any(|(_, closure)| closure.contains(namespace))
+            {
+                eprintln!(
+                    "note: nts.config.ts's girExtras names {namespace}, which no GIR import of this program reaches"
+                );
+            }
+        }
         Self {
             roots,
             search: search.to_vec(),
+            extras: by_root,
         }
+    }
+
+    /// Each root's request, as `nts bind-gir` spells it after the root:
+    /// empty without extras.
+    fn requests(&self) -> String {
+        let mut requests = String::new();
+        for (root, extras) in &self.extras {
+            let _ = write!(requests, " {root}{}", bind_gir::request_of(extras));
+        }
+        requests
     }
 
     /// A namespace's package name: `@nts/gir-gtk-4.0`.
@@ -120,8 +164,9 @@ impl GirPlatform {
         let mut namespaces: Vec<bind_gir::Generated> = Vec::new();
         let mut files = Vec::new();
         for root in &self.roots {
-            let (generated, read, _) =
-                bind_gir::generate(root, &self.search, &bind_gir::Extras::new())?;
+            let none = bind_gir::Extras::new();
+            let extras = self.extras.get(root).unwrap_or(&none);
+            let (generated, read, _) = bind_gir::generate(root, &self.search, extras)?;
             for namespace in generated {
                 if !namespaces.iter().any(|known| known.stem == namespace.stem) {
                     namespaces.push(namespace);
@@ -147,7 +192,14 @@ impl Binder for GirPlatform {
                 |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
             );
         let roots: Vec<&str> = self.roots.iter().map(String::as_str).collect();
-        format!("gtk {gtk} {} {}", std::env::consts::ARCH, roots.join("+"))
+        // No extras, no change: every store entry made before them is still
+        // the one a project without `girExtras` names.
+        format!(
+            "gtk {gtk} {} {}{}",
+            std::env::consts::ARCH,
+            roots.join("+"),
+            self.requests()
+        )
     }
 
     fn version(&self) -> String {
@@ -211,13 +263,19 @@ pub(crate) struct GirBindings {
     /// `nts.config.ts`'s `gi`: the version of each namespace a `gi:` import
     /// names, where it pins one.
     pins: std::collections::BTreeMap<String, String>,
+    /// `nts.config.ts`'s `girExtras`.
+    extras: bind_gir::Extras,
 }
 
 impl GirBindings {
-    pub(crate) fn new(pins: std::collections::BTreeMap<String, String>) -> Self {
+    pub(crate) fn new(
+        pins: std::collections::BTreeMap<String, String>,
+        extras: bind_gir::Extras,
+    ) -> Self {
         Self {
             decided: false,
             pins,
+            extras,
         }
     }
 
@@ -255,9 +313,12 @@ impl Generated for GirBindings {
             .filter(|path| path.extension() == Some("gir"))
             .collect();
         files.sort();
+        // A snapshot names the store entry it was opened with, which the
+        // extras choose; none, and the key is what it was before them.
         format!(
-            "gir-bindings/3 {GENERATOR:016x} {}",
-            nts_surfaces::fingerprint(&files)
+            "gir-bindings/3 {GENERATOR:016x} {}{}",
+            nts_surfaces::fingerprint(&files),
+            bind_gir::request_of(&self.extras)
         )
     }
 
@@ -280,9 +341,13 @@ impl Generated for GirBindings {
             return Ok(None);
         }
         let gi = missing.iter().any(|module| module.starts_with("gi:"));
-        install(tsconfig, &GirPlatform::for_modules(&modules, &search), gi)
-            .map(Some)
-            .map_err(|error| format!("{error:#}"))
+        install(
+            tsconfig,
+            &GirPlatform::for_modules(&modules, &search, &self.extras),
+            gi,
+        )
+        .map(Some)
+        .map_err(|error| format!("{error:#}"))
     }
 }
 
@@ -351,7 +416,7 @@ mod tests {
             eprintln!("skipped: no Gtk-4.0 GIR on this machine");
             return;
         }
-        let platform = GirPlatform::for_modules(&roots, &search);
+        let platform = GirPlatform::for_modules(&roots, &search, &bind_gir::Extras::new());
         let packages = platform.generate().unwrap();
         // Each type is declared once, by its namespace's package, and
         // imported by the rest: two declarations of one class would be two
@@ -719,5 +784,90 @@ export function made(): number {
                 );
             }
         }
+    }
+
+    /// Two projects asking different `girExtras` never share a store entry:
+    /// the identity names the request -- namespaces in order whatever order
+    /// the config gives them, each one's values in the order given, which is
+    /// the order they are included in -- and with none it is the string a
+    /// store entry was named by before extras existed.
+    #[test]
+    fn the_store_identity_names_the_request_and_nothing_without_one() {
+        let platform = |extras: Vec<(&str, Vec<&str>)>| {
+            let extras: bind_gir::Extras = extras
+                .into_iter()
+                .map(|(namespace, headers)| {
+                    (
+                        namespace.to_owned(),
+                        bind_gir::Extra {
+                            headers: headers.into_iter().map(str::to_owned).collect(),
+                            ..bind_gir::Extra::default()
+                        },
+                    )
+                })
+                .collect();
+            GirPlatform {
+                roots: ["Gtk-4.0".to_owned()].into(),
+                search: Vec::new(),
+                extras: if extras.is_empty() {
+                    std::collections::BTreeMap::new()
+                } else {
+                    [("Gtk-4.0".to_owned(), extras)].into()
+                },
+            }
+            .identity()
+        };
+        let none = platform(vec![]);
+        let gtk = std::process::Command::new("pkg-config")
+            .args(["--modversion", "gtk4"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map_or_else(
+                || "no-gtk".to_owned(),
+                |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            );
+        assert_eq!(
+            none,
+            format!("gtk {gtk} {} Gtk-4.0", std::env::consts::ARCH)
+        );
+        let a = platform(vec![("GLib-2.0", vec!["glib/gstdio.h"])]);
+        let b = platform(vec![("HarfBuzz-0.0", vec!["hb-ot.h"])]);
+        assert!(none != a && none != b && a != b, "{none}\n{a}\n{b}");
+        assert_eq!(
+            platform(vec![
+                ("GLib-2.0", vec!["glib/gstdio.h"]),
+                ("HarfBuzz-0.0", vec!["hb-ot.h"])
+            ]),
+            platform(vec![
+                ("HarfBuzz-0.0", vec!["hb-ot.h"]),
+                ("GLib-2.0", vec!["glib/gstdio.h"])
+            ])
+        );
+        assert_ne!(
+            platform(vec![("HarfBuzz-0.0", vec!["hb-ot.h", "hb-aat.h"])]),
+            platform(vec![("HarfBuzz-0.0", vec!["hb-aat.h", "hb-ot.h"])])
+        );
+    }
+
+    /// Each root gets the extras its closure binds, and only those: a
+    /// namespace no root reaches is left out, not an error.
+    #[test]
+    fn each_root_gets_only_the_extras_its_closure_binds() {
+        let search = bind_gir::search_path();
+        if bind_gir::namespace_of("c:GLib-2.0", &search).is_none() {
+            eprintln!("skipping: no GLib-2.0 GIR");
+            return;
+        }
+        let extras: bind_gir::Extras = [
+            ("GLib-2.0".to_owned(), bind_gir::Extra::default()),
+            ("Nowhere-1.0".to_owned(), bind_gir::Extra::default()),
+        ]
+        .into();
+        let platform = GirPlatform::for_modules(&["GLib-2.0".to_owned()].into(), &search, &extras);
+        assert_eq!(
+            platform.extras["GLib-2.0"].keys().collect::<Vec<_>>(),
+            ["GLib-2.0"]
+        );
     }
 }
