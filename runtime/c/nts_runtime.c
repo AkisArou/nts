@@ -10266,13 +10266,36 @@ static void nts_combinator_settled(void *state) {
       fprintf(stderr, "nts: a C handle settled a promise in `Promise.all`\n");
       abort();
     }
-    if (all->values->header.descriptor->references) {
-      NtsHeader *value = nts_value_reference(slot->source->value);
+    /* By the element kind the array was laid out with. `references` alone
+     * answered "a pointer, else a double", and an erased array holds 16-byte
+     * tagged values while a boolean one holds a byte a slot: the first read
+     * every result back as `undefined`, the second wrote eight bytes into each
+     * one-byte slot and corrupted the heap past the array's end. A kind not
+     * listed is refused rather than guessed at, as the descriptor asks. */
+    NtsArray *values = all->values;
+    NtsValue settled = slot->source->value;
+    const NtsDescriptor *laid = values->header.descriptor;
+    if (laid->element == NTS_ARRAY_VALUE) {
+      nts_value_retain(settled);
+      NTS_ITEMS(values, NtsValue)[slot->index] = settled;
+    } else if (laid->element == NTS_ARRAY_REFERENCE) {
+      NtsHeader *value = nts_value_reference(settled);
       nts_retain(value);
-      NTS_ITEMS(all->values, NtsHeader *)[slot->index] = value;
+      NTS_ITEMS(values, NtsHeader *)[slot->index] = value;
+    } else if (laid->element == NTS_ARRAY_BOOL) {
+      /* A typed boolean promise is settled through
+       * `nts_promise_fulfill_number`, as 0 or 1, and an erased one with a
+       * boolean: truthiness reads both. */
+      NTS_ITEMS(values, bool)[slot->index] = nts_value_truthy(settled);
+    } else if (laid->element == NTS_ARRAY_FLOAT &&
+               laid->size == sizeof(double)) {
+      NTS_ITEMS(values, double)[slot->index] = nts_value_number(settled);
     } else {
-      NTS_ITEMS(all->values, double)
-      [slot->index] = nts_value_number(slot->source->value);
+      fprintf(stderr,
+              "nts: `Promise.all` given a result array of element kind %u, "
+              "which it cannot store into\n",
+              laid->element);
+      abort();
     }
     if (--all->remaining == 0) {
       nts_promise_fulfill_reference(all->result, (NtsHeader *)all->values);
