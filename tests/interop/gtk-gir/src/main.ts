@@ -38,6 +38,11 @@
 //                 with no GType, a `Struct` -- written in Pango units, which
 //                 `pango_extents_to_pixels` rewrites in place: the origin
 //                 rounded down, the far edge up
+//   path true 10 false  a `GskPathPoint` in the program's own box, which GTK
+//                 rewrites in place: GIR does not say the caller allocates it,
+//                 and the header's `GskPathPoint *` does -- moved from the
+//                 start of `M 0 0 L 10 0` to its end, 10 from the origin, and
+//                 at the end no further
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -178,6 +183,14 @@ import {
   g_type_class_unref,
 } from "c:GObject-2.0";
 import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
+import { graphene_point_distance, graphene_point_t, graphene_point_zero } from "c:Graphene-1.0";
+import {
+  GskPathPoint,
+  gsk_path_get_next,
+  gsk_path_get_start_point,
+  gsk_path_parse,
+  gsk_path_point_get_position,
+} from "c:Gsk-4.0";
 import {
   hb_face_builder_add_table,
   hb_face_builder_create,
@@ -308,6 +321,17 @@ function boxedRecords(): void {
   console.log(
     "rect " + String(extents.x) + "," + String(extents.y) + " " + String(extents.width) + "x" + String(extents.height),
   );
+  // A path point the program boxes, which GTK reads and moves along.
+  const line = gsk_path_parse("M 0 0 L 10 0");
+  if (line !== null) {
+    const point = new GskPathPoint();
+    gsk_path_get_start_point(line, point);
+    const moved = gsk_path_get_next(line, point);
+    const position = new graphene_point_t();
+    gsk_path_point_get_position(point, line, position);
+    const along = graphene_point_distance(position, graphene_point_zero(), null, null);
+    console.log("path " + String(moved) + " " + String(along) + " " + String(gsk_path_get_next(line, point)));
+  }
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
