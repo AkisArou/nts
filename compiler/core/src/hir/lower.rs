@@ -27072,7 +27072,106 @@ impl<'a> FuncBuilder<'a> {
         // the other end of the same question.
         self.materialize(id, &want)?;
         let origin = self.origin(id);
+        self.refuse_a_foreign_layout(id, value, &want, &origin)?;
         Ok(self.push(OpKind::Unerase { value }, want, origin))
+    }
+
+    /// `x as T` where `x` is a union holding a member whose layout `T`'s is
+    /// not a prefix of: tested at run time, and refused by name if it is one.
+    ///
+    /// `as` asserts without checking, and the unerase below reads the value
+    /// at `T`'s offsets. For `(shape as Square).side` on a `Square | Named`
+    /// that read `Named`'s field 0 -- the `name` string's pointer -- as a
+    /// double: a type confusion, in the idiom every user-defined type guard
+    /// is written with (`outcomes/a-cast-reads-a-field-another-layout-holds`).
+    /// node answers `undefined` there, reading by name; a refusal is not that
+    /// answer, but it is the honest one until a member read through a cast
+    /// asks each layout, as `in` already does.
+    ///
+    /// Only the members whose layouts disagree are tested: a member `T`
+    /// prefixes is read correctly through `T`'s offsets, and a structural
+    /// subtype is the common case, which a test for `T` itself would refuse.
+    fn refuse_a_foreign_layout(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        want: &HirType,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let HirType::Managed(ManagedType::Object(asserted)) = *want else {
+            return Ok(());
+        };
+        if self.kind_of(id) != Some(syntax::AS_EXPRESSION) {
+            return Ok(());
+        }
+        let Some(&operand_ty) = self
+            .children(id)
+            .first()
+            .and_then(|operand| self.snapshot.node_types.get(operand))
+        else {
+            return Ok(());
+        };
+        let Some(TypeKind::Union(members)) = self
+            .snapshot
+            .types
+            .get(operand_ty.0 as usize)
+            .map(|record| record.kind.clone())
+        else {
+            return Ok(());
+        };
+        let mut foreign = Vec::new();
+        for member in members {
+            let object = matches!(
+                self.snapshot
+                    .types
+                    .get(member.0 as usize)
+                    .map(|record| &record.kind),
+                Some(TypeKind::Object { .. } | TypeKind::Structured { .. })
+            );
+            if object && member != asserted && self.not_a_prefix(id, member, asserted).is_some() {
+                foreign.push(member);
+            }
+        }
+        if foreign.is_empty() {
+            return Ok(());
+        }
+        for member in &foreign {
+            self.layout_of(id, *member)?;
+        }
+        foreign.sort_unstable_by_key(|ty| ty.0);
+        foreign.dedup();
+        let is_foreign = self.push(
+            OpKind::InstanceOf {
+                value,
+                classes: foreign,
+                by_layout: false,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let refused = self.new_block();
+        let carry_on = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: is_foreign,
+            then_target: refused,
+            then_args: Vec::new(),
+            else_target: carry_on,
+            else_args: Vec::new(),
+        });
+        self.switch_to(refused);
+        let named = describe(self.snapshot, asserted);
+        let what = self.push(
+            OpKind::ConstString(format!(
+                "an `as` asserting {named} of a value whose layout is not one: reading through \
+                 it would read another type's fields"
+            )),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![what], HirType::Void, origin.clone());
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(carry_on);
+        Ok(())
     }
 
     /// The name a declaration or a key node spells.
