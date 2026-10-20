@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "checked 33 of 58 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 17 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "3f5dcbe646425043",
+  "source": "measured"
+}
