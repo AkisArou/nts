@@ -194,3 +194,72 @@ fn emit_wasm_reads_every_host_spelling_and_refuses_a_wrong_one() {
     }
     std::fs::remove_dir_all(&scratch).ok();
 }
+
+/// A Wasm module publishes its entry's exports and nothing else, so a build
+/// with no `--entry` and no config roots there: an `export` another module
+/// merely imports is no root, its parameters are as narrow as its callers make
+/// them, and one nothing calls is gone. C keeps its library default, where
+/// any `export` may be called from outside -- the control, from one project.
+#[test]
+fn an_unconfigured_wasm_build_roots_at_what_its_module_publishes() {
+    let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join("wasm-entry-surface");
+    std::fs::create_dir_all(root.join("src")).unwrap();
+    std::fs::write(
+        root.join("src/lib.ts"),
+        "export function used(n: number): number { return n * 3; }\n\
+         export function unused(n: number): number { return n + 7; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("src/main.ts"),
+        "import { used } from \"./lib.ts\";\n\
+         export function run(n: number): number { return used(n | 0); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("tsconfig.json"),
+        r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","moduleResolution":"bundler","allowImportingTsExtensions":true,"strict":true,"noEmit":true},"files":["src/main.ts"]}"#,
+    )
+    .unwrap();
+    let prepared = |backend: &str| {
+        let result = Command::new(env!("CARGO_BIN_EXE_nts"))
+            .arg("hir")
+            .arg(root.join("tsconfig.json"))
+            .args(["--prepared", "--backend", backend])
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        String::from_utf8(result.stdout).unwrap()
+    };
+    // A function's header, `func name(` or `export func name(`; a call names
+    // it too, and is not one.
+    let headers = |listing: &str, name: &str| -> Vec<String> {
+        listing
+            .lines()
+            .filter(|line| {
+                let header = line.strip_prefix("export ").unwrap_or(line);
+                header.starts_with(&format!("func {name}("))
+            })
+            .map(str::to_owned)
+            .collect()
+    };
+    let wasm = prepared("wasm");
+    assert!(headers(&wasm, "unused").is_empty(), "{wasm}");
+    let used = headers(&wasm, "used");
+    assert!(
+        used.len() == 1 && used[0].contains("n: i32"),
+        "`used` should be one function of an i32, called only by `run`:\n{wasm}"
+    );
+    let c = prepared("c");
+    assert_eq!(headers(&c, "unused").len(), 1, "{c}");
+    assert!(
+        headers(&c, "used")
+            .iter()
+            .any(|line| line.contains("n: f64")),
+        "{c}"
+    );
+}

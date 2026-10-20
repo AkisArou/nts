@@ -2614,8 +2614,8 @@ fn prepare_as(
     // `nts build` does, and deriving the shape from it. Until then
     // `hir --prepared --main` gives an app's real roots.
     let (entry_files, configured) = match configured_surface(tsconfig, snapshot, emission)? {
-        Some(files) => (files, Some(hir::reachable::Roots::EntrySurface)),
-        None => (nts_frontend_ts::entry_uris(tsconfig, snapshot), None),
+        Some(files) => (files, true),
+        None => (nts_frontend_ts::entry_uris(tsconfig, snapshot), false),
     };
     let foreign = foreign_tables(snapshot)?;
     let targets = match emission.product {
@@ -2637,7 +2637,7 @@ fn prepare_as(
         // `module#init` costs -- five module-level `const`s left null and a
         // benchmark answering 32768 against node's 10240.
         roots: entry.as_deref().map_or_else(
-            || configured.unwrap_or(hir::reachable::Roots::EveryExport),
+            || emission::default_roots(configured, backend),
             hir::reachable::Roots::Entry,
         ),
         ..hir::Options::default()

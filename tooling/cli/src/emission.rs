@@ -110,13 +110,7 @@ impl Metadata {
         Ok(hir::PreparationOptions {
             provider,
             roots: self.entry.as_deref().map_or_else(
-                || {
-                    if self.configured {
-                        hir::reachable::Roots::EntrySurface
-                    } else {
-                        hir::reachable::Roots::EveryExport
-                    }
-                },
+                || default_roots(self.configured, backend),
                 hir::reachable::Roots::Entry,
             ),
             callbacks_checkpoint: matches!(backend, Backend::C | Backend::Llvm)
@@ -124,6 +118,24 @@ impl Metadata {
             targets: emission.scalar_targets(),
             ..hir::PreparationOptions::default()
         })
+    }
+}
+
+/// The roots of a build that names no `--entry`.
+///
+/// A configured project's product is its entry's surface. An unconfigured one
+/// may be a library any of whose `export`s is called from outside, so every
+/// `export` is a root -- except on Wasm, whose module publishes the entry's
+/// exports and nothing else (`program.public_api`, walked by the emitter's
+/// `module::emit`). Rooted at every `export`, a runtime module's exported
+/// helpers kept their parameters as wide as a host caller could make them,
+/// behind a `#whole` split, for a caller that does not exist: `node-utf8`'s
+/// `utf8Write` and `utf8Decode`, 3.66% of the row (2026-10-20).
+pub(super) fn default_roots(configured: bool, backend: Backend) -> hir::reachable::Roots<'static> {
+    if configured || matches!(backend, Backend::Wasm) {
+        hir::reachable::Roots::EntrySurface
+    } else {
+        hir::reachable::Roots::EveryExport
     }
 }
 
