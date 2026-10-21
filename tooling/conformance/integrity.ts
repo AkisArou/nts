@@ -1163,7 +1163,13 @@ async function scan(project) {
   // a whole program.
   const verdict = judge({ ...listings, whole: !ADDON.test(project) });
   if (verdict.unmeasured) {
-    unmeasured.push(`${project}: ${verdict.unmeasured}`);
+    // How the listing's process ended, beside what its output lacked. A
+    // process killed by a signal is reported above; one that exited by itself
+    // without its summary said why on stderr, and two GObject fixtures failed
+    // on alternate runs of one pin with nothing to go on until this line.
+    const prepared = results[0];
+    const said = prepared.stderr.trim().split("\n").at(-1)?.slice(0, 200) ?? "";
+    unmeasured.push(`${project}: ${verdict.unmeasured} (exit ${prepared.status}${said ? `; stderr: ${said}` : ""})`);
     return;
   }
   measured += 1;

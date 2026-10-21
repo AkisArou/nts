@@ -236,19 +236,52 @@ pub fn link(installed: &Installed, project: &Utf8Path) -> Result<Vec<String>> {
         if let Some(parent) = at.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        if at.symlink_metadata().is_ok() {
-            std::fs::remove_file(&at)
-                .or_else(|_| std::fs::remove_dir_all(&at))
-                .with_context(|| format!("replacing {at}"))?;
-        } else {
+        let existed = at.symlink_metadata();
+        // A directory where the link belongs is a copy from before links were
+        // made, and a rename cannot replace one: it goes first.
+        if existed.as_ref().is_ok_and(std::fs::Metadata::is_dir) {
+            match std::fs::remove_dir_all(&at) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error).with_context(|| format!("replacing {at}"));
+                }
+                _ => {}
+            }
+        }
+        if existed.is_err() {
             new.push(name.clone());
         }
         #[cfg(unix)]
-        std::os::unix::fs::symlink(dir, &at).with_context(|| format!("linking {at} to {dir}"))?;
+        replace_link(dir, &at)?;
         #[cfg(not(unix))]
         bail!("linking a platform package into {project} is not implemented on this host");
     }
     Ok(new)
+}
+
+/// Make `at` a link to `dir` in one step: the link is made beside it under a
+/// name no other caller uses, then renamed over it, which replaces whatever
+/// `at` was atomically.
+///
+/// Several builds of one project at a time link the same packages -- the
+/// integrity step runs four listings of each project at once -- and removing
+/// the old link before making the new one let one process remove the link
+/// another had just made, or make one where another had: "replacing ...: No
+/// such file or directory" and "linking ... to ...", a listing with no
+/// summary, and four `GObject` fixtures NOT MEASURED in one run of main and a
+/// different one in the next. Every caller links the same directory, so
+/// whichever rename lands last leaves the link every one of them wanted.
+#[cfg(unix)]
+fn replace_link(dir: &Utf8Path, at: &Utf8Path) -> Result<()> {
+    static STAGED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let staged = format!(
+        "{at}.{}-{}.link",
+        std::process::id(),
+        STAGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    );
+    let _ = std::fs::remove_file(&staged);
+    std::os::unix::fs::symlink(dir, &staged)
+        .with_context(|| format!("linking {staged} to {dir}"))?;
+    std::fs::rename(&staged, at).with_context(|| format!("replacing {at}"))
 }
 
 fn write_packages(directory: &Utf8Path, packages: &[Package]) -> Result<()> {
@@ -396,6 +429,51 @@ mod tests {
             .map(|surface| surface.as_str())
             .collect();
         assert_eq!(ours, nts_frontend_ts::tsgo::SURFACES);
+    }
+
+    /// Builds of one project at once each link its packages, and every one
+    /// of them must succeed and leave the link they all wanted: removing the
+    /// old link and then making the new one let one caller remove what
+    /// another had just made. Eight threads, over a stale link to an older
+    /// store directory, which is the case that made every caller replace it.
+    #[cfg(unix)]
+    #[test]
+    fn concurrent_links_of_one_project_all_succeed() {
+        let root = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-surfaces-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (old, current, project) =
+            (root.join("old"), root.join("current"), root.join("project"));
+        for dir in [&old, &current, &project] {
+            std::fs::create_dir_all(dir).unwrap();
+        }
+        std::fs::create_dir_all(project.join("node_modules/@nts")).unwrap();
+        std::os::unix::fs::symlink(&old, project.join("node_modules/@nts/gir-glib-2.0")).unwrap();
+        let installed = Installed {
+            packages: vec![("@nts/gir-glib-2.0".to_owned(), current.clone())],
+            values: Vec::new(),
+        };
+        std::thread::scope(|scope| {
+            let callers: Vec<_> = (0..8)
+                .map(|_| scope.spawn(|| link(&installed, &project)))
+                .collect();
+            for caller in callers {
+                caller.join().unwrap().unwrap();
+            }
+        });
+        let target = std::fs::read_link(project.join("node_modules/@nts/gir-glib-2.0")).unwrap();
+        assert_eq!(target, current.as_std_path());
+        let leftovers: Vec<_> = std::fs::read_dir(project.join("node_modules/@nts"))
+            .unwrap()
+            .filter_map(|entry| Some(entry.ok()?.path()))
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "link")
+            })
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     struct Counting(std::cell::Cell<u32>, Utf8PathBuf, std::cell::Cell<u32>);
