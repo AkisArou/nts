@@ -5529,6 +5529,67 @@ export function run(): number {
     );
 }
 
+/// A function a binding declares, not a method, whose body is the program's
+/// own: `@ntsCall` names it, and a call passes the same arguments, with no
+/// receiver. How `bind-gir` gives a C function that hands back an array --
+/// `g_strsplit_set` -- the form that copies it out, beside the raw one.
+///
+/// Both are overloads of one name, as the binding writes them: the raw one is
+/// C's (`@ntsSymbol`), the other is the companion function, which calls the
+/// raw one -- so a call reaching the wrong overload reads the wrong answer.
+/// The argument left out takes the *function's* default, as a method's does.
+#[test]
+fn an_ntscall_function_is_the_programs_function_on_both_backends() {
+    let source = r#"
+import type { Class } from "c:types";
+import type { c_int } from "@nts/scalars";
+type Widget = Class<"_Widget">;
+type Button = Class<"_Button", Widget>;
+declare function button_new(): Button;
+/** @ntsSymbol widget_get_width */
+declare function width_of(widget: Widget): c_int;
+/** @ntsCall width_scaled */
+declare function width_of(widget: Widget, by: c_int, label?: string): number;
+function width_scaled(widget: Widget, by: c_int, label: string = "héllo"): number {
+    return (width_of(widget) as number) * (by as number) * 1000 + label.length;
+}
+export function run(): number {
+    const button = button_new();
+    return (width_of(button) as number) * 1000000 + width_of(button, 3 as c_int) + width_of(button, 1 as c_int, "ab") * 0;
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends(
+            "ntscall-function",
+            source,
+            provider,
+            METHODS_LIBRARY,
+            &caller,
+        ) else {
+            return;
+        };
+        for output in outputs {
+            // 42 from C, then 42 * 3 * 1000 + 5 through the companion.
+            assert_eq!(output, expect("42126005", provider), "{provider:?}");
+        }
+    }
+    // A name the program does not define is refused, as for a method.
+    let Some((_, prepared)) = prepare(
+        "ntscall-function-missing",
+        &source.replace("@ntsCall width_scaled", "@ntsCall width_nowhere"),
+    ) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("@ntsCall naming `width_nowhere`, which this program does not define")),
+        "an @ntsCall naming nothing was accepted: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A promise that settles with a C handle, awaited: GIO's
 /// `await file.query_info_async(…)`, whose `_finish` returns a
 /// `GFileInfo *`.

@@ -67379,6 +67379,17 @@ impl<'a> FuncBuilder<'a> {
             return activated;
         }
 
+        // A function a binding declares with `@ntsCall`: a call to the
+        // program's function it names, with the same arguments, as a static
+        // member's is -- there is no receiver to put first.
+        if target
+            .callee
+            .is_some_and(|callee| self.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION))
+            && let Some(function) = self.called_method(id)?
+        {
+            return self.lower_called_method(id, None, function, &arguments);
+        }
+
         // `JsonValue.Parse(x)` — a function a namespace declares. The thing
         // before the dot is a namespace, which has no value to be a receiver,
         // so this is a call to the function, as `Parse(x)` would be.
@@ -69458,10 +69469,10 @@ impl<'a> FuncBuilder<'a> {
             && (signature.this_type.is_some() || via)
     }
 
-    /// The function an `@ntsCall` method names, when the call at `id`
-    /// resolved to one: the program's only defined `function` of that name.
-    /// Two, or none, is refused -- a name that could mean either is not a
-    /// binding.
+    /// The function an `@ntsCall` method or ambient function names, when the
+    /// call at `id` resolved to one: the program's only defined `function` of
+    /// that name. Two, or none, is refused -- a name that could mean either is
+    /// not a binding.
     fn called_method(&self, id: NodeId) -> Result<Option<NodeId>, Diagnostic> {
         let Some(declaration) = self
             .snapshot
@@ -69476,7 +69487,15 @@ impl<'a> FuncBuilder<'a> {
         // module's (`nts bind-objc --values`).
         let objc_member = self.kind_of(declaration) == Some(syntax::METHOD_DECLARATION)
             && self.objc_class_member(declaration).is_some();
-        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE) && !objc_member {
+        // Or a function a binding declares and does not define: the copying
+        // form of a C function that hands back an array, whose body is the
+        // companion module's -- `g_strsplit_set`'s, copying each string out.
+        let ambient_function = self.kind_of(declaration) == Some(syntax::FUNCTION_DECLARATION)
+            && !self.has_a_body(declaration);
+        if self.kind_of(declaration) != Some(syntax::METHOD_SIGNATURE)
+            && !objc_member
+            && !ambient_function
+        {
             return Ok(None);
         }
         let Some(name) = self
