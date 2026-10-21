@@ -51,6 +51,9 @@
 //   query GtkButton  a `GTypeQuery` the program lays out, which GObject fills:
 //                 its `type_name` member a `const char *` the program reads with
 //                 `stringFrom`, owning nothing
+//   store true true  a `GType` property, crossing as the `gsize` C holds it
+//                 in: a list store's `item-type`, given at construction, read
+//                 back by its method and as its property, `g_object_get`'s
 //   refcount 2 true flags 1  pointers GIR leaves unannotated, which the binding
 //                 spells as the header writes them: a `gatomicrefcount *` in
 //                 storage the program allocates, set to 1 and raised to 2 by
@@ -173,6 +176,7 @@ import {
   g_output_stream_flush,
   g_output_stream_write,
   GOutputStream,
+  GListStore,
   GThemedIcon,
   IOErrorEnum,
   type GCancellable,
@@ -396,6 +400,12 @@ function boxedRecords(): void {
   const query = local<GTypeQuery>();
   g_type_query(gtk_button_get_type(), query);
   console.log("query " + (stringFrom(query.type_name) ?? "none"));
+  // A `GType` property, read back as the `gsize` C holds it in.
+  const store = new GListStore({ item_type: gtk_button_get_type() });
+  console.log(
+    "store " + String(store.get_item_type() === gtk_button_get_type()) + " " +
+      String(store.item_type === gtk_button_get_type()),
+  );
   // Raw pointers to storage the program allocates and frees: a count C reads
   // and raises, and a datalist C keeps its flags in. Heap storage, since a
   // pointer GIR says nothing about may be kept, for all the binding can tell.
