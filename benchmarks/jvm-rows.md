@@ -21,6 +21,7 @@ meets them. This is the map; the row table below it is the current state.
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
 - Asked and answered -- do not spend a second evening on these
+  - `objects` is platform, and `json-serialize`'s slow sittings are a tier-up race
   - `json-scan`'s checked `charCodeAt` is platform, and an `int` door does not move it
   - The worktree these numbers were taken from was eight hours stale
   - `absences` is the `uirem` residual, and it is 34%
@@ -716,6 +717,31 @@ way. Ask what a value is held as, not how many instructions move it.
   emit. There is no codegen gap in this row. It is `arrays_can_grow` being
   whole-program -- one `push` anywhere puts every array behind the wrapper --
   and per-array growability is `hir::elements`', not this lane's.
+
+### `objects` is platform, and `json-serialize`'s slow sittings are a tier-up race
+
+2026-10-21, main e378abd7e, CPU 4 with 4-5 quiet.
+
+**`objects`, 1.14x node, jvm/Java 0.99: platform.** 94% of the profile is
+`simulate$whole` itself, and the one allocation is `nts.gen.Vec2`, which the
+Java reference allocates the same way. HotSpot against V8 on short-lived
+objects; no core or JVM-only share. (The 2.23 of the morning sitting is
+between-sitting variation; see 2026-10-21 above.)
+
+**`json-serialize` is at parity, and sometimes is not.** Six `nts-bench` runs
+in one sitting read jvm/node 0.96 0.99 0.99 0.97 0.97 **1.55**: the JVM's time
+went 12.5 to 20.6 us in one run while node's held. Two of 76 default runs that
+day were slow (the full sitting's 1.70 was the third). One slow run logged
+under PrintCompilation: `work` (860 bytes), the entry the bench calls, never
+reached its C2 compile before the result was printed (about 870 ms in), and
+`work$whole` took a second OSR compile instead -- against a fast run that
+compiled `work` at 683 ms. No bailout, no skipped compile, no deoptimisation
+loop: emission sets nothing off. `Bench.measure` warms for at most 300 ms or
+20,000 calls and keeps the best of five 100 ms trials, so a C2 compile that
+lands late leaves every trial in C1 code. **Platform** -- tiered compilation
+against a short warm-up -- and `NTS_BENCH_WARMUP_MS` is the knob if a sitting
+must not catch it (30 runs each with and without 2 s of warm-up were all fast,
+so the rate is too low to price the knob from one sitting).
 
 ### `json-scan`'s checked `charCodeAt` is platform, and an `int` door does not move it
 
