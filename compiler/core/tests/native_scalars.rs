@@ -2228,3 +2228,48 @@ fn the_list_of_scalar_names_is_the_librarys() {
     listed.sort_unstable();
     assert_eq!(exported, listed);
 }
+
+/// A declared `const` whose type is a string literal is that literal's text
+/// wherever it is read -- the form a binding gives a C string constant
+/// (`export const G_KEY_FILE_DESKTOP_GROUP: "Desktop Entry";`), as a number's
+/// literal type gives a number's. Before, nothing gave it a value: the read was
+/// a global nothing wrote, and answered a null string. Escapes are the
+/// checker's: the text is the string the literal denotes.
+#[test]
+fn a_declared_string_constant_is_its_literal_types_text() {
+    let Some(snapshot) = snapshot(
+        "declared-string-constant",
+        r#"
+declare const GROUP: "Desktop Entry";
+declare const QUOTED: "a\"b\\c\nd";
+export function groupLength(): number { return GROUP.length; }
+export function quoted(): string { return QUOTED; }
+"#,
+    ) else {
+        return;
+    };
+    let lowered = hir::lower::lower(&snapshot);
+    assert!(lowered.diagnostics.is_empty(), "{:?}", lowered.diagnostics);
+    let reads = |name: &str, text: &str| {
+        lowered
+            .program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .is_some_and(|func| {
+                func.values
+                    .iter()
+                    .any(|op| matches!(&op.kind, hir::OpKind::ConstString(it) if it == text))
+            })
+    };
+    assert!(reads("groupLength", "Desktop Entry"));
+    assert!(reads("quoted", "a\"b\\c\nd"));
+    assert!(
+        !lowered
+            .program
+            .globals
+            .iter()
+            .any(|global| global.name.contains("GROUP") || global.name.contains("QUOTED")),
+        "a declared string constant needs no global"
+    );
+}

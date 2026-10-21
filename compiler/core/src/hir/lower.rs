@@ -360,6 +360,12 @@ struct ModuleScope {
     initialized: rustc_hash::FxHashMap<u32, u32>,
     /// Symbol to value, for a `const` this could evaluate.
     constants: rustc_hash::FxHashMap<u32, f64>,
+    /// Symbol to text, for a declared `const` whose type is a string literal
+    /// -- a binding's `export const G_KEY_FILE_DESKTOP_GROUP: "Desktop
+    /// Entry";` -- folded to the string wherever it is read, as a number's
+    /// literal type is ([`declared_literal`]). Not storage: there is no value
+    /// for a global to start from, and the type is the whole of it.
+    string_constants: rustc_hash::FxHashMap<u32, String>,
     /// A binding's native pointer constants, lossless bits beside their type.
     /// Kept out of `constant_value`, which computes JavaScript arithmetic.
     native_constants: rustc_hash::FxHashMap<u32, (u64, HirType)>,
@@ -8559,6 +8565,21 @@ fn declared_literal(probe: &FuncBuilder, name: NodeId) -> Option<f64> {
     }
 }
 
+/// The text a declaration's string literal type carries, as
+/// [`declared_literal`] reads a number's: `declare const GROUP: "Desktop
+/// Entry"` is the one way a binding can give a string constant its value.
+fn declared_string_literal(probe: &FuncBuilder, name: NodeId) -> Option<String> {
+    match &probe
+        .snapshot
+        .types
+        .get(probe.snapshot.node_types.get(&name)?.0 as usize)?
+        .kind
+    {
+        TypeKind::Literal(LiteralValue::String(text)) => Some(text.clone()),
+        _ => None,
+    }
+}
+
 /// Collect what a module declares outside any function.
 ///
 /// A global may hold a managed value. Nothing registers it as a root, because
@@ -9007,6 +9028,17 @@ fn collect_module_scope(
             .map_or(nts_semantic_schema::VariableKind::Var, |list| {
                 nts_semantic_schema::VariableKind::from_flags(probe.node(list).flags)
             });
+        // A declared string constant is its literal type's text, folded at
+        // each read, and needs no global: nothing could give one a value to
+        // start from. Only a declaration -- an initializer, even of the same
+        // literal, is the program's own and lowers as one.
+        if kind == nts_semantic_schema::VariableKind::Const
+            && initializer.is_none()
+            && let Some(text) = declared_string_literal(&probe, *name_node)
+        {
+            scope.string_constants.insert(symbol.0, text);
+            continue;
+        }
         if settle_by_binding(
             &probe,
             &mut scope,
@@ -81835,6 +81867,22 @@ impl<'a> FuncBuilder<'a> {
         Some(self.push(constant, ty, origin))
     }
 
+    /// A declared string constant's text, where `symbol` is one
+    /// ([`ModuleScope::string_constants`]).
+    fn string_constant(
+        &mut self,
+        id: NodeId,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> Option<ValueId> {
+        let text = self.module.string_constants.get(&symbol.0).cloned()?;
+        let origin = self.origin(id);
+        Some(self.push(
+            OpKind::ConstString(text),
+            HirType::Managed(ManagedType::String),
+            origin,
+        ))
+    }
+
     /// Everything a name can denote, keyed by the symbol rather than by the
     /// node that spells it.
     ///
@@ -81896,7 +81944,10 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_accessor_on(id, receiver, window, &getter, None);
             }
         }
-        if let Some(value) = self.native_constant(id, symbol) {
+        if let Some(value) = self
+            .native_constant(id, symbol)
+            .or_else(|| self.string_constant(id, symbol))
+        {
             return Ok(value);
         }
         let origin = self.origin(id);
