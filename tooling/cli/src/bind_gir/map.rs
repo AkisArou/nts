@@ -1219,6 +1219,8 @@ fn value_kind(c: &Type) -> Option<char> {
         Type::Scalar(Scalar::UInt | Scalar::UInt32 | Scalar::UInt16 | Scalar::UInt8) => 'u',
         Type::Scalar(Scalar::Int64 | Scalar::Long) => 'l',
         Type::Scalar(Scalar::UInt64 | Scalar::ULong) => 'L',
+        // A `GType` -- a list store's `item-type` -- which C holds as a `gsize`.
+        Type::Scalar(Scalar::Size) => 'z',
         Type::Scalar(Scalar::Double | Scalar::Float) => 'd',
         Type::Pointer(_) => 'p',
         _ => return None,

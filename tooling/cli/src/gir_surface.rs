@@ -622,6 +622,15 @@ mod tests {
             themed.contains("    name?: string;"),
             "GThemedIconProps does not offer name: {themed}"
         );
+        // A `GType` one, which crosses as the `gsize` C holds it in, and
+        // which reads back as the same.
+        for present in [
+            "@ntsSymbol nts_gobject_with_z__item_type\n   */\n  export function GListStore_with_item_type(builder: Ptr<void>, value: c_size_t): void;",
+            "  export interface GListStoreProps extends GObjectProps, GListModelProps {\n    item_type: c_size_t;\n  }",
+            "@ntsSymbol nts_gobject_propget_z__item_type",
+        ] {
+            assert!(gio.declarations.contains(present), "missing: {present}");
+        }
     }
 
     /// GIR's constants and the fundamental types, as the binder declares them.
