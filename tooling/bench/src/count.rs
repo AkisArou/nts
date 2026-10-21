@@ -1886,12 +1886,28 @@ mod tests {
         let _removed = std::fs::remove_dir_all(&dir);
     }
 
+    /// A script at `dir/name`, executable, which this process never held
+    /// open for writing.
+    ///
+    /// **Written here and executed here, it is `Text file busy` now and
+    /// then.** Tests run on threads, and a thread that forks while another
+    /// holds a write descriptor on the script hands the child a copy of it
+    /// until the child's own `exec`; executing the script inside that window
+    /// is ETXTBSY. `O_CLOEXEC` closes it at the child's exec, not before, so
+    /// it narrows the window and does not shut it -- and the gate's eight
+    /// binaries at once found it (`probe_knows_a_counting_binary_from_an_old_one`,
+    /// 2026-10-21). So the text goes to a file that is never executed, and
+    /// `install` makes the executable in a process of its own: no descriptor
+    /// for writing it exists in this one to be inherited.
     fn write_fake(dir: &camino::Utf8Path, name: &str, script: &str) -> Utf8PathBuf {
-        use std::os::unix::fs::PermissionsExt as _;
         let path = dir.join(name);
-        std::fs::write(&path, script).expect("write fake");
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
-            .expect("make fake executable");
+        let text = dir.join(format!("{name}.text"));
+        std::fs::write(&text, script).expect("write fake's text");
+        let installed = std::process::Command::new("install")
+            .args(["-m", "0755", text.as_str(), path.as_str()])
+            .status()
+            .expect("run install");
+        assert!(installed.success(), "install {text} {path}: {installed}");
         path
     }
 

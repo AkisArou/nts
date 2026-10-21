@@ -1325,10 +1325,13 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # it has arrived, and a new example that disagrees now fails the day it
   # lands, as it does on the JVM.
   #
+  # 663 -> 676, 2026-10-21: the official LLVM step in landing gate
+  # 586a40d24f4e measured 676 of 676, the same ten partials.
+  # Evidence: ~/.cache/nts-land/runs/586a40d24f4e-1792592808805/.
   # 393 -> 663, 2026-10-21: the official LLVM step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/llvm.log.
-  backend_examples 663 "through the LLVM backend" exact 10 ); }
+  backend_examples 676 "through the LLVM backend" exact 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: TypeScript objects live in the platform collector's
@@ -1636,10 +1639,13 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # a-cache-entry-prefix-read-from-an-erased-array graduating out of
   # refusals), same ten partials.
   # Evidence: ~/.cache/nts-jvm-codex/inherited-faces-20261019/pinned-faces2.log.
+  # 663 -> 676, 2026-10-21: the official JVM step in landing gate
+  # 586a40d24f4e measured 676 of 676, the same ten partials.
+  # Evidence: ~/.cache/nts-land/runs/586a40d24f4e-1792592808805/.
   # 622 -> 663, 2026-10-21: the official JVM step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/jvm.log.
-  backend_examples 663 "through the JVM backend" exact 10 ); }
+  backend_examples 676 "through the JVM backend" exact 10 ); }
 # The programs through the WebAssembly backend, by the same `nts check` as
 # every other backend: the module the WasmGC backend emits, run by node through
 # its generated glue, against node running the source -- one pool, one order,
@@ -1654,10 +1660,13 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # where node answers. The partial ceiling tracks those remaining parity gaps;
 # the program floor tracks the measured corpus, including prior main changes.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
+  # 663 -> 676, 2026-10-21: the official Wasm step in landing gate
+  # 586a40d24f4e measured 676 of 676, the same ten partials.
+  # Evidence: ~/.cache/nts-land/runs/586a40d24f4e-1792592808805/.
   # 614 -> 663, 2026-10-21: the official Wasm step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/wasm.log.
-  backend_examples 663 "through the Wasm backend" exact 10 ); }
+  backend_examples 676 "through the Wasm backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
@@ -1933,7 +1942,8 @@ test262() {
 # forward var still stops by name and remains outside the ran-set.
 # Checked bigint division/remainder by zero and negative exponents now throw
 # catchable RangeErrors: three recorded fails pass on clean pin 39ccd0eec4fe.
-TEST262_LANGUAGE_PASS_FLOOR=6631
+# 6631 -> 6935, 2026-10-21: measured by the landing gate at 586a40d24f4e.
+TEST262_LANGUAGE_PASS_FLOOR=6935
 TEST262_LANGUAGE_NEGATIVES_ACCEPTED_CEILING=1353
 # One recorded test262 directory, re-run and held to its record, its floor and
 # its ceiling: `test262_recorded <dir> <record> <floor> <floor variable name>
@@ -2018,7 +2028,8 @@ test262_cases() {
 # ~/.cache/nts-handover/compiler-helper/. The official builtins step on the
 # clean rebased fb49b733d7c5 pin confirms 823 passes and 185 accepted negatives
 # (numeric-args-rebased-test262-builtins-cases.log there). Ceiling unchanged.
-TEST262_BUILTINS_PASS_FLOOR=823
+# 823 -> 824, 2026-10-21: measured by the landing gate at 586a40d24f4e.
+TEST262_BUILTINS_PASS_FLOOR=824
 TEST262_BUILTINS_NEGATIVES_ACCEPTED_CEILING=185
 test262_builtins_cases() {
   test262_recorded test/built-ins results/test262/c/builtins.tsv \
@@ -2035,9 +2046,11 @@ test262_builtins_cases() {
 # stand-in's own entries. A few seconds.
 TEST262_ANNEXB_PASS_FLOOR=9
 TEST262_ANNEXB_NEGATIVES_ACCEPTED_CEILING=1
-TEST262_STAGING_PASS_FLOOR=47
+# 47 -> 53, 2026-10-21: measured by the landing gate at 586a40d24f4e.
+TEST262_STAGING_PASS_FLOOR=53
 TEST262_STAGING_NEGATIVES_ACCEPTED_CEILING=3
-TEST262_HARNESS_PASS_FLOOR=12
+# 12 -> 17, 2026-10-21: measured by the landing gate at 586a40d24f4e.
+TEST262_HARNESS_PASS_FLOOR=17
 TEST262_HARNESS_NEGATIVES_ACCEPTED_CEILING=0
 test262_rest_cases() {
   test262_recorded test/annexB results/test262/c/annexb.tsv \

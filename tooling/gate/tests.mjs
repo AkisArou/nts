@@ -123,8 +123,31 @@ for (const r of recorded) {
 }
 for (const { key, res } of bad) {
   console.log(`  ---- ${key}: ${res.error ?? (res.signal ? `killed by ${res.signal}` : `exit ${res.status}`)}`);
-  console.log(res.out.split("\n").filter((l) => /^(test .* FAILED|failures:|---- |thread '.*' panicked|error)/.test(l)).slice(0, 40).map((l) => `    ${l}`).join("\n"));
+  console.log(failureReport(res.out).map((l) => `    ${l}`).join("\n"));
 }
+/**
+ * What a failed binary said about why: each failing test's whole block,
+ * `---- name stdout ----` up to the next block or the summary, then any line
+ * that names a failure outside one (a crash, `error:`), bounded.
+ *
+ * **Blocks, not a pattern for the panic line.** The filter this replaces kept
+ * `thread '.*' panicked`, and Rust now prints `thread 'name' (3003478)
+ * panicked at`, so the line never matched -- and the message, on the lines
+ * after it, was never kept by any pattern. Every red test in the gate came
+ * with its name and no reason (2026-10-21, twice in one afternoon).
+ */
+function failureReport(out) {
+  const lines = out.split("\n");
+  const kept = [];
+  let inBlock = false;
+  for (const line of lines) {
+    if (/^---- .* ----$/.test(line)) inBlock = true;
+    else if (/^(failures:|test result:)/.test(line)) inBlock = false;
+    if (inBlock || /^(test .* FAILED|error)/.test(line)) kept.push(line);
+  }
+  return kept.length <= 80 ? kept : [...kept.slice(0, 80), `... ${kept.length - 80} more line(s) in the step's log`];
+}
+
 const slowest = [...results].sort(([, a], [, b]) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 3)
   .map(([k, v]) => `${k.split(" ").pop()} ${Math.round(v.seconds ?? 0)}s`).join(", ");
 console.log(`  ${recorded.length} test binaries, ${doctests} doctest crate(s): ${passed} passed, ${failed} failed, ${ignored} ignored` +
