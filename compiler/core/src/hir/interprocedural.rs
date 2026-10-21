@@ -236,6 +236,8 @@ fn settle(
         },
     };
     let mut changes = Changes::default();
+    // Where each function's parameters can settle: see `comparison_thresholds`.
+    let thresholds: Vec<Vec<f64>> = program.funcs.iter().map(comparison_thresholds).collect();
 
     for _ in 0..ROUND_CAP {
         let analyses = analyze_all(program, &crossing, written, caps);
@@ -244,6 +246,7 @@ fn settle(
             &mut changes.params,
             &crossing.params,
             arguments(program, &analyses, &by_name, in_slot, outward),
+            &thresholds,
         );
         let returns = widened(
             &mut changes.returns,
@@ -277,6 +280,7 @@ fn settle(
                 &mut changes.lengths,
                 &crossing.param_lengths,
                 super::fields::parameter_lengths(program, &analyses, outward),
+                &[],
             )
         };
         let whole = flow::Whole {
@@ -347,6 +351,16 @@ struct Changes {
 /// jumps to the thresholds [`facts::widen`] knows, so it stops. `None` is an
 /// absent entry, TOP at the use, and a widened fact that reaches it stays.
 fn widen_one(changes: &mut u32, previous: Option<Facts>, next: Option<Facts>) -> Option<Facts> {
+    widen_one_toward(changes, previous, next, &[])
+}
+
+/// [`widen_one`], trying `thresholds` first ([`facts::widen_toward`]).
+fn widen_one_toward(
+    changes: &mut u32,
+    previous: Option<Facts>,
+    next: Option<Facts>,
+    thresholds: &[f64],
+) -> Option<Facts> {
     if previous == next {
         return next;
     }
@@ -354,7 +368,39 @@ fn widen_one(changes: &mut u32, previous: Option<Facts>, next: Option<Facts>) ->
     if *changes <= WIDEN_AFTER {
         return next;
     }
-    Some(facts::widen(previous?, previous?.join(next?)))
+    Some(facts::widen_toward(
+        previous?,
+        previous?.join(next?),
+        thresholds,
+    ))
+}
+
+/// The whole numbers a function compares something against, and each one
+/// above them, ascending: where a parameter's bound can settle. `c === 7`
+/// stops at 7, `c < 8` lets 8 through, so both are offered.
+fn comparison_thresholds(func: &Func) -> Vec<f64> {
+    let mut found: Vec<f64> = Vec::new();
+    for value in func.blocks.iter().flat_map(|block| &block.ops) {
+        let OpKind::Binary { op, lhs, rhs } = &func.values[value.0 as usize].kind else {
+            continue;
+        };
+        if !op.is_comparison() {
+            continue;
+        }
+        for side in [lhs, rhs] {
+            let constant = match func.values[side.0 as usize].kind {
+                #[allow(clippy::cast_precision_loss)]
+                OpKind::ConstInt(value) => value as f64,
+                OpKind::ConstFloat(value) if value.fract() == 0.0 => value,
+                _ => continue,
+            };
+            found.extend([constant, constant + 1.0]);
+        }
+    }
+    found.retain(|t| t.is_finite());
+    found.sort_by(f64::total_cmp);
+    found.dedup();
+    found
 }
 
 /// [`widen_one`] over a map of facts, an absent entry being TOP.
@@ -379,11 +425,14 @@ fn widened_slots(
     changes: &mut FxHashMap<(usize, usize), u32>,
     previous: &[Vec<Facts>],
     mut next: Vec<Vec<Facts>>,
+    thresholds: &[Vec<f64>],
 ) -> Vec<Vec<Facts>> {
     for (func, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
+        let toward = thresholds.get(func).map_or(&[][..], Vec::as_slice);
         for (slot, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
             let count = changes.entry((func, slot)).or_default();
-            *next = widen_one(count, Some(*previous), Some(*next)).unwrap_or(Facts::TOP);
+            *next =
+                widen_one_toward(count, Some(*previous), Some(*next), toward).unwrap_or(Facts::TOP);
         }
     }
     next

@@ -340,8 +340,33 @@ const WIDEN_DOWN: [f64; 4] = [0.0, -2_147_483_648.0, SAFE_MIN, f64::NEG_INFINITY
 /// enough times to show the bound is not going to settle on its own.
 #[must_use]
 pub fn widen(prev: Facts, next: Facts) -> Facts {
+    widen_toward(prev, next, &[])
+}
+
+/// [`widen`], trying `thresholds` first: the constants a function compares
+/// against, ascending. A parameter a recursion increments is bounded only by
+/// the test that stops it -- `placeQueen(c + 1)` runs after `c === 7` has
+/// returned -- and widening straight to the `i32` boundary jumps past that
+/// bound, so `c + 1` can overflow and `c` stays a double. Jumping to 7 first,
+/// the next round finds `[0, 7]` stable. Sound for any thresholds: the
+/// iteration stops only where the facts are stable, and a threshold that is
+/// too small only widens again.
+#[must_use]
+pub fn widen_toward(prev: Facts, next: Facts, thresholds: &[f64]) -> Facts {
     if prev.is_bottom() {
         return next;
+    }
+    if next.hi > prev.hi
+        && next.lo >= prev.lo
+        && let Some(hi) = thresholds.iter().copied().find(|t| *t >= next.hi)
+    {
+        return Facts::new(
+            next.lo,
+            hi,
+            next.whole,
+            next.maybe_nan,
+            next.maybe_negative_zero,
+        );
     }
     let lo = if next.lo < prev.lo {
         WIDEN_DOWN
@@ -1280,6 +1305,23 @@ mod tests {
                 .narrow(Facts::new(0.0, 100.0, false, false, false))
                 .integral()
         );
+    }
+
+    #[test]
+    fn widening_toward_the_programs_constants_stops_at_the_first_that_holds() {
+        // `c === 7` offers 7 and 8: a bound growing past 1 stops at 7, which
+        // the next round finds stable, rather than at the `i32` limit.
+        let prev = Facts::new(0.0, 1.0, true, false, false);
+        let next = Facts::new(0.0, 2.0, true, false, false);
+        assert_eq!(widen_toward(prev, next, &[7.0, 8.0]).hi, 7.0);
+        // Past every one of them, the fixed thresholds answer as before.
+        let past = Facts::new(0.0, 9.0, true, false, false);
+        assert_eq!(
+            widen_toward(prev, past, &[7.0, 8.0]).hi,
+            widen(prev, past).hi
+        );
+        // A bound that is not growing is left alone.
+        assert_eq!(widen_toward(prev, prev, &[7.0]).hi, 1.0);
     }
 
     #[test]
