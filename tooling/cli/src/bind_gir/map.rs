@@ -3261,16 +3261,25 @@ impl<'a> Mapper<'a> {
         if let TypeRef::Named { name, .. } = &param.ty
             && (name == "utf8" || name == "filename")
         {
+            let c_type = match &param.ty {
+                TypeRef::Named { c_type, .. } => c_type.as_deref().unwrap_or_default(),
+                _ => "",
+            };
+            // A string is one `*`. Behind more -- `const gchar *const *`, a
+            // list GIR does not call an array, or `const gchar **`, a slot GIR
+            // does not call out -- it is the raw pointer the header writes,
+            // down to its `char`, as any pointer GIR leaves unannotated is.
+            if c_type.matches('*').count() != 1 {
+                return self
+                    .raw_pointer("gchar", c_type)
+                    .ok_or_else(|| Reason::PointerDepth(c_type.to_owned()));
+            }
             if param.transfer != Transfer::None {
                 return Err(Reason::OwnedString);
             }
             // `char *` without `const` is a buffer the callee may write into
             // (`g_strlcat`'s destination), which GIR still calls `utf8`. A
             // string lent for the call is read-only, and not that.
-            let c_type = match &param.ty {
-                TypeRef::Named { c_type, .. } => c_type.as_deref().unwrap_or_default(),
-                _ => "",
-            };
             if !c_type.starts_with("const ") {
                 return Err(Reason::WritableBuffer);
             }
@@ -5928,6 +5937,59 @@ mod tests {
                 ("LIMIT".to_owned(), "c_int".to_owned(), Some("7".to_owned())),
             ]
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A string is one `*`. A `utf8` behind more -- a list of strings GIR
+    /// does not call an array, a slot it does not call out -- is the raw
+    /// pointer the header writes, down to its `char`, and never the one
+    /// string it is not. The control is a `const gchar *`: a string.
+    #[test]
+    fn a_string_is_one_pointer_and_one_behind_more_is_raw() {
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-string-depth-test").expect("fixture directory");
+        let function = |name: &str, c_type: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="text" transfer-ownership="none" nullable="1"><type name="utf8" c:type="{c_type}"/></parameter></parameters></function>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            &function("domains", "const gchar* const*"),
+            &function("parse", "const gchar**"),
+            &function("name", "const gchar*"),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        assert!(binding.refused.is_empty(), "{:?}", binding.refused);
+        let spelled = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .map_or_else(
+                    || panic!("{symbol} is not bound"),
+                    |f| f.parameters[0].1.ts.clone(),
+                )
+        };
+        assert_eq!(
+            spelled("s_domains"),
+            "ConstPtr<ConstPtr<c_char> | null> | null"
+        );
+        assert_eq!(spelled("s_parse"), "Ptr<ConstPtr<c_char> | null> | null");
+        assert_eq!(spelled("s_name"), "string | null");
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
