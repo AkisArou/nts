@@ -99,6 +99,9 @@
 //                 values form and freed: the name of the file
 //                 `g_file_open_tmp` made, which existed, and does not once the
 //                 program closes and removes it
+//   taken 1 kept  a string the callee takes and frees: the program's, passed
+//                 to `gtk_string_list_take` as GLib's copy of it, which the
+//                 list then holds
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -580,6 +583,10 @@ function outParameters(): void {
     "tmp " + String(made.indexOf("nts-gir-") >= 0) + " " + String(existed) + " " +
       String(g_file_test(made, FileTest.EXISTS)),
   );
+  // A string the callee takes and frees, passed as GLib's copy of it.
+  const taken = gtk_string_list_new(null);
+  taken.take("kept");
+  console.log("taken " + String(taken.get_n_items()) + " " + (taken.get_string(0) ?? "none"));
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
