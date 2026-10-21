@@ -78,17 +78,19 @@ impl Code {
             other => Some(other),
         });
     }
-    /// Each instruction replaced by what `keep` makes of it, by position, or
-    /// dropped where it answers `None`; an origin mark moves with the
-    /// instruction it named, or to the next one kept.
-    pub(crate) fn rewrite(&mut self, mut keep: impl FnMut(usize, Inst) -> Option<Inst>) {
+    /// Each instruction replaced by what `keep` makes of it, by position:
+    /// dropped where it answers nothing (`None`), several where it answers
+    /// a sequence. An origin mark moves with the instruction it named, to
+    /// the first of what replaced it, or to the next one kept.
+    pub(crate) fn rewrite<R: IntoIterator<Item = Inst>>(
+        &mut self,
+        mut keep: impl FnMut(usize, Inst) -> R,
+    ) {
         let mut kept = Vec::with_capacity(self.insts.len());
         let mut moved = Vec::with_capacity(self.insts.len() + 1);
         for (at, inst) in self.insts.drain(..).enumerate() {
             moved.push(kept.len());
-            if let Some(inst) = keep(at, inst) {
-                kept.push(inst);
-            }
+            kept.extend(keep(at, inst));
         }
         moved.push(kept.len());
         self.insts = kept;

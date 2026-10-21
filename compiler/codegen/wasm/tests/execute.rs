@@ -479,6 +479,74 @@ fn a_record_entry_asked_whether_truthy_is_read_from_its_entry() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// `ToInt32` of a double in a loop is in line below 2^63 in magnitude -- a
+/// 64-bit truncation whose low 32 bits are the answer -- and the helper
+/// beyond it, across the boundary, the infinities, NaN and a single-precision
+/// read; a callee's conversion counts once the callee is inlined into the
+/// loop. Outside every loop the conversion stays a call.
+#[test]
+fn a_double_in_a_loop_is_converted_to_int32_in_line_below_two_to_the_63() {
+    let fixture = common::repository().join("tests/wasm/int32-conversions");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let imported = imported_functions(&emitted.bytes);
+    let mut in_line = std::collections::BTreeSet::new();
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+            let mut reader = body.get_operators_reader().unwrap();
+            while !reader.eof() {
+                if matches!(
+                    reader.read().unwrap(),
+                    wasmparser::Operator::I64TruncSatF64S
+                ) {
+                    in_line.insert(names[imported + defined].clone());
+                }
+            }
+            defined += 1;
+        }
+    }
+    let converts_in_line = |name: &str| {
+        in_line
+            .iter()
+            .any(|it| it == name || it.starts_with(&format!("{name}#")))
+    };
+    for name in [
+        "wrapped",
+        "past32",
+        "product",
+        "edge",
+        "huge",
+        "unsigned",
+        "single",
+        "viaCallee",
+    ] {
+        assert!(
+            converts_in_line(name),
+            "`{name}` has no in-line conversion: {in_line:?}"
+        );
+    }
+    // The control: outside every loop the conversion is the helper's.
+    assert!(!converts_in_line("outside"), "{in_line:?}");
+    let calls = common::calls_by_name_with_imports(&emitted.bytes);
+    assert!(
+        calls
+            .get("outside")
+            .is_some_and(|callees| callees.iter().any(|callee| callee == "nts.toInt32")),
+        "{calls:?}"
+    );
+    let output = common::run_with_node_flags(
+        "int32-conversions",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 153, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Objects as collection keys compare by identity: same-shaped objects are two
 /// keys, an identity hash survives growth, and erased objects and functions
 /// hash the same way.

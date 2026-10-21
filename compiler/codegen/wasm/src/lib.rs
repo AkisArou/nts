@@ -63,6 +63,7 @@ mod symbols;
 mod tag_tests;
 mod tail;
 mod timers;
+mod to_int32;
 mod transfer;
 mod types;
 mod values;

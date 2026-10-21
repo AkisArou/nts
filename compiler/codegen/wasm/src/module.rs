@@ -746,6 +746,7 @@ pub(crate) fn emit(program: &Program) -> Result<Emitted, EmitError> {
     crate::inline::program(&mut m);
     crate::roundtrip::program(&mut m);
     crate::box_web::program(&mut m);
+    crate::to_int32::program(&mut m);
     crate::tail::program(&mut m);
     crate::locals::program(&mut m);
     let assembled = assemble(&m)?;
