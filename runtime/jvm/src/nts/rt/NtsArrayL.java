@@ -113,14 +113,17 @@ public final class NtsArrayL {
     }
 
     public static Object get(NtsArrayL a, double at) {
-        // The `(int, int)` overload, not the `(int, double)` one: this
-        // subscript is emitted `checked: false`, so the middle end already
-        // proved the index integral and only its *range* is in question.
-        // The double form re-proves integrality with a `(double)(int)`
-        // round trip per element, which cost `growth-grown` 26% -- 1.01x to
-        // 1.28x -- for a test whose answer is a precondition here.
+        // **Integral as well as in range**, because only a *checked* read
+        // comes here: an index not held as an `int` -- a `double`, or an
+        // `i64` widened to one -- whose element the middle end did not
+        // prove. `xs[1.5]` is no element, and `(int) 1.5` read `xs[1]`
+        // (tests/outcomes/a-pushed-string-array-read-at-a-fractional-index-
+        // on-the-jvm). This test was dropped (b9ef817d9) while unchecked
+        // reads called this overload too, and cost `growth-grown` 26% there;
+        // the next day they got a path of their own (`proved_growable_read`
+        // reads `items`, fcba8dd5d), and the premise went with them.
         int i = (int) at;
-        if (i >= 0 && i < a.length) { return a.items[i]; }
+        if (i == at && i >= 0 && i < a.length) { return a.items[i]; }
         NtsRuntime.outOfRange(at, a.length);
         return null;
     }

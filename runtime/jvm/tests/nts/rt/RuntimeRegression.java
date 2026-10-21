@@ -1410,6 +1410,7 @@ public final class RuntimeRegression {
         testReferenceKeyedTags(); System.out.println("reference-keyed map tags passed");
         testPresenceHas(); System.out.println("presenceHas passed");
         testIntegerViewStores(); System.out.println("integer view stores passed");
+        testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
         System.out.println("PASS " + checks + " assertions");
     }
 
@@ -1472,6 +1473,44 @@ public final class RuntimeRegression {
             number(NtsViewI32.getAt(i32, 0), bits, "Int32Array, double " + x);
             NtsViewU32.setAt(u32, 0, x);
             number(NtsViewU32.getAt(u32, 0), bits & 0xffffffffL, "Uint32Array, double " + x);
+        }
+    }
+
+    /** Whether a read refuses, by name, rather than answering. */
+    private static boolean refuses(Runnable read) {
+        try {
+            read.run();
+            return false;
+        } catch (NtsRefusal refused) {
+            return true;
+        }
+    }
+
+    /**
+     * A growable array's read at a `double` index is a *checked* read, so it
+     * has to test integrality as well as range: `xs[1.5]` is no element, and
+     * reading `xs[1]` for it was a silent wrong answer
+     * (tests/outcomes/a-pushed-string-array-read-at-a-fractional-index-on-the-jvm).
+     * An integral `double`, `-0` included, still reads its element.
+     */
+    private static void testFractionalWrapperReads() {
+        NtsArrayL words = NtsArrayL.of(0);
+        NtsArrayD numbers = NtsArrayD.of(0);
+        NtsArrayZ flags = NtsArrayZ.of(0);
+        for (int i = 0; i < 4; i++) {
+            NtsArrayL.push(words, "w" + i);
+            NtsArrayD.push(numbers, i * 10.0);
+            NtsArrayZ.push(flags, i % 2 == 1);
+        }
+        equal(NtsArrayL.get(words, 1.0), "w1", "an integral double reads its element");
+        equal(NtsArrayL.get(words, -0.0), "w0", "-0 is index 0");
+        number(NtsArrayD.get(numbers, 3.0), 30.0, "an integral double reads its element");
+        check(NtsArrayZ.get(flags, 1.0), "an integral double reads its element");
+        for (double at : new double[] {1.5, 0.25, -0.5, 3.999, Double.NaN, 4.0, -1.0,
+                Double.POSITIVE_INFINITY, 4294967297.0}) {
+            check(refuses(() -> NtsArrayL.get(words, at)), "NtsArrayL refuses " + at);
+            check(refuses(() -> NtsArrayD.get(numbers, at)), "NtsArrayD refuses " + at);
+            check(refuses(() -> NtsArrayZ.get(flags, at)), "NtsArrayZ refuses " + at);
         }
     }
 
