@@ -46,6 +46,11 @@
 //   query GtkButton  a `GTypeQuery` the program lays out, which GObject fills:
 //                 its `type_name` member a `const char *` the program reads with
 //                 `stringFrom`, owning nothing
+//   refcount 2 true flags 1  pointers GIR leaves unannotated, which the binding
+//                 spells as the header writes them: a `gatomicrefcount *` in
+//                 storage the program allocates, set to 1 and raised to 2 by
+//                 GLib; and a `GData **`, an empty datalist the program
+//                 allocates, given a flag and asked for it back
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -166,6 +171,9 @@ import {
   g_key_file_new,
   g_key_file_unref,
   g_access,
+  g_atomic_ref_count_compare,
+  g_atomic_ref_count_inc,
+  g_atomic_ref_count_init,
   g_set_error_literal,
   g_strsplit,
   g_timeout_add_full,
@@ -173,9 +181,12 @@ import {
   KeyFileFlags,
   type GError,
   g_bytes_new,
+  g_datalist_get_flags,
+  g_datalist_set_flags,
   g_bytes_equal,
   g_bytes_hash,
 } from "c:GLib-2.0";
+import type { GData } from "c:GLib-2.0";
 import {
   G_TYPE_STRING,
   g_signal_group_new,
@@ -218,7 +229,8 @@ import {
 import type { PangoRectangle } from "c:Pango-1.0";
 import type { CBool, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
-import { local, stringFrom, bytesFrom } from "c:memory";
+import { local, sizeof, stringFrom, bytesFrom } from "c:memory";
+import { free, malloc } from "c:stdlib";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
 const PRIORITY_DEFAULT = 0;
@@ -341,6 +353,23 @@ function boxedRecords(): void {
   const query = local<GTypeQuery>();
   g_type_query(gtk_button_get_type(), query);
   console.log("query " + (stringFrom(query.type_name) ?? "none"));
+  // Raw pointers to storage the program allocates and frees: a count C reads
+  // and raises, and a datalist C keeps its flags in. Heap storage, since a
+  // pointer GIR says nothing about may be kept, for all the binding can tell.
+  const count = malloc<c_int>(sizeof<c_int>());
+  const datalist = malloc<GData | null>(sizeof<GData | null>());
+  if (count !== null && datalist !== null) {
+    g_atomic_ref_count_init(count);
+    g_atomic_ref_count_inc(count);
+    const raised = g_atomic_ref_count_compare(count, 2);
+    datalist[0] = null;
+    g_datalist_set_flags(datalist, 1);
+    console.log(
+      "refcount " + String(count[0]) + " " + String(raised) + " flags " + String(g_datalist_get_flags(datalist)),
+    );
+  }
+  free(count);
+  free(datalist);
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
