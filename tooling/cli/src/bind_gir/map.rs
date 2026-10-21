@@ -380,6 +380,8 @@ pub(crate) enum ArrayLength {
     Slot(String),
     /// A zero after the last element: NULL after the last string.
     Zero,
+    /// Always this many elements.
+    Fixed(u64),
 }
 
 /// A signal's handler parameters as TypeScript spells them, and the named
@@ -3302,9 +3304,13 @@ impl<'a> Mapper<'a> {
     }
 
     /// Where an array C hands back says its length: the out slot GIR names,
-    /// which the call fills, or else the zero ending it.
+    /// which the call fills, or else the size it always has, or the zero
+    /// ending it.
     fn array_length(array: &ArrayRef, parameters: &[Param]) -> Option<ArrayLength> {
         let Some(index) = array.length else {
+            if let Some(size) = array.fixed_size {
+                return Some(ArrayLength::Fixed(size));
+            }
             return array.zero_terminated.then_some(ArrayLength::Zero);
         };
         let length = parameters
@@ -6471,6 +6477,56 @@ mod tests {
         ] {
             assert!(companion.contains(line), "missing {line:?}:\n{companion}");
         }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// An array C hands back that always has the same number of elements --
+    /// `gsk_border_node_get_widths`' four -- is copied that many: the size
+    /// GIR states is the count, and NULL is a broken promise whatever it is,
+    /// not only where a count is other than 0 (`4 !== 0`, which TypeScript
+    /// refuses as a comparison of two literals that never overlap).
+    #[test]
+    fn an_array_of_a_fixed_size_is_copied() {
+        use super::super::emit;
+        use super::{ArrayLength, Element, Shape, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-fixed-array-test").expect("fixture directory");
+        let xml = r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">
+            <function name="widths" c:identifier="s_widths"><return-value transfer-ownership="none"><array zero-terminated="0" fixed-size="4" c:type="const float*"><type name="gfloat"/></array></return-value></function>
+            </namespace></repository>"#;
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        let widths = binding
+            .functions
+            .iter()
+            .find(|f| f.symbol == "s_widths")
+            .unwrap_or_else(|| panic!("{:?}", binding.refused));
+        assert_eq!(
+            widths.result.shape,
+            Shape::Array {
+                element: Element::Scalar("Float32".to_owned()),
+                length: ArrayLength::Fixed(4),
+                transfer: super::Transfer::None,
+            }
+        );
+        let companion = emit::companion(&binding, "test");
+        assert!(
+            companion.contains("    for (let i = 0; i < 4; i++) {")
+                && companion.contains(
+                    "  } else {\n    console.error(\"s_widths: NULL with a length of \" + String(4));"
+                )
+                && !companion.contains("4 !== 0"),
+            "{companion}"
+        );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

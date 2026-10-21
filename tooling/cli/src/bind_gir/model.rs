@@ -308,6 +308,9 @@ pub(crate) struct ArrayRef {
     /// Ends with a zero element. GIR's default when neither a length nor a
     /// fixed size is given.
     pub(crate) zero_terminated: bool,
+    /// How many elements it always has, where GIR says (`fixed-size`):
+    /// `gsk_border_node_get_widths`' 4.
+    pub(crate) fixed_size: Option<u64>,
     /// The `GLib` container it is, where GIR names one (`GLib.ByteArray`,
     /// `GLib.PtrArray`): a struct, not a C array.
     pub(crate) container: Option<String>,

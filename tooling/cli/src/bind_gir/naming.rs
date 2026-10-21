@@ -487,6 +487,7 @@ impl Renamer<'_> {
                 length: match length {
                     ArrayLength::Slot(slot) => ArrayLength::Slot(parameter(slot)),
                     ArrayLength::Zero => ArrayLength::Zero,
+                    ArrayLength::Fixed(size) => ArrayLength::Fixed(*size),
                 },
                 transfer: *transfer,
             },

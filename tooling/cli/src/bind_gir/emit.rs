@@ -1565,6 +1565,7 @@ fn copy_array(
             let _ = writeln!(after, "  }}");
             count
         }
+        ArrayLength::Fixed(size) => size.to_string(),
     };
     let counted = matches!(length, ArrayLength::Zero);
     let at = match element {
@@ -1598,7 +1599,12 @@ fn copy_array(
                 let _ = writeln!(after, "      {copy}.push({at}[i]);");
             }
             let _ = writeln!(after, "    }}");
-            let _ = writeln!(after, "  }} else if ({count} !== 0) {{");
+            // A size the array always has is a promise whatever it is.
+            if matches!(length, ArrayLength::Fixed(_)) {
+                let _ = writeln!(after, "  }} else {{");
+            } else {
+                let _ = writeln!(after, "  }} else if ({count} !== 0) {{");
+            }
             let _ = writeln!(
                 after,
                 "    console.error(\"{symbol}: NULL with a length of \" + String({count}));"
