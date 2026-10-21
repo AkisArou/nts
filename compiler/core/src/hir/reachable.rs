@@ -96,6 +96,76 @@ pub enum Roots<'a> {
     Declared(&'a [String]),
 }
 
+/// [`Roots`], owned: what a prepared program keeps of where its walk started
+/// (`Program::roots`), so an analysis after preparation asks the question the
+/// walk answered rather than a second one.
+#[derive(Debug, Clone)]
+pub enum OwnedRoots {
+    Entry(Vec<String>),
+    EveryExport,
+    EntrySurface,
+    Declared(Vec<String>),
+}
+
+impl Roots<'_> {
+    #[must_use]
+    pub fn to_owned(self) -> OwnedRoots {
+        match self {
+            Self::Entry(names) => OwnedRoots::Entry(names.to_vec()),
+            Self::EveryExport => OwnedRoots::EveryExport,
+            Self::EntrySurface => OwnedRoots::EntrySurface,
+            Self::Declared(names) => OwnedRoots::Declared(names.to_vec()),
+        }
+    }
+}
+
+impl OwnedRoots {
+    #[must_use]
+    pub fn as_roots(&self) -> Roots<'_> {
+        match self {
+            Self::Entry(names) => Roots::Entry(names),
+            Self::EveryExport => Roots::EveryExport,
+            Self::EntrySurface => Roots::EntrySurface,
+            Self::Declared(names) => Roots::Declared(names),
+        }
+    }
+}
+
+/// The functions something outside the program can call, with arguments the
+/// program does not show: the roots the build chose, and every callback the
+/// runtime was handed.
+///
+/// The question analyses asked of `Func::exported`, which answers another:
+/// whether the declaration carries `export`. In an executable those differ
+/// wherever one module exports a helper for a sibling to import. Nothing
+/// outside can call it, because there is no outside, and still its parameters
+/// were treated as written by a caller nobody can see. `runtime/web-platform`'s
+/// `utf8.ts` exports `utf8Write` for `encoding.ts`, so `owned_view_kinds` took
+/// every `u8` view for one a host might hold, and node-utf8 on Wasm kept eleven
+/// length-tracking reads per access: 16% of its instructions.
+///
+/// Before preparation has chosen roots (`Program::roots` is `None`: lowering,
+/// or a program built by hand) the answer is the `exported` flag, which is
+/// what every reader had before, so nothing becomes narrower than it was by
+/// asking early. `typed_signatures::entries_from_elsewhere` keeps the flag for
+/// that reason: lowering decides with it, and the verifier must ask what
+/// lowering asked.
+#[must_use]
+pub fn outside_callers(program: &Program) -> FxHashSet<&str> {
+    match &program.roots {
+        Some(roots) => root_names(program, roots.as_roots())
+            .into_iter()
+            .chain(callback_names(program))
+            .collect(),
+        None => program
+            .funcs
+            .iter()
+            .filter(|func| func.exported)
+            .map(|func| func.name.as_str())
+            .collect(),
+    }
+}
+
 /// Names in a declared surface that the program does not export.
 #[must_use]
 /// The functions the *runtime* can call because a closure was handed to an

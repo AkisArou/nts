@@ -79,8 +79,17 @@ pub fn owned_view_kinds(program: &Program) -> FxHashSet<HirType> {
         .iter()
         .map(|func| (func.name.as_str(), func))
         .collect();
+    let outside = super::reachable::outside_callers(program);
     for func in &program.funcs {
-        exposes(program, &funcs, func, &mut seen, &mut exposed);
+        let called_from_outside = outside.contains(func.name.as_str());
+        exposes(
+            program,
+            &funcs,
+            func,
+            called_from_outside,
+            &mut seen,
+            &mut exposed,
+        );
     }
     seen.retain(|kind| !exposed.contains(kind));
     seen
@@ -98,11 +107,12 @@ fn exposes(
     program: &Program,
     funcs: &FxHashMap<&str, &Func>,
     func: &Func,
+    called_from_outside: bool,
     seen: &mut FxHashSet<HirType>,
     exposed: &mut FxHashSet<HirType>,
 ) {
     let kind_of = |value: ValueId| kind(&func.values[value.0 as usize].ty).cloned();
-    if func.exported {
+    if called_from_outside {
         for param in &func.params {
             exposed.extend(kind(&param.ty).cloned());
         }

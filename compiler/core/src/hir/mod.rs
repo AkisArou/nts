@@ -3315,6 +3315,11 @@ pub struct Program {
     /// into a written scalar kind must fit on every one, and a read of one is
     /// what C may hand in on any. Every row until `prepare` names the build's.
     pub targets: native::Targets,
+    /// Where preparation started its walk over the call graph
+    /// ([`PreparationOptions::roots`]), kept so a later analysis can ask
+    /// [`reachable::outside_callers`] rather than read `Func::exported` as if
+    /// it meant the same. `None` until `prepare` sets it.
+    pub roots: Option<reachable::OwnedRoots>,
     /// [`Options::callbacks_checkpoint`], for the passes that read it.
     pub callbacks_checkpoint: bool,
     /// The program's public surface: `(emitted name, name it is published as)`.
@@ -7632,6 +7637,7 @@ fn prepare_lowered(
     let specialize_numbers = options.specialize_numbers;
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
+    lowered.program.roots = Some(options.roots.to_owned());
     // On the program the lowering produced, before any pass renumbers a value
     // the lowering recorded an obligation about.
     let rejected = obligations::take_checked(&mut lowered.program, &lowered.arrivals.at_signature);

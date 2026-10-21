@@ -342,12 +342,13 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
         .map(|(index, func)| (func.name.as_str(), index))
         .collect();
 
+    let outside = super::reachable::outside_callers(program);
     let candidates: Vec<usize> = program
         .funcs
         .iter()
         .enumerate()
         .filter(|(_, func)| {
-            !func.exported
+            !outside.contains(func.name.as_str())
                 && !dispatched.contains(func.name.as_str())
                 && func.params.iter().any(|p| p.ty == HirType::Erased)
         })
@@ -433,11 +434,12 @@ pub fn narrow_parameters(program: &mut Program) -> usize {
 /// otherwise looked at.
 pub fn narrow_returns(program: &mut Program) -> usize {
     let dispatched: FxHashSet<&str> = program.dispatch_targets().collect();
+    let outside = super::reachable::outside_callers(program);
 
     // What each candidate returns, where that is one thing.
     let mut agreed: FxHashMap<usize, HirType> = FxHashMap::default();
     for (at, func) in program.funcs.iter().enumerate() {
-        if func.exported
+        if outside.contains(func.name.as_str())
             || dispatched.contains(func.name.as_str())
             || func.return_type != HirType::Erased
         {

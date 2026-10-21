@@ -173,11 +173,12 @@ fn returning_from_the_stack(
             _ => None,
         })
         .collect();
+    let outside = super::reachable::outside_callers(program);
     program
         .funcs
         .iter()
         .filter(|func| {
-            !func.exported
+            !outside.contains(func.name.as_str())
                 && !lent.contains(func.name.as_str())
                 && !resumed.contains(func.name.as_str())
                 && func
@@ -2885,11 +2886,9 @@ fn invoked_only_directly<'a>(
         .map(String::as_str)
         .chain(program.interface_access.defaults().map(|(_, body)| body))
         .collect();
+    indirect.extend(super::reachable::outside_callers(program));
     let mut called: rustc_hash::FxHashSet<&str> = rustc_hash::FxHashSet::default();
     for func in &program.funcs {
-        if func.exported {
-            indirect.insert(func.name.as_str());
-        }
         for op in &func.values {
             match &op.kind {
                 OpKind::Call {
