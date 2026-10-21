@@ -59,6 +59,9 @@
 //   quark nts     an alias GLib declares, named as its C documentation names
 //                 it: a `GQuark`, the `Uint32` a string is interned as, and
 //                 the string it is the quark of
+//   parsed 7 tail  a `const gchar **` GIR does not call out, the raw pointer
+//                 the header writes: where g_variant_parse stopped in "7 tail",
+//                 in storage the program allocates, read back as text
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -190,6 +193,7 @@ import {
   g_key_file_unref,
   g_quark_from_string,
   g_quark_to_string,
+  g_variant_parse,
   G_KEY_FILE_DESKTOP_GROUP,
   g_access,
   g_atomic_ref_count_compare,
@@ -252,7 +256,7 @@ import {
   pango_parse_markup,
 } from "c:Pango-1.0";
 import type { PangoRectangle } from "c:Pango-1.0";
-import type { CBool, Ptr } from "c:types";
+import type { CBool, ConstPtr, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
 import { local, sizeof, stringFrom, bytesFrom } from "c:memory";
 import { free, malloc } from "c:stdlib";
@@ -412,6 +416,16 @@ function boxedRecords(): void {
   // A name GLib gives a scalar, which the program names too.
   const quark: GQuark = g_quark_from_string("nts");
   console.log("quark " + g_quark_to_string(quark));
+  // A slot GIR does not call out: the raw pointer the header writes, where
+  // parsing stopped, in storage the program allocates, since a raw pointer
+  // may be kept for all the binding can tell.
+  const stop = malloc<ConstPtr<c_char> | null>(sizeof<ConstPtr<c_char> | null>());
+  if (stop !== null) {
+    stop[0] = null;
+    const parsed = g_variant_parse(null, "7 tail", null, stop);
+    console.log("parsed " + String(parsed.get_int32()) + (stringFrom(stop[0]) ?? " none"));
+  }
+  free(stop);
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
