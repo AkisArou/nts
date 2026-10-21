@@ -28,14 +28,93 @@ pub(crate) const PLATFORM_PACKAGE: &str = "@nts/platform-gtk";
 /// What a `gi:` surface's package is named by: `@nts/gi-gtk`.
 const GI_PACKAGE: &str = "@nts/gi-";
 
+/// One namespace's part of the request every program's bind request makes.
+struct PlatformExtra {
+    namespace: &'static str,
+    packages: &'static [&'static str],
+    defines: &'static [&'static str],
+    headers: &'static [&'static str],
+}
+
+/// What every program's bind request names before its project's
+/// `girExtras`: what GIR describes for a program to call and its own headers
+/// do not include -- `GLib`'s `gstdio.h`, Gio's `gnetworking.h`,
+/// `HarfBuzz`'s OpenType, AAT and GLib-blob APIs, and GTK's unix-print types
+/// with their package. Data the request carries, as a project's extras are,
+/// so a binding's command line records it, and a namespace no root's
+/// closure holds asks for nothing. Not what a library keeps behind a macro
+/// for whoever implements it -- Gio's settings backends
+/// (`G_SETTINGS_ENABLE_BACKEND`), `GdkPixbuf`'s animations
+/// (`GDK_PIXBUF_ENABLE_BACKEND`): a project writing one asks, as it would
+/// in C.
+const DEFAULTS: &[PlatformExtra] = &[
+    PlatformExtra {
+        namespace: "GLib-2.0",
+        packages: &[],
+        defines: &[],
+        headers: &["glib/gstdio.h"],
+    },
+    PlatformExtra {
+        namespace: "Gio-2.0",
+        packages: &[],
+        defines: &[],
+        headers: &["gio/gnetworking.h"],
+    },
+    PlatformExtra {
+        namespace: "HarfBuzz-0.0",
+        packages: &[],
+        defines: &[],
+        headers: &["hb-ot.h", "hb-aat.h", "hb-glib.h"],
+    },
+    PlatformExtra {
+        namespace: "Gtk-4.0",
+        packages: &["gtk4-unix-print"],
+        defines: &[],
+        headers: &["gtk/gtkunixprint.h"],
+    },
+];
+
+/// `extras` over [`DEFAULTS`]: each namespace's defaults first, then what
+/// the project adds, each value once and in the order given.
+fn with_defaults(extras: &bind_gir::Extras) -> bind_gir::Extras {
+    let mut merged = bind_gir::Extras::new();
+    let defaults = DEFAULTS.iter().map(|default| {
+        let owned = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect();
+        (
+            default.namespace.to_owned(),
+            bind_gir::Extra {
+                packages: owned(default.packages),
+                defines: owned(default.defines),
+                headers: owned(default.headers),
+            },
+        )
+    });
+    for (namespace, extra) in defaults.chain(extras.clone()) {
+        let into = merged.entry(namespace).or_default();
+        for (into, from) in [
+            (&mut into.packages, extra.packages),
+            (&mut into.defines, extra.defines),
+            (&mut into.headers, extra.headers),
+        ] {
+            for value in from {
+                if !into.contains(&value) {
+                    into.push(value);
+                }
+            }
+        }
+    }
+    merged
+}
+
 /// GTK's packages for one set of root namespaces on this machine.
 #[derive(Debug, Clone)]
 pub(crate) struct GirPlatform {
     /// The namespaces bound with their closures: `Gtk-4.0`, `Adw-1`.
     pub(crate) roots: BTreeSet<String>,
     pub(crate) search: Vec<Utf8PathBuf>,
-    /// `girExtras`, by root: each root's only the namespaces its closure
-    /// binds, so one root's request cannot name what another's lacks.
+    /// The request's extras -- [`DEFAULTS`] and `girExtras` -- by root: each
+    /// root's only the namespaces its closure binds, so one root's request
+    /// cannot name what another's lacks.
     pub(crate) extras: std::collections::BTreeMap<String, bind_gir::Extras>,
 }
 
@@ -68,12 +147,13 @@ impl GirPlatform {
             })
             .cloned()
             .collect();
+        let requested = with_defaults(extras);
         let mut by_root = std::collections::BTreeMap::new();
         for (module, closure) in &closures {
             if !roots.contains(*module) {
                 continue;
             }
-            let own: bind_gir::Extras = extras
+            let own: bind_gir::Extras = requested
                 .iter()
                 .filter(|(namespace, _)| closure.contains(*namespace))
                 .map(|(namespace, extra)| (namespace.clone(), extra.clone()))
@@ -159,8 +239,8 @@ impl Binder for GirPlatform {
                 |output| String::from_utf8_lossy(&output.stdout).trim().to_owned(),
             );
         let roots: Vec<&str> = self.roots.iter().map(String::as_str).collect();
-        // No extras, no change: every store entry made before them is still
-        // the one a project without `girExtras` names.
+        // The request names the store entry, defaults and all; a root whose
+        // closure holds no namespace either names adds nothing.
         format!(
             "gtk {gtk} {} {}{}",
             std::env::consts::ARCH,
@@ -791,6 +871,32 @@ export function made(): number {
         assert_ne!(
             platform(vec![("HarfBuzz-0.0", vec!["hb-ot.h", "hb-aat.h"])]),
             platform(vec![("HarfBuzz-0.0", vec!["hb-aat.h", "hb-ot.h"])])
+        );
+    }
+
+    /// Every request starts from the platform's defaults, and a project's
+    /// `girExtras` adds to them: a header the defaults name is not named
+    /// twice, and one the project adds follows them.
+    #[test]
+    fn a_projects_extras_add_to_the_platforms_defaults() {
+        let extras: bind_gir::Extras = [(
+            "HarfBuzz-0.0".to_owned(),
+            bind_gir::Extra {
+                headers: vec!["hb-ot.h".to_owned(), "hb-ft.h".to_owned()],
+                ..bind_gir::Extra::default()
+            },
+        )]
+        .into();
+        let merged = with_defaults(&extras);
+        assert_eq!(
+            merged["HarfBuzz-0.0"].headers,
+            ["hb-ot.h", "hb-aat.h", "hb-glib.h", "hb-ft.h"]
+        );
+        assert_eq!(merged["Gtk-4.0"].packages, ["gtk4-unix-print"]);
+        assert_eq!(merged["Gio-2.0"].headers, ["gio/gnetworking.h"]);
+        assert_eq!(
+            with_defaults(&bind_gir::Extras::new()).len(),
+            DEFAULTS.len()
         );
     }
 
