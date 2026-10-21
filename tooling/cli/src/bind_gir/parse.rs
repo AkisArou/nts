@@ -468,11 +468,27 @@ fn signature(node: Node<'_, '_>) -> Signature {
     }
 }
 
+/// GIR's name for `GLib`'s byte array, `GByteArray`.
+const BYTE_ARRAY: &str = "GLib.ByteArray";
+
 fn param(node: Node<'_, '_>, result: bool) -> Param {
     let ty = if let Some(ty) = child(node, "type") {
         TypeRef::Named {
             name: attribute(ty, "name").unwrap_or_default().to_owned(),
             c_type: c_attribute(ty, "type").map(str::to_owned),
+        }
+    } else if let Some(array) = child(node, "array")
+        && attribute(array, "name") == Some(BYTE_ARRAY)
+    {
+        // GLib's byte array, which GIR spells here as an array and elsewhere
+        // as the record it is (`<type name="GLib.ByteArray">`): one type,
+        // read as that record and held by its handle. Its elements are
+        // bytes, so the array spelling says nothing the record does not;
+        // `GPtrArray` and `GArray` stay arrays, whose element types a handle
+        // would drop.
+        TypeRef::Named {
+            name: BYTE_ARRAY.to_owned(),
+            c_type: c_attribute(array, "type").map(str::to_owned),
         }
     } else if let Some(array) = child(node, "array") {
         let length = attribute(array, "length").and_then(|v| v.parse().ok());

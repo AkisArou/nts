@@ -3263,7 +3263,7 @@ impl<'a> Mapper<'a> {
         else {
             return false;
         };
-        // A GLib container (`GByteArray`) is a struct with its own accessors.
+        // A GLib container (`GPtrArray`) is a struct with its own accessors.
         if array.container.is_some() {
             return false;
         }
@@ -6625,11 +6625,77 @@ mod tests {
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
+    /// `GLib`'s byte array, which GIR spells as an array where a function takes
+    /// or returns one, is the record it is, held by its handle, in and out --
+    /// a plain handle the program frees as C does (`g_byte_array_unref`). The
+    /// control is `GPtrArray`, still an array: a handle would drop its
+    /// element type.
+    #[test]
+    fn a_byte_array_is_its_record() {
+        use super::super::facts;
+        use super::bind;
+        let dir = crate::bind_scratch::directory("gir-byte-array-test").expect("fixture directory");
+        let array = |name: &str, c_type: &str, element: &str| {
+            format!(
+                r#"<array name="GLib.{name}" c:type="{c_type}*"><type name="{element}"/></array>"#
+            )
+        };
+        let xml = format!(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="GLib" version="2.0" c:symbol-prefixes="g">
+            <record name="ByteArray" c:type="GByteArray"><field name="len"><type name="guint" c:type="guint"/></field></record>
+            <record name="PtrArray" c:type="GPtrArray"><field name="len"><type name="guint" c:type="guint"/></field></record>
+            <function name="byte_array_new" c:identifier="g_byte_array_new"><return-value transfer-ownership="full">{bytes}</return-value></function>
+            <function name="byte_array_append" c:identifier="g_byte_array_append"><return-value transfer-ownership="none">{bytes}</return-value><parameters><parameter name="array" transfer-ownership="none">{bytes}</parameter></parameters></function>
+            <function name="ptr_array_new" c:identifier="g_ptr_array_new"><return-value transfer-ownership="full">{pointers}</return-value></function>
+            </namespace></repository>"#,
+            bytes = array("ByteArray", "GByteArray", "guint8"),
+            pointers = array("PtrArray", "GPtrArray", "gpointer"),
+        );
+        std::fs::write(dir.join("GLib-2.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("GLib-2.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: [("GByteArray", "_GByteArray"), ("GPtrArray", "_GPtrArray")]
+                .map(|(c, tag)| (c.to_owned(), tag.to_owned()))
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["GLib"], &header);
+        let spelled = |symbol: &str| {
+            let function = binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol}: {:?}", binding.refused));
+            let mut spelled: Vec<String> = function
+                .parameters
+                .iter()
+                .map(|(_, mapped)| mapped.ts.clone())
+                .collect();
+            spelled.push(function.result.ts.clone());
+            spelled
+        };
+        assert_eq!(spelled("g_byte_array_new"), ["GByteArray"]);
+        assert_eq!(spelled("g_byte_array_append"), ["GByteArray", "GByteArray"]);
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(name, _)| name == "g_ptr_array_new"),
+            "{:?}",
+            binding.refused
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     /// An array C hands back ended by a zero is counted to it and copied:
     /// strings to NULL, bytes to 0. A function whose copying form takes the
     /// same parameters as its raw form declares the raw one under its own
     /// name, so neither shadows the other, and the values form calls it. The
-    /// control is a `GLib` container, `GByteArray`, which is a struct: not
+    /// control is a `GLib` container, `GPtrArray`, which is a struct: not
     /// copied.
     #[test]
     fn an_array_ended_by_a_zero_is_copied() {
@@ -6643,7 +6709,7 @@ mod tests {
             <c:include name="s.h"/><namespace name="S" version="1.0">"#,
             r#"<function name="names" c:identifier="s_names"><return-value transfer-ownership="none"><array c:type="gchar**"><type name="utf8"/></array></return-value></function>"#,
             r#"<function name="output" c:identifier="s_output"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="output" direction="out" caller-allocates="0" transfer-ownership="full"><array zero-terminated="1" c:type="gchar**"><type name="guint8"/></array></parameter></parameters></function>"#,
-            r#"<function name="buffer" c:identifier="s_buffer"><return-value transfer-ownership="full"><array name="GLib.ByteArray" c:type="GByteArray*"><type name="guint8"/></array></return-value></function>"#,
+            r#"<function name="buffer" c:identifier="s_buffer"><return-value transfer-ownership="full"><array name="GLib.PtrArray" c:type="GPtrArray*"><type name="utf8"/></array></return-value></function>"#,
             "</namespace></repository>",
         ]
         .concat();
