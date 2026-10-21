@@ -45,6 +45,10 @@ struct Measured {
     checksum: String,
     /// Slowest pass over fastest, across `RUNS` processes.
     spread: f64,
+    /// The JVM driver's warm-up reached its cap with the JIT still compiling,
+    /// so this pass may have timed its first tier (`Bench.settle`).
+    #[serde(default)]
+    warm_capped: bool,
 }
 
 /// Which translation unit, if any, the compiler contributes to a variant.
@@ -1831,6 +1835,51 @@ fn measure_hosts(
 /// A case's row, from its measurements: the checks a row must pass, and the
 /// console line. Run after measuring, and again by `--render`. `filtered`
 /// is whether `NTS_BENCH_LANES` chose the lanes.
+/// Say which cells of a row are not a steady state, beside the row: a cell
+/// whose passes disagree past `SPREAD_WORTH_SAYING`, and a JVM cell whose
+/// warm-up reached its cap still compiling (`Bench.settle`).
+fn note_unsteady_cells(shown: &str, results: &[Option<Measured>], row: &mut Row) {
+    // A row whose own passes disagree has no single number, and printing one of
+    // them as though it were the answer is the failure this table exists to
+    // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
+    // A cell `idle_reference` dropped is not published, so it has no spread.
+    for (label, measured) in [
+        ("nts (JVM)", results.get(4)),
+        ("Java", results.get(5)),
+        ("nts (C)", results.get(1)),
+        ("nts (Wasm)", results.get(6)),
+        (
+            "C++ (wasm)",
+            results.get(7).filter(|_| row.cpp_wasm.is_some()),
+        ),
+        (
+            "C++ (wasmtime)",
+            results.get(8).filter(|_| row.cpp_wasmtime.is_some()),
+        ),
+        ("AssemblyScript", results.get(9)),
+    ] {
+        if let Some(Some(measured)) = measured
+            && measured.spread >= SPREAD_WORTH_SAYING
+        {
+            eprintln!(
+                "note: {} {} varied {:.2}x across {} runs of the same binary -- \
+                 the figure here is the minimum, which may still be reproducible; \
+                 take six invocations before reading this as unquotable",
+                shown, label, measured.spread, RUNS
+            );
+            row.varied.push((label.to_owned(), measured.spread));
+        }
+        if let Some(Some(measured)) = measured
+            && measured.warm_capped
+        {
+            eprintln!(
+                "note: {shown} {label} was still compiling when its warm-up reached the cap -- \
+                 warm-capped: the figure may be the JIT's first tier rather than a steady state"
+            );
+        }
+    }
+}
+
 fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
     let Measurements {
         shown,
@@ -1886,37 +1935,7 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
         varied: Vec::new(),
     };
     idle_reference(&mut row, WASI_IDLE_TODAY)?;
-    // A row whose own passes disagree has no single number, and printing one of
-    // them as though it were the answer is the failure this table exists to
-    // avoid. Said out loud rather than smoothed over; see `SPREAD_WORTH_SAYING`.
-    // A cell `idle_reference` dropped is not published, so it has no spread.
-    for (label, measured) in [
-        ("nts (JVM)", results.get(4)),
-        ("Java", results.get(5)),
-        ("nts (C)", results.get(1)),
-        ("nts (Wasm)", results.get(6)),
-        (
-            "C++ (wasm)",
-            results.get(7).filter(|_| row.cpp_wasm.is_some()),
-        ),
-        (
-            "C++ (wasmtime)",
-            results.get(8).filter(|_| row.cpp_wasmtime.is_some()),
-        ),
-        ("AssemblyScript", results.get(9)),
-    ] {
-        if let Some(Some(measured)) = measured
-            && measured.spread >= SPREAD_WORTH_SAYING
-        {
-            eprintln!(
-                "note: {} {} varied {:.2}x across {} runs of the same binary -- \
-                 the figure here is the minimum, which may still be reproducible; \
-                 take six invocations before reading this as unquotable",
-                shown, label, measured.spread, RUNS
-            );
-            row.varied.push((label.to_owned(), measured.spread));
-        }
-    }
+    note_unsteady_cells(shown, results, &mut row);
 
     work_agrees(&row)?;
 
@@ -3630,12 +3649,16 @@ fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
         .parse()
         .context("timing was not a number")?;
     let checksum = fields.next().context("no checksum on stdout")?.to_owned();
+    // A third field only the JVM driver writes, and only when its warm-up was
+    // still compiling at the cap.
+    let warm_capped = fields.next() == Some("warm-capped");
     Ok(Measured {
         ns_per_op,
         checksum,
         // Filled in by `measure`, which is the only thing that sees more
         // than one pass.
         spread: 1.0,
+        warm_capped,
     })
 }
 
@@ -3820,6 +3843,7 @@ mod tests {
             ns_per_op: ns,
             checksum: "3ff0000000000000".to_owned(),
             spread: 1.0,
+            warm_capped: false,
         }
     }
 

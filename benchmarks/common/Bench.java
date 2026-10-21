@@ -57,16 +57,18 @@ public final class Bench {
         // and five such runs of one binary disagree by exactly the 1.2x-1.9x
         // those rows carry. Default unchanged, so this measures nothing until
         // somebody asks it to.
+        long started = System.nanoTime();
         long budget = 300_000_000L;
         String raise = System.getenv("NTS_BENCH_WARMUP_MS");
         if (raise != null) {
             budget = Long.parseLong(raise) * 1_000_000L;
         }
-        long until = System.nanoTime() + budget;
+        long until = started + budget;
         int cap = raise == null ? 20000 : Integer.MAX_VALUE;
         for (int i = 0; i < cap && System.nanoTime() < until; i++) {
             work.run();
         }
+        boolean settled = settle(work, started);
 
         long probe = System.nanoTime();
         work.run();
@@ -97,7 +99,57 @@ public final class Bench {
         // strings, so a lane that printed its own spelling would report a
         // disagreement it caused itself.
         long bits = Double.doubleToRawLongBits(checksum);
-        System.out.printf("%.4f %016x%n", best, bits);
+        System.out.printf("%.4f %016x%s%n", best, bits, settled ? "" : " warm-capped");
+    }
+
+    /** How long the JIT must add no compilation time for warm-up to be over. */
+    private static final long QUIET_NS = 200_000_000L;
+
+    /** How long warm-up may run, from its start, before a row is timed anyway. */
+    private static final long WARM_CAP_NS = 5_000_000_000L;
+
+    /**
+     * Keep warming, past the floor above, until compilation goes quiet: until
+     * the JVM's total compilation time stops rising for {@link #QUIET_NS} of
+     * calls. Whether it answers that it settled before the cap.
+     *
+     * <p>**A trial timed while C2 is still compiling measures C1 code**, not a
+     * slow run of ours. `json-serialize` on 2026-10-21: in one run in about
+     * thirty, its 860-byte entry had not reached C2 when the result was printed,
+     * 870 ms in, and every one of the five trials ran its C1 code -- 20.6 us
+     * against 12.5. The fixed floor is the JavaScript side's, and the JVM is the
+     * one that can say when it is done: `getTotalCompilationTime` is the
+     * compiler threads' own account, flag-free, so the column stays what a
+     * user's JVM runs.
+     *
+     * <p>A row still compiling at the cap is timed anyway and marked
+     * `warm-capped` on its line, which `nts-bench` names, rather than its
+     * figure passing for a steady state. A JVM that keeps no account answers
+     * settled, as the floor alone always did.
+     */
+    private static boolean settle(Work work, long started) {
+        java.lang.management.CompilationMXBean jit =
+            java.lang.management.ManagementFactory.getCompilationMXBean();
+        if (jit == null || !jit.isCompilationTimeMonitoringSupported()) {
+            return true;
+        }
+        long compiled = jit.getTotalCompilationTime();
+        long window = System.nanoTime();
+        for (;;) {
+            work.run();
+            long now = System.nanoTime();
+            if (now - window >= QUIET_NS) {
+                long after = jit.getTotalCompilationTime();
+                if (after == compiled) {
+                    return true;
+                }
+                compiled = after;
+                window = now;
+            }
+            if (now - started >= WARM_CAP_NS) {
+                return false;
+            }
+        }
     }
 
     /**
