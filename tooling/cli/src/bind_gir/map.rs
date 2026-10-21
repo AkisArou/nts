@@ -658,6 +658,54 @@ pub(crate) fn bind<'a>(
                 embedded.insert(c_type.as_str());
             }
         }
+        // And every record GIR names where C passes a `gpointer`: an object
+        // handed out through an untyped pointer -- `GTypeInterface` to
+        // `g_type_interface_peek_parent` -- which the binding spells
+        // `Erased<T>`, a handle. GIR's own word in each namespace, so a
+        // record's spelling does not depend on which others a closure holds:
+        // GObject's interface struct carries no `is-gtype-struct-for`, and
+        // bound with GLib alone nothing marked embedded `GTypeInterface`.
+        let callables = ns
+            .functions
+            .iter()
+            .chain(
+                ns.classes
+                    .iter()
+                    .flat_map(|c| c.callables.iter().chain(&c.vfuncs)),
+            )
+            .chain(ns.records.iter().flat_map(|r| &r.callables));
+        let signatures = callables
+            .map(|callable| &callable.signature)
+            .chain(ns.callbacks.iter().map(|callback| &callback.signature));
+        for signature in signatures {
+            let params = signature
+                .instance
+                .iter()
+                .chain(&signature.parameters)
+                .chain(std::iter::once(&signature.result));
+            for param in params {
+                let TypeRef::Named {
+                    name,
+                    c_type: Some(c_type),
+                } = &param.ty
+                else {
+                    continue;
+                };
+                if !matches!(c_type.as_str(), "gpointer" | "gconstpointer") {
+                    continue;
+                }
+                let (owner, local) = match name.split_once('.') {
+                    Some((owner, local)) => (repository.namespaces.get(owner), local),
+                    None => (Some(ns), name.as_str()),
+                };
+                if let Some(c_type) = owner
+                    .and_then(|owner| owner.records.iter().find(|r| r.name == local))
+                    .and_then(|record| record.c_type.as_deref())
+                {
+                    embedded.insert(c_type);
+                }
+            }
+        }
     }
     let mut mapper = Mapper {
         repository,
@@ -5192,6 +5240,8 @@ mod tests {
             &record("Root", &field("type", "GType", "GType")),
             &record("Unsized", &ints),
             &record("Holder", &field("rect", "Rect", "SRect*")),
+            &record("Handed", &field("type", "GType", "GType")),
+            r#"<function name="peek" c:identifier="s_peek"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="handed"><type name="Handed" c:type="gpointer"/></parameter></parameters></function>"#,
             r#"<record name="ThingClass" c:type="SThingClass" glib:is-gtype-struct-for="Thing">"#,
             &field("root", "Root", "SRoot"),
             "</record>",
@@ -5217,8 +5267,9 @@ mod tests {
     /// as its raw `char *` -- and a pointer to one is the program's storage,
     /// in, out or both. The controls differ from it in one thing each and
     /// stay handles: a `volatile` member, a record a class struct embeds
-    /// first, one the headers do not complete, one holding a pointer to
-    /// another record.
+    /// first, one GIR names where C passes a `gpointer` (as it names
+    /// `GTypeInterface`), one the headers do not complete, one holding a
+    /// pointer to another record.
     #[test]
     fn a_plain_record_is_a_struct_and_its_pointer_is_storage() {
         use super::super::facts;
@@ -5229,14 +5280,22 @@ mod tests {
         let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
         let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
         let header = facts::Facts {
-            tags: ["SRect", "SVolatile", "SRoot", "SUnsized", "SHolder"]
-                .map(|c| (c.to_owned(), format!("_{c}")))
-                .into(),
+            tags: [
+                "SRect",
+                "SVolatile",
+                "SRoot",
+                "SUnsized",
+                "SHolder",
+                "SHanded",
+            ]
+            .map(|c| (c.to_owned(), format!("_{c}")))
+            .into(),
             sizes: [
                 ("SRect", 48),
                 ("SVolatile", 4),
                 ("SRoot", 8),
                 ("SHolder", 8),
+                ("SHanded", 8),
             ]
             .map(|(c, size)| (c.to_owned(), size))
             .into(),
@@ -5265,7 +5324,7 @@ mod tests {
                 ("reserved", "Ptr<void> | null"),
             ]
         );
-        for control in ["SVolatile", "SRoot", "SUnsized", "SHolder"] {
+        for control in ["SVolatile", "SRoot", "SUnsized", "SHolder", "SHanded"] {
             assert!(
                 binding
                     .types
