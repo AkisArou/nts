@@ -342,19 +342,37 @@ pub(crate) enum Shape {
     Filled {
         class: String,
     },
-    /// Bytes C hands back with their length in another out slot, `length`:
-    /// the call's result or an out slot of its own, which a GJS-style method
-    /// returns as the `Uint8Array` it copies them into (`bytesFrom`), freeing
-    /// C's buffer after where it is the caller's (`owned`).
-    Bytes {
-        length: String,
-        owned: bool,
+    /// An array C hands back -- the call's result, or an out slot of its own
+    /// -- which a GJS-style method returns as the copy it makes of it
+    /// (`Element`), as long as `length` says, and frees C's after as
+    /// `transfer` says: nothing of a borrowed one, the array of one whose
+    /// container is the caller's, and each element too of one wholly the
+    /// caller's.
+    Array {
+        element: Element,
+        length: ArrayLength,
+        transfer: Transfer,
     },
-    /// The out slot holding a `Bytes`'s length, typed `value`: made and read
+    /// The out slot holding an `Array`'s length, typed `value`: made and read
     /// by the values form, and not a value it returns.
     Length {
         value: String,
     },
+}
+
+/// What an array C hands back holds, as the copy a values form makes of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Element {
+    /// Bytes -- `guint8`, or a `gchar` array that is no string -- copied into
+    /// a `Uint8Array` (`bytesFrom`).
+    Bytes,
+}
+
+/// Where an array C hands back says how long it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ArrayLength {
+    /// The out slot named so, which the call fills (`Shape::Length`).
+    Slot(String),
 }
 
 /// A signal's handler parameters as TypeScript spells them, and the named
@@ -3114,7 +3132,7 @@ impl<'a> Mapper<'a> {
     }
 
     /// Bytes C returns, their length in the out slot `length`: C's own
-    /// pointer, which the values form copies (`Shape::Bytes`), and frees where
+    /// pointer, which the values form copies (`Shape::Array`), and frees where
     /// the transfer makes it the caller's.
     fn returned_bytes(
         &mut self,
@@ -3159,7 +3177,15 @@ impl<'a> Mapper<'a> {
             .brands
             .extend(["Ptr", "ConstPtr", "Uint8", "c_char"]);
         Ok(Mapped {
-            shape: Shape::Bytes { length, owned },
+            shape: Shape::Array {
+                element: Element::Bytes,
+                length: ArrayLength::Slot(length),
+                transfer: if owned {
+                    Transfer::Full
+                } else {
+                    Transfer::None
+                },
+            },
             ts: ts.to_owned(),
             c: Type::Pointer(pointee),
         })
@@ -3221,7 +3247,7 @@ impl<'a> Mapper<'a> {
 
     /// An out slot C writes bytes' address into, their length in the out slot
     /// `length`: `Ptr<Ptr<c_char> | null>`, the `char **` C declares, which
-    /// the values form makes, reads and copies (`Shape::Bytes`).
+    /// the values form makes, reads and copies (`Shape::Array`).
     fn out_bytes(
         &mut self,
         param: &Param,
@@ -3246,9 +3272,14 @@ impl<'a> Mapper<'a> {
         };
         self.binding.brands.extend(["Ptr", "Uint8", "c_char"]);
         Ok(Mapped {
-            shape: Shape::Bytes {
-                length: length.to_owned(),
-                owned,
+            shape: Shape::Array {
+                element: Element::Bytes,
+                length: ArrayLength::Slot(length.to_owned()),
+                transfer: if owned {
+                    Transfer::Full
+                } else {
+                    Transfer::None
+                },
             },
             ts: ts.to_owned(),
             c: Type::Pointer(Pointee::Pointer(Box::new(Pointee::Scalar(element)))),

@@ -29,8 +29,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::map::{
-    Accessor, AliasDecl, Binding, Cast, Constructed, Constructor, Function, Mapped, Reason, Shape,
-    TypeDecl, Vfunc,
+    Accessor, AliasDecl, ArrayLength, Binding, Cast, Constructed, Constructor, Function, Mapped,
+    Reason, Shape, TypeDecl, Vfunc,
 };
 use super::model::{Namespace, Repository};
 
@@ -478,9 +478,16 @@ impl Renamer<'_> {
             Shape::Length { value } => Shape::Length {
                 value: self.text(value),
             },
-            Shape::Bytes { length, owned } => Shape::Bytes {
-                length: parameter(length),
-                owned: *owned,
+            Shape::Array {
+                element,
+                length,
+                transfer,
+            } => Shape::Array {
+                element: element.clone(),
+                length: match length {
+                    ArrayLength::Slot(slot) => ArrayLength::Slot(parameter(slot)),
+                },
+                transfer: *transfer,
             },
             other @ (Shape::Other | Shape::Once) => other.clone(),
         };

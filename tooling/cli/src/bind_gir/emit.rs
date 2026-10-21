@@ -3,7 +3,8 @@
 
 use std::fmt::Write;
 
-use super::map::{Binding, Constructor, Function, Mapped, Shape, TypeDecl};
+use super::map::{ArrayLength, Binding, Constructor, Element, Function, Mapped, Shape, TypeDecl};
+use super::model::Transfer;
 
 /// The module's head: what wrote it, its headers, and the types it imports.
 fn preamble(binding: &Binding, command: &str) -> String {
@@ -779,7 +780,7 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
             function.method.is_some()
                 && function.vfunc.is_none()
                 && function.parameters.iter().any(|(_, mapped)| {
-                    matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Bytes { .. } | Shape::Length { .. })
+                    matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. })
                 })
                 && function.parameters.iter().all(|(name, mapped)| {
                     function.throws.as_deref() == Some(name.as_str())
@@ -788,7 +789,7 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
                         || function.omissible.contains_key(name)
                         || matches!(
                             mapped.shape,
-                            Shape::Out { .. } | Shape::Filled { .. } | Shape::Bytes { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
+                            Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
                         )
                         || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
                 })
@@ -802,8 +803,8 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
 /// A throwing function's `gboolean` result is left out, as GJS leaves it: it
 /// says whether the call failed, which the thrown error already says.
 fn values_result(function: &Function) -> String {
-    let result = match function.result.shape {
-        Shape::Bytes { .. } => Some("Uint8Array".to_owned()),
+    let result = match &function.result.shape {
+        Shape::Array { element, .. } => Some(copied(element)),
         _ if reports_by_throwing(function) => None,
         _ => (function.result.ts != "void").then(|| function.result.ts.clone()),
     };
@@ -816,7 +817,7 @@ fn values_result(function: &Function) -> String {
                 .filter_map(|(_, mapped)| match &mapped.shape {
                     Shape::Out { value } => Some(value.clone()),
                     Shape::Filled { class } => Some(class.clone()),
-                    Shape::Bytes { .. } => Some("Uint8Array".to_owned()),
+                    Shape::Array { element, .. } => Some(copied(element)),
                     _ => None,
                 }),
         )
@@ -845,7 +846,7 @@ fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
                 mapped.shape,
                 Shape::Out { .. }
                     | Shape::Filled { .. }
-                    | Shape::Bytes { .. }
+                    | Shape::Array { .. }
                     | Shape::Length { .. }
             ) && function.throws.as_deref() != Some(name.as_str())
         })
@@ -1224,7 +1225,15 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
                 .chain([&function.result.shape])
         })
     };
-    let bytes = shapes().any(|shape| matches!(shape, Shape::Bytes { .. }));
+    let bytes = shapes().any(|shape| {
+        matches!(
+            shape,
+            Shape::Array {
+                element: Element::Bytes,
+                ..
+            }
+        )
+    });
     let memory: Vec<&str> = [
         values
             .iter()
@@ -1232,7 +1241,7 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
                 function.parameters.iter().any(|(_, mapped)| {
                     matches!(
                         mapped.shape,
-                        Shape::Out { .. } | Shape::Length { .. } | Shape::Bytes { .. }
+                        Shape::Out { .. } | Shape::Length { .. } | Shape::Array { .. }
                     )
                 })
             })
@@ -1243,7 +1252,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     .flatten()
     .collect();
     // The free a buffer the caller owns takes: GLib's, where it is declared.
-    if shapes().any(|shape| matches!(shape, Shape::Bytes { owned: true, .. })) {
+    if shapes()
+        .any(|shape| matches!(shape, Shape::Array { transfer, .. } if *transfer != Transfer::None))
+    {
         imports
             .entry("c:GLib-2.0".to_owned())
             .or_default()
@@ -1297,14 +1308,20 @@ fn values_wrapper(out: &mut String, function: &Function) {
     // left the zeroed slots alone: NULL and 0, an empty array.
     let mut after = String::new();
     let mut read = Vec::new();
-    if let Shape::Bytes { length, owned } = &function.result.shape {
-        let _ = writeln!(
-            after,
-            "  const nts_bytes = bytesFrom(nts_result, {length}[0]);"
+    if let Shape::Array {
+        element,
+        length,
+        transfer,
+    } = &function.result.shape
+    {
+        copy_array(
+            &mut after,
+            "nts_result",
+            "nts_bytes",
+            element,
+            length,
+            *transfer,
         );
-        if *owned {
-            let _ = writeln!(after, "  g_free(nts_result);");
-        }
         read.push("nts_bytes".to_owned());
     } else if function.result.ts != "void" && !reports_by_throwing(function) {
         read.push("nts_result".to_owned());
@@ -1318,21 +1335,27 @@ fn values_wrapper(out: &mut String, function: &Function) {
             Shape::Length { value } => {
                 let _ = writeln!(body, "  const {name} = local<{value}>();");
             }
-            Shape::Bytes { length, owned } => {
+            Shape::Array {
+                element,
+                length,
+                transfer,
+            } => {
                 let slot = mapped
                     .ts
                     .strip_prefix("Ptr<")
                     .and_then(|rest| rest.strip_suffix('>'))
                     .unwrap_or("never");
                 let _ = writeln!(body, "  const {name} = local<{slot}>();");
-                let _ = writeln!(
-                    after,
-                    "  const {name}_bytes = bytesFrom({name}[0], {length}[0]);"
+                let copy = format!("{name}_bytes");
+                copy_array(
+                    &mut after,
+                    &format!("{name}[0]"),
+                    &copy,
+                    element,
+                    length,
+                    *transfer,
                 );
-                if *owned {
-                    let _ = writeln!(after, "  g_free({name}[0]);");
-                }
-                read.push(format!("{name}_bytes"));
+                read.push(copy);
             }
             Shape::Filled { class } => {
                 let _ = writeln!(body, "  const {name} = new {class}();");
@@ -1368,6 +1391,37 @@ fn values_wrapper(out: &mut String, function: &Function) {
         symbol = function.symbol,
         result = values_result(function),
     );
+}
+
+/// What a values form returns for an array C hands back (`Shape::Array`).
+fn copied(element: &Element) -> String {
+    match element {
+        Element::Bytes => "Uint8Array".to_owned(),
+    }
+}
+
+/// The lines that copy an array C handed back at `pointer` into `copy` -- as
+/// long as `length` says, as `element` is -- and then free C's as `transfer`
+/// says (`Shape::Array`).
+fn copy_array(
+    after: &mut String,
+    pointer: &str,
+    copy: &str,
+    element: &Element,
+    length: &ArrayLength,
+    transfer: Transfer,
+) {
+    let count = match length {
+        ArrayLength::Slot(slot) => format!("{slot}[0]"),
+    };
+    match element {
+        Element::Bytes => {
+            let _ = writeln!(after, "  const {copy} = bytesFrom({pointer}, {count});");
+        }
+    }
+    if transfer != Transfer::None {
+        let _ = writeln!(after, "  g_free({pointer});");
+    }
 }
 
 /// A wrapper's own parameters, as it declares them: the trailing defaulted
