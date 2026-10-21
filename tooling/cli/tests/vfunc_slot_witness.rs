@@ -1,10 +1,15 @@
-//! A program that overrides a virtual function holds a declaration of the
-//! module declaring it, whose headers its witness then includes -- the
-//! ground the witness's claims about the program's class struct slots
-//! stand on.
+//! The witness asks the headers a program is built with about every class
+//! struct slot the program fills: that it sits where the binding recorded,
+//! and holds the function type its entry point is defined as. The binder
+//! asked the headers it was bound against; the two need not be the same, and
+//! an entry written at a slot that moved since, or whose type changed, is
+//! not something any later step would catch.
 //!
-//! A small `GObject` library is bound, and a program subclasses its widget
-//! and overrides `vfunc_measure`, calling nothing else of the library's.
+//! A small `GObject` library is bound, a program subclasses its widget and
+//! overrides `vfunc_measure`, and the program's witness is compiled against
+//! the header it was bound from -- and against two that drifted, one thing
+//! each: a member before `measure`, which the offset assertion refuses, and
+//! `measure` taking a `long`, which the type assertion refuses.
 
 #![cfg(target_os = "linux")]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -114,6 +119,17 @@ fn library(dir: &Path, members: &str) {
     std::fs::write(dir.join("gir/Slot-1.0.gir"), GIR).unwrap();
 }
 
+/// The witness at `witness` compiled against the `slot.h` in `include`.
+fn compiles(witness: &Path, include: &Path, flags: &[String]) -> std::process::Output {
+    Command::new("clang")
+        .args(["-std=c11", "-fsyntax-only", "-w"])
+        .arg(format!("-I{}", include.display()))
+        .args(flags)
+        .arg(witness)
+        .output()
+        .expect("running clang")
+}
+
 /// The library under `dir`, its header with `members`, bound by `nts
 /// bind-gir` into `dir/bindings`.
 fn bound(dir: &Path, members: &str) -> PathBuf {
@@ -212,5 +228,50 @@ fn an_override_reaches_the_module_declaring_its_virtual_function() {
         "export function made(): number {\n  return 1;\n}\n",
     );
     assert!(!includes_the_header(&control));
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn a_filled_slot_is_asked_of_the_headers_the_program_is_built_with() {
+    let Some(flags) = available() else {
+        return;
+    };
+    let dir = scratch("slots");
+    let bindings = bound(&dir, BOUND);
+    let witness = emitted(&dir, &bindings, "overrides", MAIN);
+    let text = std::fs::read_to_string(&witness).unwrap();
+    assert!(
+        text.contains("_Static_assert(offsetof(SlotWidgetClass, measure) == ")
+            && text.contains("__typeof__(((SlotWidgetClass *)0)->measure), "),
+        "{text}"
+    );
+    let built = compiles(&witness, &dir.join("include"), &flags);
+    assert!(
+        built.status.success(),
+        "the header it was bound from: {}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    // Drifted since: a member before `measure`, and `measure` retyped.
+    for (name, members, refusal) in [
+        (
+            "moved",
+            "void (*before)(SlotWidget *widget); int (*measure)(SlotWidget *widget, int for_size);",
+            "SlotWidgetClass.measure is where the binding placed it",
+        ),
+        (
+            "retyped",
+            "int (*measure)(SlotWidget *widget, long for_size);",
+            "SlotWidgetClass.measure holds the function type its entry is",
+        ),
+    ] {
+        let drifted = dir.join(name);
+        library(&drifted, members);
+        let built = compiles(&witness, &drifted.join("include"), &flags);
+        let said = String::from_utf8_lossy(&built.stderr);
+        assert!(
+            !built.status.success() && said.contains(refusal),
+            "{name}: {said}"
+        );
+    }
     std::fs::remove_dir_all(dir).unwrap();
 }

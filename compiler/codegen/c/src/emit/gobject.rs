@@ -9,10 +9,12 @@
 //! - an entry point per `vfunc_` override, defined as exactly the class
 //!   struct slot's type, converting to what the compiled method takes;
 //! - a table of `{ offset, entry point }`, the offset `offsetof` of the slot
-//!   as the binding recorded it (`@ntsVfunc GtkButtonClass clicked 408`) and
-//!   its witness checked, which the support file's `class_init` writes --
-//!   so `program.c`, which does not include `GLib`'s headers, never needs a
-//!   class struct's type;
+//!   as the binding recorded it (`@ntsVfunc GtkButtonClass clicked 408`),
+//!   which the support file's `class_init` writes -- so `program.c`, which
+//!   does not include `GLib`'s headers, never needs a class struct's type.
+//!   The witness asks the headers the program is built with whether the slot
+//!   is there and of the entry's type (`slot_claims`): the binder asked the
+//!   headers it was bound against, which need not be the same;
 //! - `nts_gobject_type_{Class}`, registering `Nts_{Class}` below the parent's
 //!   `get_type` (`nts_gobject_register`), as GJS registers its `Gjs_{Class}`;
 //! - `nts_gobject_new_{Class}`, which the lowering calls for `new`: one
@@ -24,7 +26,7 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
+use nts_core::hir::native::{Family, FnPointer, PROGRAM_GTYPE, Type};
 use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, TemplateText};
 
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
@@ -79,6 +81,7 @@ pub(super) fn classes(
             if nts_core::hir::native::lent_string(&method.signature.result, &compiled.return_type) {
                 return Err(refuse("a GObject virtual function answering a string"));
             }
+            let (returns, spelled) = entry_spelling(&method.signature);
             let mut parameters = Vec::new();
             let mut arguments = Vec::new();
             let (mut copies, mut releases) = (String::new(), String::new());
@@ -89,7 +92,7 @@ pub(super) fn classes(
                 .zip(&compiled.params)
                 .enumerate()
             {
-                parameters.push(format!("{} a{slot}", ty.c_type()));
+                parameters.push(format!("{} a{slot}", spelled[slot]));
                 if let Some(copy) = super::native_memory::lent_string(
                     ty,
                     &want.ty,
@@ -106,7 +109,6 @@ pub(super) fn classes(
             }
             let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
             let entry = format!("nts_gobject_{name}_{at}");
-            let returns = method.signature.result.c_type();
             let body = if matches!(*method.signature.result, Type::Void) {
                 format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
             } else {
@@ -243,6 +245,57 @@ fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]
             format!("size_t {PROGRAM_GTYPE}{}(void);", class.name),
         );
     }
+}
+
+/// What a slot's entry point is defined with, and so what the slot holds: its
+/// result and its parameters as C spells them. One spelling, which the entry's
+/// definition and the witness's claim about the slot both take, so what is
+/// asserted is what is emitted.
+fn entry_spelling(signature: &FnPointer) -> (String, Vec<String>) {
+    (
+        signature.result.c_type().into_owned(),
+        signature
+            .parameters
+            .iter()
+            .map(|ty| ty.c_type().into_owned())
+            .collect(),
+    )
+}
+
+/// The witness's claims about every class struct slot the program fills --
+/// the slots `classes` writes, from the same walk: that it sits at the offset
+/// the binding recorded (`@ntsVfunc GtkButtonClass clicked 408`), and holds
+/// the function type its entry point is defined as. Asked of the headers the
+/// program is built with, which the binder, asking those it was bound
+/// against, could not: a slot that moved since, or changed its type, is a
+/// failed assertion rather than an entry written at the wrong place.
+pub(super) fn slot_claims(program: &Program) -> Vec<String> {
+    let mut claims = Vec::new();
+    for class in nts_codegen_common::gobject::registered(program) {
+        for method in &class.methods {
+            let mut words = method.selector().split_whitespace();
+            let (Some(structure), Some(member), Some(offset)) =
+                (words.next(), words.next(), words.next())
+            else {
+                continue;
+            };
+            let (returns, parameters) = entry_spelling(&method.signature);
+            let parameters = if parameters.is_empty() {
+                "void".to_owned()
+            } else {
+                parameters.join(", ")
+            };
+            claims.push(format!(
+                "_Static_assert(offsetof({structure}, {member}) == {offset}u, \
+                 \"{structure}.{member} is where the binding placed it\");"
+            ));
+            claims.push(format!(
+                "_Static_assert(__builtin_types_compatible_p(__typeof__((({structure} *)0)->{member}), \
+                 {returns} (*)({parameters})), \"{structure}.{member} holds the function type its entry is\");"
+            ));
+        }
+    }
+    claims
 }
 
 /// The interfaces a class implements: each one's table of the slots its
