@@ -198,6 +198,50 @@ fn callables(namespace: &model::Namespace) -> Vec<&str> {
         .collect()
 }
 
+/// The C typedefs GIR names as types of their own: a name no namespace
+/// qualifies, spelled as its `c:type` -- `pid_t` -- and not one of `GLib`'s
+/// scalars, in any signature the namespace declares.
+fn bare_typedefs(namespace: &model::Namespace) -> Vec<&str> {
+    let signatures = namespace
+        .functions
+        .iter()
+        .chain(
+            namespace
+                .classes
+                .iter()
+                .flat_map(|c| c.callables.iter().chain(&c.vfuncs)),
+        )
+        .chain(namespace.records.iter().flat_map(|r| &r.callables))
+        .map(|callable| &callable.signature)
+        .chain(
+            namespace
+                .callbacks
+                .iter()
+                .map(|callback| &callback.signature),
+        );
+    let mut names = std::collections::BTreeSet::new();
+    for signature in signatures {
+        let params = signature
+            .instance
+            .iter()
+            .chain(&signature.parameters)
+            .chain(std::iter::once(&signature.result));
+        for param in params {
+            if let model::TypeRef::Named {
+                name,
+                c_type: Some(c_type),
+            } = &param.ty
+                && name == c_type
+                && !name.contains('.')
+                && !map::SCALARS.iter().any(|(gir, ..)| gir == name)
+            {
+                names.insert(name.as_str());
+            }
+        }
+    }
+    names.into_iter().collect()
+}
+
 /// The GIR files `root`'s closure is read from (`parse::closure_files`).
 pub(crate) fn closure_files(root: &str, search: &[Utf8PathBuf]) -> Result<Vec<Utf8PathBuf>> {
     parse::closure_files(root, search)
@@ -395,6 +439,9 @@ fn namespace_facts(
         .filter_map(|r| r.c_type.as_deref())
         .collect();
     facts.pointers = facts::pointer_records(&preamble, &flags, &pointers)?;
+    // What each C typedef GIR names as a type of its own is.
+    let bare = bare_typedefs(namespace);
+    facts.integers = facts::integer_typedefs(&preamble, &flags, &bare)?;
     // The interfaces GIR gives no prerequisite, which the
     // type system is asked about instead.
     let interfaces: Vec<(&str, &str)> = namespace

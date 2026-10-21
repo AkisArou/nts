@@ -3443,6 +3443,16 @@ impl<'a> Mapper<'a> {
             let ts = self.spelled_as_alias(name, mapped.ts);
             return Ok(Mapped { ts, ..mapped });
         }
+        // A C typedef GIR names as a type of its own -- `pid_t` -- which the
+        // headers make an integer: that integer, spelled in C as the
+        // parameter says, which the self-check compiles against the typedef.
+        if let Some(integer) = self.facts.integers.get(name) {
+            let mut integral = param.clone();
+            if let TypeRef::Named { name, .. } = &mut integral.ty {
+                name.clone_from(integer);
+            }
+            return self.typed(&integral);
+        }
         // Raw addresses use the same exact pointer vocabulary in every
         // direction. The former `object` input already refused managed values
         // at lowering; spelling Ptr/ConstPtr makes that contract visible to TS.
@@ -5992,6 +6002,56 @@ mod tests {
         );
         assert_eq!(spelled("s_parse"), "Ptr<ConstPtr<c_char> | null> | null");
         assert_eq!(spelled("s_name"), "string | null");
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A C typedef GIR names as a type of its own -- `pid_t`, which no
+    /// namespace qualifies -- is the integer the headers make it, in and out.
+    /// The control is the same function with no answer from the headers:
+    /// still a type the binder does not know.
+    #[test]
+    fn a_bare_typedef_is_the_integer_the_headers_make_it() {
+        use super::super::facts;
+        use super::{Reason, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-bare-typedef-test").expect("fixture directory");
+        let xml = r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">
+            <function name="pid" c:identifier="s_pid"><return-value transfer-ownership="none"><type name="pid_t" c:type="pid_t"/></return-value><parameters><parameter name="user"><type name="uid_t" c:type="uid_t"/></parameter></parameters></function>
+            </namespace></repository>"#;
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let namespace = &repository.namespaces["S"];
+        let answered = facts::Facts {
+            integers: [
+                ("pid_t".to_owned(), "gint".to_owned()),
+                ("uid_t".to_owned(), "guint".to_owned()),
+            ]
+            .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, namespace, &answered);
+        let pid = binding
+            .functions
+            .iter()
+            .find(|f| f.symbol == "s_pid")
+            .unwrap_or_else(|| panic!("s_pid: {:?}", binding.refused));
+        assert_eq!(
+            (pid.result.ts.as_str(), pid.parameters[0].1.ts.as_str()),
+            ("c_int", "c_uint")
+        );
+        let unanswered = bind(&repository, namespace, &facts::Facts::default());
+        assert!(
+            unanswered
+                .refused
+                .iter()
+                .any(|(name, reason)| name == "s_pid" && matches!(reason, Reason::Unknown(_))),
+            "{:?}",
+            unanswered.refused
+        );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

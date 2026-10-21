@@ -80,6 +80,10 @@ pub(crate) struct Facts {
     /// reads as the handle: the pointer record spelled bare is the handle,
     /// and spelled `hb_language_t *` is a pointer to one.
     pub(crate) pointers: BTreeMap<String, PointerRecord>,
+    /// `C type -> GIR scalar` for each C typedef GIR names as a type of its
+    /// own -- `pid_t`, `uid_t`, named by no namespace -- which the headers
+    /// make an integer: the GIR name of that integer (`gint` for `int`).
+    pub(crate) integers: BTreeMap<String, String>,
 }
 
 /// A pointer record's pointee, as its typedef says.
@@ -106,6 +110,7 @@ impl Facts {
         self.prototypes.extend(other.prototypes);
         self.volatile.extend(other.volatile);
         self.pointers.extend(other.pointers);
+        self.integers.extend(other.integers);
     }
 }
 
@@ -141,6 +146,59 @@ pub(crate) fn pointer_records(
         }
     }
     Ok(pointers)
+}
+
+/// What each C typedef GIR names as a type of its own is, from the headers
+/// through the shared probe: the integer it comes to, by the GIR name of
+/// that integer, or no answer, and the name keeps its refusal.
+pub(crate) fn integer_typedefs(
+    preamble: &[String],
+    cflags: &[String],
+    names: &[&str],
+) -> Result<BTreeMap<String, String>> {
+    if names.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let mut clang_args = vec!["-std=c11".to_owned(), "-fno-spell-checking".to_owned()];
+    clang_args.extend(cflags.iter().cloned());
+    let probe = Probe {
+        preamble,
+        clang_args: &clang_args,
+        prefix: PREFIX,
+        label: "bind-gir",
+    };
+    let typedefs = probe.typedefs(names.iter().map(|name| (*name).to_owned()).collect())?;
+    let mut integers = BTreeMap::new();
+    for name in names {
+        let Some(text) = typedefs.get(*name) else {
+            continue;
+        };
+        if let Ok(CType::Scalar(spelling)) = ctype::parse(text, &typedefs)
+            && let Some(gir) = gir_integer(&spelling)
+        {
+            integers.insert((*name).to_owned(), gir.to_owned());
+        }
+    }
+    Ok(integers)
+}
+
+/// The GIR name of the integer C spells `spelling` (canonically, as the
+/// type reader gives it), or none for a type that is not one.
+fn gir_integer(spelling: &str) -> Option<&'static str> {
+    Some(match spelling {
+        "char" => "gchar",
+        "signed char" => "gint8",
+        "unsigned char" => "guint8",
+        "short" => "gshort",
+        "unsigned short" => "gushort",
+        "int" => "gint",
+        "unsigned int" => "guint",
+        "long" => "glong",
+        "unsigned long" => "gulong",
+        "long long" => "gint64",
+        "unsigned long long" => "guint64",
+        _ => return None,
+    })
 }
 
 /// Each callable's C function type, from the headers through the probe the
