@@ -318,61 +318,95 @@ public abstract class NtsTable {
     }
 
     /**
-     * Every key as a `double`, in one pass, without the cursor protocol.
+     * `nts_map_keys_into` and `nts_map_values_into`: a table's live keys or
+     * values, in entry order and skipping holes, into the array the middle end
+     * allocated just before them with the table's live count. One overload per
+     * array the JVM holds -- bare `double[]`, `boolean[]`, a reference array, or
+     * an `NtsValue[]` of erased elements, and each growable wrapper's storage --
+     * chosen by the destination's type (`ops::table_fill_external`).
      *
-     * <p>**6.5x, measured before this was written.** `Array.from(set)` lowers
-     * to `nts_map_next` for a cursor and `nts_map_key_at` for the key, so a
-     * 256-element set costs 512 static calls and index arithmetic per element.
-     * Against the identical output from this:
+     * <p>**6.5x, measured before this was reachable.** `Array.from(set)` walked
+     * the table through `nts_map_next` for a cursor and `nts_map_key_at` for the
+     * key, two static calls and index arithmetic per element:
      *
      * <pre>
      *   walked 918 ns    bulk 140 ns
      *   walked 918 ns    bulk 144 ns
      * </pre>
      *
-     * <p>`benches/cases/array-from` spends about 1.84ms of its 2.09ms in that
-     * walk -- 2000 rounds at 918ns -- against a reference at 986us, so the row
-     * is mostly this and not code generation.
+     * <p>Core emits the fill only where the array's element type is the
+     * table's stored key or value type, so each copy only unboxes: `.num` for a
+     * number, `.num != 0` for a boolean, `.ref` for a reference, and the box
+     * itself for an erased element. A copy that finds an entry of another tag
+     * refuses rather than reading the field anyway -- `.num` on a string is
+     * zero, and a table of zeroes is a wrong answer `typeof` agrees with all
+     * the way down -- so a broken proof is loud, at one compare per element.
      *
-     * <p>**It is unreachable until the lowering calls it**, because the loop is
-     * emitted open-coded rather than as one helper, and that is `hir`'s to
-     * change rather than this backend's. Filed with MainClaude with this
-     * number. A helper waiting for its caller is the same shape `isMap` and
-     * `isSet` were in an hour before their lowering landed.
-     *
-     * <p>**The caller must know the keys are numbers**, exactly as
-     * `arrayIndexOfI` must know its array is a `double[]`. Reading `.num` off a
-     * string key answers zero rather than refusing, which is why this is not a
-     * general iteration primitive and should not become one.
-     *
-     * <p>Deletions are the whole risk and are tested: `next` steps over null
-     * slots, so a bulk pass that did not would return holes or the wrong count.
-     * Seven cases -- empty, single, dense, every-other-deleted, head advanced,
-     * emptied and refilled, and five thousand past the linear limit -- agree
-     * element for element with the walk.
+     * <p>A hole is a null key, for the value as well: a deletion clears both.
      */
-    public static int keysIntoDoubles(NtsTable map, double[] out) {
+    public static void keysInto(NtsTable map, double[] out) { numbersInto(map, map.keys, out); }
+    public static void valuesInto(NtsTable map, double[] out) { numbersInto(map, map.values, out); }
+    public static void keysInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.values, out.items); }
+    public static void keysInto(NtsTable map, boolean[] out) { booleansInto(map, map.keys, out); }
+    public static void valuesInto(NtsTable map, boolean[] out) { booleansInto(map, map.values, out); }
+    public static void keysInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.values, out.items); }
+    /** A reference array of any class: an element the table holds is of it. */
+    public static void keysInto(NtsTable map, Object[] out) { referencesInto(map, map.keys, out); }
+    public static void valuesInto(NtsTable map, Object[] out) { referencesInto(map, map.values, out); }
+    public static void keysInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.values, out.items); }
+    /** Erased elements: the boxes themselves, `-0` already stored as `+0`. */
+    public static void keysIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.keys, out); }
+    public static void valuesIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.values, out); }
+    public static void keysIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.keys, out.items); }
+    public static void valuesIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.values, out.items); }
+
+    private static void numbersInto(NtsTable map, NtsValue[] from, double[] out) {
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
-            NtsValue key = map.keys[slot];
-            if (key == null) {
-                continue;
-            }
-            // **A non-number key refuses rather than reading `.num`.**
-            // `.num` on a string key is zero, and a table of zeroes is a wrong
-            // answer that `typeof` agrees with all the way down -- the same
-            // shape as `arrayElement` falling through to `undefined` for an
-            // array kind it had no arm for. The caller is meant to have proved
-            // the key type, exactly as `arrayIndexOfI`'s caller proves the
-            // element type; this makes the failure of that proof loud.
-            if (key.tag != NtsValue.NUMBER) {
-                throw new NtsRefusal(
-                    "a bulk numeric key read over a collection holding a key of tag "
-                        + key.tag);
-            }
-            out[at++] = key.num;
+            if (map.keys[slot] == null) { continue; }
+            NtsValue part = from[slot];
+            if (part.tag != NtsValue.NUMBER) { throw misread("numeric", part); }
+            out[at++] = part.num;
         }
-        return at;
+    }
+
+    private static void booleansInto(NtsTable map, NtsValue[] from, boolean[] out) {
+        int at = 0;
+        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+            if (map.keys[slot] == null) { continue; }
+            NtsValue part = from[slot];
+            if (part.tag != NtsValue.BOOLEAN) { throw misread("boolean", part); }
+            out[at++] = part.num != 0.0;
+        }
+    }
+
+    /**
+     * A null or undefined entry is the null reference, as a reference element
+     * holds either; a number or a boolean has no reference to copy.
+     */
+    private static void referencesInto(NtsTable map, NtsValue[] from, Object[] out) {
+        int at = 0;
+        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+            if (map.keys[slot] == null) { continue; }
+            NtsValue part = from[slot];
+            if (part.tag == NtsValue.NUMBER || part.tag == NtsValue.BOOLEAN) { throw misread("reference", part); }
+            out[at++] = part.ref;
+        }
+    }
+
+    private static void boxesInto(NtsTable map, NtsValue[] from, Object[] out) {
+        int at = 0;
+        for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+            if (map.keys[slot] == null) { continue; }
+            out[at++] = from[slot];
+        }
+    }
+
+    private static NtsRefusal misread(String width, NtsValue part) {
+        return new NtsRefusal("a bulk " + width + " read over a collection holding an entry of tag " + part.tag);
     }
 
     /**

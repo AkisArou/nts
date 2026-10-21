@@ -1413,7 +1413,96 @@ public final class RuntimeRegression {
         testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
         testProvedViewAccess(); System.out.println("proven view accesses passed");
         testStringKeyDoors(); System.out.println("unboxed string keys passed");
+        testTableFills(); System.out.println("table fills passed");
         System.out.println("PASS " + checks + " assertions");
+    }
+
+    /**
+     * `keysInto` and `valuesInto` copy what a walk of the table reads: the live
+     * entries in entry order, holes skipped. Checked against a `LinkedHashMap`
+     * mirror, which keeps JavaScript's `Map` order -- an update in place, a
+     * re-add at the end -- over the shapes deletion makes: empty, dense, holes
+     * between, a prefix deleted (`head` advances), emptied and refilled, and
+     * past the linear limit. Each width, bare and in its growable wrapper.
+     */
+    private static void testTableFills() {
+        for (int n : new int[] {0, 1, 7, 8, 9, 5000}) {
+            for (int pattern = 0; pattern < 4; pattern++) {
+                NtsMap map = NtsMap.newMap(0);
+                java.util.LinkedHashMap<Double, Double> mirror = new java.util.LinkedHashMap<>();
+                for (int i = 0; i < n; i++) {
+                    NtsMap.set(map, NtsValue.ofNumber(i * 1.5), NtsValue.ofNumber(i * 10.0));
+                    mirror.put(i * 1.5, i * 10.0);
+                }
+                for (int i = 0; i < n; i++) {
+                    boolean drop = pattern == 1 ? i % 2 == 0 : pattern == 2 ? i < n / 2 : pattern == 3;
+                    if (drop) {
+                        NtsTable.delete(map, NtsValue.ofNumber(i * 1.5));
+                        mirror.remove(i * 1.5);
+                    }
+                }
+                if (pattern == 3) {
+                    for (int i = 0; i < n / 3; i++) {
+                        NtsMap.set(map, NtsValue.ofNumber(i * 1.5), NtsValue.ofNumber(-i));
+                        mirror.put(i * 1.5, (double) -i);
+                    }
+                }
+                if (n > 2) {
+                    // An update keeps its place and a key deleted and set again
+                    // moves to the end, in the table as in the mirror's `put`.
+                    NtsMap.set(map, NtsValue.ofNumber(1.5), NtsValue.ofNumber(99));
+                    mirror.put(1.5, 99.0);
+                }
+                String shape = n + " entries, pattern " + pattern;
+                double[] keys = new double[map.size()];
+                double[] values = new double[map.size()];
+                NtsTable.keysInto(map, keys);
+                NtsTable.valuesInto(map, values);
+                NtsArrayD wrapped = NtsArrayD.of(map.size());
+                NtsTable.valuesInto(map, wrapped);
+                int at = 0;
+                for (java.util.Map.Entry<Double, Double> entry : mirror.entrySet()) {
+                    number(keys[at], entry.getKey(), "key " + at + ", " + shape);
+                    number(values[at], entry.getValue(), "value " + at + ", " + shape);
+                    number(wrapped.items[at], entry.getValue(), "wrapped value " + at + ", " + shape);
+                    at++;
+                }
+                equal(at, keys.length, "every slot written, " + shape);
+            }
+        }
+        NtsMap flags = NtsMap.newMap(0);
+        NtsMap.set(flags, NtsValue.ofString("a"), NtsValue.ofBoolean(true));
+        NtsMap.set(flags, NtsValue.ofString("b"), NtsValue.ofBoolean(false));
+        NtsMap.set(flags, NtsValue.ofString("c"), NtsValue.ofBoolean(true));
+        NtsTable.delete(flags, NtsValue.ofString("a"));
+        boolean[] bare = new boolean[flags.size()];
+        NtsTable.valuesInto(flags, bare);
+        NtsArrayZ wrappedFlags = NtsArrayZ.of(flags.size());
+        NtsTable.valuesInto(flags, wrappedFlags);
+        check(!bare[0] && bare[1] && !wrappedFlags.items[0] && wrappedFlags.items[1], "boolean values, a hole first");
+        String[] names = new String[flags.size()];
+        NtsTable.keysInto(flags, names);
+        NtsArrayL wrappedNames = NtsArrayL.of(flags.size());
+        NtsTable.keysInto(flags, wrappedNames);
+        check("b".equals(names[0]) && "c".equals(names[1]) && "c".equals(wrappedNames.items[1]),
+            "string keys into a String[] and a wrapper");
+        NtsSet members = NtsSet.newSet(0);
+        NtsSet.add(members, NtsValue.ofNumber(-0.0));
+        NtsSet.add(members, NtsValue.ofString("s"));
+        NtsSet.add(members, NtsValue.NULL_VALUE);
+        NtsValue[] boxes = new NtsValue[members.size()];
+        NtsTable.keysIntoErased(members, boxes);
+        check(boxes[0].tag == NtsValue.NUMBER && Double.doubleToRawLongBits(boxes[0].num) == 0L,
+            "-0 is held as +0");
+        check(boxes[1].tag == NtsValue.STRING && boxes[2] == NtsValue.NULL_VALUE, "erased boxes as stored");
+        check(refuses(() -> NtsTable.keysInto(flags, new double[2])), "a number read of string keys refuses");
+        check(refuses(() -> NtsTable.valuesInto(map(), new boolean[1])), "a boolean read of number values refuses");
+    }
+
+    private static NtsMap map() {
+        NtsMap one = NtsMap.newMap(0);
+        NtsMap.set(one, NtsValue.ofNumber(1), NtsValue.ofNumber(2));
+        return one;
     }
 
     /**

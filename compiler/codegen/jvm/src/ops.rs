@@ -264,6 +264,38 @@ pub fn promise_all_external(holds: &str, grows: bool) -> (&'static str, &'static
     )
 }
 
+/// `nts_map_keys_into` and `nts_map_values_into`: a table's live keys or
+/// values copied into the array the middle end allocated just before them,
+/// one entry point per kind of that array -- the destination is the subject,
+/// as the values array is for [`promise_all_external`], and by the same rule:
+/// `holds` is `"D"`, `"Z"`, `"L"` or `"V"`, and an erased array is a member of
+/// its own because a growable program holds it in `NtsArrayL` as it holds a
+/// reference array. `None` for another name.
+#[must_use]
+pub fn table_fill_external(
+    name: &str,
+    holds: &str,
+    grows: bool,
+) -> Option<(&'static str, &'static str, String)> {
+    let member = match (name, holds) {
+        ("nts_map_keys_into", "V") => "keysIntoErased",
+        ("nts_map_keys_into", _) => "keysInto",
+        ("nts_map_values_into", "V") => "valuesIntoErased",
+        ("nts_map_values_into", _) => "valuesInto",
+        _ => return None,
+    };
+    let out = match (grows, holds) {
+        (false, "D") => "[D",
+        (false, "Z") => "[Z",
+        (false, "V") => "[Lnts/rt/NtsValue;",
+        (false, _) => "[Ljava/lang/Object;",
+        (true, "D") => "Lnts/rt/NtsArrayD;",
+        (true, "Z") => "Lnts/rt/NtsArrayZ;",
+        (true, _) => "Lnts/rt/NtsArrayL;",
+    };
+    Some((types::TABLE, member, format!("(Lnts/rt/NtsTable;{out})V")))
+}
+
 /// The array helpers, which need one entry point per element width.
 ///
 /// `element` is `"D"`, `"Z"` or `"L"` -- the two primitive widths that appear
@@ -3844,25 +3876,45 @@ impl Emitter<'_> {
         // The array whose element type picks the overload. For most
         // helpers that is the first argument; `Promise.all` takes the
         // promises first and the values second, and it is the values
-        // that carry the payload representation.
-        let which = usize::from(name == "nts_promise_all");
+        // that carry the payload representation. A table fill takes the
+        // table first and the array it fills second.
+        let fill = matches!(name, "nts_map_keys_into" | "nts_map_values_into");
+        let which = usize::from(name == "nts_promise_all" || fill);
         let subject = args.get(which).map(|&first| self.ty(first).clone());
         let element = subject
             .as_ref()
             .and_then(|ty| self.array_element_descriptor(ty));
+        // An erased array is a reference array to every other helper, and to
+        // these the one that must keep the tag.
+        let erased = matches!(
+            subject.as_ref(),
+            Some(HirType::Managed(ManagedType::Array(holds))) if **holds == HirType::Erased
+        );
         let found = if name == "nts_promise_all" {
-            // An erased array is a reference array to every other helper,
-            // and here the one that must keep the tag.
-            let erased = matches!(
-                subject.as_ref(),
-                Some(HirType::Managed(ManagedType::Array(holds))) if **holds == HirType::Erased
-            );
             let holds = if erased {
                 "V"
             } else {
                 element.as_deref().unwrap_or("L")
             };
             Some(promise_all_external(holds, self.shape.grows))
+        } else if fill {
+            // The copy reads the element the table stores, which is a
+            // `double`, a `boolean` or a reference. Any other primitive the
+            // array could hold has no copy to call, rather than the reference
+            // one `array_element_descriptor` would fold it into.
+            let stored = match subject.as_ref() {
+                Some(HirType::Managed(ManagedType::Array(holds))) => {
+                    types::descriptor(self.shape, holds)
+                }
+                _ => None,
+            };
+            match stored.as_deref() {
+                Some(width @ ("D" | "Z")) => table_fill_external(name, width, self.shape.grows),
+                Some(reference) if reference.starts_with(['L', '[']) => {
+                    table_fill_external(name, if erased { "V" } else { "L" }, self.shape.grows)
+                }
+                _ => None,
+            }
         } else if self.shape.grows {
             // A growable program has no bare arrays, so every array
             // helper is a method on a wrapper and the element-width
