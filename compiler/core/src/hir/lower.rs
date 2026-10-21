@@ -59032,7 +59032,19 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 *element
             };
-            let value = self.lower_expression(node)?;
+            let value = if spread {
+                self.lower_expression(node)?
+            } else {
+                // A written element, lowered expecting the element type and
+                // coerced to it, as the literal without a spread lowers each
+                // one. Lowered bare, an inner literal took the *outer* one's
+                // expected type: `[["s", t], ...more]` built `["s", t]` as an
+                // array of string arrays and stored strings in it, which one
+                // pointer type hid on a native backend and Wasm's typed arrays
+                // refused.
+                let value = self.lower_expecting(node, &element_ty)?;
+                self.coerce(value, &element_ty, node)?
+            };
             if spread
                 && !matches!(
                     self.values[value.0 as usize].ty,
