@@ -195,6 +195,21 @@ iterations to reach a JIT steady state, then times a calibrated loop with
 parses that number; it never measures the wall-clock of `node bench.mjs`, so
 process startup and warm-up are excluded.
 
+**The JVM warms until compilation is quiet.** `Bench.java` keeps the same floor
+(20,000 iterations or 300 ms) and then warms on until a 200 ms window adds no
+compilation time (`CompilationMXBean.getTotalCompilationTime`, no JVM flag),
+capped at 5 s, after which the row is timed anyway and marked `warm-capped`
+beside the table. A fixed warm-up timed C1 code wherever C2 landed late: five
+JSON rows and `array-mutations` read 0.30-0.54 of their old figures once it did
+not (2026-10-21).
+
+**Some node rows are bimodal, and the table takes node at its best.** V8
+settles `closures` at 3.3 or 7.1 us, about half the runs each; `strings` runs
+1.6x slow about one time in eight; `array-from` spans 650-952 us (2026-10-21).
+Best of five processes usually reaches node's fast mode, so a ratio is against
+node at its best, the conservative comparison -- and a node swing between
+sittings is node's, not ours.
+
 **Best of five, after calibrating to ~100 ms of work.** The minimum is the run
 least contaminated by the scheduler; a mean measures the machine's other tenants
 as much as the code.

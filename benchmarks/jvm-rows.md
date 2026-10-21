@@ -314,6 +314,29 @@ e378abd7e over e4003674c read 0.975-1.022, 0.999-1.056 and 0.893-1.094,
 medians about 1.00. Noise. A row's change is read from a pair, never from
 two sittings.
 
+**Five rows were being timed in C1.** `Bench.measure` warmed for a fixed 300 ms,
+so a C2 compile that landed later left every trial in the first tier.
+f933d9c77 warms until compilation is quiet (the bench README says how); a full
+sitting under each warm-up, back to back, read these at a fraction of their
+old figures:
+
+    json-serialize 0.30  json-stringify-typed 0.39  json-stringify-doc 0.44
+    json-stringify-inline 0.51  array-mutations 0.54
+
+The eight rows that read 1.12-1.46 of their old figures across those two
+sittings (the old one at machine load 56, the new at 13) were paired in one
+sitting, each row's classes under both drivers: medians 0.98-1.03. No row is
+worse for the longer warm-up.
+
+**On that warm-up, one sitting at 16:40: 12 of 67 lose to node.**
+
+    loop 2.04  uniform-callback 1.49  uniform-callback-default 1.41  bytes 1.40
+    awfy-queens 1.30  json-scan 1.24  map-and-set 1.13  objects 1.08
+    node-utf8 1.08  json-stringify-typed 1.06  uniform-callback-arguments 1.02
+    array-mutations 1.02
+
+`json-serialize`, at 1.70 in the earlier sitting, is off it: that cell was C1.
+
 **A proven typed-array access costs nothing to check on HotSpot.** ca427cfa8 /
 fa9548ea3 gave every view class one byte layout and `getProved`/`setProved` for
 `checked: false`, as C indexes `NTS_VIEW_ITEMS` bare. With view-lengths under
