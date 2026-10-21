@@ -3,9 +3,12 @@
 // packages (`@ntsPackage`) -- gtk4, HarfBuzz's harfbuzz-gobject, whose types
 // release a face, set or blob the program owns -- and the program compiles
 // and links against those of the modules it uses, GLib's loop among them.
-// `girExtras` reaches what GIR describes and its own headers do not include:
-// GLib's gstdio.h, HarfBuzz's OpenType API and its GLib blobs, Gio's settings
-// backend behind its macro, and GTK's unix-print types, with their package.
+// What GIR describes and its own headers do not include -- GLib's gstdio.h,
+// HarfBuzz's OpenType API and its GLib blobs, GTK's unix-print types with
+// their package -- the GTK platform's bind request names for every program.
+// `girExtras` adds what a library keeps for whoever implements it, behind a
+// macro: Gio's settings backend, whose null backend the program makes, and
+// GdkPixbuf's animation class struct, whose slot the program fills.
 import { defineConfig, app } from "@nts/config";
 
 export default defineConfig({
@@ -13,9 +16,7 @@ export default defineConfig({
     gir: app.linux({ entry: "./src/main.ts", backend: "c" }),
   },
   girExtras: {
-    "GLib-2.0": { headers: ["glib/gstdio.h"] },
-    "HarfBuzz-0.0": { headers: ["hb-ot.h", "hb-glib.h"] },
     "Gio-2.0": { defines: ["G_SETTINGS_ENABLE_BACKEND"], headers: ["gio/gsettingsbackend.h"] },
-    "Gtk-4.0": { packages: ["gtk4-unix-print"], headers: ["gtk/gtkunixprint.h"] },
+    "GdkPixbuf-2.0": { defines: ["GDK_PIXBUF_ENABLE_BACKEND"] },
   },
 });

@@ -24,12 +24,17 @@
 //   hb en-us true  HarfBuzz's `hb_language_t`, a pointer record -- itself a
 //                 `const struct hb_language_impl_t *` -- held as its handle:
 //                 "en-US" read back as HarfBuzz writes it, a more specific "en"
-//   reach access=0 ot=en backend=true print=true  what GIR describes and its
-//                 headers do not include, through nts.config.ts's `girExtras`:
-//                 g_access (glib/gstdio.h), the language OpenType tags `ENG `
-//                 (hb-ot.h), a null settings backend (gsettingsbackend.h, under
-//                 its macro) and the unix print dialog's type
-//   collected 1 true  a set the program made, which HarfBuzz fills: GIR's
+//   reach access=0 ot=en backend=true print=true net still=true  what GIR
+//                 describes and its headers do not include: by the GTK
+//                 platform's bind request, g_access (glib/gstdio.h), the
+//                 language OpenType tags `ENG ` (hb-ot.h), the unix print
+//                 dialog's type and g_networking_init (gnetworking.h); by
+//                 nts.config.ts's `girExtras`, what a library keeps for its
+//                 implementers behind a macro -- a null settings backend
+//                 (gsettingsbackend.h) and a GdkPixbuf animation of the
+//                 program's, whose `is_static_image` slot the class struct
+//                 places only under GDK_PIXBUF_ENABLE_BACKEND
+//   collected 1 true aat 0  a set the program made, which HarfBuzz fills: GIR's
 //                 caller-allocated `out` of a record the headers keep opaque
 //                 is the caller's own object. The face is built from two
 //                 tables, a `cmap` mapping U+0041 to glyph 1 and a `maxp` of
@@ -157,6 +162,7 @@ import {
   g_memory_output_stream_new_resizable,
   g_memory_output_stream_steal_as_bytes,
   g_io_error_quark,
+  g_networking_init,
   g_null_settings_backend_new,
   g_output_stream_close,
   g_output_stream_flush,
@@ -211,6 +217,7 @@ import {
 } from "c:GObject-2.0";
 import type { GTypeQuery } from "c:GObject-2.0";
 import { GdkRGBA, GdkRectangle, gdk_rgba_equal } from "c:Gdk-4.0";
+import { GdkPixbufAnimation, gdk_pixbuf_animation_is_static_image } from "c:GdkPixbuf-2.0";
 import { graphene_point_distance, graphene_point_t, graphene_point_zero } from "c:Graphene-1.0";
 import {
   GskPathPoint,
@@ -223,6 +230,7 @@ import {
   hb_face_builder_add_table,
   hb_face_builder_create,
   hb_face_collect_unicodes,
+  hb_aat_layout_has_substitution,
   hb_glib_blob_create,
   hb_language_from_string,
   hb_language_matches,
@@ -253,6 +261,14 @@ const PRIORITY_DEFAULT = 0;
 // reports through `GError **`, reached through `g_output_stream_flush`: the
 // first flush is answered, the second refused through the override's `error`
 // slot, which the caller -- passing no slot of its own -- sees thrown.
+// An animation that is one still image, which GdkPixbuf asks through its
+// class struct's slot.
+class StillImage extends GdkPixbufAnimation {
+  vfunc_is_static_image(): CBool<c_int> {
+    return true;
+  }
+}
+
 class Flusher extends GOutputStream {
   flushes = 0;
 
@@ -312,16 +328,20 @@ function boxedRecords(): void {
   const english = hb_language_from_string(new Uint8Array([101, 110]));
   const american = hb_language_from_string(new Uint8Array([101, 110, 45, 85, 83]));
   console.log("hb " + hb_language_to_string(american) + " " + String(hb_language_matches(english, american) !== 0));
-  // What GIR describes and its own headers do not include, reached through
-  // nts.config.ts's `girExtras`: glib/gstdio.h's g_access, HarfBuzz's
-  // OpenType API, Gio's settings backend behind G_SETTINGS_ENABLE_BACKEND,
-  // and GTK's unix-print types.
+  // What GIR describes and its own headers do not include. The GTK
+  // platform's bind request names glib/gstdio.h's g_access, HarfBuzz's
+  // OpenType API, Gio's gnetworking.h and GTK's unix-print types for every
+  // program; nts.config.ts's `girExtras` adds Gio's settings backend behind
+  // G_SETTINGS_ENABLE_BACKEND and GdkPixbuf's animation class struct behind
+  // GDK_PIXBUF_ENABLE_BACKEND, which a library keeps for its implementers.
   const tagged = hb_ot_tag_to_language(0x454e4720);
+  g_networking_init();
   console.log(
     "reach access=" + String(g_access("/", 0)) +
       " ot=" + (tagged === null ? "none" : hb_language_to_string(tagged)) +
       " backend=" + String(g_null_settings_backend_new() !== null) +
-      " print=" + String(gtk_print_unix_dialog_get_type() !== 0n),
+      " print=" + String(gtk_print_unix_dialog_get_type() !== 0n) +
+      " net still=" + String(gdk_pixbuf_animation_is_static_image(new StillImage())),
   );
   // A face of two tables, and a set the program made for HarfBuzz to fill.
   const cmap = new Uint8Array([
@@ -342,6 +362,8 @@ function boxedRecords(): void {
   const unicodes = hb_set_create();
   hb_face_collect_unicodes(built, unicodes);
   console.log("collected " + String(hb_set_get_population(unicodes)) + " " + String(hb_set_has(unicodes, 0x41) !== 0));
+  // HarfBuzz's AAT API (hb-aat.h): the face has no `morx` table to substitute by.
+  console.log("aat " + String(hb_aat_layout_has_substitution(built)));
   // Storage of the program's own, which C reads and rewrites.
   const extents = local<PangoRectangle>();
   extents.x = 1024;
