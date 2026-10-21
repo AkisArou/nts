@@ -419,7 +419,8 @@ impl FuncBuilder<'_> {
             return self.iterator_return_contract(action, &selection.contracts[0], validate);
         }
         let origin = self.origin(action.at);
-        let erased = self.erased(action.iterator, &origin);
+        // An iterator is an object, never absent.
+        let erased = self.erased(action.iterator, super::Absent::Impossible, &origin);
         let join = self.new_block();
         for contract in &selection.contracts {
             let yes = self.new_block();

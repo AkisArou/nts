@@ -157,7 +157,8 @@ pub(super) fn apply(
         HirType::Managed(ManagedType::String),
         origin.clone(),
     );
-    let formatted = builder.erased_for_table(text, &origin);
+    // `ToString`'s answer is a string, never absent.
+    let formatted = builder.erased(text, Absent::Impossible, &origin);
     builder.terminate(Terminator::Jump {
         target: string,
         args: vec![formatted],

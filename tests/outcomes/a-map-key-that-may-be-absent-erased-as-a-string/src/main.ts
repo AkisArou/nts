@@ -17,6 +17,15 @@
 //
 // The one-change control, `...-control`, types the keys `string` and spells
 // each absence as a string of its own, and agrees.
+//
+// **Since 2026-10-21 it agrees, a guard.** Every table erase now carries the
+// absence its source allows, and a `Map` or `Set` whose key type admits an
+// absence holds its keys erased (`table_key_within`), so the table compares
+// them by their tags: C and LLVM agree; Wasm, which declined every key that
+// was not a string, agrees; and the JVM agrees by design rather than by
+// `ofString(null)`. Such a key is no longer a non-null string, so the JVM's
+// string-key fusion rightly leaves it on the boxed path.
+// tests/programs/an-absence-a-table-holds-keeps-its-tag holds the rest.
 
 export function undefinedKeys(seed: number): number {
   const keys = new Map<string | undefined, number>();

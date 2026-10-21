@@ -19121,6 +19121,43 @@ fn absence_of_member(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Absence>
     }
 }
 
+/// Whether a value of `ty` may be `null` or `undefined`: an absence itself, or
+/// a union with one among its members.
+fn admits_absence(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
+    absence_of_member(snapshot, ty).is_some()
+        || matches!(
+            snapshot.types.get(ty.0 as usize).map(|record| &record.kind),
+            Some(TypeKind::Union(members))
+                if members.iter().any(|member| absence_of_member(snapshot, *member).is_some())
+        )
+}
+
+/// A `Map`'s key or a `Set`'s element, at the representation its table
+/// compares it as.
+///
+/// **A key that may be absent is held erased.** A table compares its keys, and
+/// a `string | undefined` key's own representation -- a string whose null
+/// pointer is `undefined` -- says nothing a string hash can read: C and LLVM
+/// hashed the null pointer as a string and faulted, and Wasm, which builds its
+/// collection from this type, declined every key that was not a string. Held
+/// erased, a key carries its tag, `key_kind_of` answers `ERASED` for it, and
+/// every backend's table compares by that tag.
+fn table_key_within(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    path: &mut Vec<TypeId>,
+    subst: &Substitution,
+) -> Option<HirType> {
+    let held = representation_within(snapshot, ty, path, subst)?;
+    Some(
+        if super::tags::payload_is_a_reference(&held) && admits_absence(snapshot, ty) {
+            HirType::Erased
+        } else {
+            held
+        },
+    )
+}
+
 /// A union member's name, short enough to put several on one line.
 fn short(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     let Some(record) = snapshot.types.get(ty.0 as usize) else {
@@ -19705,7 +19742,7 @@ fn representation_within(
         },
         // A map's *value* may be a counted foreign object -- Swift's
         // `[String: NSObject]` -- held in a box of its family, as a promise
-        // holds one (`erased_for_table`). A key may not: a box has an
+        // holds one (`erased`). A key may not: a box has an
         // identity of its own, not the object's.
         HirType::Managed(ManagedType::Map(key, value)) => {
             !matches!(key.as_ref(), HirType::NativePointer(_))
@@ -20103,7 +20140,7 @@ fn provided_representation(
     // than like a bug.
     if matches!(provided(snapshot, ty), Some("Map" | "ReadonlyMap")) {
         let arguments = snapshot.type_arguments.get(&ty)?;
-        let key = representation_within(snapshot, *arguments.first()?, path, subst)?;
+        let key = table_key_within(snapshot, *arguments.first()?, path, subst)?;
         let value = representation_within(snapshot, *arguments.get(1)?, path, subst)?;
         return Some(HirType::Managed(ManagedType::Map(
             Box::new(key),
@@ -20112,7 +20149,7 @@ fn provided_representation(
     }
     if matches!(provided(snapshot, ty), Some("Set" | "ReadonlySet")) {
         let arguments = snapshot.type_arguments.get(&ty)?;
-        let element = representation_within(snapshot, *arguments.first()?, path, subst)?;
+        let element = table_key_within(snapshot, *arguments.first()?, path, subst)?;
         return Some(HirType::Managed(ManagedType::Set(Box::new(element))));
     }
 
@@ -28778,6 +28815,22 @@ impl<'a> FuncBuilder<'a> {
         have: &HirType,
         undefined_is_the_other_arm: bool,
     ) -> Absent {
+        let Some(&ty) = self.snapshot.node_types.get(&id) else {
+            return Absent::Impossible;
+        };
+        self.absence_of_type(ty, have, undefined_is_the_other_arm)
+    }
+
+    /// [`Self::absence_at_excluding`]'s question asked of a checker type: what
+    /// a null pointer of `have` means for a value written at `ty`. Asked
+    /// directly where the value has no node of its own -- an array's element,
+    /// a pair's half -- and through a node everywhere else.
+    fn absence_of_type(
+        &self,
+        ty: TypeId,
+        have: &HirType,
+        undefined_is_the_other_arm: bool,
+    ) -> Absent {
         // **Only a reference can be the absence.** The question this answers is
         // what a *null pointer* means, and a `double` or a `bool` has no null:
         // zero bits are `+0` and `false`, values a program holds. Asked of the
@@ -28792,9 +28845,6 @@ impl<'a> FuncBuilder<'a> {
         if !super::tags::payload_is_a_reference(have) {
             return Absent::Impossible;
         }
-        let Some(ty) = self.snapshot.node_types.get(&id) else {
-            return Absent::Impossible;
-        };
         // **An explicit absence is its own answer.** A `null` lowered at a
         // reference's type -- the first argument of `new Error(null as any)`,
         // typed `string` by its context -- is a null pointer whose node says
@@ -28802,7 +28852,7 @@ impl<'a> FuncBuilder<'a> {
         // present string, and reading it crashed. (The repair rode in with
         // 86528f0c4 and was dropped with it; it does not depend on that
         // commit's array storage.)
-        match absence_of_member(self.snapshot, *ty) {
+        match absence_of_member(self.snapshot, ty) {
             Some(Absence::Null) => return Absent::Null,
             Some(Absence::Undefined) => return Absent::Undefined,
             None => {}
@@ -32205,7 +32255,8 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 HirType::Erased
             };
-            let erased = self.erased(promise, &origin);
+            // A promise is never absent.
+            let erased = self.erased(promise, Absent::Impossible, &origin);
             let promise = self.push(
                 OpKind::Unerase { value: erased },
                 HirType::Managed(ManagedType::Promise(Box::new(payload.clone()))),
@@ -41196,7 +41247,9 @@ impl<'a> FuncBuilder<'a> {
             arms.push((class, arm));
         }
         let origin = self.origin(id);
-        let erased = self.erased(value, &origin);
+        // A reference of a thenable's type can still be `null`, which is no
+        // thenable: its own node says which absence it is.
+        let erased = self.erased_from(value, id, &origin);
         let join = self.new_block();
         for (class, arm) in arms {
             let classes = self.classes_under(class);
@@ -41254,7 +41307,7 @@ impl<'a> FuncBuilder<'a> {
         // Where the payload can hold it, the typed reader at the `await` reads
         // it; where the checker's type said it could not arrive, that reader's
         // assertion names it rather than reading a null as a number.
-        let promise = self.erased(result.promise, &origin);
+        let promise = self.erased(result.promise, Absent::Impossible, &origin);
         let promise = self.push(
             OpKind::Unerase { value: promise },
             erased_promise(),
@@ -41485,7 +41538,7 @@ impl<'a> FuncBuilder<'a> {
         let thenable_ty = self.thenable_type(job)?;
         let thenable = self.coerce(thenable, &thenable_ty, id)?;
         // See `erased_promise`: the job holds the promise without its payload.
-        let erased = self.erased(promise, origin);
+        let erased = self.erased(promise, Absent::Impossible, origin);
         let promise = self.push(
             OpKind::Unerase { value: erased },
             erased_promise(),
@@ -44034,19 +44087,40 @@ impl<'a> FuncBuilder<'a> {
     /// -- a true sentence about a conversion this was not asking for. A plain
     /// rethrow out of a function was refused by every backend, which is
     /// ordinary error handling.
-    fn erased(&mut self, value: ValueId, origin: &Origin) -> ValueId {
+    ///
+    /// **`absent` is the caller's to answer, every time**: what a null pointer
+    /// of `value` means, from [`Self::absence_at_excluding`] at the node it came
+    /// from ([`Self::erased_from`]) or [`Self::absence_of_type`] at the type an
+    /// array holds it as. This answered `Impossible` for everything it erased,
+    /// and so did the table's own copy of it: a `Map<string | undefined, _>`
+    /// key that was `undefined` crossed as a string with a null pointer and
+    /// hashing it faulted, and a stored `null` read back through `unknown` was
+    /// an "object". A value that cannot be absent -- a constant, a promise --
+    /// says `Impossible`, which is its answer. A counted foreign object is
+    /// erased as its family's tag, and the value owns the reference the box
+    /// used to: one representation of a handle in any value, so
+    /// `map.get(k) === widget`.
+    fn erased(&mut self, value: ValueId, absent: Absent, origin: &Origin) -> ValueId {
         if self.values[value.0 as usize].ty == HirType::Erased {
             return value;
         }
         self.push(
             OpKind::Erase {
                 value,
-                absent: Absent::Impossible,
+                absent,
                 slots: Absent::Impossible,
             },
             HirType::Erased,
             origin.clone(),
         )
+    }
+
+    /// [`Self::erased`] for a value lowered from `source`, whose node says
+    /// which absence a null pointer of it is.
+    fn erased_from(&mut self, value: ValueId, source: NodeId, origin: &Origin) -> ValueId {
+        let have = self.values[value.0 as usize].ty.clone();
+        let absent = self.absence_at_excluding(source, &have, false);
+        self.erased(value, absent, origin)
     }
 
     fn lower_throw(&mut self, id: NodeId) -> Result<(), Diagnostic> {
@@ -44632,7 +44706,8 @@ impl<'a> FuncBuilder<'a> {
         }
         let value = self.lower_expression(rhs)?;
         let origin = self.origin(id);
-        let value = self.erased(value, &origin);
+        // `in` over a value its type lets be absent does not typecheck.
+        let value = self.erased(value, Absent::Impossible, &origin);
         if self.module.templates {
             self.call_runtime(
                 "nts_template_reflection",
@@ -45313,8 +45388,9 @@ impl<'a> FuncBuilder<'a> {
         let value = self.lower_expression(rhs)?;
         // Erased first, for the reason `lower_instanceof` gives: the operation
         // asks an object for its class, and a value that might not be one has
-        // to say so.
-        let value = self.erased(value, &origin);
+        // to say so. `#x in` over one its type lets be absent does not
+        // typecheck.
+        let value = self.erased(value, Absent::Impossible, &origin);
         Ok(self.push(
             OpKind::InstanceOf {
                 value,
@@ -45611,7 +45687,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let value = self.lower_expression(lhs)?;
         let origin = self.origin(id);
-        let erased = self.erased(value, &origin);
+        let erased = self.erased_from(value, lhs, &origin);
         let mut args = vec![erased];
         if let Some(kind) = kind {
             args.push(self.push(
@@ -45732,7 +45808,7 @@ impl<'a> FuncBuilder<'a> {
         // for its class, and a value that might not be an object has to say so
         // -- which is what a tag is. An erase of something already known to be
         // an object is one inline word.
-        let value = self.erased(value, &origin);
+        let value = self.erased_from(value, lhs, &origin);
         // **Which binding was asked about, for the arm that runs when the answer
         // is yes.** The test is the licence a narrowing needs, and it was being
         // discarded here: `lower_if` saw only a `Bool`, so each use inside the
@@ -48831,7 +48907,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Managed(ManagedType::String),
                 origin.clone(),
             );
-            let key = self.erased_for_table(key, &origin);
+            let key = self.erased(key, Absent::Impossible, &origin);
             return Ok(Place::Entry { table: object, key });
         }
         let HirType::Managed(ManagedType::Object(type_id)) =
@@ -50617,7 +50693,7 @@ impl<'a> FuncBuilder<'a> {
                 );
             }
             Place::Entry { table, key } => {
-                let erased = self.erased_for_table(value, &origin);
+                let erased = self.erased_from(value, id, &origin);
                 property_keys::apply(self, id, table, key, property_keys::Action::Set(erased));
             }
             Place::Global(global) => {
@@ -51211,7 +51287,7 @@ impl<'a> FuncBuilder<'a> {
             return None;
         }
         let origin = self.origin(at);
-        let erased = self.erased(held, &origin);
+        let erased = self.erased_from(held, at, &origin);
         let narrow = self.push(OpKind::Unerase { value: erased }, want, origin);
         self.bindings.insert(symbol, narrow);
         Some((symbol, held, narrow))
@@ -52538,9 +52614,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(children[0], "a computed name with no expression"));
             };
             let key = self.lower_expression(expression)?;
-            let key = self.erased_for_table(key, origin);
+            let key = self.erased_from(key, expression, origin);
             let value = self.lower_expression(children[1])?;
-            let value = self.erased_for_table(value, origin);
+            let value = self.erased_from(value, children[1], origin);
             return Ok((key, value));
         }
         let (name, value) = self.property_parts(property, None)?;
@@ -52549,10 +52625,15 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
-        Ok((
-            self.erased_for_table(key, origin),
-            self.erased_for_table(value, origin),
-        ))
+        // The value's own node: an assignment's initializer, a shorthand's name.
+        let written = match self.kind_of(property) {
+            Some(syntax::PROPERTY_ASSIGNMENT) => self.children(property).get(1).copied(),
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => self.children(property).first().copied(),
+            _ => None,
+        };
+        let key = self.erased(key, Absent::Impossible, origin);
+        let value = self.erased_from(value, written.unwrap_or(property), origin);
+        Ok((key, value))
     }
 
     /// The object type a literal is contextually assigned to, through a union.
@@ -54637,7 +54718,8 @@ impl<'a> FuncBuilder<'a> {
             for (key, value) in initializers {
                 if key.as_deref() == Some(super::builtin::CAUSE_FIELD) {
                     let lowered = self.lower_expecting(value, &HirType::Erased)?;
-                    cause = Some(self.erased(lowered, &origin));
+                    // Lowered as an erased value already, so this is the identity.
+                    cause = Some(self.erased(lowered, Absent::Impossible, &origin));
                 } else {
                     self.lower_expression(value)?;
                 }
@@ -60231,7 +60313,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
-        let key = self.erased_for_table(key, &origin);
+        let key = self.erased(key, Absent::Impossible, &origin);
         let read = property_keys::apply(self, id, value, key, property_keys::Action::Get);
         claimed_reads::narrowed(self, id, read)
     }
@@ -70566,7 +70648,8 @@ impl<'a> FuncBuilder<'a> {
             (*element_ty).clone(),
             origin.clone(),
         );
-        let key = self.erased_for_table(item, &origin);
+        // An `NSSet` holds no `nil`.
+        let key = self.erased(item, Absent::Impossible, &origin);
         self.runtime_call("nts_set_add", vec![set, key], ty, origin.clone());
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
         let next = self.push(
@@ -70728,8 +70811,9 @@ impl<'a> FuncBuilder<'a> {
             (*value_ty).clone(),
             origin.clone(),
         );
-        let key = self.erased_for_table(key, &origin);
-        let entry = self.erased_for_table(entry, &origin);
+        // An `NSDictionary` holds no `nil`, as a key or as a value.
+        let key = self.erased(key, Absent::Impossible, &origin);
+        let entry = self.erased(entry, Absent::Impossible, &origin);
         self.runtime_call("nts_map_set", vec![map, key, entry], ty, origin.clone());
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
         let next = self.push(
@@ -79527,15 +79611,24 @@ impl<'a> FuncBuilder<'a> {
     /// The table first, then the element -- or, for a map, the pair's two
     /// halves, read the way its representation stores them. Everything crosses
     /// erased, because that is what a table holds, which is the same thing
-    /// `lower_table_method` does for `s.add(v)` and `m.set(k, v)`.
+    /// `lower_table_method` does for `s.add(v)` and `m.set(k, v)`. Each half is
+    /// erased with the absence the type it is written at allows (`written`,
+    /// from [`Self::written_halves`]): an element has no node of its own.
     fn table_insertion_arguments(
         &mut self,
-        table: ValueId,
-        entry: ValueId,
+        (table, entry): (ValueId, ValueId),
         pair: Option<&Pair>,
+        written: [Option<TypeId>; 2],
         origin: &Origin,
     ) -> Vec<ValueId> {
         let mut args = vec![table];
+        let erase = |builder: &mut Self, value: ValueId, half: usize| {
+            let have = builder.values[value.0 as usize].ty.clone();
+            let absent = written[half].map_or(Absent::Impossible, |ty| {
+                builder.absence_of_type(ty, &have, false)
+            });
+            builder.erased(value, absent, origin)
+        };
         match pair {
             Some(Pair::Fields(layout)) => {
                 for field in 0..2u32 {
@@ -79547,14 +79640,13 @@ impl<'a> FuncBuilder<'a> {
                         layout.fields[field as usize].ty.clone(),
                         origin.clone(),
                     );
-                    let erased = self.erased_for_table(slot, origin);
-                    args.push(erased);
+                    args.push(erase(self, slot, field as usize));
                 }
             }
             Some(Pair::Slots(slot_ty)) => {
-                for at in 0..2u32 {
+                for half in 0..2u32 {
                     let at = self.push(
-                        OpKind::ConstFloat(f64::from(at)),
+                        OpKind::ConstFloat(f64::from(half)),
                         HirType::NUMBER,
                         origin.clone(),
                     );
@@ -79567,16 +79659,43 @@ impl<'a> FuncBuilder<'a> {
                         slot_ty.clone(),
                         origin.clone(),
                     );
-                    let erased = self.erased_for_table(slot, origin);
-                    args.push(erased);
+                    args.push(erase(self, slot, half as usize));
                 }
             }
-            None => {
-                let erased = self.erased_for_table(entry, origin);
-                args.push(erased);
-            }
+            None => args.push(erase(self, entry, 0)),
         }
         args
+    }
+
+    /// The checker types `new Set(xs)`'s elements, or `new Map(entries)`'s two
+    /// halves, are written at -- what [`Self::absence_of_type`] asks of a value
+    /// an array hands out. `None` where the contents' type says nothing that
+    /// specific, which erases as a value with no absence, as before.
+    fn written_halves(&self, contents: NodeId, is_a_map: bool) -> [Option<TypeId>; 2] {
+        let source = |ty: TypeId| *self.sources.get(&ty).unwrap_or(&ty);
+        let kind = |ty: TypeId| {
+            self.snapshot
+                .types
+                .get(ty.0 as usize)
+                .map(|record| &record.kind)
+        };
+        let element =
+            self.snapshot
+                .node_types
+                .get(&contents)
+                .and_then(|ty| match kind(source(*ty)) {
+                    Some(TypeKind::Array(element)) => Some(source(*element)),
+                    _ => None,
+                });
+        if !is_a_map {
+            return [element, None];
+        }
+        match element.and_then(kind) {
+            Some(TypeKind::Tuple(halves)) if halves.len() == 2 => {
+                [Some(halves[0]), Some(halves[1])]
+            }
+            _ => [None, None],
+        }
     }
 
     /// `new Set([1, 2])` and `new Map([[k, v]])` -- the contents, as a loop.
@@ -79664,7 +79783,8 @@ impl<'a> FuncBuilder<'a> {
             element_ty,
             origin.clone(),
         );
-        let args = self.table_insertion_arguments(table, entry, pair.as_ref(), origin);
+        let written = self.written_halves(contents, is_a_map);
+        let args = self.table_insertion_arguments((table, entry), pair.as_ref(), written, origin);
         let helper = if is_a_map {
             "nts_map_set"
         } else {
@@ -79763,7 +79883,7 @@ impl<'a> FuncBuilder<'a> {
         let mut args = vec![receiver];
         for argument in arguments {
             let value = self.lower_expression(*argument)?;
-            args.push(self.erased_for_table(value, &origin));
+            args.push(self.erased_from(value, *argument, &origin));
         }
         let call = self.push(
             OpKind::Call {
@@ -79781,28 +79901,6 @@ impl<'a> FuncBuilder<'a> {
             return self.narrowed(id, call);
         }
         Ok(call)
-    }
-
-    /// A value at the width the table stores, which is erased.
-    ///
-    /// Already-erased values pass through: erasing one twice would build a
-    /// value whose payload is a value.
-    fn erased_for_table(&mut self, value: ValueId, origin: &Origin) -> ValueId {
-        if self.values[value.0 as usize].ty == HirType::Erased {
-            return value;
-        }
-        // A counted foreign object is erased as its family's tag, and the value
-        // owns the reference the box used to: one representation of a handle in
-        // any value, so `map.get(k) === widget`.
-        self.push(
-            OpKind::Erase {
-                value,
-                absent: Absent::Impossible,
-                slots: Absent::Impossible,
-            },
-            HirType::Erased,
-            origin.clone(),
-        )
     }
 
     /// A method call on an object, once the receiver is lowered.
