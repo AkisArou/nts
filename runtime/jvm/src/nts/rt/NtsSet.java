@@ -17,26 +17,34 @@ package nts.rt;
  */
 public final class NtsSet<E> extends NtsTable implements java.util.Set<E> {
 
+    public NtsSet() { this(false); }
+
+    NtsSet(boolean numberKeys) { super(numberKeys, false, false); }
+
     public static NtsSet newSet(double kind) { return new NtsSet(); }
 
-    /** Insert, and hand back the receiver; see {@link NtsMap#set}. */
+    /** `new Set<number>()`: the members in a number column; see {@link NtsMap#newMapOfNumberKeys}. */
+    public static NtsSet newSetOfNumbers(double kind) { return new NtsSet(true); }
+
+    /**
+     * Insert, and hand back the receiver; see {@link NtsMap#set}. The append
+     * stores `-0` as `+0`, which Set iteration must expose.
+     */
     public static NtsSet add(NtsSet set, NtsValue key) {
-        // Set iteration must expose +0, not the -0 supplied by the caller.
-        NtsValue canonical = canonicalKey(key);
-        insert(set, canonical, canonical);
+        set.slotFor(key);
+        return set;
+    }
+
+    /** {@link #add} for a number, unboxed. */
+    public static NtsSet addNumber(NtsSet set, double key) {
+        set.slotForNumber(key);
         return set;
     }
 
     /** A shallow copy, which is a `Set` because the receiver is. */
     public static NtsSet copy(NtsSet from) {
-        NtsSet out = new NtsSet();
-        for (int slot = from.head; slot < from.used; slot++) {
-            NtsValue key = from.keys[slot];
-            if (key == null) {
-                continue;
-            }
-            add(out, key);
-        }
+        NtsSet out = new NtsSet(from.numberKeys != null);
+        copyEntries(from, out);
         return out;
     }
 

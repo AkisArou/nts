@@ -20,7 +20,21 @@ package nts.rt;
  */
 public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
 
+    public NtsMap() { this(false, false); }
+
+    NtsMap(boolean numberKeys, boolean numberValues) { super(numberKeys, numberValues, true); }
+
     public static NtsMap newMap(double kind) { return new NtsMap(); }
+
+    /**
+     * `new Map<number, V>()`: the keys in a number column. Chosen by the
+     * emitter from the map's static type (`ops::table_constructor`), as
+     * {@link #newMapOfNumbers} is; see {@link NtsTable} for what a column is.
+     */
+    public static NtsMap newMapOfNumberKeys(double kind) { return new NtsMap(true, false); }
+
+    /** `new Map<number, number>()`: the keys and the values in number columns. */
+    public static NtsMap newMapOfNumbers(double kind) { return new NtsMap(true, true); }
 
     /** A dictionary, which is a `Map`'s storage printing as an object. */
     public static NtsMap newTable(double kind) { return new NtsDictionary(); }
@@ -45,6 +59,18 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
         return map;
     }
 
+    /** {@link #set} for a number key, unboxed. */
+    public static NtsMap setNumber(NtsMap map, double key, NtsValue value) {
+        map.store(map.slotForNumber(key), value);
+        return map;
+    }
+
+    /** {@link #set} for a number key and a number value, both unboxed. */
+    public static NtsMap setNumber(NtsMap map, double key, double value) {
+        map.storeNumber(map.slotForNumber(key), value);
+        return map;
+    }
+
     /**
      * A shallow copy, which is a `Map` because the receiver is.
      *
@@ -53,14 +79,8 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
      * {@link NtsSet#copy} directly and nothing reads a flag.
      */
     public static NtsMap copy(NtsMap from) {
-        NtsMap out = new NtsMap();
-        for (int slot = from.head; slot < from.used; slot++) {
-            NtsValue key = from.keys[slot];
-            if (key == null) {
-                continue;
-            }
-            insert(out, key, from.values[slot]);
-        }
+        NtsMap out = new NtsMap(from.numberKeys != null, from.numberValues != null);
+        copyEntries(from, out);
         return out;
     }
 
@@ -81,13 +101,7 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
      * reading is observable.
      */
     public static NtsMap extend(NtsMap target, NtsMap source) {
-        for (int slot = source.head; slot < source.used; slot++) {
-            NtsValue key = source.keys[slot];
-            if (key == null) {
-                continue;
-            }
-            insert(target, key, source.values[slot]);
-        }
+        copyEntries(source, target);
         return target;
     }
 

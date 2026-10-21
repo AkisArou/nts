@@ -264,6 +264,42 @@ fn a_shift_typed_i64_takes_the_low_32_bits() {
     assert_eq!(stdout, "true true true\ntrue true true\ntrue true\n");
 }
 
+/// A `Map<number, number>` handed a string key and a string value through a
+/// `Map<unknown, unknown>` view, which TypeScript's method bivariance allows,
+/// turns its number columns into boxes and keeps every entry, its order and
+/// the hole `delete` left between two of them (`NtsTable.eraseKeys`,
+/// `eraseValues`) -- between, because deleting the first entry only moves
+/// `head`, which the turn starts after, and leaves no hole to keep. The second
+/// line is the control, a table made `Map<unknown, unknown>`, which never had
+/// a number column; node prints the same for both. A JVM test rather than a
+/// program in the corpus because Wasm declines the upcast.
+#[test]
+fn a_number_table_handed_a_string_turns_its_columns() {
+    let Some((status, stdout, stderr)) = run_whole(
+        "turn",
+        "function widen(into: Map<unknown, unknown>, seed: number): string {\n\
+         \x20 into.set(\"text\", seed);\n\
+         \x20 into.set(seed + 100, \"value\");\n\
+         \x20 const out: string[] = [];\n\
+         \x20 into.forEach((v, k) => out.push(String(k) + \":\" + String(v)));\n\
+         \x20 return out.join(\" \");\n\
+         }\n\
+         const m = new Map<number, number>();\n\
+         m.set(1, 2);\nm.set(2, 3);\nm.set(3, 4);\nm.delete(2);\n\
+         console.log(widen(m, 7) + \" \" + m.get(3) + \" \" + m.has(2) + \" \" + m.size);\n\
+         const unknown = new Map<unknown, unknown>();\n\
+         unknown.set(1, 2);\nunknown.set(2, 3);\nunknown.set(3, 4);\nunknown.delete(2);\n\
+         console.log(widen(unknown, 7) + \" \" + unknown.get(3) + \" \" + unknown.has(2) + \" \" + unknown.size);\n",
+    ) else {
+        return;
+    };
+    assert_eq!(status, 0, "a clean run: {stderr}");
+    assert_eq!(
+        stdout,
+        "1:2 3:4 text:7 107:value 4 false 4\n1:2 3:4 text:7 107:value 4 false 4\n"
+    );
+}
+
 /// `Math.exp` and `Math.hypot` answer node's bits. fdlibm's `exp(1)` is one bit
 /// off `Math.E`, which V8 special-cases and `StrictMath` does not (test262's
 /// staging `sm/Math/exp-exact`), and fdlibm's `hypot` is not V8's algorithm:

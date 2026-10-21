@@ -110,87 +110,176 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     candidates
 }
 
-/// How a map key held unboxed is compared, which decides the form it may take:
-/// `sameKey` compares a `STRING` by `equals` and every other reference by
-/// identity.
+/// How an operand a map helper takes unboxed is held, which decides the form
+/// it may take: `sameKey` compares a `STRING` by `equals`, a `NUMBER` by
+/// `SameValueZero` and every other reference by identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum KeyKind {
+pub(crate) enum Unboxed {
     /// Any reference but a string, compared by identity (`findObject`).
     Object,
     /// A string, compared by its contents (`findString`).
     String,
+    /// A number, passed as a `double`: a key (`findNumber`) or a value a
+    /// table stores in a number column (`storeNumber`).
+    Number,
 }
 
-/// A map helper that compares its key *through* the box, and keeps the box, if
-/// at all, only as a key it inserts: where the key sits, and the form that
-/// takes it unboxed for each kind.
+/// A map helper that reads its key *through* the box, and keeps the box, if
+/// at all, only as a key or a value it stores: where the key and the value sit,
+/// the class that declares its unboxed forms, and each form.
 ///
 /// The mirror of `scalar_form` above: that one is about an answer nobody wants
-/// boxed, this one about an argument nobody wants boxed.
+/// boxed, this one about arguments nobody wants boxed.
 struct Keyed {
     name: &'static str,
     key_at: usize,
-    object: Option<(&'static str, &'static str)>,
-    string: Option<(&'static str, &'static str)>,
+    /// Where it takes the value it stores, for a helper that stores one.
+    value_at: Option<usize>,
+    /// The class named at the call: `NtsMap` for the forms declared on
+    /// `NtsTable`, which resolves to them and is what the boxed forms have
+    /// always named, so a program with no number table emits what it did.
+    owner: &'static str,
+    /// The key's kind, the value's where it is unboxed too, the member and
+    /// its descriptor.
+    forms: &'static [(Unboxed, Option<Unboxed>, &'static str, &'static str)],
 }
 
 /// Every such helper, one row each, so a helper that reads a key in a new way
-/// is one more row and [`unboxed_keys`] reads its key position from here.
+/// is one more row and [`unboxed_operands`] reads its positions from here.
 ///
 /// No object form for `set`: an object key is stored as its box, and nothing
-/// measured wants one.
+/// measured wants one. A number key has a form everywhere, because a number
+/// key column stores no box at all (`NtsTable`'s columns); a number value has
+/// one beside a number key, the only table whose values have a number column.
 const KEYED: &[Keyed] = &[
     Keyed {
         name: "nts_map_get",
         key_at: 1,
-        object: Some((
-            "getObject",
-            "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;",
-        )),
-        string: Some((
-            "getString",
-            "(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;",
-        )),
+        value_at: None,
+        owner: crate::types::MAP,
+        forms: &[
+            (
+                Unboxed::Object,
+                None,
+                "getObject",
+                "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;",
+            ),
+            (
+                Unboxed::String,
+                None,
+                "getString",
+                "(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;",
+            ),
+            (
+                Unboxed::Number,
+                None,
+                "getNumber",
+                "(Lnts/rt/NtsTable;D)Lnts/rt/NtsValue;",
+            ),
+        ],
     },
     Keyed {
         name: "nts_map_has",
         key_at: 1,
-        object: Some(("hasObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z")),
-        string: Some(("hasString", "(Lnts/rt/NtsTable;Ljava/lang/String;)Z")),
+        value_at: None,
+        owner: crate::types::MAP,
+        forms: &[
+            (
+                Unboxed::Object,
+                None,
+                "hasObject",
+                "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z",
+            ),
+            (
+                Unboxed::String,
+                None,
+                "hasString",
+                "(Lnts/rt/NtsTable;Ljava/lang/String;)Z",
+            ),
+            (Unboxed::Number, None, "hasNumber", "(Lnts/rt/NtsTable;D)Z"),
+        ],
+    },
+    Keyed {
+        name: "nts_map_delete",
+        key_at: 1,
+        value_at: None,
+        owner: crate::types::MAP,
+        forms: &[(
+            Unboxed::Number,
+            None,
+            "deleteNumber",
+            "(Lnts/rt/NtsTable;D)Z",
+        )],
     },
     Keyed {
         name: "nts_map_set",
         key_at: 1,
-        object: None,
-        string: Some((
-            "setString",
-            "(Lnts/rt/NtsMap;Ljava/lang/String;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
-        )),
+        value_at: Some(2),
+        owner: crate::types::MAP,
+        forms: &[
+            (
+                Unboxed::String,
+                None,
+                "setString",
+                "(Lnts/rt/NtsMap;Ljava/lang/String;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+            ),
+            (
+                Unboxed::Number,
+                None,
+                "setNumber",
+                "(Lnts/rt/NtsMap;DLnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+            ),
+            (
+                Unboxed::Number,
+                Some(Unboxed::Number),
+                "setNumber",
+                "(Lnts/rt/NtsMap;DD)Lnts/rt/NtsMap;",
+            ),
+        ],
+    },
+    Keyed {
+        name: "nts_set_add",
+        key_at: 1,
+        value_at: None,
+        owner: crate::types::SET,
+        forms: &[(
+            Unboxed::Number,
+            None,
+            "addNumber",
+            "(Lnts/rt/NtsSet;D)Lnts/rt/NtsSet;",
+        )],
     },
 ];
 
-/// Where the helper `name` takes its key, if it is one of those.
+fn keyed(name: &str) -> Option<&'static Keyed> {
+    KEYED.iter().find(|row| row.name == name)
+}
+
+/// The form of the helper `name` that takes its key as `key` and its value as
+/// `value`, `None` for a value passed boxed: the class, the member and its
+/// descriptor.
 #[must_use]
-pub(crate) fn key_at(name: &str) -> Option<usize> {
-    KEYED
+pub(crate) fn unboxed_form(
+    name: &str,
+    key: Unboxed,
+    value: Option<Unboxed>,
+) -> Option<(&'static str, &'static str, &'static str)> {
+    let row = keyed(name)?;
+    row.forms
         .iter()
-        .find(|row| row.name == name)
-        .map(|row| row.key_at)
+        .find(|form| form.0 == key && form.1 == value)
+        .map(|form| (row.owner, form.2, form.3))
 }
 
-/// The form of the helper `name` that takes a key of `kind` unboxed: the
-/// member and its descriptor.
+/// Where the helper `name` takes its key and, for one that stores a value,
+/// its value.
 #[must_use]
-pub(crate) fn unboxed_key_form(name: &str, kind: KeyKind) -> Option<(&'static str, &'static str)> {
-    let row = KEYED.iter().find(|row| row.name == name)?;
-    match kind {
-        KeyKind::Object => row.object,
-        KeyKind::String => row.string,
-    }
+pub(crate) fn operands_at(name: &str) -> Option<(usize, Option<usize>)> {
+    keyed(name).map(|row| (row.key_at, row.value_at))
 }
 
-/// Erasures of a reference whose every use is a key one of those helpers can
-/// take unboxed: the reference each one erases, and how it compares.
+/// Erasures whose every use is a key or a value one of those helpers can take
+/// unboxed: the value each one erases, and how it is held.
 ///
 /// # Why a string has a form of its own
 ///
@@ -209,9 +298,10 @@ pub(crate) fn unboxed_key_form(name: &str, kind: KeyKind) -> Option<(&'static st
 /// hot loop `find` and `insert` are "already compiled into a big method":
 /// `benchmarks/cases/record-word-counts` erases a string key 1,600 times a run,
 /// 38 KB at 24 bytes a box, of the 70,768 bytes it allocated against the Java
-/// reference's 15,408.
+/// reference's 15,408. A number key or value is the same box, and
+/// `map-and-set` built one per key and value it passed.
 #[must_use]
-pub(crate) fn unboxed_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, (ValueId, KeyKind)> {
+pub(crate) fn unboxed_operands(func: &Func) -> rustc_hash::FxHashMap<ValueId, (ValueId, Unboxed)> {
     let mut candidates = rustc_hash::FxHashMap::default();
     for (at, op) in func.values.iter().enumerate() {
         // **Only an erase that cannot be null.** This fuses an erasure into
@@ -228,8 +318,9 @@ pub(crate) fn unboxed_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, (Value
             continue;
         };
         let kind = match func.values.get(value.0 as usize).map(|it| &it.ty) {
-            Some(HirType::Managed(nts_core::hir::ManagedType::String)) => KeyKind::String,
-            Some(HirType::Managed(_)) => KeyKind::Object,
+            Some(HirType::Managed(nts_core::hir::ManagedType::String)) => Unboxed::String,
+            Some(HirType::Managed(_)) => Unboxed::Object,
+            Some(HirType::Float { bits: 64 }) => Unboxed::Number,
             _ => continue,
         };
         candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)), (value, kind));
@@ -239,8 +330,8 @@ pub(crate) fn unboxed_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, (Value
     }
 
     // Every use, or none -- `fused`'s rule, for the same reason: the box is not
-    // built, so a use that wants one has nothing to want. A key whose helper
-    // has no form for its kind wants the box too.
+    // built, so a use that wants one has nothing to want. An operand whose
+    // helper has no form for it wants the box too.
     //
     // **Live uses only**, as `hir::erased_uses` counts them: an op no block
     // holds is never emitted, so it wants nothing. Asking every value refused
@@ -248,40 +339,68 @@ pub(crate) fn unboxed_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, (Value
     // (tests/programs/a-record-keyed-by-strings-built-at-run-time), whose one
     // live use is `nts_map_has`.
     let mut refused = FxHashSet::default();
-    let live = func
-        .blocks
-        .iter()
-        .flat_map(|block| &block.ops)
-        .map(|value| &func.values[value.0 as usize]);
-    for op in live {
-        if let OpKind::Call {
-            callee: Callee::External(name),
-            args,
-            ..
-        } = &op.kind
-            && let Some(key) = key_at(name)
-        {
-            for (at, operand) in args.iter().enumerate() {
-                let Some(&(_, kind)) = candidates.get(operand) else {
-                    continue;
-                };
-                if at != key || unboxed_key_form(name, kind).is_none() {
-                    refused.insert(*operand);
-                }
-            }
-            continue;
-        }
-        for operand in operands_of(&op.kind) {
-            if candidates.contains_key(&operand) {
-                refused.insert(operand);
-            }
-        }
-    }
     for block in &func.blocks {
         for operand in nts_core::hir::operands_of_terminator(&block.terminator) {
             if candidates.contains_key(&operand) {
                 refused.insert(operand);
             }
+        }
+    }
+    let live: Vec<&nts_core::hir::Op> = func
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .map(|value| &func.values[value.0 as usize])
+        .collect();
+    // **Until nothing more is refused**, because whether a value goes unboxed
+    // depends on its call's key: there is no form for a boxed key and an
+    // unboxed value, so refusing a key at one call refuses the value beside
+    // it, and that value may be an erasure another call shares. Refusals only
+    // grow, so this ends.
+    loop {
+        let before = refused.len();
+        for op in &live {
+            if let OpKind::Call {
+                callee: Callee::External(name),
+                args,
+                ..
+            } = &op.kind
+                && let Some((key_at, value_at)) = operands_at(name)
+            {
+                let held = |at: usize| {
+                    args.get(at)
+                        .filter(|operand| !refused.contains(*operand))
+                        .and_then(|operand| candidates.get(operand))
+                        .map(|&(_, kind)| kind)
+                };
+                let key = held(key_at);
+                let value = value_at.and_then(held);
+                let (key_kept, value_kept) = match key {
+                    Some(key) if unboxed_form(name, key, value).is_some() => {
+                        (true, value.is_some())
+                    }
+                    Some(key) if unboxed_form(name, key, None).is_some() => (true, false),
+                    _ => (false, false),
+                };
+                for (at, operand) in args.iter().enumerate() {
+                    if !candidates.contains_key(operand) {
+                        continue;
+                    }
+                    let kept = (at == key_at && key_kept) || (Some(at) == value_at && value_kept);
+                    if !kept {
+                        refused.insert(*operand);
+                    }
+                }
+                continue;
+            }
+            for operand in operands_of(&op.kind) {
+                if candidates.contains_key(&operand) {
+                    refused.insert(operand);
+                }
+            }
+        }
+        if refused.len() == before {
+            break;
         }
     }
     candidates.retain(|value, _| !refused.contains(value));

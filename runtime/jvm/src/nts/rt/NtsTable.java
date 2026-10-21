@@ -6,8 +6,40 @@ import java.util.Arrays;
  * Insertion-ordered SameValueZero table. The double-valued public ABI is unchanged.
  *
  * <p>The open-addressed index contains a cached hash and an insertion slot, not
- * boxed keys, boxed slots or HashMap nodes. A null key slot is a deletion hole;
- * Java null is not a valid NtsValue (JS null is NtsValue.NULL_VALUE).
+ * boxed keys, boxed slots or HashMap nodes. Java null is not a valid NtsValue
+ * (JS null is NtsValue.NULL_VALUE).
+ *
+ * <p>**Keys and values are each one column, and a number column holds bare
+ * doubles.** A table the program types `Map<number, V>` or `Set<number>` keeps
+ * its keys in {@link #numberKeys}, and a `Map<number, number>` its values in
+ * {@link #numberValues}; every other table keeps {@link NtsValue} boxes in
+ * {@link #keys} and {@link #values}, and exactly one of each pair is non-null.
+ * The emitter picks the columns at construction from the table's static type
+ * (`ops::table_constructor`), and its doors take a number key or value
+ * unboxed (`fuse::unboxed_operands`). An erased box per entry was 62% of
+ * `map-and-set`'s bytes, and a box built at the call site to pass a key was
+ * allocated whether or not the table kept it: {@link #find} and
+ * {@link #slotFor} do not inline into a hot loop, so it escaped into them.
+ *
+ * <p>**A number column is a storage choice, never a promise the table relies
+ * on.** TypeScript's method bivariance lets a `Map<number, number>` be passed
+ * as a `Map<unknown, unknown>` and handed a string, so the boxed entry points
+ * take any key and value into any table: one that does not fit a number column
+ * turns that column into boxes ({@link #eraseKeys}, {@link #eraseValues}),
+ * once and for good, and each door falls back to its boxed form on a table
+ * whose column is boxed. So no answer depends on which constructor ran.
+ *
+ * <p>A hole -- a deleted entry -- is a null key in a boxed key column, and a
+ * set mark in {@link #dead} in a number one, which has no null to spare and
+ * allocates the marks at its first deletion. A Set has no value column at
+ * all -- neither {@link #values} nor {@link #numberValues} -- and its value is
+ * its key.
+ *
+ * <p>**A boxed table pays nothing for the other layout.** Each test of the
+ * layout reads the boxed column first, through the field the access then
+ * loads anyway, so its null test is the one the array access makes: a first
+ * version tested the number fields first, and `map-entries-top-k` ran at
+ * 1.058 of main in a paired run, 1.001 with the boxed column read first.
  *
  * <p>Cursors are absolute insertion positions. base lets clear() and removal of
  * an all-dead prefix reuse storage without invalidating outstanding cursors.
@@ -16,6 +48,7 @@ import java.util.Arrays;
  */
 public abstract class NtsTable {
     private static final NtsValue[] EMPTY_VALUES = new NtsValue[0];
+    private static final double[] EMPTY_NUMBERS = new double[0];
     private static final long[] EMPTY_INDEX = new long[0];
     private static final NtsValue ZERO_KEY = NtsValue.ofNumber(0.0);
     /**
@@ -37,8 +70,16 @@ public abstract class NtsTable {
     private static final int LINEAR_LIMIT = 8;
     private static final int MAX_ARRAY = Integer.MAX_VALUE - 8;
 
-    NtsValue[] keys = EMPTY_VALUES;
-    NtsValue[] values = EMPTY_VALUES;
+    /** The keys as boxes, or null where they are {@link #numberKeys}. */
+    NtsValue[] keys;
+    /** The keys as numbers, `-0` stored as `+0`, or null where they are {@link #keys}. */
+    double[] numberKeys;
+    /** The values as boxes, or null where they are {@link #numberValues} or this is a Set. */
+    NtsValue[] values;
+    /** The values as numbers, or null where they are {@link #values} or this is a Set. */
+    double[] numberValues;
+    /** A number key column's holes, one mark per slot; null until its first deletion. */
+    private boolean[] dead;
     // Upper 32 bits: hash. Lower 32 bits: local slot + 1. Zero: empty.
     private long[] buckets = EMPTY_INDEX;
     int used;
@@ -46,6 +87,14 @@ public abstract class NtsTable {
     int head;
     private int base;
     private int threshold;
+
+    /** A Map's columns, or with {@code valued} false a Set's, which has no value column. */
+    NtsTable(boolean numberKeys, boolean numberValues, boolean valued) {
+        if (numberKeys) { this.numberKeys = EMPTY_NUMBERS; } else { this.keys = EMPTY_VALUES; }
+        if (valued) {
+            if (numberValues) { this.numberValues = EMPTY_NUMBERS; } else { this.values = EMPTY_VALUES; }
+        }
+    }
 
     public static double size(NtsTable map) { return map.count; }
 
@@ -168,8 +217,7 @@ public abstract class NtsTable {
 
 
     public static NtsValue get(NtsTable map, NtsValue key) {
-        int at = map.find(key);
-        return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];
+        return map.valueOrUndefined(map.find(key));
     }
 
     public static boolean has(NtsTable map, NtsValue key) {
@@ -177,22 +225,77 @@ public abstract class NtsTable {
     }
 
     static void insert(NtsTable map, NtsValue key, NtsValue value) {
+        map.store(map.slotFor(key), value);
+    }
+
+    /**
+     * The value at {@code at}, or undefined where {@code at} is -1.
+     *
+     * <p>**A number column's answer is built at one site**, its fields chosen
+     * first. Where a hot caller reads the answer straight back -- its tag for
+     * `?? 0`, its number -- C2 inlines this and takes the box apart, and it
+     * does so only for an allocation nothing merges with: returning
+     * `UNDEFINED_VALUE` on one arm and a new box on the other is a merge, and
+     * HotSpot 21 kept every such box, 4,608 bytes an operation in a probe of
+     * 192 reads where this shape measured zero. The boxed columns return what
+     * they hold, as before.
+     *
+     * <p>**Under 35 bytes of bytecode, with the number arm a method of its
+     * own**, as {@link #store} is. 35 is `MaxInlineSize`, what C2 inlines at a
+     * call site that is not hot, and the door this replaced was 23 bytes, so
+     * a boxed read inlines wherever it did. Measured neutral on the five
+     * table rows, which read at hot sites; what had cost `record-word-counts`
+     * was {@link #insertString}'s miss path.
+     */
+    private NtsValue valueOrUndefined(int at) {
+        NtsValue[] boxes = values;
+        if (boxes == null) { return unboxedValueOrUndefined(at); }
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : boxes[at];
+    }
+
+    /** {@link #valueOrUndefined} for a number value column, or a Set's, whose value is its key. */
+    private NtsValue unboxedValueOrUndefined(int at) {
+        double[] numbers = numberValues;
+        if (numbers == null) { return keyOrUndefined(at); }
+        boolean found = at >= 0;
+        return NtsValue.numberOrUndefined(found, found ? numbers[at] : 0.0);
+    }
+
+    /** The key at {@code at}, or undefined where {@code at} is -1; see {@link #valueOrUndefined}. */
+    private NtsValue keyOrUndefined(int at) {
+        NtsValue[] boxes = keys;
+        if (boxes == null) { return numberKeyOrUndefined(at); }
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : boxes[at];
+    }
+
+    private NtsValue numberKeyOrUndefined(int at) {
+        boolean found = at >= 0;
+        return NtsValue.numberOrUndefined(found, found ? numberKeys[at] : 0.0);
+    }
+
+    /**
+     * The slot holding {@code key}, appended where there is none.
+     *
+     * <p>An appended slot's value is unwritten: every caller stores one with
+     * {@link #store} or {@link #storeNumber}, which is the other half of a
+     * `set`, and which a Set ignores. A key that is not a number turns a number
+     * key column into boxes first.
+     */
+    int slotFor(NtsValue key) {
         if (key == null) { throw new NullPointerException("NtsValue key"); }
-        long[] table = map.buckets;
+        if (keys == null) {
+            if (key.tag == NtsValue.NUMBER) { return slotForNumber(key.num); }
+            eraseKeys();
+        }
+        long[] table = buckets;
         if (table.length == 0) {
-            int existing = map.findLinear(key);
-            if (existing >= 0) {
-                map.values[existing] = value;
-                return;
-            }
-            map.reserveEntry();
+            int existing = findLinear(key);
+            if (existing >= 0) { return existing; }
+            reserveEntry();
             // Bound the historical scan as well as the live size.
-            if (map.used - map.head < LINEAR_LIMIT) {
-                map.append(key, value);
-                return;
-            }
-            map.rehash(16);
-            table = map.buckets;
+            if (used - head < LINEAR_LIMIT) { return append(key); }
+            rehash(16);
+            table = buckets;
         }
         int h = hash(key);
         int mask = table.length - 1;
@@ -200,35 +303,167 @@ public abstract class NtsTable {
         long cell;
         while ((cell = table[p]) != 0L) {
             int slot = (int) cell - 1;
-            if ((int) (cell >>> 32) == h && sameKey(map.keys[slot], key)) {
-                map.values[slot] = value;
-                return;
-            }
+            if ((int) (cell >>> 32) == h && sameKey(keys[slot], key)) { return slot; }
             p = (p + 1) & mask;
         }
-        map.reserveEntry();
-        if (map.count >= map.threshold) {
-            if (table.length >= (1 << 30)) {
-                throw new OutOfMemoryError("map index capacity exhausted");
-            }
-            map.rehash(table.length << 1);
-            table = map.buckets;
-            mask = table.length - 1;
-            p = h & mask;
-            while (table[p] != 0L) { p = (p + 1) & mask; }
-        }
+        reserveEntry();
+        p = growIndex(h, p);
         // Prefix reclamation changes slots, not hash bucket positions.
-        int slot = map.used;
-        map.append(key, value);
-        table[p] = cell(h, slot);
-        return;
+        int slot = append(key);
+        buckets[p] = cell(h, slot);
+        return slot;
     }
 
-    private void append(NtsValue key, NtsValue value) {
+    /** {@link #slotFor} for a number key, unboxed. */
+    int slotForNumber(double key) {
+        if (numberKeys == null) { return slotFor(NtsValue.ofNumber(key)); }
+        long[] table = buckets;
+        if (table.length == 0) {
+            int existing = findNumber(key);
+            if (existing >= 0) { return existing; }
+            reserveEntry();
+            if (used - head < LINEAR_LIMIT) { return appendNumber(key); }
+            rehash(16);
+            table = buckets;
+        }
+        int h = hashNumber(key);
+        int mask = table.length - 1;
+        int p = h & mask;
+        long cell;
+        while ((cell = table[p]) != 0L) {
+            int slot = (int) cell - 1;
+            if ((int) (cell >>> 32) == h && sameNumber(numberKeys[slot], key)) { return slot; }
+            p = (p + 1) & mask;
+        }
+        reserveEntry();
+        p = growIndex(h, p);
+        int slot = appendNumber(key);
+        buckets[p] = cell(h, slot);
+        return slot;
+    }
+
+    /**
+     * The empty bucket at {@code p} for an entry of hash {@code h} about to be
+     * appended, or the one it moves to when the index first grows.
+     */
+    private int growIndex(int h, int p) {
+        if (count < threshold) { return p; }
+        if (buckets.length >= (1 << 30)) {
+            throw new OutOfMemoryError("map index capacity exhausted");
+        }
+        rehash(buckets.length << 1);
+        int mask = buckets.length - 1;
+        p = h & mask;
+        while (buckets[p] != 0L) { p = (p + 1) & mask; }
+        return p;
+    }
+
+    private int append(NtsValue key) {
         keys[used] = canonicalKey(key);
-        values[used] = value;
-        used++;
         count++;
+        return used++;
+    }
+
+    private int appendNumber(double key) {
+        numberKeys[used] = key == 0.0 ? 0.0 : key;
+        // A slot past `used` may carry a mark from an entry deleted before
+        // the table emptied or was cleared; the append is what clears it.
+        if (dead != null) { dead[used] = false; }
+        count++;
+        return used++;
+    }
+
+    /**
+     * Store the value of a `set` in {@code slot}. Small enough to inline at any
+     * call site, as {@link #valueOrUndefined} is, so the boxed column costs
+     * what it did before there was another.
+     */
+    void store(int slot, NtsValue value) {
+        NtsValue[] boxes = values;
+        if (boxes == null) {
+            storeUnboxed(slot, value);
+            return;
+        }
+        boxes[slot] = value;
+    }
+
+    /** {@link #store} into a number value column, which a value that is not a number turns into boxes, or a Set's none. */
+    private void storeUnboxed(int slot, NtsValue value) {
+        if (numberValues == null) { return; }
+        if (value.tag != NtsValue.NUMBER) {
+            eraseValues();
+            values[slot] = value;
+            return;
+        }
+        numberValues[slot] = value.num;
+    }
+
+    /** {@link #store} for a number value, unboxed. */
+    void storeNumber(int slot, double value) {
+        if (numberValues != null) {
+            numberValues[slot] = value;
+        } else if (values != null) {
+            values[slot] = NtsValue.ofNumber(value);
+        }
+    }
+
+    /** The number key column as boxes, for a key that is not a number. */
+    private void eraseKeys() {
+        double[] numbers = numberKeys;
+        NtsValue[] boxes = new NtsValue[numbers.length];
+        for (int slot = head; slot < used; slot++) {
+            if (!hole(slot)) { boxes[slot] = NtsValue.ofNumber(numbers[slot]); }
+        }
+        keys = boxes;
+        numberKeys = null;
+        dead = null;
+    }
+
+    /** The number value column as boxes, for a value that is not a number. */
+    private void eraseValues() {
+        double[] numbers = numberValues;
+        NtsValue[] boxes = new NtsValue[numbers.length];
+        for (int slot = head; slot < used; slot++) {
+            if (!hole(slot)) { boxes[slot] = NtsValue.ofNumber(numbers[slot]); }
+        }
+        values = boxes;
+        numberValues = null;
+    }
+
+    /** Whether {@code slot}, below {@code used}, is a deleted entry's. */
+    private boolean hole(int slot) {
+        NtsValue[] boxes = keys;
+        return boxes != null ? boxes[slot] == null : dead != null && dead[slot];
+    }
+
+    private int capacity() {
+        NtsValue[] boxes = keys;
+        return boxes != null ? boxes.length : numberKeys.length;
+    }
+
+    /** The hash of the key in {@code slot}, from whichever column holds it. */
+    private int slotHash(int slot) {
+        NtsValue[] boxes = keys;
+        return boxes != null ? hash(boxes[slot]) : hashNumber(numberKeys[slot]);
+    }
+
+    /**
+     * Every live entry of {@code from} set into {@code into}, in entry order,
+     * each column read as it is held: what `copy` and `extend` do, for any two
+     * column layouts.
+     */
+    static void copyEntries(NtsTable from, NtsTable into) {
+        for (int slot = from.head; slot < from.used; slot++) {
+            if (from.hole(slot)) { continue; }
+            int at = from.keys != null
+                ? into.slotFor(from.keys[slot])
+                : into.slotForNumber(from.numberKeys[slot]);
+            if (from.numberValues != null) {
+                into.storeNumber(at, from.numberValues[slot]);
+            } else if (from.values != null) {
+                into.store(at, from.values[slot]);
+            }
+        }
     }
 
     static NtsValue canonicalKey(NtsValue key) {
@@ -237,6 +472,7 @@ public abstract class NtsTable {
 
     private int find(NtsValue key) {
         if (key == null) { throw new NullPointerException("NtsValue key"); }
+        if (keys == null) { return key.tag == NtsValue.NUMBER ? findNumber(key.num) : -1; }
         if (count == 0) { return -1; }
         if (buckets.length == 0) { return findLinear(key); }
         int h = hash(key);
@@ -261,35 +497,84 @@ public abstract class NtsTable {
         return -1;
     }
 
-    public static boolean delete(NtsTable map, NtsValue key) {
-        if (key == null) { throw new NullPointerException("NtsValue key"); }
-        if (map.count == 0) { return false; }
-        int slot;
-        if (map.buckets.length == 0) {
-            slot = map.findLinear(key);
-            if (slot < 0) { return false; }
-        } else {
-            int h = hash(key);
-            int mask = map.buckets.length - 1;
-            int p = h & mask;
-            for (;;) {
-                long cell = map.buckets[p];
-                if (cell == 0L) { return false; }
-                slot = (int) cell - 1;
-                if ((int) (cell >>> 32) == h && sameKey(map.keys[slot], key)) { break; }
-                p = (p + 1) & mask;
+    /**
+     * {@link #find} in a number key column, for a key that has not been boxed.
+     *
+     * <p>A deleted slot keeps its number, so the scan asks {@link #hole} of a
+     * match; the index drops a deleted slot's bucket and needs no such test.
+     */
+    private int findNumber(double key) {
+        if (count == 0) { return -1; }
+        double[] column = numberKeys;
+        if (buckets.length == 0) {
+            for (int i = head; i < used; i++) {
+                if (sameNumber(column[i], key) && !hole(i)) { return i; }
             }
-            map.removeBucket(p);
+            return -1;
         }
-        map.keys[slot] = null;
-        map.values[slot] = null;
-        if (--map.count == 0) {
-            map.base += map.used;
-            map.used = map.head = 0;
-        } else if (slot == map.head) {
-            do { map.head++; } while (map.head < map.used && map.keys[map.head] == null);
+        int h = hashNumber(key);
+        int mask = buckets.length - 1;
+        int p = h & mask;
+        for (;;) {
+            long cell = buckets[p];
+            if (cell == 0L) { return -1; }
+            int slot = (int) cell - 1;
+            if ((int) (cell >>> 32) == h && sameNumber(column[slot], key)) { return slot; }
+            p = (p + 1) & mask;
+        }
+    }
+
+    /** The slot of a number key in any table: unboxed in a number key column, boxed in another. */
+    private int findNumberKey(double key) {
+        return keys == null ? findNumber(key) : find(NtsValue.ofNumber(key));
+    }
+
+    public static boolean delete(NtsTable map, NtsValue key) {
+        return map.remove(map.find(key));
+    }
+
+    /** Delete the entry at {@code slot}, answering whether there was one: false for -1. */
+    private boolean remove(int slot) {
+        if (slot < 0) { return false; }
+        if (buckets.length != 0) { unlink(slot); }
+        if (keys != null) {
+            keys[slot] = null;
+        } else {
+            if (dead == null) { dead = new boolean[numberKeys.length]; }
+            dead[slot] = true;
+        }
+        if (values != null) { values[slot] = null; }
+        if (--count == 0) {
+            base += used;
+            used = head = 0;
+        } else if (slot == head) {
+            do { head++; } while (head < used && hole(head));
         }
         return true;
+    }
+
+    /** Drop the bucket that indexes {@code slot}, found by its key's hash. */
+    private void unlink(int slot) {
+        int mask = buckets.length - 1;
+        int p = slotHash(slot) & mask;
+        long indexed = slot + 1L;
+        while ((buckets[p] & 0xffffffffL) != indexed) { p = (p + 1) & mask; }
+        removeBucket(p);
+    }
+
+    /** {@code m.get(k)} for a number key, unboxed; see {@link #valueOrUndefined} for the answer. */
+    public static NtsValue getNumber(NtsTable map, double key) {
+        return map.valueOrUndefined(map.findNumberKey(key));
+    }
+
+    /** {@code m.has(k)} for a number key, unboxed. */
+    public static boolean hasNumber(NtsTable map, double key) {
+        return map.findNumberKey(key) >= 0;
+    }
+
+    /** {@code m.delete(k)} for a number key, unboxed. */
+    public static boolean deleteNumber(NtsTable map, double key) {
+        return map.remove(map.findNumberKey(key));
     }
 
     /** Close the probe cluster: there are no accumulating index tombstones. */
@@ -310,8 +595,10 @@ public abstract class NtsTable {
 
     public static void clear(NtsTable map) {
         if (map.count == 0) { return; }
-        Arrays.fill(map.keys, map.head, map.used, null);
-        Arrays.fill(map.values, map.head, map.used, null);
+        // A number column's slots and marks need no clearing: an append
+        // writes its key and clears its mark.
+        if (map.keys != null) { Arrays.fill(map.keys, map.head, map.used, null); }
+        if (map.values != null) { Arrays.fill(map.values, map.head, map.used, null); }
         Arrays.fill(map.buckets, 0L);
         map.base += map.used;
         map.used = map.count = map.head = 0;
@@ -342,43 +629,70 @@ public abstract class NtsTable {
      * zero, and a table of zeroes is a wrong answer `typeof` agrees with all
      * the way down -- so a broken proof is loud, at one compare per element.
      *
-     * <p>A hole is a null key, for the value as well: a deletion clears both.
+     * <p>A hole is a deleted key's slot, for the value as well. A number
+     * column with none between `head` and `used` -- a table nothing was
+     * deleted from -- is one `arraycopy`, as Wasm's fill is one `array.copy`.
      */
-    public static void keysInto(NtsTable map, double[] out) { numbersInto(map, map.keys, out); }
-    public static void valuesInto(NtsTable map, double[] out) { numbersInto(map, map.values, out); }
-    public static void keysInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.keys, out.items); }
-    public static void valuesInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.values, out.items); }
-    public static void keysInto(NtsTable map, boolean[] out) { booleansInto(map, map.keys, out); }
-    public static void valuesInto(NtsTable map, boolean[] out) { booleansInto(map, map.values, out); }
-    public static void keysInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.keys, out.items); }
-    public static void valuesInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.values, out.items); }
+    public static void keysInto(NtsTable map, double[] out) { numbersInto(map, map.numberKeys, map.keys, out); }
+    public static void valuesInto(NtsTable map, double[] out) { numbersInto(map, map.valueNumbers(), map.valueBoxes(), out); }
+    public static void keysInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.numberKeys, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayD out) { numbersInto(map, map.valueNumbers(), map.valueBoxes(), out.items); }
+    public static void keysInto(NtsTable map, boolean[] out) { booleansInto(map, map.numberKeys, map.keys, out); }
+    public static void valuesInto(NtsTable map, boolean[] out) { booleansInto(map, map.valueNumbers(), map.valueBoxes(), out); }
+    public static void keysInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.numberKeys, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayZ out) { booleansInto(map, map.valueNumbers(), map.valueBoxes(), out.items); }
     /** A reference array of any class: an element the table holds is of it. */
-    public static void keysInto(NtsTable map, Object[] out) { referencesInto(map, map.keys, out); }
-    public static void valuesInto(NtsTable map, Object[] out) { referencesInto(map, map.values, out); }
-    public static void keysInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.keys, out.items); }
-    public static void valuesInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.values, out.items); }
+    public static void keysInto(NtsTable map, Object[] out) { referencesInto(map, map.numberKeys, map.keys, out); }
+    public static void valuesInto(NtsTable map, Object[] out) { referencesInto(map, map.valueNumbers(), map.valueBoxes(), out); }
+    public static void keysInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.numberKeys, map.keys, out.items); }
+    public static void valuesInto(NtsTable map, NtsArrayL out) { referencesInto(map, map.valueNumbers(), map.valueBoxes(), out.items); }
     /** Erased elements: the boxes themselves, `-0` already stored as `+0`. */
-    public static void keysIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.keys, out); }
-    public static void valuesIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.values, out); }
-    public static void keysIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.keys, out.items); }
-    public static void valuesIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.values, out.items); }
+    public static void keysIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.numberKeys, map.keys, out); }
+    public static void valuesIntoErased(NtsTable map, NtsValue[] out) { boxesInto(map, map.valueNumbers(), map.valueBoxes(), out); }
+    public static void keysIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.numberKeys, map.keys, out.items); }
+    public static void valuesIntoErased(NtsTable map, NtsArrayL out) { boxesInto(map, map.valueNumbers(), map.valueBoxes(), out.items); }
 
-    private static void numbersInto(NtsTable map, NtsValue[] from, double[] out) {
+    /** Whether this has a value column: a Set has none, and its values are its keys. */
+    private boolean valued() { return values != null || numberValues != null; }
+
+    /** The value column as numbers, or null; a Set's values are its keys. */
+    private double[] valueNumbers() { return valued() ? numberValues : numberKeys; }
+
+    /** The value column as boxes, or null; a Set's values are its keys. */
+    private NtsValue[] valueBoxes() { return valued() ? values : keys; }
+
+    /** Each copy below takes a column both ways, as numbers or as boxes, exactly one of them non-null. */
+    private static void numbersInto(NtsTable map, double[] numbers, NtsValue[] boxes, double[] out) {
+        if (numbers != null) {
+            if (map.count == map.used - map.head) {
+                System.arraycopy(numbers, map.head, out, 0, Math.min(map.count, out.length));
+                return;
+            }
+            int at = 0;
+            for (int slot = map.head; slot < map.used && at < out.length; slot++) {
+                if (!map.hole(slot)) { out[at++] = numbers[slot]; }
+            }
+            return;
+        }
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
-            if (map.keys[slot] == null) { continue; }
-            NtsValue part = from[slot];
-            if (part.tag != NtsValue.NUMBER) { throw misread("numeric", part); }
+            if (map.hole(slot)) { continue; }
+            NtsValue part = boxes[slot];
+            if (part.tag != NtsValue.NUMBER) { throw misread("numeric", part.tag); }
             out[at++] = part.num;
         }
     }
 
-    private static void booleansInto(NtsTable map, NtsValue[] from, boolean[] out) {
+    private static void booleansInto(NtsTable map, double[] numbers, NtsValue[] boxes, boolean[] out) {
+        if (numbers != null) {
+            if (map.count > 0) { throw misread("boolean", NtsValue.NUMBER); }
+            return;
+        }
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
-            if (map.keys[slot] == null) { continue; }
-            NtsValue part = from[slot];
-            if (part.tag != NtsValue.BOOLEAN) { throw misread("boolean", part); }
+            if (map.hole(slot)) { continue; }
+            NtsValue part = boxes[slot];
+            if (part.tag != NtsValue.BOOLEAN) { throw misread("boolean", part.tag); }
             out[at++] = part.num != 0.0;
         }
     }
@@ -387,26 +701,30 @@ public abstract class NtsTable {
      * A null or undefined entry is the null reference, as a reference element
      * holds either; a number or a boolean has no reference to copy.
      */
-    private static void referencesInto(NtsTable map, NtsValue[] from, Object[] out) {
+    private static void referencesInto(NtsTable map, double[] numbers, NtsValue[] boxes, Object[] out) {
+        if (numbers != null) {
+            if (map.count > 0) { throw misread("reference", NtsValue.NUMBER); }
+            return;
+        }
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
-            if (map.keys[slot] == null) { continue; }
-            NtsValue part = from[slot];
-            if (part.tag == NtsValue.NUMBER || part.tag == NtsValue.BOOLEAN) { throw misread("reference", part); }
+            if (map.hole(slot)) { continue; }
+            NtsValue part = boxes[slot];
+            if (part.tag == NtsValue.NUMBER || part.tag == NtsValue.BOOLEAN) { throw misread("reference", part.tag); }
             out[at++] = part.ref;
         }
     }
 
-    private static void boxesInto(NtsTable map, NtsValue[] from, Object[] out) {
+    private static void boxesInto(NtsTable map, double[] numbers, NtsValue[] boxes, Object[] out) {
         int at = 0;
         for (int slot = map.head; slot < map.used && at < out.length; slot++) {
-            if (map.keys[slot] == null) { continue; }
-            out[at++] = from[slot];
+            if (map.hole(slot)) { continue; }
+            out[at++] = numbers != null ? NtsValue.ofNumber(numbers[slot]) : boxes[slot];
         }
     }
 
-    private static NtsRefusal misread(String width, NtsValue part) {
-        return new NtsRefusal("a bulk " + width + " read over a collection holding an entry of tag " + part.tag);
+    private static NtsRefusal misread(String width, int tag) {
+        return new NtsRefusal("a bulk " + width + " read over a collection holding an entry of tag " + tag);
     }
 
     /**
@@ -420,7 +738,7 @@ public abstract class NtsTable {
         if (from < 0 || map.count == 0) { return -1; }
         int at = from <= map.base ? map.head : Math.max(map.head, from - map.base);
         while (at < map.used) {
-            if (map.keys[at] != null) { return map.base + at; }
+            if (!map.hole(at)) { return map.base + at; }
             at++;
         }
         return -1;
@@ -428,18 +746,19 @@ public abstract class NtsTable {
 
     /** Read the key at a live absolute cursor, or undefined if it is dead. */
     public static NtsValue keyAtI(NtsTable map, int absolute) {
-        if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
-        int slot = absolute - map.base;
-        if (slot >= map.used || map.keys[slot] == null) { return NtsValue.UNDEFINED_VALUE; }
-        return map.keys[slot];
+        return map.keyOrUndefined(map.liveSlot(absolute));
     }
 
     /** Read the value at a live absolute cursor, or undefined if it is dead. */
     public static NtsValue valueAtI(NtsTable map, int absolute) {
-        if (absolute < map.base) { return NtsValue.UNDEFINED_VALUE; }
-        int slot = absolute - map.base;
-        if (slot >= map.used || map.keys[slot] == null) { return NtsValue.UNDEFINED_VALUE; }
-        return map.values[slot];
+        return map.valueOrUndefined(map.liveSlot(absolute));
+    }
+
+    /** The slot of a live absolute cursor, or -1 for a dead one. */
+    private int liveSlot(int absolute) {
+        if (absolute < base) { return -1; }
+        int slot = absolute - base;
+        return slot < used && !hole(slot) ? slot : -1;
     }
 
     private void reserveEntry() {
@@ -449,14 +768,23 @@ public abstract class NtsTable {
         if ((long) base + used >= MAX_ARRAY) {
             throw new OutOfMemoryError("map insertion cursor space exhausted");
         }
-        if (used < keys.length) { return; }
+        if (used < capacity()) { return; }
         if (head > 0) {
             int removed = head;
             int retained = used - removed;
-            System.arraycopy(keys, removed, keys, 0, retained);
-            System.arraycopy(values, removed, values, 0, retained);
-            Arrays.fill(keys, retained, used, null);
-            Arrays.fill(values, retained, used, null);
+            if (keys != null) {
+                System.arraycopy(keys, removed, keys, 0, retained);
+                Arrays.fill(keys, retained, used, null);
+            } else {
+                System.arraycopy(numberKeys, removed, numberKeys, 0, retained);
+                if (dead != null) { System.arraycopy(dead, removed, dead, 0, retained); }
+            }
+            if (values != null) {
+                System.arraycopy(values, removed, values, 0, retained);
+                Arrays.fill(values, retained, used, null);
+            } else if (numberValues != null) {
+                System.arraycopy(numberValues, removed, numberValues, 0, retained);
+            }
             base += removed;
             used = retained;
             head = 0;
@@ -468,10 +796,14 @@ public abstract class NtsTable {
             }
             return;
         }
-        int capacity = keys.length == 0 ? 4 : (int) Math.min((long) keys.length * 2, MAX_ARRAY);
+        int now = capacity();
+        int capacity = now == 0 ? 4 : (int) Math.min((long) now * 2, MAX_ARRAY);
         if (capacity <= used) { throw new OutOfMemoryError("map storage capacity exhausted"); }
-        keys = Arrays.copyOf(keys, capacity);
-        values = Arrays.copyOf(values, capacity);
+        if (keys != null) { keys = Arrays.copyOf(keys, capacity); }
+        else { numberKeys = Arrays.copyOf(numberKeys, capacity); }
+        if (dead != null) { dead = Arrays.copyOf(dead, capacity); }
+        if (values != null) { values = Arrays.copyOf(values, capacity); }
+        else if (numberValues != null) { numberValues = Arrays.copyOf(numberValues, capacity); }
     }
 
     private void rehash(int capacity) {
@@ -479,8 +811,8 @@ public abstract class NtsTable {
         int mask = capacity - 1;
         if (buckets.length == 0) {
             for (int slot = head; slot < used; slot++) {
-                if (keys[slot] == null) { continue; }
-                int h = hash(keys[slot]);
+                if (hole(slot)) { continue; }
+                int h = slotHash(slot);
                 int p = h & mask;
                 while (replacement[p] != 0L) { p = (p + 1) & mask; }
                 replacement[p] = cell(h, slot);
@@ -506,7 +838,7 @@ public abstract class NtsTable {
         if (a.tag != b.tag) { return false; }
         switch (a.tag) {
             case NtsValue.NUMBER:
-                return a.num == b.num || (a.num != a.num && b.num != b.num);
+                return sameNumber(a.num, b.num);
             case NtsValue.BOOLEAN:
                 return (a.num != 0.0) == (b.num != 0.0);
             case NtsValue.STRING:
@@ -519,6 +851,44 @@ public abstract class NtsTable {
             default:
                 return a.ref == b.ref;
         }
+    }
+
+    /**
+     * SameValueZero between two numbers: `NaN` is one key, whatever its bits,
+     * and `-0` is `+0`, which `==` already says.
+     */
+    private static boolean sameNumber(double a, double b) {
+        return a == b || (a != a && b != b);
+    }
+
+    /**
+     * The hash of a number key, boxed or not: {@link #hash} sends a `NUMBER`
+     * here, so a key stored unboxed and looked up boxed -- or a column turned
+     * into boxes under its index -- hashes alike. `doubleToLongBits` answers
+     * one pattern for every `NaN`, as {@link #sameNumber} makes them one key,
+     * and `-0` hashes as `+0`.
+     */
+    private static int hashNumber(double key) {
+        long bits = Double.doubleToLongBits(key == 0.0 ? 0.0 : key);
+        return mix((int) (bits ^ (bits >>> 32)));
+    }
+
+    /**
+     * One multiply, and no tag mix. A profile of `map-and-set` put 20% of the
+     * row in hashing -- not from collisions, which were already 1.43 probes
+     * against an ideal 1.00, but from its cost, against a reference whose
+     * `Integer.hashCode` is `return value`.
+     *
+     * <p>The tag does not need mixing in: `sameKey` separates a number from a
+     * string that hashes the same, so the tag only has to affect
+     * *distribution*, and in a table whose keys are all one tag it affects
+     * nothing. Dropping it and one of the two multiplies measured **better**
+     * spread, not worse -- 1.17 probes and 226 distinct low-9 bits against
+     * 194 -- on integer keys, fractional keys and negative keys alike.
+     */
+    private static int mix(int h) {
+        h *= 0x9e3779b1;
+        return h ^ (h >>> 16);
     }
 
     /**
@@ -568,8 +938,7 @@ public abstract class NtsTable {
         int h = ref instanceof NtsBigInt
             ? Long.hashCode(((NtsBigInt) ref).hi) * 31 + Long.hashCode(((NtsBigInt) ref).lo)
             : System.identityHashCode(ref);
-        h *= 0x9e3779b1;
-        return h ^ (h >>> 16);
+        return mix(h);
     }
 
     /**
@@ -590,10 +959,12 @@ public abstract class NtsTable {
     private int findObject(Object key) {
         if (key == null) { return find(NtsValue.NULL_VALUE); }
         if (key instanceof NtsBigInt) { return find(NtsValue.ofBigInt((NtsBigInt) key)); }
-        if (count == 0) { return -1; }
+        // A number key column holds nothing else.
+        NtsValue[] column = keys;
+        if (count == 0 || column == null) { return -1; }
         if (buckets.length == 0) {
             for (int i = head; i < used; i++) {
-                NtsValue candidate = keys[i];
+                NtsValue candidate = column[i];
                 if (candidate != null && keyedByIdentity(candidate.tag) && candidate.ref == key) {
                     return i;
                 }
@@ -607,7 +978,7 @@ public abstract class NtsTable {
             long cell = buckets[p];
             if (cell == 0L) { return -1; }
             int slot = (int) cell - 1;
-            NtsValue candidate = keys[slot];
+            NtsValue candidate = column[slot];
             if ((int) (cell >>> 32) == h && keyedByIdentity(candidate.tag) && candidate.ref == key) {
                 return slot;
             }
@@ -632,8 +1003,7 @@ public abstract class NtsTable {
      * through the call boundary.
      */
     public static NtsValue getObject(NtsTable map, Object key) {
-        int at = map.findObject(key);
-        return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];
+        return map.valueOrUndefined(map.findObject(key));
     }
 
     /** {@code m.has(k)} for an unboxed reference key; see {@link #getObject}. */
@@ -667,10 +1037,12 @@ public abstract class NtsTable {
      */
     int findString(String key) {
         if (key == null) { return find(NtsValue.NULL_VALUE); }
-        if (count == 0) { return -1; }
+        // A number key column holds nothing else.
+        NtsValue[] column = keys;
+        if (count == 0 || column == null) { return -1; }
         if (buckets.length == 0) {
             for (int i = head; i < used; i++) {
-                NtsValue candidate = keys[i];
+                NtsValue candidate = column[i];
                 if (candidate != null && candidate.tag == NtsValue.STRING
                         && (candidate.ref == key || candidate.ref.equals(key))) {
                     return i;
@@ -685,7 +1057,7 @@ public abstract class NtsTable {
             long cell = buckets[p];
             if (cell == 0L) { return -1; }
             int slot = (int) cell - 1;
-            NtsValue candidate = keys[slot];
+            NtsValue candidate = column[slot];
             if ((int) (cell >>> 32) == h && candidate.tag == NtsValue.STRING
                     && (candidate.ref == key || candidate.ref.equals(key))) {
                 return slot;
@@ -705,8 +1077,7 @@ public abstract class NtsTable {
      * Java reference's 15,408. See `fuse::unboxed_keys`.
      */
     public static NtsValue getString(NtsTable map, String key) {
-        int at = map.findString(key);
-        return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];
+        return map.valueOrUndefined(map.findString(key));
     }
 
     /** {@code m.has(k)} for an unboxed string key; see {@link #getString}. */
@@ -722,48 +1093,37 @@ public abstract class NtsTable {
     static void insertString(NtsTable map, String key, NtsValue value) {
         int at = map.findString(key);
         if (at >= 0) {
-            map.values[at] = value;
+            map.store(at, value);
             return;
         }
-        insert(map, NtsValue.ofString(key), value);
+        // **`slotFor` itself, not `insert`.** `insert` is a wrapper small
+        // enough to inline anywhere, and inlined here its call to `slotFor`
+        // counts as hot as every `insert` does, so C2 took all of `slotFor`
+        // into this door: `setString` compiled to 5,232 bytes, past the
+        // 2,500 of `InlineSmallCode`, and stopped inlining at
+        // `record-word-counts`' hot site -- 1.032 of main with main's classes
+        // and this jar, 19 rounds in 20. Called directly, this miss's own
+        // frequency decides, and `slotFor` stays a call, as the old 268-byte
+        // `insert` did.
+        map.store(map.slotFor(NtsValue.ofString(key)), value);
     }
 
     private static int hash(NtsValue value) {
-        int h;
         switch (value.tag) {
             case NtsValue.NUMBER:
-                long bits = Double.doubleToLongBits(value.num == 0.0 ? 0.0 : value.num);
-                h = (int) (bits ^ (bits >>> 32));
-                break;
+                return hashNumber(value.num);
             case NtsValue.BOOLEAN:
-                h = value.num != 0.0 ? 1231 : 1237;
-                break;
+                return mix(value.num != 0.0 ? 1231 : 1237);
             case NtsValue.STRING:
                 return hashString(value.ref);
             case NtsValue.UNDEFINED:
             case NtsValue.NULL:
-                h = 0;
-                break;
+                return mix(0);
             default:
-                // Returns rather than breaking to the mix below, because
-                // `hashObject` applies it: one implementation, so a key looked
-                // up without its box cannot hash differently from the same key
-                // stored with one.
+                // `hashObject`, so a key looked up without its box cannot hash
+                // differently from the same key stored with one.
                 return hashObject(value.ref);
         }
-        // One multiply, and no tag mix. A profile of `map-and-set` put 20% of
-        // the row in this method -- not from collisions, which were already
-        // 1.43 probes against an ideal 1.00, but from its cost, against a
-        // reference whose `Integer.hashCode` is `return value`.
-        //
-        // The tag does not need mixing in: `sameKey` separates a number from a
-        // string that hashes the same, so the tag only has to affect
-        // *distribution*, and in a table whose keys are all one tag it affects
-        // nothing. Dropping it and one of the two multiplies measured **better**
-        // spread, not worse -- 1.17 probes and 226 distinct low-9 bits against
-        // 194 -- on integer keys, fractional keys and negative keys alike.
-        h *= 0x9e3779b1;
-        return h ^ (h >>> 16);
     }
 
     // ------------------------------------------------------------------

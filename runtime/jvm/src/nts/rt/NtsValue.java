@@ -43,6 +43,19 @@ public final class NtsValue {
     // Do not pool mutable wrappers or add a lookup to every numeric erasure.
     // The immutable allocation is available for scalar replacement when it does not escape.
     public static NtsValue ofNumber(double value) { return new NtsValue(NUMBER, value, null); }
+
+    /**
+     * A number, or `undefined` where {@code found} is false, built at one
+     * site either way: a table's number column answers through this
+     * (`NtsTable.valueOrUndefined`), so that C2, inlining a lookup whose
+     * answer is read straight back, has one allocation to remove rather than
+     * a merge of a constant with a new box, which it keeps. Its `undefined`
+     * is `UNDEFINED_VALUE`'s fields, not that object, which nothing compares
+     * by identity.
+     */
+    static NtsValue numberOrUndefined(boolean found, double value) {
+        return new NtsValue(found ? NUMBER : UNDEFINED, found ? value : 0.0, null);
+    }
     public static NtsValue ofBoolean(boolean value) { return value ? TRUE_VALUE : FALSE_VALUE; }
     public static NtsValue ofString(String value) {
         return value == null ? NULL_VALUE : new NtsValue(STRING, 0.0, value);

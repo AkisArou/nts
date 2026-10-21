@@ -23,9 +23,10 @@ use nts_jvm_emitter::{Compare, Kind, Pool, insn};
 use crate::body::{Emitter, Placed, RUNTIME, comparison, refuse};
 use crate::types;
 
-/// A map call re-spelled to take its key unboxed: the arguments to push, and
-/// the owner, member and descriptor to invoke. See `Body::unboxed_key`.
-type UnboxedKeyCall = (Vec<ValueId>, (&'static str, &'static str, String));
+/// A map call re-spelled to take its key, and a value it stores, unboxed: the
+/// arguments to push, and the owner, member and descriptor to invoke. See
+/// `Emitter::unboxed_call`.
+type UnboxedCall = (Vec<ValueId>, (&'static str, &'static str, String));
 
 /// The runtime helpers this backend can call, and how each is spelled on the JVM.
 ///
@@ -1606,14 +1607,14 @@ impl Emitter<'_> {
             if Some(value) == fused {
                 continue;
             }
-            // An erasure whose every use is a map key the helper now reads
-            // unboxed; see `fuse::unboxed_keys`. Substituting the call was not
-            // enough on its own -- the `Erase` is a separate operation and went
+            // An erasure whose every use is a map key or value the helper now
+            // reads unboxed; see `fuse::unboxed_operands`. Substituting the call
+            // was not enough on its own -- the `Erase` is a separate operation and went
             // on emitting `ofObject` into a slot nothing read, so the box was
             // still built and the measurement did not move. The call is the
             // producer in `fuse`'s other direction, which is why that one
             // needed no equivalent.
-            if self.unboxed_keys.contains_key(&value) {
+            if self.unboxed_operands.contains_key(&value) {
                 continue;
             }
             // The one-character string an `appendCharCode` makes unnecessary.
@@ -3938,7 +3939,7 @@ impl Emitter<'_> {
             let member = if member == "of" {
                 of_holding(self.ty(value))
             } else {
-                member
+                table_constructor(member, self.ty(value))
             };
             (class, member, signature)
         })
@@ -6739,21 +6740,27 @@ impl Emitter<'_> {
         })
     }
 
-    /// A map key the caller already holds as a reference or a string; see
-    /// `fuse::unboxed_keys`.
+    /// A map helper's key, and the value it stores, that the caller already
+    /// holds unboxed; see `fuse::unboxed_operands`.
     ///
-    /// Answers the reference to pass, the member to call and its descriptor.
-    /// The descriptor and the argument have to move together --
+    /// Answers the operands to pass, and the owner, the member and its
+    /// descriptor. The descriptor and the arguments have to move together --
     /// `push_arguments` reads the descriptor to decide how to push each
     /// operand, so changing one without the other puts a box where an `Object`
-    /// is declared, or the reverse, and the verifier is what finds out.
-    fn unboxed_key(&self, name: &str, args: &[ValueId]) -> Option<UnboxedKeyCall> {
-        let at = crate::fuse::key_at(name)?;
-        let &(source, kind) = self.unboxed_keys.get(args.get(at)?)?;
-        let (member, spelling) = crate::fuse::unboxed_key_form(name, kind)?;
+    /// or a `double` is declared, or the reverse, and the verifier is what
+    /// finds out.
+    fn unboxed_call(&self, name: &str, args: &[ValueId]) -> Option<UnboxedCall> {
+        let (key_at, value_at) = crate::fuse::operands_at(name)?;
+        let &(key, key_kind) = self.unboxed_operands.get(args.get(key_at)?)?;
+        let value = value_at.and_then(|at| Some((at, *self.unboxed_operands.get(args.get(at)?)?)));
+        let (owner, member, spelling) =
+            crate::fuse::unboxed_form(name, key_kind, value.map(|(_, (_, kind))| kind))?;
         let mut swapped = args.to_vec();
-        swapped[at] = source;
-        Some((swapped, (types::MAP, member, spelling.to_owned())))
+        swapped[key_at] = key;
+        if let Some((at, (source, _))) = value {
+            swapped[at] = source;
+        }
+        Some((swapped, (owner, member, spelling.to_owned())))
     }
 
     /// `String(n)` where `n` is provably an `i32`, answering whether it emitted.
@@ -7323,7 +7330,7 @@ impl Emitter<'_> {
                 if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
-                let (swapped, unboxed_form) = self.unboxed_key(name, args).unzip();
+                let (swapped, unboxed_form) = self.unboxed_call(name, args).unzip();
                 let args = swapped.as_deref().unwrap_or(args);
                 let found = unboxed_form.or(found);
                 // An index this backend holds as an `int`; see `intcall`. The
@@ -8556,6 +8563,30 @@ fn holds_values(ty: &HirType) -> bool {
 /// `NtsArrayL.values`.
 fn of_holding(ty: &HirType) -> &'static str {
     if holds_values(ty) { "ofValues" } else { "of" }
+}
+
+/// `new Map()` and `new Set()`: the factory whose columns the table's static
+/// type lets it keep unboxed -- `NtsTable`'s number key and value columns --
+/// or `member` itself. A Record is a `Table` and keeps its boxes: its keys are
+/// strings.
+///
+/// The type is a storage choice and not a promise: a table handed a key or a
+/// value its column cannot hold turns that column into boxes, so a wrong guess
+/// here costs time, never an answer.
+fn table_constructor(member: &'static str, made: &HirType) -> &'static str {
+    match (member, made) {
+        ("newMap", HirType::Managed(ManagedType::Map(key, value))) if **key == HirType::NUMBER => {
+            if **value == HirType::NUMBER {
+                "newMapOfNumbers"
+            } else {
+                "newMapOfNumberKeys"
+            }
+        }
+        ("newSet", HirType::Managed(ManagedType::Set(key))) if **key == HirType::NUMBER => {
+            "newSetOfNumbers"
+        }
+        _ => member,
+    }
 }
 
 /// An array read back out of an erased value as an `unknown[]` is checked to

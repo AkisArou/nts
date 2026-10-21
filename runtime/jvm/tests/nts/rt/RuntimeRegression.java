@@ -1414,6 +1414,7 @@ public final class RuntimeRegression {
         testProvedViewAccess(); System.out.println("proven view accesses passed");
         testStringKeyDoors(); System.out.println("unboxed string keys passed");
         testTableFills(); System.out.println("table fills passed");
+        testNumberColumns(); System.out.println("number columns passed");
         System.out.println("PASS " + checks + " assertions");
     }
 
@@ -1497,6 +1498,177 @@ public final class RuntimeRegression {
         check(boxes[1].tag == NtsValue.STRING && boxes[2] == NtsValue.NULL_VALUE, "erased boxes as stored");
         check(refuses(() -> NtsTable.keysInto(flags, new double[2])), "a number read of string keys refuses");
         check(refuses(() -> NtsTable.valuesInto(map(), new boolean[1])), "a boolean read of number values refuses");
+    }
+
+    /**
+     * A table whose keys or values are a number column answers what the boxed
+     * table answers, through its unboxed doors and its boxed entry points
+     * alike.
+     *
+     * <p>Each layout -- number keys and values, number keys, a number Set --
+     * runs one random sequence beside a boxed control and a model, so a wrong
+     * answer says which of the three disagrees. The keys are where the column
+     * differs from a box: `-0` beside `+0`, `NaN` with two bit patterns,
+     * infinities and fractions, past the linear limit and under it, with
+     * deletions making holes, a cleared table refilled, and walks by cursor
+     * between. A value of `-0` keeps its sign: only a key is SameValueZero.
+     *
+     * <p>Then the one-way turns: a key or value the column cannot hold makes
+     * it boxes, keeping every entry, its order and its holes, and the doors
+     * still find what the boxes hold.
+     */
+    private static void testNumberColumns() {
+        double[] pool = {
+            0.0, -0.0, 1.0, -1.0, 0.5, 2.5, 1e300, -1e-300, Double.NaN,
+            Double.longBitsToDouble(0x7ff80000000000ffL), Double.POSITIVE_INFINITY,
+            Double.NEGATIVE_INFINITY, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
+        };
+        String[] layouts = {"numbers", "number keys", "number set"};
+        for (String layout : layouts) {
+            for (int span : new int[] {6, pool.length}) {
+                Random random = new Random(layout.hashCode() * 31 + span);
+                boolean set = layout.equals("number set");
+                NtsTable table = set ? NtsSet.newSetOfNumbers(0)
+                    : layout.equals("numbers") ? NtsMap.newMapOfNumbers(0) : NtsMap.newMapOfNumberKeys(0);
+                NtsTable control = set ? NtsSet.newSet(0) : NtsMap.newMap(0);
+                List<double[]> model = new ArrayList<double[]>();
+                for (int round = 0; round < 20000; ++round) {
+                    double key = pool[random.nextInt(span)];
+                    double value = random.nextBoolean() ? -0.0 : random.nextInt(50) - 25;
+                    boolean door = random.nextBoolean();
+                    int hit = -1;
+                    for (int i = 0; i < model.size(); ++i) {
+                        double held = model.get(i)[0];
+                        if (held == key || (held != held && key != key)) { hit = i; break; }
+                    }
+                    int action = random.nextInt(100);
+                    String at = layout + ", " + span + " keys, round " + round;
+                    if (action < 45) {
+                        if (set) {
+                            if (door) { NtsSet.addNumber((NtsSet) table, key); } else { NtsSet.add((NtsSet) table, NtsValue.ofNumber(key)); }
+                            NtsSet.add((NtsSet) control, NtsValue.ofNumber(key));
+                        } else {
+                            if (door) { NtsMap.setNumber((NtsMap) table, key, value); }
+                            else if (random.nextBoolean()) { NtsMap.setNumber((NtsMap) table, key, NtsValue.ofNumber(value)); }
+                            else { NtsMap.set((NtsMap) table, NtsValue.ofNumber(key), NtsValue.ofNumber(value)); }
+                            NtsMap.set((NtsMap) control, NtsValue.ofNumber(key), NtsValue.ofNumber(value));
+                        }
+                        if (hit >= 0) { model.get(hit)[1] = value; } else { model.add(new double[] {key == 0.0 ? 0.0 : key, value}); }
+                    } else if (action < 70) {
+                        boolean gone = door ? NtsTable.deleteNumber(table, key) : NtsTable.delete(table, NtsValue.ofNumber(key));
+                        check(gone == (hit >= 0) && NtsTable.delete(control, NtsValue.ofNumber(key)) == gone, "delete, " + at);
+                        if (hit >= 0) { model.remove(hit); }
+                    } else if (action == 99) {
+                        NtsTable.clear(table); NtsTable.clear(control); model.clear();
+                    } else {
+                        boolean has = door ? NtsTable.hasNumber(table, key) : NtsTable.has(table, NtsValue.ofNumber(key));
+                        check(has == (hit >= 0) && NtsTable.has(control, NtsValue.ofNumber(key)) == has, "has, " + at);
+                        if (!set) {
+                            NtsValue got = door ? NtsTable.getNumber(table, key) : NtsTable.get(table, NtsValue.ofNumber(key));
+                            if (hit < 0) { check(got.tag == NtsValue.UNDEFINED && got.num == 0.0, "a miss is undefined, " + at); }
+                            else { check(got.tag == NtsValue.NUMBER, "a hit is a number, " + at); number(got.num, model.get(hit)[1], "get, " + at); }
+                        }
+                    }
+                    check(NtsTable.size(table) == model.size() && NtsTable.size(control) == model.size(), "size, " + at);
+                    if (round % 97 == 0) { walks(table, control, model, set, at); }
+                }
+                walks(table, control, model, set, layout + ", " + span + " keys, at the end");
+            }
+        }
+
+        // -0 is a key once and a value as itself; NaN is one key.
+        NtsMap numbers = NtsMap.newMapOfNumbers(0);
+        NtsMap.setNumber(numbers, -0.0, -0.0);
+        NtsMap.setNumber(numbers, Double.NaN, 1.0);
+        number(NtsTable.getNumber(numbers, 0.0).num, -0.0, "a -0 value keeps its sign");
+        number(NtsTable.keyAtI(numbers, 0).num, 0.0, "a -0 key is held as +0");
+        number(NtsTable.getNumber(numbers, Double.longBitsToDouble(0xfff8000000000001L)).num, 1.0, "every NaN is one key");
+        check(Double.isNaN(NtsTable.keyAtI(numbers, 1).num), "a NaN key reads back as NaN");
+        equal(numbers.size(), 2, "two keys");
+
+        // A string key turns the key column into boxes; a string value, the values.
+        NtsMap turned = NtsMap.newMapOfNumbers(0);
+        for (int i = 0; i < 12; i++) { NtsMap.setNumber(turned, i, i * 2.0); }
+        NtsTable.deleteNumber(turned, 3);
+        NtsMap.set(turned, NtsValue.ofString("s"), NtsValue.ofNumber(-1));
+        NtsMap.setNumber(turned, 5, NtsValue.ofString("v"));
+        equal(turned.size(), 12, "a turn keeps every entry");
+        number(NtsTable.getNumber(turned, 4).num, 8.0, "a door on a boxed key column");
+        equal(NtsTable.getNumber(turned, 5).ref, "v", "a boxed value through the number door");
+        check(!NtsTable.hasNumber(turned, 3), "a hole stays a hole through a turn");
+        check(NtsTable.get(turned, NtsValue.ofString("s")).num == -1.0, "the key that turned it");
+        int cursor = NtsTable.nextI(turned, 0);
+        for (int i = 0; i < 12; i++) {
+            if (i == 3) { continue; }
+            number(NtsTable.keyAtI(turned, cursor).num, i, "order through a turn, " + i);
+            cursor = NtsTable.nextI(turned, cursor + 1);
+        }
+        equal(NtsTable.keyAtI(turned, cursor).ref, "s", "the turning key is last");
+        NtsSet members = NtsSet.newSetOfNumbers(0);
+        NtsSet.addNumber(members, 1);
+        NtsSet.add(members, NtsValue.ofString("one"));
+        check(NtsTable.hasNumber(members, 1) && NtsTable.hasString(members, "one"), "a Set's turn");
+        check(!NtsTable.hasString(NtsSet.newSetOfNumbers(0), "1"), "a number column holds no string");
+
+        // A copy keeps its source's columns; an extend reads any into any.
+        NtsMap copied = NtsMap.copy(numbers);
+        number(NtsTable.getNumber(copied, 0.0).num, -0.0, "a copy of number columns");
+        NtsMap boxed = NtsMap.newMap(0);
+        NtsMap.set(boxed, NtsValue.ofString("k"), NtsValue.ofNumber(9));
+        NtsMap.extend(boxed, numbers);
+        check(boxed.size() == 3 && NtsTable.getNumber(boxed, Double.NaN).num == 1.0, "an extend from number columns");
+        NtsMap.extend(copied, boxed);
+        check(copied.size() == 3 && NtsTable.getString(copied, "k").num == 9.0, "an extend into number columns turns them");
+        NtsSet copiedSet = NtsSet.copy(members);
+        check(copiedSet.size() == 2 && NtsTable.hasNumber(copiedSet, 1), "a copy of a turned Set");
+
+        // A Java caller reads the columns through the same map.
+        java.util.Map<Object, Object> java = numbers;
+        check(java.containsKey(-0.0) && java.get(Double.NaN).equals(1.0), "java.util.Map over number columns");
+        java.put(2.0, 3.0);
+        number(NtsTable.getNumber(numbers, 2).num, 3.0, "a Java put into number columns");
+
+        // A fill reads a column with holes and without, each as one copy or a walk.
+        NtsSet dense = NtsSet.newSetOfNumbers(0);
+        for (int i = 0; i < 40; i++) { NtsSet.addNumber(dense, i * 3); }
+        double[] all = new double[dense.size()];
+        NtsTable.keysInto(dense, all);
+        double[] asValues = new double[dense.size()];
+        NtsTable.valuesInto(dense, asValues);
+        for (int i = 0; i < 40; i++) {
+            number(all[i], i * 3, "a dense fill, " + i);
+            number(asValues[i], i * 3, "a Set's values are its keys, " + i);
+        }
+        NtsTable.deleteNumber(dense, 0);
+        NtsTable.deleteNumber(dense, 30);
+        double[] holed = new double[dense.size()];
+        NtsTable.keysInto(dense, holed);
+        NtsValue[] boxes = new NtsValue[dense.size()];
+        NtsTable.keysIntoErased(dense, boxes);
+        int at = 0;
+        for (int i = 1; i < 40; i++) {
+            if (i == 10) { continue; }
+            number(holed[at], i * 3, "a fill past holes, " + i);
+            number(boxes[at].num, i * 3, "an erased fill past holes, " + i);
+            at++;
+        }
+        check(refuses(() -> NtsTable.keysInto(dense, new boolean[dense.size()])), "a boolean read of a number column refuses");
+    }
+
+    /** One walk of each table by cursor, against the model's order and values. */
+    private static void walks(NtsTable table, NtsTable control, List<double[]> model, boolean set, String at) {
+        int cursor = NtsTable.nextI(table, 0);
+        int boxed = NtsTable.nextI(control, 0);
+        for (double[] entry : model) {
+            check(cursor >= 0 && boxed >= 0, "a cursor per entry, " + at);
+            number(NtsTable.keyAtI(table, cursor).num, entry[0], "key order, " + at);
+            number(NtsTable.keyAtI(control, boxed).num, entry[0], "control key order, " + at);
+            number(NtsTable.valueAtI(table, cursor).num, set ? entry[0] : entry[1], "value by cursor, " + at);
+            cursor = NtsTable.nextI(table, cursor + 1);
+            boxed = NtsTable.nextI(control, boxed + 1);
+        }
+        check(cursor == -1 && boxed == -1, "the walk ends with the model, " + at);
+        check(NtsTable.keyAtI(table, -1).tag == NtsValue.UNDEFINED, "a dead cursor, " + at);
     }
 
     private static NtsMap map() {

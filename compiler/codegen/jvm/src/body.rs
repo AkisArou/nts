@@ -193,7 +193,7 @@ fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
 fn crossing_values(
     program: &JvmProgram<'_>,
     func: &Func,
-    unboxed_keys: &rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
+    unboxed_operands: &rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::Unboxed)>,
 ) -> rustc_hash::FxHashSet<ValueId> {
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
     for (block_at, block) in func.blocks.iter().enumerate() {
@@ -284,7 +284,7 @@ fn crossing_values(
             .map(|(index, _)| index)
             .collect();
         // **A key passed unboxed is its erasure's source, read where the
-        // call is** (`fuse::unboxed_keys`). The `Erase` is never emitted, so
+        // call is** (`fuse::unboxed_operands`). The `Erase` is never emitted, so
         // the call loads the source's slot -- and when the call is past a
         // join from the erasure, as `counts[w] = (counts[w] || 0) + 1` puts
         // the store, the source was read nowhere else after its own block
@@ -298,7 +298,7 @@ fn crossing_values(
                 nts_core::hir::operands_of(&func.values[value.0 as usize].kind)
                     .into_iter()
                     .map(move |operand| {
-                        let read = unboxed_keys
+                        let read = unboxed_operands
                             .get(&operand)
                             .map_or(operand, |&(source, _)| source);
                         (read, index)
@@ -369,8 +369,8 @@ struct Held {
     unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     fused: rustc_hash::FxHashSet<ValueId>,
-    /// Erased map keys a helper takes unboxed; see `fuse::unboxed_keys`.
-    unboxed_keys: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
+    /// Erased map keys and values a helper takes unboxed; see `fuse::unboxed_operands`.
+    unboxed_operands: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::Unboxed)>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Index helpers whose answer every use converts to an integer; see `intcall`.
@@ -417,7 +417,7 @@ fn held_values(
     Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
-        unboxed_keys: crate::fuse::unboxed_keys(func),
+        unboxed_operands: crate::fuse::unboxed_operands(func),
         accumulated: crate::builder::accumulators(func),
         narrowed: crate::intcall::narrowed(func),
         joined: crate::closures::joined(package, program, func),
@@ -444,8 +444,8 @@ pub struct Emitter<'a> {
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     pub(crate) fused: rustc_hash::FxHashSet<ValueId>,
-    /// Erased map keys a helper takes unboxed; see `fuse::unboxed_keys`.
-    pub(crate) unboxed_keys: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
+    /// Erased map keys and values a helper takes unboxed; see `fuse::unboxed_operands`.
+    pub(crate) unboxed_operands: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::Unboxed)>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Helper results declared `f64` and held as an `int`; see `intcall`.
@@ -480,7 +480,7 @@ impl<'a> Emitter<'a> {
         let order = block_order(func);
 
         let plans = held_values(package, program, func, plan);
-        let crosses = crossing_values(program, func, &plans.unboxed_keys);
+        let crosses = crossing_values(program, func, &plans.unboxed_operands);
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
         let mut next = 0u32;
@@ -604,7 +604,7 @@ impl<'a> Emitter<'a> {
             scratch: None,
             unboxed: plans.unboxed,
             fused: plans.fused,
-            unboxed_keys: plans.unboxed_keys,
+            unboxed_operands: plans.unboxed_operands,
             accumulated: plans.accumulated,
             char_codes,
             narrowed: plans.narrowed,
@@ -913,7 +913,7 @@ mod tests {
         crossing_values(
             &JvmProgram::new(&Program::default()),
             &func,
-            &crate::fuse::unboxed_keys(&func),
+            &crate::fuse::unboxed_operands(&func),
         )
         .contains(&ValueId(0))
     }
@@ -1020,7 +1020,7 @@ mod tests {
             let crossing = crossing_values(
                 &JvmProgram::new(&program),
                 &func,
-                &crate::fuse::unboxed_keys(&func),
+                &crate::fuse::unboxed_operands(&func),
             );
             // Written after the label, like a comparison's result.
             assert!(!crossing.contains(&ValueId(1)));
@@ -1033,7 +1033,7 @@ mod tests {
     /// `tests/programs/a-record-keyed-by-strings-built-at-run-time`'s
     /// `countBuilt`: "Type top (current frame, locals[19])". A string key is
     /// erased in one block and stored through in the next, as the join an
-    /// `||` makes puts the store; `fuse::unboxed_keys` skips the `Erase`, so
+    /// `||` makes puts the store; `fuse::unboxed_operands` skips the `Erase`, so
     /// the store loads the string, and the string is what crosses. The
     /// control's key may be undefined, so it keeps its box, and the erasure
     /// crosses instead.
@@ -1094,7 +1094,7 @@ mod tests {
                 ops: vec![ValueId(4), ValueId(5)],
                 terminator: Terminator::Return(None),
             });
-            let keys = crate::fuse::unboxed_keys(&func);
+            let keys = crate::fuse::unboxed_operands(&func);
             crossing_values(&JvmProgram::new(&Program::default()), &func, &keys)
         };
         let unboxed = crossing(nts_core::hir::Absent::Impossible);
