@@ -1,10 +1,14 @@
-// expect: emit-c --rc -> duplicates-c nts_guarded_nts_dom_release((void *)
+// expect: emit-c --rc -> once-c nts_guarded_nts_dom_release((void *)
 //
 // **FIXED 2026-10-07, and kept as a guard**: a parameter the function keeps is
-// released where it dies, after the loop, as well as by the closure's capture
-// -- the two release call sites the paragraph below predicted. The checker has
-// no exact-count form, so `duplicates-c` asserts more than one, and goes red if
-// the parameter's release disappears again. The record follows unchanged.
+// released where it dies, after the loop. It was counted beside the closure's
+// capture -- two release call sites, `duplicates-c` -- until 2026-10-22, when a
+// closure nothing reads stopped being made (dead-code elimination), and with
+// it the capture that made `each` keep `d` at all. So `make` is now kept in a
+// module variable: `each` keeps `d` through it, the capture is given back by
+// the closure's own release, and the one call site left in `each` is the
+// parameter's. `once-c` holds it: none means that release is gone again. The
+// record follows unchanged.
 //
 // A host handle parameter the callee owns -- `each` captures `d` in a
 // closure, so its caller retains `d` before each call -- is never released
@@ -31,8 +35,10 @@ import type { Document } from "nts:dom";
 function touch(d: Document, n: number): void {
   if (n < 0) d.createElement("p");
 }
+let kept: (() => void) | null = null;
 function each(d: Document): number {
   const make = (): void => { d.createElement("p"); };
+  kept = make;
   for (const n of [1, 2]) touch(d, n);
   return 0;
 }

@@ -4646,10 +4646,14 @@ export function errors(): number { return errors_seen(); }
         text.contains("host_retain"),
         "nothing was ever rooted: the escapes went uncounted"
     );
+    // `helper` takes no retain. Its one used to be `unwrapped`'s `holder`: the
+    // handle stored into an object and read straight back, which forwarding
+    // answers from the store -- and an object nothing reads is no longer made
+    // (`dce::eliminate`), so the handle never leaves the stack.
     for output in outputs {
         assert_eq!(
             output,
-            "local=30/0 walk=100/0 helper=60/1 maybe=20/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0"
+            "local=30/0 walk=100/0 helper=60/0 maybe=20/0 keep=1 drop=0 listed=30 captured=20 given=1 across=301 roots=0 errors=0 leak=0"
         );
     }
 }

@@ -18,8 +18,37 @@ use rustc_hash::FxHashSet;
 use super::{BlockId, Func, Op, OpKind, Terminator, ValueId};
 
 /// Drop operations whose results nothing reads, and report how many.
+///
+/// # A store into an object nothing reads
+///
+/// `field.set` is an effect, and kept for its own sake -- except into an object
+/// this function allocated, where it is live exactly when the object is. Such
+/// an object is observed only through its uses: a read of a field, a call that
+/// takes it, an identity comparison, a store of it somewhere, a return. With
+/// none of them live, nothing can ever see what was written, and the
+/// allocation goes with its stores.
+///
+/// `benchmarks/cases/exceptions` is the shape. A `throw new Error("boom")`
+/// caught in the same function is a branch, `catch (e)` never reads `e`, and
+/// what was left was `object.new` and two `field.set`s of strings, every
+/// eighth iteration. On C the object was in the frame and clang dropped it; on
+/// Wasm and the JVM it was a heap allocation per throw -- Wasm 53.1 µs against
+/// 2.83 µs for C++ compiled to Wasm. `scalarize` does not take it, because its
+/// fields hold references.
+///
+/// A store of the object *into another* such object is likewise live only if
+/// that other one is, so two objects that only point at each other go together.
+/// Anything not made here -- a parameter, a loaded reference, a global -- is
+/// visible elsewhere, and a store into it stays an effect.
 pub fn eliminate(func: &mut Func) -> usize {
     let hole_reads = super::holes::read_observations(func);
+    let fresh: FxHashSet<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .copied()
+        .filter(|value| matches!(func.values[value.0 as usize].kind, OpKind::ObjectNew { .. }))
+        .collect();
     let mut live: FxHashSet<ValueId> = FxHashSet::default();
 
     // Seeds: anything a terminator reads, and every call. A call's result may
@@ -29,7 +58,8 @@ pub fn eliminate(func: &mut Func) -> usize {
             live.insert(operand);
         }
         for value in &block.ops {
-            if hole_reads.contains(value) || has_effects(&func.values[value.0 as usize]) {
+            let op = &func.values[value.0 as usize];
+            if hole_reads.contains(value) || (has_effects(op) && store_into(op, &fresh).is_none()) {
                 live.insert(*value);
             }
         }
@@ -43,6 +73,12 @@ pub fn eliminate(func: &mut Func) -> usize {
         for block in &func.blocks {
             for value in &block.ops {
                 if !live.contains(value) {
+                    // A store into a fresh object lives once its object does.
+                    if store_into(&func.values[value.0 as usize], &fresh)
+                        .is_some_and(|object| live.contains(&object))
+                    {
+                        live.insert(*value);
+                    }
                     continue;
                 }
                 for operand in super::verify::operands(&func.values[value.0 as usize].kind) {
@@ -62,6 +98,14 @@ pub fn eliminate(func: &mut Func) -> usize {
         removed += before - block.ops.len();
     }
     removed
+}
+
+/// The object a `field.set` writes, when this function allocated it.
+fn store_into(op: &Op, fresh: &FxHashSet<ValueId>) -> Option<ValueId> {
+    match op.kind {
+        OpKind::FieldSet { object, .. } if fresh.contains(&object) => Some(object),
+        _ => None,
+    }
 }
 
 /// Drop block parameters nothing reads, with the arguments that fed them.
