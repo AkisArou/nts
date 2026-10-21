@@ -29,14 +29,54 @@
 
 use super::facts::Facts;
 use super::flow::Analysis;
-use super::{BlockId, Func, HirType, OpKind, Program, ValueId};
+use super::{BlockId, Callee, Func, HirType, OpKind, Program, ValueId};
+
+/// What the whole program says about lengths that one function cannot see for
+/// itself: how long the arrays its fields point at are, and whether a typed
+/// array keeps the length it was made with.
+#[derive(Debug, Default)]
+pub struct ProgramLengths {
+    pub fields: super::fields::FieldFacts,
+    /// No function can detach or resize a buffer, so a view made with a length
+    /// of its own has that length for its whole life. `Default` says it may
+    /// not, which proves nothing.
+    pub views_hold: bool,
+}
+
+impl ProgramLengths {
+    #[must_use]
+    pub fn of(program: &Program, analyses: &[Analysis]) -> Self {
+        Self {
+            fields: super::fields::lengths(program, analyses),
+            views_hold: !buffers_can_move(program),
+        }
+    }
+}
+
+/// The runtime's two ways to take a buffer's bytes from a view that holds it:
+/// `transfer`, which detaches the source, and `resize`, which can leave a
+/// view of a fixed length past the end. A view over a moved buffer reads as
+/// empty (`nts_view_length`), which is a length its construction does not say.
+const MOVES_A_BUFFER: &[&str] = &["nts_buffer_transfer", "nts_buffer_resize"];
+
+/// Whether any function in the program can detach or resize a buffer.
+///
+/// A whole-program answer for the reason [`super::arrays_can_grow`] is one:
+/// whatever holds a buffer can pass it anywhere, so a call in one function
+/// moves the bytes a view in another reads. Nothing else does it -- the
+/// runtimes free a buffer's bytes only when the buffer itself is gone -- so a
+/// program without either call has views whose lengths never change.
+fn buffers_can_move(program: &Program) -> bool {
+    program.funcs.iter().flat_map(|func| &func.values).any(|op| {
+        matches!(
+            &op.kind,
+            OpKind::Call { callee: Callee::External(name), .. } if MOVES_A_BUFFER.contains(&name.as_str())
+        )
+    })
+}
 
 /// Turn off the checks that cannot fail, and report how many.
-pub fn eliminate_checks(
-    func: &mut Func,
-    analysis: &Analysis,
-    field_lengths: &super::fields::FieldFacts,
-) -> usize {
+pub fn eliminate_checks(func: &mut Func, analysis: &Analysis, lengths: &ProgramLengths) -> usize {
     let mut removed = 0;
     let least = super::loops::least_lengths(func, analysis);
     for access in checked_accesses(func, analysis.growable()) {
@@ -50,7 +90,7 @@ pub fn eliminate_checks(
         if !provably_in_bounds(
             func,
             analysis,
-            field_lengths,
+            lengths,
             &least,
             at,
             array,
@@ -196,7 +236,7 @@ pub fn prove_stores_cannot_grow(
         return 0;
     }
     let analyses = super::interprocedural::analyze_assuming(program, roots, false);
-    let field_lengths = super::fields::lengths(program, &analyses);
+    let lengths = ProgramLengths::of(program, &analyses);
     let mut proven = Vec::new();
     for (at, (func, analysis)) in program.funcs.iter().zip(&analyses).enumerate() {
         for access in checked_accesses(func, false) {
@@ -206,7 +246,7 @@ pub fn prove_stores_cannot_grow(
             if !provably_in_bounds(
                 func,
                 analysis,
-                &field_lengths,
+                &lengths,
                 &super::loops::least_lengths(func, analysis),
                 access.at,
                 access.array,
@@ -233,7 +273,7 @@ pub fn prove_stores_cannot_grow(
 fn provably_in_bounds(
     func: &Func,
     analysis: &Analysis,
-    field_lengths: &super::fields::FieldFacts,
+    lengths: &ProgramLengths,
     least: &super::loops::LeastLengths,
     at: BlockId,
     array: ValueId,
@@ -257,7 +297,7 @@ fn provably_in_bounds(
     // container's *shape* says, and what the program proved about a length it
     // read for itself. `BOTTOM` from the first means "nothing structural to
     // say" rather than an empty set, so it is not narrowed into.
-    let structural = length_facts(func, analysis, field_lengths, least, at, array);
+    let structural = length_facts(func, analysis, lengths, least, at, array);
     let computed = computed_length(func, analysis, at, array);
     let length = if structural.is_bottom() {
         computed
@@ -511,7 +551,7 @@ fn computed_length(func: &Func, analysis: &Analysis, at: BlockId, array: ValueId
 fn length_facts(
     func: &Func,
     analysis: &Analysis,
-    field_lengths: &super::fields::FieldFacts,
+    lengths: &ProgramLengths,
     least: &super::loops::LeastLengths,
     at: BlockId,
     array: ValueId,
@@ -521,7 +561,8 @@ fn length_facts(
         // over the whole program -- the only way to know it, since a method
         // that reads `this.flags` has no allocation in front of it to look at.
         OpKind::FieldGet { object, field } => match &func.values[object.0 as usize].ty {
-            super::HirType::Managed(super::ManagedType::Object(ty)) => field_lengths
+            super::HirType::Managed(super::ManagedType::Object(ty)) => lengths
+                .fields
                 .get(&(*ty, *field))
                 .copied()
                 .unwrap_or(Facts::BOTTOM),
@@ -542,6 +583,32 @@ fn length_facts(
         // The array a *parameter* points at, whose length the callers say. The
         // only way to know it inside a function handed a buffer to work on.
         OpKind::Param(slot) => analysis.param_length(*slot),
+        // A typed array made with a length of its own -- `new Uint8Array(4096)`,
+        // `new Uint8Array(buffer, 0, n)` -- has it for its whole life where no
+        // function can detach or resize a buffer ([`ProgramLengths::views_hold`]).
+        // The lowering has already refused every construction whose offset and
+        // length do not fit the buffer, so the count is the view's. A tracking
+        // view follows its buffer's length instead, and is not this.
+        //
+        // Without it a view built in the function that scans it kept a test of
+        // its length on every element: `benchmarks/cases/bytes` reads 4096
+        // bytes 64 times an op under `i < 4096`, and the Wasm lane priced the
+        // tests at 10.5% of the row.
+        OpKind::Call {
+            callee: Callee::External(name),
+            args,
+            ..
+        } if lengths.views_hold && name == "nts_view_new" => match args[..] {
+            [_, _, length, _, tracking]
+                if matches!(
+                    func.values[tracking.0 as usize].kind,
+                    OpKind::ConstBool(false)
+                ) =>
+            {
+                analysis.get_at(at, length)
+            }
+            _ => Facts::BOTTOM,
+        },
         OpKind::ConstString(text) => {
             let units = text.encode_utf16().count();
             Facts::constant(f64::from(u32::try_from(units).unwrap_or(u32::MAX)))

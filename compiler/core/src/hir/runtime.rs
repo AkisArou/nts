@@ -1363,6 +1363,15 @@ static SIGNATURES: &[Declared] = &[
     ),
     ("nts_template_reflection", &[Some(HirType::Erased)], None),
     (
+        // ToIndex of a number the lowering has already range-checked: a
+        // `double`, which `flow` sharpens to the whole number it was given.
+        // Without this row nothing held the call at the type C returns, and
+        // a sharper fact retyped the call itself (`: i32` over a `double`).
+        "nts_to_index",
+        &[Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
         "nts_to_int16",
         &[Some(HirType::Float { bits: 64 })],
         Some(HirType::Int {

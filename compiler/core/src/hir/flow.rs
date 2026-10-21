@@ -718,6 +718,15 @@ fn operand_result(
         (Callee::External(name), [argument]) if name == "nts_math_sign" => {
             Some(facts::sign(lookup(refinements, values, *argument)))
         }
+        // ToIndex, which the lowering calls only once it has refused what is
+        // out of range: a whole number at or above zero is itself. Without it
+        // `new Uint32Array(buffer, 16, 8)` made a view whose length was a
+        // call's result, `[0, 2^53)`, and no read of it could be proven in
+        // bounds against the 8 its source says.
+        (Callee::External(name), [argument]) if name == "nts_to_index" => {
+            let index = lookup(refinements, values, *argument);
+            (index.integral() && !index.maybe_nan && index.lo >= 0.0).then_some(index)
+        }
         _ => None,
     }
 }
@@ -1964,6 +1973,18 @@ mod tests {
                 "{name}: its facts would retype a call whose declared result is unknown"
             );
         }
+        // The helpers whose result follows their operand (`operand_result`),
+        // on the same terms. `nts_to_index` had no row, so its fact retyped
+        // the call `: i32` over C's `double`: the JVM refused
+        // `typed-array-aliasing` and ran `open-typed-values` wrong, where C
+        // converted silently.
+        for name in ["nts_math_sign", "nts_to_index"] {
+            assert_eq!(
+                crate::hir::runtime::result(name),
+                Some(&HirType::Float { bits: 64 }),
+                "{name}: its facts would retype a call whose declared result is unknown"
+            );
+        }
         // The cursor is declared what it is, and its facts fit the declaration
         // with room for the walk's one step past them.
         for name in CURSOR {
@@ -2117,7 +2138,11 @@ mod tests {
         // check, not what makes the value finite.
         assert!(!before.get(ValueId(3)).maybe_nan);
         assert_eq!(
-            super::super::bounds::eliminate_checks(&mut body, &before, &FxHashMap::default()),
+            super::super::bounds::eliminate_checks(
+                &mut body,
+                &before,
+                &super::super::bounds::ProgramLengths::default()
+            ),
             1
         );
         let after = analyze(&body).get(ValueId(3));
