@@ -95,6 +95,10 @@
 //   byte-array 3 7,9  GLib's byte array, which GIR spells as an array, held
 //                 by its handle: grown by two appends, then sealed into a
 //                 `GBytes` whose bytes the program reads
+//   tmp true true false  a string C writes into an out slot, copied by the
+//                 values form and freed: the name of the file
+//                 `g_file_open_tmp` made, which existed, and does not once the
+//                 program closes and removes it
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -241,6 +245,11 @@ import {
   g_variant_parse,
   g_byte_array_append,
   g_byte_array_free_to_bytes,
+  g_close,
+  g_file_open_tmp,
+  g_file_test,
+  g_unlink,
+  FileTest,
   g_byte_array_new,
   g_bytes_get_data,
   g_cond_wait,
@@ -562,6 +571,16 @@ function outParameters(): void {
   g_byte_array_append(grown, new Uint8Array([9]));
   const sealed = g_bytes_get_data(g_byte_array_free_to_bytes(grown));
   console.log("byte-array " + String(sealed.length) + " " + String(sealed[0]) + "," + String(sealed[2]));
+  // A string C writes into an out slot, copied and freed: the name of the
+  // file made, which the program closes and removes.
+  const [descriptor, made] = g_file_open_tmp("nts-gir-XXXXXX");
+  const existed = g_file_test(made, FileTest.EXISTS);
+  g_close(descriptor);
+  g_unlink(made);
+  console.log(
+    "tmp " + String(made.indexOf("nts-gir-") >= 0) + " " + String(existed) + " " +
+      String(g_file_test(made, FileTest.EXISTS)),
+  );
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
