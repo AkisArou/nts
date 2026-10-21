@@ -86,6 +86,9 @@
 //                 `g_str_tokenize_and_fold` writes into an out slot, and the
 //                 bytes a process wrote, which `g_spawn_command_line_sync`
 //                 collects
+//   read 3 104,105,33  the caller's buffer a read fills, lent for the call: a
+//                 `Uint8Array` of the program's, which `g_input_stream_read`
+//                 writes into, answering how many bytes
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -189,6 +192,8 @@ import {
   g_output_stream_write,
   GOutputStream,
   GListStore,
+  g_input_stream_read,
+  g_memory_input_stream_new_from_bytes,
   g_credentials_new,
   GThemedIcon,
   IOErrorEnum,
@@ -510,6 +515,13 @@ function outParameters(): void {
   console.log(
     "folded " + tokens.join("|") + " " + alternates.join("|") + " spawned " +
       String(spawned[0]) + "," + String(spawned[1]),
+  );
+  // The caller's buffer a read fills, lent for the call.
+  const stream = g_memory_input_stream_new_from_bytes(g_bytes_new(new Uint8Array([104, 105, 33])));
+  const buffer = new Uint8Array(4);
+  const read = g_input_stream_read(stream, buffer, null);
+  console.log(
+    "read " + String(read) + " " + String(buffer[0]) + "," + String(buffer[1]) + "," + String(buffer[2]),
   );
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
