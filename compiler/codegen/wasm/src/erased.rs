@@ -517,6 +517,33 @@ fn erase_reference(body: &mut Body<'_, '_>, value: ValueId, absent: Absent) -> R
     Ok(())
 }
 
+/// Where an erased operand is read from: an HIR value, or a local an emitter
+/// holds for a value no HIR operation names -- the entry a table copy reads
+/// on its way into a typed array.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Operand {
+    Value(ValueId),
+    Local(u32),
+}
+
+impl From<ValueId> for Operand {
+    fn from(value: ValueId) -> Self {
+        Self::Value(value)
+    }
+}
+
+impl Operand {
+    pub(crate) fn load(self, body: &mut Body<'_, '_>) -> Result<(), Failure> {
+        match self {
+            Self::Value(value) => body.load(value),
+            Self::Local(local) => {
+                body.instruction(&I::LocalGet(local));
+                Ok(())
+            }
+        }
+    }
+}
+
 pub(crate) fn unerase(
     body: &mut Body<'_, '_>,
     result: ValueId,
@@ -546,11 +573,12 @@ pub(crate) fn unerase(
 /// refused by name.
 pub(crate) fn unerase_to(
     body: &mut Body<'_, '_>,
-    value: ValueId,
+    value: impl Into<Operand>,
     ty: &HirType,
 ) -> Result<(), Failure> {
+    let value = value.into();
     let boxed = types(body.m)?;
-    body.load(value)?;
+    value.load(body)?;
     match ty.clone() {
         HirType::Erased => {}
         HirType::Bool => {
@@ -561,7 +589,7 @@ pub(crate) fn unerase_to(
                 &[HeapType::Concrete(boxed.boolean)],
                 "an erased value read as a boolean, which it is not",
             )?;
-            body.load(value)?;
+            value.load(body)?;
             body.instruction(&I::RefCastNonNull(HeapType::Concrete(boxed.boolean)));
             body.instruction(&I::StructGet {
                 struct_type_index: boxed.boolean,
@@ -576,7 +604,7 @@ pub(crate) fn unerase_to(
                 &number_cases(boxed),
                 "an erased value read as a number, which it is not",
             )?;
-            body.load(value)?;
+            value.load(body)?;
             call(body, Helper::Number)?;
             numeric::convert(body, &HirType::NUMBER, &ty)?;
         }
@@ -586,12 +614,12 @@ pub(crate) fn unerase_to(
             body.instruction(&I::If(BlockType::Result(ValType::EXTERNREF)));
             body.instruction(&I::RefNull(HeapType::EXTERN));
             body.instruction(&I::Else);
-            body.load(value)?;
+            value.load(body)?;
             call(body, Helper::Tag)?;
             body.instruction(&I::I32Const(STRING));
             body.instruction(&I::I32Eq);
             contract::require(body, "an erased value read as a string, which it is not")?;
-            body.load(value)?;
+            value.load(body)?;
             string_payload(&mut body.code);
             body.instruction(&I::End);
         }
@@ -624,7 +652,12 @@ pub(crate) fn unerase_to(
     Ok(())
 }
 
-fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> Result<(), Failure> {
+fn unerase_reference(
+    body: &mut Body<'_, '_>,
+    value: impl Into<Operand>,
+    ty: &HirType,
+) -> Result<(), Failure> {
+    let value = value.into();
     let Physical::Reference(reference) = body.types().value_slot(ty)? else {
         return Err(Failure::Invariant(
             "non-reference managed projection".into(),
@@ -640,7 +673,7 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
         body.instruction(&I::Else);
         projection_guard(body, value, &[reference.heap_type], why)?;
         crate::buffers::kind_guard(body, value, element)?;
-        body.load(value)?;
+        value.load(body)?;
         body.instruction(&I::RefCastNonNull(reference.heap_type));
         body.instruction(&I::End);
         return Ok(());
@@ -653,7 +686,7 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
     // (`optional-chain`, 2026-10-15). A value that is not one is the absence
     // when it is null or undefined, and refused by name otherwise.
     body.instruction(&I::Block(BlockType::Result(ValType::Ref(reference))));
-    body.load(value)?;
+    value.load(body)?;
     body.instruction(&I::BrOnCast {
         relative_depth: 0,
         from_ref_type: RefType::ANYREF,
@@ -676,24 +709,31 @@ fn unerase_reference(body: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> R
 /// as an object asked it twice per absent read, each `value.tag` opening with
 /// a `wasm:js-string` `test` crossing: `optional-chain`, 23.3% of the row by
 /// hand (2026-10-20).
-fn nullish(body: &mut Body<'_, '_>, value: ValueId) -> Result<(), Failure> {
+fn nullish(body: &mut Body<'_, '_>, value: impl Into<Operand>) -> Result<(), Failure> {
+    let value = value.into();
     box_tag_is(body, value, &[NULL, UNDEFINED])
 }
 
 pub(crate) fn projection_guard(
     body: &mut Body<'_, '_>,
-    value: ValueId,
+    value: impl Into<Operand>,
     cases: &[HeapType],
     why: &str,
 ) -> Result<(), Failure> {
+    let value = value.into();
     is_one_of(body, value, cases)?;
     contract::require(body, why)
 }
 
 /// Whether `value` is one of `cases`, as an i32.
-fn is_one_of(body: &mut Body<'_, '_>, value: ValueId, cases: &[HeapType]) -> Result<(), Failure> {
+fn is_one_of(
+    body: &mut Body<'_, '_>,
+    value: impl Into<Operand>,
+    cases: &[HeapType],
+) -> Result<(), Failure> {
+    let value = value.into();
     for (at, case) in cases.iter().enumerate() {
-        body.load(value)?;
+        value.load(body)?;
         body.instruction(&I::RefTestNonNull(*case));
         if at != 0 {
             body.instruction(&I::I32Or);
@@ -728,13 +768,18 @@ pub(crate) fn tag_test(body: &mut Body<'_, '_>, value: ValueId, tag: i32) -> Res
 /// Whether erased `value` is a box whose tag, its first field, is one of
 /// `tags`, as an i32. `undefined`, `null` and the booleans are such boxes, and
 /// nothing else an erased value holds is a box with their tags.
-fn box_tag_is(body: &mut Body<'_, '_>, value: ValueId, tags: &[i32]) -> Result<(), Failure> {
+fn box_tag_is(
+    body: &mut Body<'_, '_>,
+    value: impl Into<Operand>,
+    tags: &[i32],
+) -> Result<(), Failure> {
+    let value = value.into();
     let tagged = types(body.m)?.tagged;
-    body.load(value)?;
+    value.load(body)?;
     body.instruction(&I::RefTestNonNull(HeapType::Concrete(tagged)));
     body.instruction(&I::If(BlockType::Result(ValType::I32)));
     for (at, tag) in tags.iter().enumerate() {
-        body.load(value)?;
+        value.load(body)?;
         body.instruction(&I::RefCastNonNull(HeapType::Concrete(tagged)));
         body.instruction(&I::StructGet {
             struct_type_index: tagged,

@@ -616,6 +616,95 @@ fn a_push_grows_its_storage_only_on_the_cold_path() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// A table's keys or values collected into an array are one fill
+/// (`nts_map_keys_into`, `nts_map_values_into`): a copy helper per storage
+/// pair whose fast path is one `array.copy`, a converting loop at the call
+/// site where the table holds objects erased, and no cursor walk in any
+/// collecting function -- across holes at both ends, a re-add, every spread
+/// form, mixed members, objects, booleans and the empty table. The control
+/// collects by hand and still walks.
+#[test]
+fn a_table_collected_into_an_array_is_one_fill() {
+    let fixture = common::repository().join("tests/programs/a-table-copied-into-an-array");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let calls = common::calls_by_name_with_imports(&emitted.bytes);
+    let callees_of = |caller: &str| -> Vec<&String> {
+        calls
+            .iter()
+            .filter(|(name, _)| *name == caller || name.starts_with(&format!("{caller}#")))
+            .flat_map(|(_, callees)| callees)
+            .collect()
+    };
+    let walks = |caller: &str| {
+        callees_of(caller)
+            .iter()
+            .any(|callee| callee.starts_with("collection<") && callee.ends_with(".Next"))
+    };
+    for name in [
+        "mapParts",
+        "mapSpread",
+        "setForms",
+        "mixed",
+        "objects",
+        "kinds",
+        "empty",
+    ] {
+        assert!(
+            !walks(name),
+            "`{name}` still walks a table: {:?}",
+            callees_of(name)
+        );
+    }
+    assert!(
+        walks("byHand"),
+        "the control collects by `for...of`: {calls:?}"
+    );
+    let imported = imported_functions(&emitted.bytes);
+    let mut helpers = Vec::new();
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+            let name = &names[imported + defined];
+            if name.contains("Into<") {
+                let mut reader = body.get_operators_reader().unwrap();
+                let mut has_copy = false;
+                while !reader.eof() {
+                    has_copy |= matches!(
+                        reader.read().unwrap(),
+                        wasmparser::Operator::ArrayCopy { .. }
+                    );
+                }
+                helpers.push((name.clone(), has_copy));
+            }
+            defined += 1;
+        }
+    }
+    assert!(
+        helpers.len() >= 4 && helpers.iter().all(|(_, has_copy)| *has_copy),
+        "every copy helper has its array.copy path: {helpers:?}"
+    );
+    // A Set of a class holds its members erased, so they are unerased into
+    // the array at the call site rather than copied by a helper.
+    assert!(
+        !callees_of("objects")
+            .iter()
+            .any(|callee| callee.contains("Into<")),
+        "{:?}",
+        callees_of("objects")
+    );
+    let output = common::run_with_node_flags(
+        "a-table-copied-into-an-array",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 136, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Objects as collection keys compare by identity: same-shaped objects are two
 /// keys, an identity hash survives growth, and erased objects and functions
 /// hash the same way.

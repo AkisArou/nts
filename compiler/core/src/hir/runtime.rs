@@ -1904,14 +1904,20 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         return foreign_keeps(name);
     }
     match name {
-        // Both read, neither kept: the result is a fresh string.
+        // Both read, neither kept: the result is a fresh string. And a
+        // table's keys or values copied into the array the caller sized: the
+        // table is read and the array written, neither kept, as the
+        // `nts_map_next` / `nts_map_key_at` walk they replace never made the
+        // table escape.
         "nts_concat"
         | "nts_string_eq"
         | "nts_str_index_of"
         | "nts_str_last_index_of"
         | "nts_str_includes"
         | "nts_str_starts_with"
-        | "nts_str_ends_with" => Some(&[]),
+        | "nts_str_ends_with"
+        | "nts_map_keys_into"
+        | "nts_map_values_into" => Some(&[]),
         // The left is consumed and the result may *be* it, so it is kept; the
         // right is only read.
         "nts_str_append" => Some(&[0]),

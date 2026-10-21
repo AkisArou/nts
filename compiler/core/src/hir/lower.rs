@@ -38770,6 +38770,9 @@ impl<'a> FuncBuilder<'a> {
             return Err(self.unsupported(id, "a walk collected into a value that is not an array"));
         };
         let element_ty = element_ty.as_ref();
+        if let Some(out) = self.fill_from_table(&walk, sequence_value, element_ty, ty, &origin) {
+            return Ok(out);
+        }
         let append = self.collection_append(id, element_ty, None)?;
 
         // How many elements are coming, where that is known before the walk
@@ -38897,6 +38900,44 @@ impl<'a> FuncBuilder<'a> {
         self.end_loop(&record, step)?;
         self.unlend_walked(lent, &origin);
         Ok(out)
+    }
+
+    /// A table's keys or values, into an array of the type it stores them as:
+    /// sized at the table's live count and filled by one call, in entry order
+    /// and holes skipped, where the walk made a call pair per element
+    /// (`nts_map_next`, `nts_map_key_at`) -- half of `Array.from`'s time on C.
+    /// Only at the stored type, so no backend converts: an element type of the
+    /// program's own choosing keeps the walk and its `coerce`. Asked before the
+    /// walk's append, which a copy never makes, so a narrow element -- a
+    /// boolean -- is copied too. None where the walk is not a table's.
+    fn fill_from_table(
+        &mut self,
+        walk: &Walk,
+        sequence_value: ValueId,
+        element_ty: &HirType,
+        ty: &HirType,
+        origin: &Origin,
+    ) -> Option<ValueId> {
+        let Walk::Table { read, .. } = walk else {
+            return None;
+        };
+        let fill = table_fill(&self.values[sequence_value.0 as usize].ty, read, element_ty)?;
+        let live = self.push(
+            OpKind::Length(sequence_value),
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let out = self.push(
+            OpKind::ArrayNew {
+                length: live,
+                // Filled: the call writes every slot before anything reads one.
+                fill: ArrayFill::Filled,
+            },
+            ty.clone(),
+            origin.clone(),
+        );
+        self.call_runtime(fill, vec![sequence_value, out], HirType::Void, origin);
+        Some(out)
     }
 
     /// The callback-free collection. A mapper has to run during iteration,
@@ -59020,6 +59061,25 @@ impl<'a> FuncBuilder<'a> {
             .children(spread)
             .first()
             .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
+        // A Set, or a Map's keys or values, spread whole is `Array.from` of
+        // it: the same table walk, which `collect_a_walk` fills in one call.
+        // A Map itself and `entries()` are pairs, which the walk does not
+        // build, and keep the copy's refusal.
+        let (sequence, forced) = self.sequence_source(inner);
+        let table = match self.type_of(sequence) {
+            Some(HirType::Managed(ManagedType::Set(_))) => {
+                matches!(forced, None | Some("keys" | "values"))
+            }
+            Some(HirType::Managed(ManagedType::Map(..))) => {
+                matches!(forced, Some("keys" | "values"))
+            }
+            _ => false,
+        };
+        if table {
+            let sequence_value = self.lower_expression(sequence)?;
+            let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
+            return self.collect_a_walk(spread, sequence, sequence_value, walk, ty);
+        }
         self.lower_array_copy(inner, ty, origin)
     }
 
@@ -85104,6 +85164,27 @@ struct IteratorMethods {
     has: NativeMethod,
     current: NativeMethod,
     advance: NativeMethod,
+}
+
+/// The helper that copies a table's keys (`nts_map_key_at`'s walk) or values
+/// (`nts_map_value_at`'s) into an array whose element is the type the table
+/// stores them as, or none where the element is any other type. A Set's
+/// values are its keys, and its walk already reads them as keys.
+fn table_fill(table: &HirType, read: &str, element: &HirType) -> Option<&'static str> {
+    let (stored, fill) = match (table, read) {
+        (
+            HirType::Managed(
+                ManagedType::Set(key) | ManagedType::Map(key, _) | ManagedType::Table(key, _),
+            ),
+            "nts_map_key_at",
+        ) => (key, "nts_map_keys_into"),
+        (
+            HirType::Managed(ManagedType::Map(_, value) | ManagedType::Table(_, value)),
+            "nts_map_value_at",
+        ) => (value, "nts_map_values_into"),
+        _ => return None,
+    };
+    (stored.as_ref() == element).then_some(fill)
 }
 
 #[derive(Clone)]

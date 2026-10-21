@@ -394,16 +394,17 @@ fn test(b: &mut Body<'_, '_>, op: Op, args: &[ValueId]) -> Result<(), Failure> {
 /// read as a `Float64Array` would read its bytes at the wrong width.
 pub(crate) fn kind_guard(
     b: &mut Body<'_, '_>,
-    value: ValueId,
+    value: impl Into<crate::erased::Operand>,
     element: &HirType,
 ) -> Result<(), Failure> {
+    let value = value.into();
     let t = types(b.m)?;
     // An owned kind has a struct type of its own, so the cast was the test.
     if b.types().owned_views.contains_key(element) {
         return Ok(());
     }
     let kind = element_kind(element).ok_or_else(|| format!("a view of {element:?}"))?;
-    b.load(value)?;
+    value.load(b)?;
     b.instructions(&[
         I::RefCastNonNull(HeapType::Concrete(t.view)),
         I::StructGet {

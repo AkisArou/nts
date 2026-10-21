@@ -13,9 +13,10 @@ because      `used * 2` with a floor of eight, and nothing tells a `Set` how
 because      many elements are coming.
 because   1  the array
 because
-because The array is allocated **at the walk's length** and filled by index,
-because because a table keeps its live entry count in the header field an array
-because uses for `length`. Appending instead measures **nine**: the same five
+because The array is allocated **at the table's live count** and filled by one
+because call, `nts_map_keys_into` (it was filled by index from a cursor walk until
+because 2026-10-21, at the same five), because a table keeps its live entry count
+because in the header field an array uses for `length`. Appending instead measures **nine**: the same five
 because plus four doublings of the result. That difference is the whole of what
 because this case ratchets, and it is invisible to the benchmark -- 1.86 ms
 because against 1.84 ms, which is no change at all. Two instruments, one of

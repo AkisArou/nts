@@ -5,9 +5,13 @@
 // sum] of totals.entries())` (the control below) and `for ... of totals`
 // (one name per entry is a blocker of its own,
 // an-entries-walk-binding-one-name).
-// `[...totals]`, `[...totals.keys()]` and `Array.from(totals.entries())`
-// are refused too. Found by the Chromium lane writing an expense tracker
-// against lib.dom (2026-10-14): totals per category, sorted by amount.
+// `[...totals]` and `Array.from(totals.entries())` are refused too: a pair
+// per entry, which no walk builds. `[...totals.keys()]` and
+// `[...totals.values()]` compile since 2026-10-21, collected by the table
+// copy that `Array.from` of them uses (tests/programs/
+// a-table-copied-into-an-array). Found by the Chromium lane writing an
+// expense tracker against lib.dom (2026-10-14): totals per category, sorted
+// by amount.
 //
 // Control, one difference -- the loop the spread stands for:
 //

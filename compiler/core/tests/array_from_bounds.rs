@@ -1,5 +1,7 @@
-//! The output index of a callback-free table collection is bounded by its
-//! allocation. The table cursor can skip holes and is a different value.
+//! A callback-free table collection is sized at the table's live count and
+//! filled by one call; a mapped one grows, because its callback can change
+//! that count. (The fill replaced a walk whose output position had to stay
+//! bounded by the allocation while the table cursor skipped holes.)
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
@@ -65,14 +67,61 @@ fn collection_stores(program: &hir::Program, name: &str) -> String {
     records.join("\n")
 }
 
+/// The fills of arrays allocated at a table's live count, as `helper(array)`,
+/// and whether anything else in the function still walks a table by cursor.
+fn collection_fills(program: &hir::Program, name: &str) -> (Vec<String>, bool) {
+    let function = program
+        .funcs
+        .iter()
+        .find(|function| function.name == name)
+        .unwrap_or_else(|| panic!("{name} is compiled"));
+    let mut fills = Vec::new();
+    let mut walks = false;
+    for value in function.blocks.iter().flat_map(|block| &block.ops) {
+        let OpKind::Call {
+            callee: hir::Callee::External(helper),
+            args,
+            ..
+        } = &function.value(*value).kind
+        else {
+            continue;
+        };
+        if helper == "nts_map_next" {
+            walks = true;
+        }
+        let [table, out] = args.as_slice() else {
+            continue;
+        };
+        let OpKind::ArrayNew { length, .. } = function.value(*out).kind else {
+            continue;
+        };
+        if matches!(function.value(length).kind, OpKind::Length(source) if source == *table) {
+            fills.push(helper.clone());
+        }
+    }
+    (fills, walks)
+}
+
+/// A callback-free collection of a table is sized at its live count and
+/// filled by one call: no store per element, so no output position for a
+/// hole to put out of step, and no cursor at all.
 #[test]
-fn callback_free_table_collections_use_an_integer_unchecked_write() {
+fn callback_free_table_collections_are_one_fill_at_the_live_count() {
     let Some(prepared) = prepared() else { return };
-    for name in ["fromSet", "fromMapValues"] {
+    for (name, helper) in [
+        ("fromSet", "nts_map_keys_into"),
+        ("fromEmptySet", "nts_map_keys_into"),
+        ("fromMapValues", "nts_map_values_into"),
+    ] {
+        assert_eq!(
+            collection_fills(&prepared.program, name),
+            (vec![helper.to_owned()], false),
+            "{name}: one fill of an array sized at the live count, and no walk"
+        );
         assert_eq!(
             collection_stores(&prepared.program, name),
-            "index: Int { bits: 32, signed: true }, checked: false",
-            "{name}: a live-entry count bounds the output position, including holes"
+            "",
+            "{name}: the fill stores every element; nothing stores one by one"
         );
     }
 }
