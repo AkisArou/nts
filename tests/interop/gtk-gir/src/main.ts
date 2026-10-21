@@ -63,6 +63,8 @@
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
 //                 `gtk_string_list_new` directly and through `{ strings }`
+//   group Desktop Entry  a string GLib `#define`s, G_KEY_FILE_DESKTOP_GROUP:
+//                 declared as its literal type, and read as the text it is
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
@@ -188,6 +190,7 @@ import {
   g_key_file_unref,
   g_quark_from_string,
   g_quark_to_string,
+  G_KEY_FILE_DESKTOP_GROUP,
   g_access,
   g_atomic_ref_count_compare,
   g_atomic_ref_count_inc,
@@ -439,6 +442,9 @@ function outParameters(): void {
   const markup = stringFrom(stripped[0]);
   g_free(stripped[0]);
   console.log("markup=" + (markup ?? "none") + "|" + (stringFrom(null) ?? "none"));
+
+  // A string GLib `#define`s, which the binding declares as its literal type.
+  console.log("group " + G_KEY_FILE_DESKTOP_GROUP);
 
   const keys = g_key_file_new();
   const error = local<GError | null>();
