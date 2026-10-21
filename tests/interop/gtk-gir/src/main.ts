@@ -81,6 +81,11 @@
 //                 file's string list by the method's values form, its integer
 //                 list by the free function's, and `g_shell_parse_argv`'s
 //                 `argv`, an array C writes into an out slot
+//   folded hello|wörld world spawned 97,98  arrays C hands back ended by a
+//                 zero, counted to it and copied: the ASCII alternates
+//                 `g_str_tokenize_and_fold` writes into an out slot, and the
+//                 bytes a process wrote, which `g_spawn_command_line_sync`
+//                 collects
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -199,6 +204,8 @@ import {
   g_key_file_get_integer,
   g_key_file_get_integer_list,
   g_shell_parse_argv,
+  g_spawn_command_line_sync,
+  g_str_tokenize_and_fold,
   g_free,
   g_malloc0,
   g_memdup2,
@@ -496,6 +503,13 @@ function outParameters(): void {
     "copied " + lists.get_string_list("l", "s").join("|") + " " +
       g_key_file_get_integer_list(lists, "l", "n").join(",") + " argv " +
       g_shell_parse_argv("a 'b c'").join("|"),
+  );
+  // Arrays C hands back ended by a zero, counted to it and copied.
+  const [tokens, alternates] = g_str_tokenize_and_fold("Hello wörld", null);
+  const [spawned] = g_spawn_command_line_sync("printf ab");
+  console.log(
+    "folded " + tokens.join("|") + " " + alternates.join("|") + " spawned " +
+      String(spawned[0]) + "," + String(spawned[1]),
   );
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
