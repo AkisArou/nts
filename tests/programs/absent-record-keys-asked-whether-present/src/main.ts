@@ -9,8 +9,10 @@
 // `=== undefined` folded to `false` and `typeof` said "number", while Wasm
 // stopped by name. `(counts[w] || 0) + 1` agreed by luck, 0 being falsy too.
 //
-// The other uses of a missing entry -- arithmetic, a store, an argument --
-// stop by name: tests/outcomes/a-missing-record-key-read-as-a-number.
+// Arithmetic applies ToNumber to a missing entry and answers NaN, as node
+// does (tests/outcomes/a-missing-record-key-read-as-a-number); a store, a
+// return or an argument, which would see `undefined` as it is, declines by name
+// (tests/outcomes/a-missing-number-record-entry-is-read-as-zero).
 //
 // The control, present-record-keys-asked-whether-present, sets every key
 // these read.

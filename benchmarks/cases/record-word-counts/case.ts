@@ -7,8 +7,9 @@
 // value the lookup answers and tests its tag. The second pass asks about a
 // vocabulary a third of which was never counted, through `?? 0`, the same
 // kind of read. The last pass reads every counted word at a number,
-// `counts[w] * (i + 1)`, which is checked to be the number its type says
-// before it is read as one: the price of the stop a missing key there makes.
+// `counts[w] * (i + 1)`: its tag is tested, the number read where it is one,
+// and an absence converted as ToNumber converts it -- the price of reading a
+// record entry exactly.
 //
 // The comparison is `std::unordered_map<std::string, double>`, `HashMap<String,
 // Double>`, and node's own object used as a dictionary.

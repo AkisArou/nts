@@ -1610,10 +1610,9 @@ int main(void) {{
     check("holds(NaN)", holds((double)NAN) ? 1 : 0, 0);
     check("holds(9)", holds(9) ? 1 : 0, 1);
 
-    /* Negative counts from the end, and out of range is undefined. */
+    /* Negative counts from the end; out of range declines, below. */
     check("nth(-1)", nth(-1), 6);
     check("nth(0)", nth(0), 3);
-    check("nth(99) is NaN", isnan(nth(99)) ? 1 : 0, 1);
 
     check("filledWith(7)", filledWith(7), 7);
     check("reversedHead", reversedHead(), 6);
@@ -1633,6 +1632,42 @@ int main(void) {{
     assert!(
         output.contains("ok firstAt(NaN) is -1") && output.contains("ok holds(NaN) = 0"),
         "`indexOf` and `includes` must disagree about NaN: {output}",
+    );
+}
+
+#[test]
+fn an_index_its_non_null_assertion_promised_declines_by_name() {
+    // `nth` returns `digits().at(i)!`, which node answers `undefined` past the
+    // end, where `nth`'s type promised a number. No double is `undefined`, and
+    // NaN would print "NaN" where node prints "undefined": the program's own
+    // promise failed, so the case declines by name (`nts: refused:`, which the
+    // differential harness skips -- `tests/programs/arrays` under agree)
+    // rather than answering. In bounds first, so a failure there is not
+    // mistaken for the decline.
+    let harness = format!(
+        r#"{CHECK}
+double nth(double i);
+int main(void) {{
+    check("nth(0)", nth(0), 3);
+    if (failures) return 0;
+    (void)nth(99);
+    printf("FAIL: answered past the end\n");
+    return 0;
+}}
+"#
+    );
+    let Some(output) = build_and_run("arrays", &harness) else {
+        return;
+    };
+    let printed = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        !output.status.success() && !printed.contains("FAIL"),
+        "{printed}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("nts: refused: an erased value read as a number, which it is not"),
+        "the read must decline by name: {output:?}"
     );
 }
 

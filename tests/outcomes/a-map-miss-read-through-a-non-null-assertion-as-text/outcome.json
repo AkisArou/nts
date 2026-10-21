@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "exit 1; nts: refused: an erased value read as a number, which it is not",
+  "node": "exit 1; nts: uncaught Observed: a=1;missing=undefined;",
+  "measured_with": "30306e14080cb0dc",
+  "source": "measured"
+}

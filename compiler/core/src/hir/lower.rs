@@ -29733,12 +29733,12 @@ impl<'a> FuncBuilder<'a> {
         if let Some(kind) = self.literal_method_typeof(id, operand)? {
             return Ok(kind);
         }
-        // A string record's entry the checker calls a number is `undefined`
-        // where the key is missing: its read arrives erased, and the tag
-        // answers (`entry_reads`).
+        // A read the checker calls a number -- a string record's entry, a
+        // `!` -- is `undefined` where nothing is there: it arrives erased, and
+        // the tag answers (`claimed_reads`).
         let answer = self
             .typeof_from_the_checkers_type(operand)
-            .filter(|_| !entry_reads::stays_erased(self, operand))
+            .filter(|_| !claimed_reads::stays_erased(self, operand))
             .ok_or_else(|| {
                 self.unsupported(
                     id,
@@ -49376,7 +49376,7 @@ impl<'a> FuncBuilder<'a> {
             }
             Place::Entry { table, key } => {
                 let read = property_keys::apply(self, id, table, key, property_keys::Action::Get);
-                entry_reads::narrowed(self, id, read)?
+                claimed_reads::narrowed(self, id, read)?
             }
             Place::Global(global) => {
                 // **Narrowed, like every other read of a name.** A global
@@ -58540,7 +58540,7 @@ impl<'a> FuncBuilder<'a> {
                 .expect("element access has an index");
             let key = property_keys::capture(self, source, index)?;
             let read = property_keys::apply(self, id, array, key, property_keys::Action::Get);
-            return entry_reads::narrowed(self, id, read);
+            return claimed_reads::narrowed(self, id, read);
         }
 
         // An array the checker proved and the representation did not. There is
@@ -60189,7 +60189,7 @@ impl<'a> FuncBuilder<'a> {
         );
         let key = self.erased_for_table(key, &origin);
         let read = property_keys::apply(self, id, value, key, property_keys::Action::Get);
-        entry_reads::narrowed(self, id, read)
+        claimed_reads::narrowed(self, id, read)
     }
 
     /// The layouts a value of a union can have: each arm, and for an arm that
@@ -77827,10 +77827,14 @@ impl<'a> FuncBuilder<'a> {
         // are three answers for an index that is not there.
         //
         // Only where the result is erased -- where the caller has not narrowed
-        // it away with `!` or a guard -- so a program that promised the index
-        // was there pays nothing. That is the rule `pop` and `at` already
-        // follow.
-        if helper == "nts_str_code_point_at" && self.type_of(id) == Some(HirType::Erased) {
+        // it away with a guard, or with a `!` its consumer converts
+        // (`claimed_reads::read_as_number`) -- so a program that promised the
+        // index was there pays nothing. That is the rule `pop` and `at`
+        // already follow.
+        if helper == "nts_str_code_point_at"
+            && self.type_of(id) == Some(HirType::Erased)
+            && !claimed_reads::read_as_number(self, id)
+        {
             let value = self.push(
                 OpKind::Call {
                     callee: Callee::External(helper.to_owned()),
@@ -78004,9 +78008,11 @@ impl<'a> FuncBuilder<'a> {
         // written claim that "undefined is NaN for a number" -- which is not
         // true of anything the language does with it. `String([].pop())` is
         // "undefined" in node and was "NaN" here; `?? 0` takes the one and not
-        // the other. Where a caller has narrowed the result back to a number
-        // the double-returning helper is still the one, and costs nothing.
-        let absent_result = self.type_of(id) == Some(HirType::Erased);
+        // the other. Where a caller has narrowed the result back to a number,
+        // or converts it through a `!` (`claimed_reads::read_as_number`), the
+        // double-returning helper is still the one, and costs nothing.
+        let absent_result =
+            self.type_of(id) == Some(HirType::Erased) && !claimed_reads::read_as_number(self, id);
 
         // `push` returns the new length, which is what the expression is worth
         // in JavaScript, and takes as many elements as it was given.
@@ -84077,11 +84083,11 @@ impl<'a> FuncBuilder<'a> {
         };
         // Erased by its type, or -- where the checker's type has no
         // representation, as `NSObject | undefined` from a map's `get` has
-        // none -- by what the name is bound to. Or a string record's entry the
-        // checker calls present, whose key may be missing all the same: its
-        // read arrives erased here (`entry_reads`).
+        // none -- by what the name is bound to. Or a read the checker calls
+        // present -- a string record's entry, a `!` -- which may be `undefined`
+        // all the same: it arrives erased here (`claimed_reads`).
         if self.type_of(value).or_else(|| self.bound_type(value)) != Some(HirType::Erased)
-            && !entry_reads::stays_erased(self, value)
+            && !claimed_reads::stays_erased(self, value)
         {
             return self.absence_the_type_decides(id, operator, value, written);
         }
@@ -86060,9 +86066,9 @@ mod access_family_functions;
 mod access_family_sites;
 mod assertions;
 mod bigint;
+mod claimed_reads;
 mod closure_context;
 mod elision_patterns;
-mod entry_reads;
 mod field_initialization;
 mod function_names;
 mod gobject;

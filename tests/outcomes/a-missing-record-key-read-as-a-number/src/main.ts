@@ -20,6 +20,13 @@
 //
 // The control is the first observation: the same read of a key that is
 // there, which agrees.
+//
+// **Since 2026-10-21 it agrees, a guard.** Arithmetic applies ToNumber to
+// what it reads, so ToNumber's own answer is exact there: a missing key is
+// NaN and `stock[key] + 1` is NaN, as in node, on every backend. Only a
+// consumer that would see `undefined` as it is -- a store, a return, an
+// argument -- declines by name now (lower/claimed_reads.rs):
+// tests/outcomes/a-missing-number-record-entry-is-read-as-zero.
 const stock: Record<string, number> = { apples: 3 };
 
 function next(key: string): number {

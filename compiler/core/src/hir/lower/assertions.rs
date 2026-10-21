@@ -22,9 +22,10 @@ enum Check {
 /// `x!` is checked only where its target is a reference: after it the program
 /// trusts the pointer, folds its own `=== null` guards away and dereferences
 /// it, so a null that got through is a crash rather than a JavaScript answer.
-/// A scalar target has no pointer to trust -- `digits().at(99)!` unerases
-/// `undefined` to NaN, which is what node's `undefined` becomes as a number --
-/// so it stays the type-only claim it is in JavaScript.
+/// A scalar target has no pointer to trust, so it stays the type-only claim it
+/// is in JavaScript, and `claimed_reads` reads it as its consumer takes it:
+/// `digits().at(99)! + 1` is NaN, as node's `undefined + 1` is,
+/// `typeof m.get(k)!` asks the tag, and `return digits().at(99)!` declines.
 fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
     if probe.kind_of(id) == Some(syntax::NON_NULL_EXPRESSION) {
         return probe
@@ -217,6 +218,11 @@ pub(super) fn lower(
         }
         _ => {}
     }
+    // A scalar `x!` over an erased value is the type-only claim it is in
+    // JavaScript, read as its consumer takes it (`claimed_reads`).
+    if builder.kind_of(id) == Some(syntax::NON_NULL_EXPRESSION) {
+        return super::claimed_reads::narrowed(builder, id, value);
+    }
     builder.narrowed(id, value)
 }
 
@@ -393,6 +399,20 @@ fn reject_when(
     {
         return builder.refuse_when(id, condition, class, message);
     }
+    decline_when(builder, id, condition, message)
+}
+
+/// Where `condition` holds, decline the case by name (`nts: refused:`): the
+/// input broke a promise the program made -- a native assertion, a `!`, an
+/// index signature's type -- and no answer this program can give is
+/// JavaScript's. Never a `TypeError`, which a handler could catch where
+/// JavaScript threw nothing.
+pub(super) fn decline_when(
+    builder: &mut FuncBuilder<'_>,
+    id: NodeId,
+    condition: ValueId,
+    message: &str,
+) -> Result<(), Diagnostic> {
     let rejected = builder.new_block();
     let accepted = builder.new_block();
     builder.terminate(super::super::Terminator::Branch {

@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "aborted",
-  "nts": "SIGABRT; nts: refused at run time: an erased value read as a number, which it is not",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: apples=4;pears=NaN;",
   "node": "exit 1; nts: uncaught Observed: apples=4;pears=NaN;",
-  "measured_with": "46d7d1783c2f5e77",
+  "measured_with": "30306e14080cb0dc",
   "source": "measured"
 }
