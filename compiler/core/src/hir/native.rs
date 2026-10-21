@@ -1289,6 +1289,26 @@ pub struct Handle {
     /// prerequisite last. Any handle extending that chain converts to it --
     /// the checker has already required that it implements the interface.
     pub interface: bool,
+    /// How C names the type: by its struct tag, or by a typedef.
+    pub spelling: Spelling,
+}
+
+/// How C names a handle's type -- `struct _GtkWidget *` or `GTestLogMsg *`.
+///
+/// **A typedef where there is no tag to write**: `typedef struct { ... }
+/// GTestLogMsg;` gives the struct none, so `struct GTestLogMsg` names
+/// nothing. And **a typedef where the tag is not a struct's**: `typedef union
+/// _GMutex GMutex;` makes `GMutex *` the same type to C as `union _GMutex *`,
+/// so a union needs no spelling of its own. `Typedef<H>` in `c:types` says
+/// which, as it does for a record; nothing in the handle's tag can.
+///
+/// Only the C backends spell a handle, and only C's text differs: every
+/// backend holds one as a pointer either way.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Spelling {
+    #[default]
+    Tag,
+    Typedef,
 }
 
 /// The object system a handle belongs to.
@@ -1517,6 +1537,7 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
                 ancestors: Vec::new(),
                 family: Family::Objc,
                 interface: false,
+                spelling: Spelling::Tag,
             }),
             "HandleBoxObjc",
         )),
@@ -1529,6 +1550,7 @@ pub fn handle_box(family: Family) -> Option<(super::TypeId, Pointee, &'static st
                 ancestors: Vec::new(),
                 family: Family::Com,
                 interface: false,
+                spelling: Spelling::Tag,
             }),
             "HandleBoxCom",
         )),
@@ -1548,6 +1570,7 @@ pub fn gobject_root() -> Pointee {
         ancestors: vec!["_GTypeInstance".to_owned()],
         family: Family::GObject,
         interface: false,
+        spelling: Spelling::Tag,
     })
 }
 
@@ -1627,6 +1650,7 @@ impl From<String> for Handle {
             ancestors: Vec::new(),
             family: Family::C,
             interface: false,
+            spelling: Spelling::Tag,
         }
     }
 }
@@ -1655,6 +1679,7 @@ impl Handle {
             ancestors: Vec::new(),
             family: Family::C,
             interface: false,
+            spelling: Spelling::Tag,
         }
     }
 
@@ -1667,6 +1692,7 @@ impl Handle {
             ancestors: Vec::new(),
             family: Family::C,
             interface: false,
+            spelling: Spelling::Tag,
         }
     }
 
@@ -1679,6 +1705,7 @@ impl Handle {
             ancestors: vec!["NSObject".to_owned()],
             family: Family::Objc,
             interface: false,
+            spelling: Spelling::Tag,
         }
     }
 }
@@ -1896,7 +1923,10 @@ impl Pointee {
     #[must_use]
     pub fn c_type(&self) -> String {
         match self {
-            Self::Opaque(name) => format!("struct {name}"),
+            Self::Opaque(handle) => match handle.spelling {
+                Spelling::Tag => format!("struct {}", handle.tag),
+                Spelling::Typedef => handle.tag.clone(),
+            },
             Self::Scalar(scalar) => scalar.c_type().to_owned(),
             // The width belongs to the *declarator*, not the type: C writes
             // `unsigned int ihl : 4`, so `c_type` is the storage unit and
@@ -3819,6 +3849,7 @@ fn returned_text(array: bool, string: Option<&ReturnedString>) -> Option<Type> {
                 ancestors: Vec::new(),
                 family: Family::C,
                 interface: false,
+                spelling: Spelling::Tag,
             },
         )))))
     } else if string.is_some() {
@@ -6070,7 +6101,7 @@ pub fn is_c_identifier(name: &str) -> bool {
 
 #[cfg(test)]
 mod handles {
-    use super::{Handle, Pointee};
+    use super::{Handle, Pointee, Spelling};
 
     fn class(chain: &[&str]) -> Pointee {
         let (tag, ancestors) = chain.split_last().expect("a chain has a tag");
@@ -6079,6 +6110,7 @@ mod handles {
             ancestors: ancestors.iter().map(|&a| a.to_owned()).collect(),
             family: super::Family::C,
             interface: false,
+            spelling: Spelling::Tag,
         })
     }
 

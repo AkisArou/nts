@@ -2,9 +2,9 @@
 //! never resolved by whichever declaration happened to be visited first.
 use nts_core::hir::{
     HirType, Program,
-    native::{Pointee, Record, RecordKind},
+    native::{Pointee, Record, RecordKind, Spelling},
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
@@ -16,6 +16,10 @@ pub struct Layouts {
     /// spelled with the wrong one is a different type rather than a typo.
     pub tags: BTreeMap<String, RecordKind>,
     pub structs: BTreeMap<String, Arc<Record>>,
+    /// Every handle this program names by a typedef ([`Spelling::Typedef`]):
+    /// declared by its header and by nothing here, so it is no tag to
+    /// forward-declare, and the headers are included for it.
+    pub typedefs: BTreeSet<String>,
 }
 
 impl Layouts {
@@ -43,6 +47,15 @@ impl Layouts {
             // its definition emitted -- stored inline, so before this one. A
             // flexible array member is the same question with no extent.
             Pointee::Array { element, .. } | Pointee::Flexible(element) => self.visit(element)?,
+            Pointee::Opaque(handle) if handle.spelling == Spelling::Typedef => {
+                if !super::symbols::is_native_c_identifier(&handle.tag) {
+                    return Err(format!(
+                        "native pointee `{}` is not a C typedef name",
+                        handle.tag
+                    ));
+                }
+                self.typedefs.insert(handle.tag.clone());
+            }
             Pointee::Opaque(name) => self.tag(name, RecordKind::Struct)?,
             Pointee::Record(layout) => {
                 self.tag(&layout.name, layout.kind)?;
@@ -167,6 +180,15 @@ pub fn layouts(program: &Program) -> Result<Layouts, String> {
         if let HirType::NativePointer(pointee) = ty {
             found.visit(pointee)?;
         }
+    }
+    // Only a header declares a typedef-named handle, and a program whose
+    // bindings name none would emit C naming a type nothing declares.
+    if let Some(name) = found.typedefs.first()
+        && program.native_headers.is_empty()
+    {
+        return Err(format!(
+            "native handle `{name}` is named by a typedef, which only the header declaring it can define, and no binding names a header (@ntsHeader)"
+        ));
     }
     // A record a composed class's forwarder passes through by value, which no
     // value of the program need hold: the forwarder's C still spells it.

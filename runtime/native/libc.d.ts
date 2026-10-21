@@ -524,6 +524,13 @@ declare module "c:types" {
   // that changes how a type is *spelled* rather than how it is laid out, which
   // is why it is not inferable -- nothing in `Struct<{...}, "__sigset_t">` says
   // which of the two the header wrote, and this compiler does not read headers.
+  //
+  // **A handle too**: `Typedef<Class<"GTestLogMsg">>` is `GTestLogMsg *`, for
+  // `typedef struct { ... } GTestLogMsg;`, whose struct has no tag. And a
+  // union reached by its typedef needs nothing else: `typedef union _GMutex
+  // GMutex;` makes `Typedef<Class<"GMutex">>`'s `GMutex *` the same type to C
+  // as `union _GMutex *`. Only the header declares such a name, so a binding
+  // using one names its header (`@ntsHeader`), and is refused without one.
   export type Typedef<T> = T & { readonly __c_typedef: true };
   // A record the header declares **without a tag** needs no marker:
   //

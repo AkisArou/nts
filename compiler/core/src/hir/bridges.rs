@@ -152,6 +152,7 @@ mod tests {
             ancestors: ancestors.iter().map(|name| (*name).to_owned()).collect(),
             family: Family::Host(HostFamily::of("nts_dom_retain", "nts_dom_release")),
             interface: false,
+            spelling: crate::hir::native::Spelling::Tag,
         }
     }
 

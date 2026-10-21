@@ -14,8 +14,8 @@ use nts_core::hir::native::{NativeAbi, Pointee, Type};
 
 /// Whether this program needs a type one of its bindings' headers defines.
 ///
-/// The includes exist to supply *struct definitions*, so a program that names
-/// no header-backed struct gets none -- which matters because an include is not
+/// The includes exist to supply *struct definitions* -- and the typedef a
+/// handle may be named by -- so a program that names neither gets none -- which matters because an include is not
 /// free here. `<stdlib.h>` declares `div`, a name a TypeScript program is
 /// entitled to export, and the C compiler would then have two incompatible
 /// declarations of it. Including only what a layout needs keeps that collision
@@ -23,8 +23,9 @@ use nts_core::hir::native::{NativeAbi, Pointee, Type};
 /// is worse: this file defining its own copy of a type a header also defines.
 #[must_use]
 pub(super) fn needs_headers(program: &Program) -> bool {
-    nts_codegen_common::native::layouts(program)
-        .is_ok_and(|layouts| layouts.structs.values().any(|layout| layout.from_header()))
+    nts_codegen_common::native::layouts(program).is_ok_and(|layouts| {
+        layouts.structs.values().any(|layout| layout.from_header()) || !layouts.typedefs.is_empty()
+    })
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
@@ -798,6 +799,10 @@ fn declare_record(
 
 fn collect_opaque_pointee(pointee: &Pointee, into: &mut std::collections::BTreeSet<String>) {
     match pointee {
+        // A handle C names by a typedef is declared by its header and by
+        // nothing else: `typedef struct GTestLogMsg GTestLogMsg;` written here
+        // would be a second, different type beside the header's tagless one.
+        Pointee::Opaque(handle) if handle.spelling == nts_core::hir::native::Spelling::Typedef => {}
         Pointee::Opaque(name) => {
             into.insert(format!("struct {name}"));
         }

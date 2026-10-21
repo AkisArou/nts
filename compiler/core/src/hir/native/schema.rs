@@ -98,8 +98,18 @@ pub(crate) fn stored(snapshot: &SemanticSnapshot, ty: TypeId) -> TypeId {
 
 /// An opaque pointee: `Opaque<Tag>`, or `Class<Tag, Parent>` with its chain.
 fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
+    // `Typedef<H>`: C names the type by the tag as a typedef, not after
+    // `struct` (see [`super::Spelling`]).
+    let spelling = if marker(snapshot, ty, "__c_typedef").is_some() {
+        super::Spelling::Typedef
+    } else {
+        super::Spelling::Tag
+    };
     if let Some(tag) = marker(snapshot, ty, "__c_opaque") {
-        return Some(Pointee::Opaque(text(snapshot, tag)?.into()));
+        return Some(Pointee::Opaque(super::Handle {
+            spelling,
+            ..super::Handle::from(text(snapshot, tag)?)
+        }));
     }
     // `Class<Tag, Parent>` -- an opaque pointee with a hierarchy. The chain is
     // a tuple of string literals, root first, ending in a `...string[]` rest,
@@ -154,6 +164,7 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         ancestors: tags,
         family,
         interface: interface.is_some(),
+        spelling,
     }))
 }
 
@@ -309,6 +320,7 @@ fn objc_class(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         ancestors,
         family: super::Family::Objc,
         interface: false,
+        spelling: super::Spelling::Tag,
     }))
 }
 
@@ -337,6 +349,7 @@ fn objc_protocol(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         ancestors: vec!["NSObject".to_owned()],
         family: super::Family::Objc,
         interface: true,
+        spelling: super::Spelling::Tag,
     }))
 }
 

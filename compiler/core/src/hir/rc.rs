@@ -1743,6 +1743,7 @@ mod tests {
                 ancestors: vec!["NSObject".to_owned()],
                 family: crate::hir::native::Family::Objc,
                 interface: false,
+                spelling: crate::hir::native::Spelling::Tag,
             },
         ));
         let values = vec![
@@ -1791,6 +1792,7 @@ mod tests {
                 ancestors: vec!["NSObject".to_owned()],
                 family: crate::hir::native::Family::Objc,
                 interface: false,
+                spelling: crate::hir::native::Spelling::Tag,
             },
         ));
         let read = crate::hir::native::Function {
@@ -2033,6 +2035,7 @@ mod tests {
                 },
                 family: crate::hir::native::Family::Objc,
                 interface: false,
+                spelling: crate::hir::native::Spelling::Tag,
             },
         ))
     }

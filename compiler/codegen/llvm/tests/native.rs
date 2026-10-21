@@ -3563,6 +3563,20 @@ fn run_on_both_backends(
     library: &str,
     caller: &str,
 ) -> Option<(String, Vec<String>)> {
+    run_on_both_backends_with(name, source, provider, library, caller, &[])
+}
+
+/// [`run_on_both_backends`], with `files` written beside the program first:
+/// a header of the test's own, which the program names (`@ntsHeader
+/// "own.h"`) so that the witness has a declaration to compare against.
+fn run_on_both_backends_with(
+    name: &str,
+    source: &str,
+    provider: hir::Provider,
+    library: &str,
+    caller: &str,
+    files: &[(&str, &str)],
+) -> Option<(String, Vec<String>)> {
     let label = if provider == hir::Provider::ReferenceCounting {
         "rc"
     } else {
@@ -3585,6 +3599,9 @@ fn run_on_both_backends(
     }
     std::fs::write(dir.join("native.c"), library).unwrap();
     std::fs::write(dir.join("caller.c"), caller).unwrap();
+    for (file, text) in files {
+        std::fs::write(dir.join(file), text).unwrap();
+    }
     // The witness `nts build` compiles beside the program, which names no
     // header here: each prototype must still be a declaration C accepts.
     if dir.join(nts_codegen_c::NATIVE_WITNESS_NAME).exists() {
@@ -5587,6 +5604,93 @@ export function run(): number {
             .contains("@ntsCall naming `width_nowhere`, which this program does not define")),
         "an @ntsCall naming nothing was accepted: {:?}",
         prepared.diagnostics
+    );
+}
+
+/// A handle C names by a typedef, not after `struct`: `Typedef<Class<...>>`.
+///
+/// Two shapes, both from the system's headers. `div_t` is
+/// `typedef struct { ... } div_t;`, a struct with no tag, so
+/// `struct div_t *` names nothing. `__sigval_t` is a typedef of
+/// `union sigval`, which is how `GLib`'s `GMutex` is declared: spelled by its
+/// typedef, a union needs no spelling of its own. Each crosses as a pointer
+/// and is read back by C, so a handle spelled the old way fails to compile,
+/// and one passed wrongly reads the wrong number. Without a header to declare
+/// the name, the program is refused rather than emitted naming a type nothing
+/// declares.
+#[test]
+fn a_handle_named_by_a_typedef_on_both_backends() {
+    let source = r#"/**
+ * @ntsHeader "typedef_handles.h"
+ * @ntsDefine _POSIX_C_SOURCE=200809L
+ */
+import type { Class, Typedef } from "c:types";
+import type { c_int } from "@nts/scalars";
+type Quotient = Typedef<Class<"div_t">>;
+type SignalValue = Typedef<Class<"__sigval_t">>;
+declare function quotient_new(n: c_int, d: c_int): Quotient;
+declare function quotient_digits(q: Quotient): c_int;
+declare function signal_value_new(n: c_int): SignalValue;
+declare function signal_value_int(v: SignalValue): c_int;
+export function run(): number {
+    const q = quotient_new(17 as c_int, 5 as c_int);
+    return (quotient_digits(q) as number) * 100 + (signal_value_int(signal_value_new(9 as c_int)) as number);
+}
+"#;
+    let header = r"
+#include <signal.h>
+#include <stdlib.h>
+div_t *quotient_new(int n, int d);
+int quotient_digits(div_t *q);
+__sigval_t *signal_value_new(int n);
+int signal_value_int(__sigval_t *v);
+";
+    let library = r#"
+#define _POSIX_C_SOURCE 200809L
+#include "typedef_handles.h"
+static div_t the_quotient;
+static __sigval_t the_value;
+div_t *quotient_new(int n, int d) { the_quotient = div(n, d); return &the_quotient; }
+int quotient_digits(div_t *q) { return q->quot * 10 + q->rem; }
+__sigval_t *signal_value_new(int n) { the_value.sival_int = n; return &the_value; }
+int signal_value_int(__sigval_t *v) { return v->sival_int; }
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        // `program.h` asks its includer for the macro the bindings were
+        // checked under, rather than setting it too late to matter.
+        let caller = format!(
+            "#define _POSIX_C_SOURCE 200809L\n{}",
+            counted_caller(r#"printf("%.0f", run());"#, "run();")
+        );
+        let Some((_, outputs)) = run_on_both_backends_with(
+            "typedef-handle",
+            source,
+            provider,
+            library,
+            &caller,
+            &[("typedef_handles.h", header)],
+        ) else {
+            return;
+        };
+        for output in outputs {
+            // 17 / 5 is 3 rem 2, then the union's 9.
+            assert_eq!(output, expect("3209", provider), "{provider:?}");
+        }
+    }
+    let headerless = source
+        .replace(" * @ntsHeader \"typedef_handles.h\"\n", "")
+        .replace(" * @ntsDefine _POSIX_C_SOURCE=200809L\n", "");
+    assert!(!headerless.contains("@ntsHeader"));
+    let Some((_, prepared)) = prepare("typedef-handle-headerless", &headerless) else {
+        return;
+    };
+    let c = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+    assert!(
+        c.diagnostics.iter().any(|d| d
+            .message
+            .contains("is named by a typedef, which only the header")),
+        "a typedef-named handle with no header was emitted: {:?}",
+        c.diagnostics
     );
 }
 

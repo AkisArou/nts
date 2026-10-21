@@ -495,6 +495,7 @@ mod representation {
             ancestors: Vec::new(),
             family,
             interface: false,
+            spelling: crate::hir::native::Spelling::Tag,
         }))
     }
 

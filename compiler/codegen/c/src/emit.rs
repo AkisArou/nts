@@ -6256,6 +6256,7 @@ mod tests {
                 ancestors: Vec::new(),
                 family,
                 interface: false,
+                spelling: nts_core::hir::native::Spelling::Tag,
             }));
             assert_eq!(
                 nts_core::hir::lower::erasable(&ty),
