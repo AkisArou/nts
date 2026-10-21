@@ -120,6 +120,12 @@ pub fn specialize(
 
     join_edges(func, &mut classes);
 
+    // What each value could be on its own, ignoring the company it keeps.
+    let observed = super::zero_sign::observed(func);
+    let eligible: Vec<Option<u8>> = (0..count)
+        .map(|index| width_of(func, analysis, &observed, index))
+        .collect();
+
     // A comparison joins its two operands to each other, but not to its result,
     // which is a bool whatever they are. Without this, `i < 1000` leaves the
     // literal an integer and `i` a double and the loop pays a conversion every
@@ -159,16 +165,22 @@ pub fn specialize(
             // row's inner loop, 47% of its count on Wasm (2.13x node to 1.13x).
             && !is_constant(func, *lhs)
             && !is_constant(func, *rhs)
+            // ...or a side that cannot be an integer, for the parameter's
+            // reason: it never moves, so joining to it can only drag the other
+            // side down, and the comparison gains nothing -- one side is a
+            // double either way. Converting the provable side at the comparison
+            // costs one instruction; joining made it a double everywhere.
+            // `utf8Decode`'s `bytesSeen === bytesNeeded` compared a counter the
+            // analysis cannot bound (`bytesSeen++`) with a state that is only
+            // ever 0 to 3, and every comparison `bytesNeeded` took part in was
+            // made in doubles (node-utf8 on Wasm, the decoder's state machine
+            // at 1.18x node with equal instructions).
+            && eligible[lhs.0 as usize].is_some()
+            && eligible[rhs.0 as usize].is_some()
         {
             classes.union(lhs.0, rhs.0);
         }
     }
-
-    // What each value could be on its own, ignoring the company it keeps.
-    let observed = super::zero_sign::observed(func);
-    let eligible: Vec<Option<u8>> = (0..count)
-        .map(|index| width_of(func, analysis, &observed, index))
-        .collect();
 
     // A class is only as good as its worst member, and needs the widest
     // representation any member asked for.
