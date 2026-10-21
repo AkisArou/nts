@@ -4536,6 +4536,12 @@ impl Emitter<'_> {
     /// and what the subscript has to do first. Splitting them is how the
     /// growable array family ended up with two answers to "which wrapper", and
     /// that put `NtsArrayD.pop` where an `NtsValue` was wanted.
+    ///
+    /// `checked: false` takes `getProved` or `setProved`, which index the
+    /// buffer's bytes with no test of their own: the middle end proved the
+    /// index in range and the length unmoved, and C indexes `NTS_VIEW_ITEMS`
+    /// bare for the same op. The checked accessor tests, per element, that the
+    /// buffer is attached and the index under the length (`NtsView.atInt`).
     fn view_element(
         &mut self,
         code: &mut Code,
@@ -4573,6 +4579,11 @@ impl Emitter<'_> {
                 self.func,
                 "a typed array whose element this backend has no accessor for",
             ));
+        };
+        let member = match (checked, value.is_some()) {
+            (true, _) => member,
+            (false, false) => "getProved",
+            (false, true) => "setProved",
         };
         self.load(code, pool, array)?;
         self.view_subscript(code, pool, index, checked, origin)?;
