@@ -203,17 +203,33 @@ pub(super) fn helpers(program: &super::Program) -> String {
             .iter()
             .any(|op| matches!(op.kind, OpKind::NativeCopy { .. }))
     });
+    // A binding's own `free` or `malloc` -- a library's `@ntsFree free` -- is
+    // declared with the program's other native calls, and as C's own, since
+    // `native::layouts` refuses any other. A second `declare` of it here would
+    // be the redefinition LLVM refuses even where C takes a repeated prototype.
+    let bound = |name: &str| {
+        program.native_funcs().any(|f| {
+            f.values.iter().any(|op| {
+                matches!(
+                    &op.kind,
+                    OpKind::Call { callee: nts_core::hir::Callee::Native(target), .. } if target.name == name
+                )
+            })
+        })
+    };
     let mut text = String::new();
     if copies {
         text.push_str("declare void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)\n");
     }
-    if free {
+    if free && !bound("free") {
         text.push_str("declare void @free(ptr)\n");
+    }
+    if allocate && !bound("malloc") {
+        text.push_str("declare ptr @malloc(i64)\n");
     }
     if allocate {
         text.push_str(
-            r"declare ptr @malloc(i64)
-define internal ptr @nts_native_malloc(double %bytes, i64 %minimum) {
+            r"define internal ptr @nts_native_malloc(double %bytes, i64 %minimum) {
 entry:
   %min = uitofp i64 %minimum to double
   %lower = fcmp oge double %bytes, %min

@@ -3225,7 +3225,7 @@ fn authored_allocator_symbols_cannot_redefine_storage_operations() {
         assert!(
             diagnostics.iter().any(|d| d
                 .message
-                .contains("collides with the compiler's memory operations")),
+                .contains("is declared other than as the C library declares it")),
             "{diagnostics:?}"
         );
     }

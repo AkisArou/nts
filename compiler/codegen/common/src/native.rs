@@ -92,6 +92,30 @@ impl Layouts {
     }
 }
 
+/// Whether a binding's function takes a name the compiler's memory operations
+/// declare, and declares it as something else.
+///
+/// `free` as C declares it, `void free(void *)`, is the function the
+/// compiler's `free` is, and a second identical prototype is the same
+/// declaration: a library's `@ntsFree free`, and the compiler's own release of
+/// a thrown C message, are that. A `free` of another type would be a second,
+/// conflicting declaration beside `extern void free(void *);`, which C
+/// refuses. So it is the declaration that is compared, not the name; and
+/// `nts_native_malloc` is the compiler's own, which no binding can be.
+fn declares_a_memory_operation_differently(target: &nts_core::hir::native::Function) -> bool {
+    use nts_core::hir::native::{Scalar, Type};
+    let (parameters, result) = match target.name.as_str() {
+        "free" => (vec![Type::Pointer(Pointee::Void)], Type::Void),
+        "malloc" => (
+            vec![Type::Scalar(Scalar::Size)],
+            Type::Pointer(Pointee::Void),
+        ),
+        "nts_native_malloc" => return true,
+        _ => return false,
+    };
+    target.variadic.is_some() || target.parameters != parameters || target.result != result
+}
+
 /// Collect from lowered values, including closure/object fields. The immutable
 /// pointee carried by each value is the source of both ABI and memory layout.
 ///
@@ -114,13 +138,10 @@ pub fn layouts(program: &Program) -> Result<Layouts, String> {
                 callee: nts_core::hir::Callee::Native(target),
                 ..
             } = &op.kind
-                && matches!(
-                    target.name.as_str(),
-                    "malloc" | "free" | "nts_native_malloc"
-                )
+                && declares_a_memory_operation_differently(target)
             {
                 return Err(format!(
-                    "native `{}` collides with the compiler's memory operations; use c:stdlib",
+                    "native `{}` is declared other than as the C library declares it, beside the compiler's memory operations; use c:stdlib",
                     target.name
                 ));
             }

@@ -1,13 +1,13 @@
 //! A program may use the compiler's own memory operations -- `malloc` and
 //! `free` from `c:stdlib` -- beside a binding that throws. The collision
 //! rule (`nts_codegen_common::native::layouts`) refuses a program that uses
-//! them and also calls a native `malloc` or `free` of its own, which is a
-//! binding colliding with them. But lowering calls C's `free` itself, to
-//! release the message `@ntsThrows`' converter hands back
-//! (`nts_gerror_take_message`), and that synthesized call is counted as a
-//! binding's: the program below is refused with "native `free` collides with
-//! the compiler's memory operations; use c:stdlib", at a location in `GLib`'s
-//! generated values module rather than in the program.
+//! them and also calls a native `malloc` or `free` declared otherwise than C
+//! declares it. Lowering releases the message `@ntsThrows`' converter hands
+//! back (`nts_gerror_take_message`) with C's own `free`, and until the rule
+//! compared declarations rather than names, that release counted as a
+//! binding's: the program below was refused with "native `free` collides
+//! with the compiler's memory operations; use c:stdlib", at a location in
+//! `GLib`'s generated values module rather than in the program.
 //!
 //! The control differs in one thing: it calls nothing that throws.
 

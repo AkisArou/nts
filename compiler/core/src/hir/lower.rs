@@ -68092,19 +68092,13 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String),
             origin.clone(),
         );
-        let release = synthesized(
-            "free",
-            vec![super::native::Type::Pointer(super::native::Pointee::Void)],
-            super::native::Type::Void,
-            None,
-            Vec::new(),
-        );
+        // Freed by the compiler's own memory operation, which is what this is.
+        // A `free` synthesized as a native call was a second spelling of it,
+        // and the rule that keeps a binding's `free` from colliding with
+        // `c:stdlib`'s (`native::layouts`) could not tell the two apart: a
+        // program calling a throwing binding and using `malloc` was refused.
         self.push(
-            OpKind::Call {
-                callee: Callee::Native(std::sync::Arc::new(release)),
-                args: vec![message],
-                frame: None,
-            },
+            OpKind::NativeFree { pointer: message },
             HirType::Void,
             origin.clone(),
         );
