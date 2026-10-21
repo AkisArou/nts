@@ -190,7 +190,11 @@ fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
 /// is `Top` only if every read of it is in its own block with no label
 /// in between. Fusion is ignored -- a fused comparison emits no label,
 /// so counting it costs a slot its `Top` and never soundness.
-fn crossing_values(program: &JvmProgram<'_>, func: &Func) -> rustc_hash::FxHashSet<ValueId> {
+fn crossing_values(
+    program: &JvmProgram<'_>,
+    func: &Func,
+    unboxed_keys: &rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
+) -> rustc_hash::FxHashSet<ValueId> {
     let mut defined_at: Vec<Option<(usize, usize)>> = vec![None; func.values.len()];
     for (block_at, block) in func.blocks.iter().enumerate() {
         for (index, value) in block.ops.iter().enumerate() {
@@ -279,6 +283,13 @@ fn crossing_values(program: &JvmProgram<'_>, func: &Func) -> rustc_hash::FxHashS
             .filter(|&(_, &value)| puts_label(program, func, value))
             .map(|(index, _)| index)
             .collect();
+        // **A key passed unboxed is its erasure's source, read where the
+        // call is** (`fuse::unboxed_keys`). The `Erase` is never emitted, so
+        // the call loads the source's slot -- and when the call is past a
+        // join from the erasure, as `counts[w] = (counts[w] || 0) + 1` puts
+        // the store, the source was read nowhere else after its own block
+        // and its slot was `Top` at the join: "Type top (current frame,
+        // locals[19]) is not assignable to reference type".
         let reads = block
             .ops
             .iter()
@@ -286,7 +297,12 @@ fn crossing_values(program: &JvmProgram<'_>, func: &Func) -> rustc_hash::FxHashS
             .flat_map(|(index, value)| {
                 nts_core::hir::operands_of(&func.values[value.0 as usize].kind)
                     .into_iter()
-                    .map(move |operand| (operand, index))
+                    .map(move |operand| {
+                        let read = unboxed_keys
+                            .get(&operand)
+                            .map_or(operand, |&(source, _)| source);
+                        (read, index)
+                    })
             })
             .chain(
                 nts_core::hir::operands_of_terminator(&block.terminator)
@@ -353,7 +369,8 @@ struct Held {
     unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     fused: rustc_hash::FxHashSet<ValueId>,
-    object_keys: rustc_hash::FxHashMap<ValueId, ValueId>,
+    /// Erased map keys a helper takes unboxed; see `fuse::unboxed_keys`.
+    unboxed_keys: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Index helpers whose answer every use converts to an integer; see `intcall`.
@@ -400,7 +417,7 @@ fn held_values(
     Held {
         unboxed: crate::unbox::unboxable(func),
         fused: crate::fuse::fused(func),
-        object_keys: crate::fuse::object_keys(func),
+        unboxed_keys: crate::fuse::unboxed_keys(func),
         accumulated: crate::builder::accumulators(func),
         narrowed: crate::intcall::narrowed(func),
         joined: crate::closures::joined(package, program, func),
@@ -427,7 +444,8 @@ pub struct Emitter<'a> {
     pub(crate) unboxed: rustc_hash::FxHashSet<ValueId>,
     /// Erased answers read only as a float; see `fuse`.
     pub(crate) fused: rustc_hash::FxHashSet<ValueId>,
-    pub(crate) object_keys: rustc_hash::FxHashMap<ValueId, ValueId>,
+    /// Erased map keys a helper takes unboxed; see `fuse::unboxed_keys`.
+    pub(crate) unboxed_keys: rustc_hash::FxHashMap<ValueId, (ValueId, crate::fuse::KeyKind)>,
     /// String accumulators held as a `StringBuilder`; see `builder`.
     pub(crate) accumulated: rustc_hash::FxHashSet<ValueId>,
     /// Helper results declared `f64` and held as an `int`; see `intcall`.
@@ -461,7 +479,8 @@ impl<'a> Emitter<'a> {
 
         let order = block_order(func);
 
-        let crosses = crossing_values(program, func);
+        let plans = held_values(package, program, func, plan);
+        let crosses = crossing_values(program, func, &plans.unboxed_keys);
         let mut slots = vec![None; func.values.len()];
         let mut locals = Vec::new();
         let mut next = 0u32;
@@ -469,7 +488,6 @@ impl<'a> Emitter<'a> {
         // Parameters occupy the first slots, in order, whether or not the body
         // reads them: the JVM places arguments there and a gap would shift
         // every later one.
-        let plans = held_values(package, program, func, plan);
         let mut param_slot = Vec::with_capacity(func.params.len());
         for param in &func.params {
             let Some(vtype) = types::vtype(types::Shape::packaged(program, package), &param.ty)
@@ -586,7 +604,7 @@ impl<'a> Emitter<'a> {
             scratch: None,
             unboxed: plans.unboxed,
             fused: plans.fused,
-            object_keys: plans.object_keys,
+            unboxed_keys: plans.unboxed_keys,
             accumulated: plans.accumulated,
             char_codes,
             narrowed: plans.narrowed,
@@ -892,7 +910,12 @@ mod tests {
             ),
         ];
         let func = one_block(values, Terminator::Return(None));
-        crossing_values(&JvmProgram::new(&Program::default()), &func).contains(&ValueId(0))
+        crossing_values(
+            &JvmProgram::new(&Program::default()),
+            &func,
+            &crate::fuse::unboxed_keys(&func),
+        )
+        .contains(&ValueId(0))
     }
 
     /// A function of one block holding every value, in order.
@@ -994,12 +1017,92 @@ mod tests {
                 ],
                 Terminator::Return(Some(ValueId(1))),
             );
-            let crossing = crossing_values(&JvmProgram::new(&program), &func);
+            let crossing = crossing_values(
+                &JvmProgram::new(&program),
+                &func,
+                &crate::fuse::unboxed_keys(&func),
+            );
             // Written after the label, like a comparison's result.
             assert!(!crossing.contains(&ValueId(1)));
             crossing.contains(&ValueId(0))
         };
         assert!(crosses(vec![TypeId(1)]));
         assert!(!crosses(Vec::new()));
+    }
+
+    /// `tests/programs/a-record-keyed-by-strings-built-at-run-time`'s
+    /// `countBuilt`: "Type top (current frame, locals[19])". A string key is
+    /// erased in one block and stored through in the next, as the join an
+    /// `||` makes puts the store; `fuse::unboxed_keys` skips the `Erase`, so
+    /// the store loads the string, and the string is what crosses. The
+    /// control's key may be undefined, so it keeps its box, and the erasure
+    /// crosses instead.
+    #[test]
+    fn a_key_passed_unboxed_is_read_where_its_call_is() {
+        let crossing = |absent| {
+            let string = HirType::Managed(ManagedType::String);
+            let number = HirType::Float { bits: 64 };
+            let values = vec![
+                op(OpKind::ConstFloat(1.0), number.clone()),
+                op(
+                    OpKind::Call {
+                        callee: nts_core::hir::Callee::External("nts_table_new".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    HirType::Managed(ManagedType::Table(
+                        Box::new(string.clone()),
+                        Box::new(number.clone()),
+                    )),
+                ),
+                op(OpKind::ConstString("w".to_owned()), string),
+                op(
+                    OpKind::Erase {
+                        value: ValueId(2),
+                        absent,
+                        slots: nts_core::hir::Absent::Impossible,
+                    },
+                    HirType::Erased,
+                ),
+                op(
+                    OpKind::Erase {
+                        value: ValueId(0),
+                        absent: nts_core::hir::Absent::Impossible,
+                        slots: nts_core::hir::Absent::Impossible,
+                    },
+                    HirType::Erased,
+                ),
+                op(
+                    OpKind::Call {
+                        callee: nts_core::hir::Callee::External("nts_map_set".to_owned()),
+                        args: vec![ValueId(1), ValueId(3), ValueId(4)],
+                        frame: None,
+                    },
+                    HirType::Void,
+                ),
+            ];
+            let mut func = one_block(
+                values,
+                Terminator::Jump {
+                    target: BlockId(1),
+                    args: Vec::new(),
+                },
+            );
+            func.blocks[0].ops.truncate(4);
+            func.blocks.push(Block {
+                params: Vec::new(),
+                ops: vec![ValueId(4), ValueId(5)],
+                terminator: Terminator::Return(None),
+            });
+            let keys = crate::fuse::unboxed_keys(&func);
+            crossing_values(&JvmProgram::new(&Program::default()), &func, &keys)
+        };
+        let unboxed = crossing(nts_core::hir::Absent::Impossible);
+        assert!(unboxed.contains(&ValueId(2)), "{unboxed:?}");
+        let boxed = crossing(nts_core::hir::Absent::Undefined);
+        assert!(
+            boxed.contains(&ValueId(3)) && !boxed.contains(&ValueId(2)),
+            "{boxed:?}"
+        );
     }
 }

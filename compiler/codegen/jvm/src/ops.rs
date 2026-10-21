@@ -24,8 +24,8 @@ use crate::body::{Emitter, Placed, RUNTIME, comparison, refuse};
 use crate::types;
 
 /// A map call re-spelled to take its key unboxed: the arguments to push, and
-/// the owner, member and descriptor to invoke. See `Body::object_key`.
-type ObjectKeyCall = (Vec<ValueId>, (&'static str, &'static str, String));
+/// the owner, member and descriptor to invoke. See `Body::unboxed_key`.
+type UnboxedKeyCall = (Vec<ValueId>, (&'static str, &'static str, String));
 
 /// The runtime helpers this backend can call, and how each is spelled on the JVM.
 ///
@@ -1575,13 +1575,13 @@ impl Emitter<'_> {
                 continue;
             }
             // An erasure whose every use is a map key the helper now reads
-            // unboxed; see `fuse::object_keys`. Substituting the call was not
+            // unboxed; see `fuse::unboxed_keys`. Substituting the call was not
             // enough on its own -- the `Erase` is a separate operation and went
             // on emitting `ofObject` into a slot nothing read, so the box was
             // still built and the measurement did not move. The call is the
             // producer in `fuse`'s other direction, which is why that one
             // needed no equivalent.
-            if self.object_keys.contains_key(&value) {
+            if self.unboxed_keys.contains_key(&value) {
                 continue;
             }
             // The one-character string an `appendCharCode` makes unnecessary.
@@ -6686,20 +6686,20 @@ impl Emitter<'_> {
         })
     }
 
-    /// A map key the caller already holds as a reference; see
-    /// `fuse::object_keys`.
+    /// A map key the caller already holds as a reference or a string; see
+    /// `fuse::unboxed_keys`.
     ///
     /// Answers the reference to pass, the member to call and its descriptor.
     /// The descriptor and the argument have to move together --
     /// `push_arguments` reads the descriptor to decide how to push each
     /// operand, so changing one without the other puts a box where an `Object`
     /// is declared, or the reverse, and the verifier is what finds out.
-    fn object_key(&self, name: &str, args: &[ValueId]) -> Option<ObjectKeyCall> {
-        let (member, spelling) = crate::fuse::object_key_form(name)?;
-        let key = *args.get(crate::fuse::KEY_AT)?;
-        let source = *self.object_keys.get(&key)?;
+    fn unboxed_key(&self, name: &str, args: &[ValueId]) -> Option<UnboxedKeyCall> {
+        let at = crate::fuse::key_at(name)?;
+        let &(source, kind) = self.unboxed_keys.get(args.get(at)?)?;
+        let (member, spelling) = crate::fuse::unboxed_key_form(name, kind)?;
         let mut swapped = args.to_vec();
-        swapped[crate::fuse::KEY_AT] = source;
+        swapped[at] = source;
         Some((swapped, (types::MAP, member, spelling.to_owned())))
     }
 
@@ -7270,9 +7270,9 @@ impl Emitter<'_> {
                 if self.integer_to_string(code, pool, name, args, origin)? {
                     return Ok(Placed::OnStack);
                 }
-                let (swapped, object_form) = self.object_key(name, args).unzip();
+                let (swapped, unboxed_form) = self.unboxed_key(name, args).unzip();
                 let args = swapped.as_deref().unwrap_or(args);
-                let found = object_form.or(found);
+                let found = unboxed_form.or(found);
                 // An index this backend holds as an `int`; see `intcall`. The
                 // descriptor is the table's with its return replaced, so the
                 // argument spelling stays the one place it is decided.

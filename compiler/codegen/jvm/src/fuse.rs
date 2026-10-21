@@ -117,41 +117,108 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     candidates
 }
 
-/// The map helper whose key is compared *through* its box and never kept, and
-/// the form that takes the reference itself.
-///
-/// The mirror of `scalar_form` above: that one is about an answer nobody wants
-/// boxed, this one about an argument nobody wants boxed. Both exist because
-/// ART does not scalar-replace across the call boundary C2 inlines away, and
-/// neither is worth anything on `HotSpot`.
-#[must_use]
-pub(crate) fn object_key_form(name: &str) -> Option<(&'static str, &'static str)> {
-    Some(match name {
-        "nts_map_get" => (
-            "getObject",
-            "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;",
-        ),
-        "nts_map_has" => ("hasObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z"),
-        _ => return None,
-    })
+/// How a map key held unboxed is compared, which decides the form it may take:
+/// `sameKey` compares a `STRING` by `equals` and every other reference by
+/// identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyKind {
+    /// Any reference but a string, compared by identity (`findObject`).
+    Object,
+    /// A string, compared by its contents (`findString`).
+    String,
 }
 
-/// Where the key sits in one of those calls.
-pub(crate) const KEY_AT: usize = 1;
-
-/// Erasures of a reference whose every use is such a key, and the reference
-/// each one erases.
+/// A map helper that compares its key *through* the box, and keeps the box, if
+/// at all, only as a key it inserts: where the key sits, and the form that
+/// takes it unboxed for each kind.
 ///
-/// # Why the string case is excluded rather than handled
+/// The mirror of `scalar_form` above: that one is about an answer nobody wants
+/// boxed, this one about an argument nobody wants boxed.
+struct Keyed {
+    name: &'static str,
+    key_at: usize,
+    object: Option<(&'static str, &'static str)>,
+    string: Option<(&'static str, &'static str)>,
+}
+
+/// Every such helper, one row each, so a helper that reads a key in a new way
+/// is one more row and [`unboxed_keys`] reads its key position from here.
+///
+/// No object form for `set`: an object key is stored as its box, and nothing
+/// measured wants one.
+const KEYED: &[Keyed] = &[
+    Keyed {
+        name: "nts_map_get",
+        key_at: 1,
+        object: Some((
+            "getObject",
+            "(Lnts/rt/NtsTable;Ljava/lang/Object;)Lnts/rt/NtsValue;",
+        )),
+        string: Some((
+            "getString",
+            "(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;",
+        )),
+    },
+    Keyed {
+        name: "nts_map_has",
+        key_at: 1,
+        object: Some(("hasObject", "(Lnts/rt/NtsTable;Ljava/lang/Object;)Z")),
+        string: Some(("hasString", "(Lnts/rt/NtsTable;Ljava/lang/String;)Z")),
+    },
+    Keyed {
+        name: "nts_map_set",
+        key_at: 1,
+        object: None,
+        string: Some((
+            "setString",
+            "(Lnts/rt/NtsMap;Ljava/lang/String;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+        )),
+    },
+];
+
+/// Where the helper `name` takes its key, if it is one of those.
+#[must_use]
+pub(crate) fn key_at(name: &str) -> Option<usize> {
+    KEYED
+        .iter()
+        .find(|row| row.name == name)
+        .map(|row| row.key_at)
+}
+
+/// The form of the helper `name` that takes a key of `kind` unboxed: the
+/// member and its descriptor.
+#[must_use]
+pub(crate) fn unboxed_key_form(name: &str, kind: KeyKind) -> Option<(&'static str, &'static str)> {
+    let row = KEYED.iter().find(|row| row.name == name)?;
+    match kind {
+        KeyKind::Object => row.object,
+        KeyKind::String => row.string,
+    }
+}
+
+/// Erasures of a reference whose every use is a key one of those helpers can
+/// take unboxed: the reference each one erases, and how it compares.
+///
+/// # Why a string has a form of its own
 ///
 /// `Erase` picks its constructor from the type: `Managed(String)` becomes
 /// `ofString` and tags `STRING`, everything else `ofObject` and tags `OBJECT`.
-/// `sameKey` compares a `STRING` by `equals` and an `OBJECT` by reference, so
-/// an unboxed lookup that assumed `OBJECT` would silently stop finding string
-/// keys that are equal without being identical. The excluded case is the one
-/// where the box is doing work.
+/// `sameKey` compares a `STRING` by `equals` and an `OBJECT` by reference, so a
+/// string sent to the identity form would silently stop finding keys that are
+/// equal without being identical, and strings were left out here at first.
+/// They have `findString` now, which compares by contents, and the key's kind
+/// picks the form.
+///
+/// # Why it is worth something on `HotSpot` after all
+///
+/// The object form was priced on ART: C2 inlines the lookup and
+/// scalar-replaces the box. It does so only where the lookup inlines, and in a
+/// hot loop `find` and `insert` are "already compiled into a big method":
+/// `benchmarks/cases/record-word-counts` erases a string key 1,600 times a run,
+/// 38 KB at 24 bytes a box, of the 70,768 bytes it allocated against the Java
+/// reference's 15,408.
 #[must_use]
-pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId> {
+pub(crate) fn unboxed_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, (ValueId, KeyKind)> {
     let mut candidates = rustc_hash::FxHashMap::default();
     for (at, op) in func.values.iter().enumerate() {
         // **Only an erase that cannot be null.** This fuses an erasure into
@@ -167,31 +234,45 @@ pub(crate) fn object_keys(func: &Func) -> rustc_hash::FxHashMap<ValueId, ValueId
         else {
             continue;
         };
-        let source = func.values.get(value.0 as usize);
-        if matches!(
-            source.map(|it| &it.ty),
-            Some(HirType::Managed(managed)) if !matches!(managed, nts_core::hir::ManagedType::String)
-        ) {
-            candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)), value);
-        }
+        let kind = match func.values.get(value.0 as usize).map(|it| &it.ty) {
+            Some(HirType::Managed(nts_core::hir::ManagedType::String)) => KeyKind::String,
+            Some(HirType::Managed(_)) => KeyKind::Object,
+            _ => continue,
+        };
+        candidates.insert(ValueId(u32::try_from(at).unwrap_or(0)), (value, kind));
     }
     if candidates.is_empty() {
         return candidates;
     }
 
     // Every use, or none -- `fused`'s rule, for the same reason: the box is not
-    // built, so a use that wants one has nothing to want.
+    // built, so a use that wants one has nothing to want. A key whose helper
+    // has no form for its kind wants the box too.
+    //
+    // **Live uses only**, as `hir::erased_uses` counts them: an op no block
+    // holds is never emitted, so it wants nothing. Asking every value refused
+    // the key of the `in` in `countLiteral`
+    // (tests/programs/a-record-keyed-by-strings-built-at-run-time), whose one
+    // live use is `nts_map_has`.
     let mut refused = FxHashSet::default();
-    for op in &func.values {
+    let live = func
+        .blocks
+        .iter()
+        .flat_map(|block| &block.ops)
+        .map(|value| &func.values[value.0 as usize]);
+    for op in live {
         if let OpKind::Call {
             callee: Callee::External(name),
             args,
             ..
         } = &op.kind
-            && object_key_form(name).is_some()
+            && let Some(key) = key_at(name)
         {
             for (at, operand) in args.iter().enumerate() {
-                if at != KEY_AT && candidates.contains_key(operand) {
+                let Some(&(_, kind)) = candidates.get(operand) else {
+                    continue;
+                };
+                if at != key || unboxed_key_form(name, kind).is_none() {
                     refused.insert(*operand);
                 }
             }
