@@ -5,8 +5,9 @@ use camino::{Utf8Path, Utf8PathBuf};
 use roxmltree::Node;
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Field, Member,
-    Namespace, Param, Property, Record, Repository, Scope, Signal, Signature, Transfer, TypeRef,
+    Alias, ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Field,
+    Member, Namespace, Param, Property, Record, Repository, Scope, Signal, Signature, Transfer,
+    TypeRef,
 };
 
 const CORE: &str = "http://www.gtk.org/introspection/core/1.0";
@@ -250,13 +251,14 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
     Ok(namespace)
 }
 
-/// An `<alias>`: its name and the type it names.
-fn alias(node: Node<'_, '_>) -> Option<(String, String)> {
+/// An `<alias>`: its name, its C typedef, and the type it names.
+fn alias(node: Node<'_, '_>) -> Option<Alias> {
     let target = child(node, "type").and_then(|ty| attribute(ty, "name"))?;
-    Some((
-        attribute(node, "name").unwrap_or_default().to_owned(),
-        target.to_owned(),
-    ))
+    Some(Alias {
+        name: attribute(node, "name").unwrap_or_default().to_owned(),
+        c_type: c_attribute(node, "type").map(str::to_owned),
+        target: target.to_owned(),
+    })
 }
 
 /// A class's `<glib:signal>` elements.

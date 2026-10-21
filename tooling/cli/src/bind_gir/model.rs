@@ -37,11 +37,21 @@ pub(crate) struct Namespace {
     pub(crate) enums: Vec<Enum>,
     pub(crate) callbacks: Vec<Callback>,
     pub(crate) functions: Vec<Callable>,
-    /// `<alias>`: a name for another type, `(name, target)` --
-    /// `GLib.Quark` for `guint32`, `HarfBuzz.codepoint_t` for `guint32`.
-    pub(crate) aliases: Vec<(String, String)>,
+    /// `<alias>`: a name for another type -- `GLib.Quark` for `guint32`,
+    /// `Gtk.Allocation` for `Gdk.Rectangle`.
+    pub(crate) aliases: Vec<Alias>,
     /// `<constant>`: a value the headers `#define`, which no C symbol holds.
     pub(crate) constants: Vec<Constant>,
+}
+
+/// An `<alias>`: its GIR name (`Allocation`), the typedef C declares for it
+/// (`GtkAllocation`), and the GIR name of the type it stands for
+/// (`Gdk.Rectangle`).
+#[derive(Debug)]
+pub(crate) struct Alias {
+    pub(crate) name: String,
+    pub(crate) c_type: Option<String>,
+    pub(crate) target: String,
 }
 
 /// A `<constant>`: its GIR name (`PRIORITY_DEFAULT`), its C macro's name

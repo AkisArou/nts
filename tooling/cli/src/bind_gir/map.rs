@@ -23,8 +23,8 @@ use crate::bind_header::ctype::CType;
 use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
 
 use super::model::{
-    ArrayRef, Callable, CallableKind, Callback, Class, Direction, Field, Namespace, Param, Record,
-    Repository, Scope, Transfer, TypeRef,
+    Alias, ArrayRef, Callable, CallableKind, Callback, Class, Direction, Field, Namespace, Param,
+    Record, Repository, Scope, Transfer, TypeRef,
 };
 
 /// A type named from another module, or this one: `(module, name)`, the module
@@ -1521,7 +1521,8 @@ impl<'a> Mapper<'a> {
         for _ in 0..8 {
             let (ns, local) = at.split_once('.')?;
             let namespace = self.repository.namespaces.get(ns)?;
-            let Some((_, target)) = namespace.aliases.iter().find(|(alias, _)| alias == local)
+            let Some(Alias { target, .. }) =
+                namespace.aliases.iter().find(|alias| alias.name == local)
             else {
                 break;
             };
@@ -1537,6 +1538,85 @@ impl<'a> Mapper<'a> {
             at = target;
         }
         found
+    }
+
+    /// A record's alias as the record it stands for: `typedef GdkRectangle
+    /// GtkAllocation` makes a `GtkAllocation *` a `GdkRectangle *` to C, and
+    /// the record is what the headers tag and the bindings declare, so every
+    /// path a record takes -- its `Struct`'s storage, its handle -- reads it
+    /// by the record's own names. Where `ty` names an alias of a record and
+    /// spells the alias's typedef, the record's GIR name and its C type, with
+    /// the `const` and `*`s kept; `None` otherwise. A scalar's alias stays as
+    /// written: `typed` spells it as the parameter does (`GQuark`).
+    fn record_alias(&self, ty: &TypeRef) -> Option<TypeRef> {
+        let TypeRef::Named {
+            name,
+            c_type: Some(c_type),
+        } = ty
+        else {
+            return None;
+        };
+        let qualified = self.qualify(name);
+        let (ns, local) = qualified.split_once('.')?;
+        let typedef = self
+            .repository
+            .namespaces
+            .get(ns)?
+            .aliases
+            .iter()
+            .find(|alias| alias.name == local)?
+            .c_type
+            .as_deref()?;
+        let target = self.alias_target(name)?;
+        let (ns, local) = target.split_once('.')?;
+        let record = self
+            .repository
+            .namespaces
+            .get(ns)?
+            .records
+            .iter()
+            .find(|record| record.name == local)?
+            .c_type
+            .as_deref()?;
+        let (constant, spelled) = match c_type.strip_prefix("const ") {
+            Some(rest) => ("const ", rest),
+            None => ("", c_type.as_str()),
+        };
+        let stars = spelled.strip_prefix(typedef)?;
+        stars
+            .chars()
+            .all(|c| c == '*' || c == ' ')
+            .then(|| TypeRef::Named {
+                name: target.clone(),
+                c_type: Some(format!("{constant}{record}{stars}")),
+            })
+    }
+
+    /// `callable` with each record alias it names read as the record
+    /// (`record_alias`); `None` where it names none.
+    fn records_unaliased(&self, callable: &Callable) -> Option<Callable> {
+        let signature = &callable.signature;
+        signature
+            .instance
+            .iter()
+            .chain(&signature.parameters)
+            .chain([&signature.result])
+            .any(|param| self.record_alias(&param.ty).is_some())
+            .then(|| {
+                let mut unaliased = callable.clone();
+                let signature = &mut unaliased.signature;
+                for param in signature
+                    .instance
+                    .iter_mut()
+                    .chain(&mut signature.parameters)
+                    .chain([&mut signature.result])
+                {
+                    if let Some(ty) = self.record_alias(&param.ty) {
+                        param.ty = ty;
+                    }
+                }
+                unaliased
+            })
     }
 
     /// The C type of the class or record `qualified` names, where its handle
@@ -2226,6 +2306,9 @@ impl<'a> Mapper<'a> {
         // GIR decides what each parameter means; the header, its `const`.
         let qualified = header.map(|header| header_qualified(callable, header));
         let callable = qualified.as_ref().unwrap_or(callable);
+        // And a record's alias is the record (`record_alias`).
+        let unaliased = self.records_unaliased(callable);
+        let callable = unaliased.as_ref().unwrap_or(callable);
         self.comparing_items = COMPARES_ITEMS.contains(&symbol.as_str());
         let signature = &callable.signature;
         let mut parameters = Vec::new();
@@ -5352,6 +5435,103 @@ mod tests {
                 .iter()
                 .any(|(_, r)| *r == Reason::CallerAllocates)
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A record's alias is the record: `SAllocation`, a `typedef SRect` as
+    /// GTK's `GtkAllocation` is a `GdkRectangle`, binds every way its record
+    /// does -- storage the caller gives C to fill, a `const` pointer in -- and
+    /// `SLayoutRun`, a boxed record's alias as Pango's `PangoLayoutRun` is a
+    /// `PangoGlyphItem`, as a lent result. Each control is the same call
+    /// through the record's own name, which bound before.
+    #[test]
+    fn a_records_alias_is_the_record() {
+        use super::super::facts;
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-record-alias-test").expect("fixture directory");
+        let function = |name: &str, result: &str, parameter: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value transfer-ownership="none"><type {result}/></return-value><parameters>{parameter}</parameters></function>"#
+            )
+        };
+        let void = r#"name="none" c:type="void""#;
+        let out = |ty: &str, c_type: &str| {
+            format!(
+                r#"<parameter name="out" direction="out" caller-allocates="1" transfer-ownership="none"><type name="{ty}" c:type="{c_type}"/></parameter>"#
+            )
+        };
+        let given = |ty: &str, c_type: &str| {
+            format!(r#"<parameter name="rect"><type name="{ty}" c:type="{c_type}"/></parameter>"#)
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<alias name="Allocation" c:type="SAllocation"><type name="Rect" c:type="SRect"/></alias>"#,
+            r#"<alias name="LayoutRun" c:type="SLayoutRun"><type name="Run" c:type="SRun"/></alias>"#,
+            r#"<record name="Rect" c:type="SRect"><field name="x" writable="1"><type name="gint" c:type="gint"/></field></record>"#,
+            r#"<record name="Run" c:type="SRun" glib:get-type="s_run_get_type"><field name="x" writable="1"><type name="gint" c:type="gint"/></field></record>"#,
+            &function("fill", void, &out("Allocation", "SAllocation*")),
+            &function("fill_rect", void, &out("Rect", "SRect*")),
+            &function("area", void, &given("Allocation", "const SAllocation*")),
+            &function("area_rect", void, &given("Rect", "const SRect*")),
+            &function("run", r#"name="LayoutRun" c:type="SLayoutRun*""#, ""),
+            &function("run_itself", r#"name="Run" c:type="SRun*""#, ""),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: ["SRect", "SRun"]
+                .map(|c| (c.to_owned(), format!("_{c}")))
+                .into(),
+            sizes: [("SRect", 4), ("SRun", 4)]
+                .map(|(c, size)| (c.to_owned(), size))
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["S"], &header);
+        assert!(binding.refused.is_empty(), "{:?}", binding.refused);
+        let bound = |symbol: &str| {
+            let function = binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol} is not bound"));
+            format!(
+                "{:?}",
+                (
+                    &function.parameters,
+                    &function.result,
+                    &function.c_parameters
+                )
+            )
+        };
+        for (alias, record) in [
+            ("s_fill", "s_fill_rect"),
+            ("s_area", "s_area_rect"),
+            ("s_run", "s_run_itself"),
+        ] {
+            assert_eq!(bound(alias), bound(record), "{alias}");
+        }
+        let parameter = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .expect("bound")
+                .parameters[0]
+                .1
+                .ts
+                .clone()
+        };
+        assert_eq!(parameter("s_fill"), "Ptr<SRect>");
+        assert_eq!(parameter("s_area"), "ConstPtr<SRect>");
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
