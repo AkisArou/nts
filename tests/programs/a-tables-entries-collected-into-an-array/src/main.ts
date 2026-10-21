@@ -105,6 +105,22 @@ export function objects(n: number): number {
   return total + pairs.length * 1000;
 }
 
+/** Object values under string keys: each pair two unlike references, which
+ * is an array of erased values -- read at its slot, and taken apart by a
+ * walk's pattern. */
+export function objectsByName(n: number): number {
+  const m = new Map<string, Point>();
+  for (let i = 0; i < 4; i++) m.set("p" + i, new Point(i * n));
+  m.delete("p2");
+  const pairs = Array.from(m);
+  const spread = [...m];
+  m.clear();
+  let total = 0;
+  for (const pair of pairs) total += pair[0].length * 100 + pair[1].x;
+  for (const [name, point] of spread) total += point.x * name.length;
+  return total + pairs.length * 1000;
+}
+
 /** The rest element over a Map is the same collection. */
 export function rest(n: number): string {
   const m = scores(n);
