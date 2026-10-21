@@ -547,6 +547,75 @@ fn a_double_in_a_loop_is_converted_to_int32_in_line_below_two_to_the_63() {
     assert_eq!(output["refused"], serde_json::json!({}), "{output}");
 }
 
+/// `push` grows its storage only on the cold path: every call to an array's
+/// growth helper sits in the `if` that `array.len; i32.ge_u` opens, where the
+/// held length has reached the backing's own. Pushed across growth from empty
+/// and from a full literal, for numbers, strings, references and open values,
+/// with push's answer read.
+#[test]
+fn a_push_grows_its_storage_only_on_the_cold_path() {
+    let fixture = common::repository().join("tests/wasm/push-held-length");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let imported = imported_functions(&emitted.bytes);
+    let mut grows = 0;
+    let mut defined = 0;
+    for payload in wasmparser::Parser::new(0).parse_all(&emitted.bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload.unwrap() {
+            let caller = &names[imported + defined];
+            let mut reader = body.get_operators_reader().unwrap();
+            // Per open structure: whether it is the `if` a length test opened.
+            let mut open: Vec<bool> = Vec::new();
+            let mut last = [None, None];
+            while !reader.eof() {
+                let op = reader.read().unwrap();
+                match &op {
+                    wasmparser::Operator::If { .. } => open.push(matches!(
+                        last,
+                        [
+                            Some(wasmparser::Operator::ArrayLen),
+                            Some(wasmparser::Operator::I32GeU)
+                        ]
+                    )),
+                    wasmparser::Operator::Block { .. }
+                    | wasmparser::Operator::Loop { .. }
+                    | wasmparser::Operator::TryTable { .. } => open.push(false),
+                    wasmparser::Operator::End => {
+                        open.pop();
+                    }
+                    wasmparser::Operator::Call { function_index }
+                        if names[*function_index as usize].starts_with("array.grow<") =>
+                    {
+                        grows += 1;
+                        assert_eq!(
+                            open.last(),
+                            Some(&true),
+                            "`{caller}` grows outside the length test"
+                        );
+                    }
+                    _ => {}
+                }
+                last = [last[1].take(), Some(op)];
+            }
+            defined += 1;
+        }
+    }
+    assert!(
+        grows >= 5,
+        "{grows} growth calls: the fixture's pushes are gone"
+    );
+    let output = common::run_with_node_flags(
+        "push-held-length",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 68, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Objects as collection keys compare by identity: same-shaped objects are two
 /// keys, an identity hash survives growth, and erased objects and functions
 /// hash the same way.

@@ -152,8 +152,8 @@ fn call_inner(
     contract::nonnull(b, array, "a method of a null array")?;
     match method {
         Method::Element => element_value(b, result, shape, array, args[1], args[2]),
-        Method::Push(_) => put(b, result, shape, args[0], args[1], End::Back),
-        Method::Unshift(_) => put(b, result, shape, args[0], args[1], End::Front),
+        Method::Push(_) => append(b, result, shape, args[0], args[1]),
+        Method::Unshift(_) => prepend(b, result, shape, args[0], args[1]),
         Method::Pop(family) => take(b, result, shape, args[0], family, End::Back),
         Method::Shift(family) => take(b, result, shape, args[0], family, End::Front),
         Method::Fill(_) => fill(b, result, shape, args[0], args[1]),
@@ -180,14 +180,13 @@ fn element(b: &mut Body<'_, '_>, shape: &gc::Array, input: ValueId) -> Result<()
     b.load(input)?;
     objects::adapt(b, &b.ty(input).clone(), &shape.element)
 }
-/// `push` and `unshift`, answering the new length.
-fn put(
+/// `unshift`, answering the new length.
+fn prepend(
     b: &mut Body<'_, '_>,
     result: ValueId,
     shape: &gc::Array,
     array: ValueId,
     input: ValueId,
-    end: End,
 ) -> Result<(), Failure> {
     length(b, shape, array)?;
     b.instruction(&I::I32Const(arrays::capacity(&shape.element)));
@@ -200,22 +199,17 @@ fn put(
     b.instruction(&I::I32Add);
     b.call(grow);
     backing(b, shape, array)?;
-    match end {
-        End::Back => length(b, shape, array)?,
-        End::Front => {
-            // The rest move up one slot; `array.copy` allows the overlap.
-            b.instruction(&I::I32Const(1));
-            backing(b, shape, array)?;
-            b.instruction(&I::I32Const(0));
-            length(b, shape, array)?;
-            b.instruction(&I::ArrayCopy {
-                array_type_index_dst: shape.backing,
-                array_type_index_src: shape.backing,
-            });
-            backing(b, shape, array)?;
-            b.instruction(&I::I32Const(0));
-        }
-    }
+    // The rest move up one slot; `array.copy` allows the overlap.
+    b.instruction(&I::I32Const(1));
+    backing(b, shape, array)?;
+    b.instruction(&I::I32Const(0));
+    length(b, shape, array)?;
+    b.instruction(&I::ArrayCopy {
+        array_type_index_dst: shape.backing,
+        array_type_index_src: shape.backing,
+    });
+    backing(b, shape, array)?;
+    b.instruction(&I::I32Const(0));
     element(b, shape, input)?;
     b.instruction(&I::ArraySet(shape.backing));
     b.load(array)?;
@@ -227,6 +221,51 @@ fn put(
         field_index: crate::gc::ARRAY_LENGTH,
     });
     length(b, shape, array)?;
+    output(b, result, &U32)
+}
+/// `push`, answering the new length: the length read once into a local of
+/// its own, the element stored at it, the length written once.
+///
+/// Storage grows on the cold path only, where the length has reached the
+/// backing's own length, and the capacity refusal moves there with it. No
+/// backing is longer than [`arrays::capacity`] -- growth stops there, and
+/// the engine traps an `array.new` past it -- so a length below the
+/// backing's is below the capacity too. Read back from the struct, the
+/// length and the backing were loaded again after the growth branch on
+/// every push, which V8 could not remove; array-predicates' `filter` push
+/// counted 15.5% fewer instructions with it held.
+fn append(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    shape: &gc::Array,
+    array: ValueId,
+    input: ValueId,
+) -> Result<(), Failure> {
+    let held = b.fresh_local(ValType::I32);
+    length(b, shape, array)?;
+    b.instruction(&I::LocalTee(held));
+    backing(b, shape, array)?;
+    b.instructions(&[I::ArrayLen, I::I32GeU, I::If(BlockType::Empty)]);
+    b.instruction(&I::LocalGet(held));
+    b.instruction(&I::I32Const(arrays::capacity(&shape.element)));
+    b.instruction(&I::I32LtU);
+    contract::require(b, arrays::PAST_CAPACITY)?;
+    let grow = arrays::grow(b.m, shape)?;
+    b.load(array)?;
+    b.instructions(&[I::LocalGet(held), I::I32Const(1), I::I32Add]);
+    b.call(grow);
+    b.instruction(&I::End);
+    backing(b, shape, array)?;
+    b.instruction(&I::LocalGet(held));
+    element(b, shape, input)?;
+    b.instruction(&I::ArraySet(shape.backing));
+    b.load(array)?;
+    b.instructions(&[I::LocalGet(held), I::I32Const(1), I::I32Add]);
+    b.instruction(&I::StructSet {
+        struct_type_index: shape.wrapper,
+        field_index: crate::gc::ARRAY_LENGTH,
+    });
+    b.instructions(&[I::LocalGet(held), I::I32Const(1), I::I32Add]);
     output(b, result, &U32)
 }
 /// The array an erased operand was made from.
@@ -477,7 +516,7 @@ fn last(b: &mut Body<'_, '_>, shape: &gc::Array, array: ValueId) -> Result<(), F
     b.instruction(&I::I32Sub);
     Ok(())
 }
-/// Which end `put` and `take` work at.
+/// Which end `take` works at.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum End {
     Front,

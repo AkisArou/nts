@@ -15,7 +15,7 @@ use nts_core::hir::{
     BinOp, BlockId, Callee, Func, HirType, ManagedType, OpKind, Terminator, ValueId,
 };
 use std::collections::BTreeMap;
-use wasm_encoder::{BlockType, Instruction as I};
+use wasm_encoder::{BlockType, Instruction as I, ValType};
 
 #[cfg(test)]
 mod tests {
@@ -316,6 +316,14 @@ impl<'b, 'p> Body<'b, 'p> {
     pub(crate) fn local(&self, value: ValueId) -> Result<u32, Failure> {
         self.values[value.0 as usize]
             .ok_or_else(|| Failure::Invariant(format!("%{} has no value local", value.0)))
+    }
+    /// A local of `ty` for one emitter's own use, declared as it is asked
+    /// for: an intermediate the emitter reads more than once, where reading
+    /// it again from the heap would cost a load V8 cannot always remove.
+    pub(crate) fn fresh_local(&mut self, ty: ValType) -> u32 {
+        let at = crate::module::index(self.func.params.len() + self.code.locals.len());
+        self.code.locals.push(ty);
+        at
     }
     pub(crate) fn load(&mut self, value: ValueId) -> Result<(), Failure> {
         if self.constant(value)? {
