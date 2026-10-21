@@ -1,6 +1,6 @@
 # Test262 tests/typescript cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 3a9d99c7cfd13c9b, commit d67bbff34f11c4cb7fdc63a20e56591c3c573ac4, backend llvm, harness f8ca0afd3c45597f; machine at start: 23.1 GB available, swap 2.4/31.5 GB, load 33.7/35.4 (1m/5m), 16 cores; 4 worker(s)
+# compiler 30306e14080cb0dc, commit 0e897771c1b59ba48d6721a2763c45bfce2c82cc, backend llvm, harness f8ca0afd3c45597f; machine at start: 18.2 GB available, swap 2.9/31.5 GB, load 50.7/56.9 (1m/5m), 16 cores; 4 worker(s)
 tests/typescript/async/async-method.ts	pass	
 tests/typescript/async/async-recursion.ts	pass	
 tests/typescript/async/await-a-plain-value.ts	pass	
@@ -69,7 +69,6 @@ tests/typescript/expressions/comma-and-void.ts	pass
 tests/typescript/expressions/exponent-operator.ts	pass	
 tests/typescript/expressions/increment-returns-old-value.ts	pass	
 tests/typescript/expressions/non-null-assignment-target.ts	pass	
-tests/typescript/expressions/non-null-has-no-check.ts	fail	nts: uncaught Test262Error: sameValue
 tests/typescript/expressions/non-null-in-optional-chain.ts	pass	
 tests/typescript/expressions/satisfies-is-erased.ts	pass	
 tests/typescript/functions/closure-captures-mutation.ts	pass	
