@@ -162,7 +162,7 @@ fn includes<'a>(repository: &'a Repository, namespace: &'a Namespace) -> BTreeSe
 /// renamed by. A string literal's contents are not tokens -- `c_int`
 /// names no type -- and neither is a name after a `.`, which is already a
 /// member of something.
-fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
+pub(super) fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
     let bytes = text.as_bytes();
     let mut at = 0;
     let mut quoted = false;

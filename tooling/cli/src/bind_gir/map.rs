@@ -1602,10 +1602,11 @@ impl<'a> Mapper<'a> {
     /// GtkAllocation` makes a `GtkAllocation *` a `GdkRectangle *` to C, and
     /// the record is what the headers tag and the bindings declare, so every
     /// path a record takes -- its `Struct`'s storage, its handle -- reads it
-    /// by the record's own names. Where `ty` names an alias of a record and
-    /// spells the alias's typedef, the record's GIR name and its C type, with
-    /// the `const` and `*`s kept; `None` otherwise. A scalar's alias stays as
-    /// written: `typed` spells it as the parameter does (`GQuark`).
+    /// by the record's C name. Where `ty` names an alias of a record and
+    /// spells the alias's typedef, its C type the record's, with the `const`
+    /// and `*`s kept; `None` otherwise. The GIR name stays the alias's, so
+    /// `typed` reads it as the record and spells it by its own name
+    /// (`spelled_as_alias`), as it does a scalar's.
     fn record_alias(&self, ty: &TypeRef) -> Option<TypeRef> {
         let TypeRef::Named {
             name,
@@ -1636,7 +1637,7 @@ impl<'a> Mapper<'a> {
             .chars()
             .all(|c| c == '*' || c == ' ')
             .then(|| TypeRef::Named {
-                name: target.clone(),
+                name: name.clone(),
                 c_type: Some(format!("{constant}{record}{stars}")),
             })
     }
@@ -1666,6 +1667,62 @@ impl<'a> Mapper<'a> {
                 }
                 unaliased
             })
+    }
+
+    /// `ts`, mapped for the type the alias `name` stands for, spelled by the
+    /// alias where it is declared (`named_alias`) and the spelling is the
+    /// form it is declared as: `GQuark` for `Uint32`, `Const<GtkAllocation>`
+    /// for `Const<GdkRectangle>`. Not where the position changes the form --
+    /// `AsNumber<BigInt64>` for a `GTimeSpan` passed, a `CBool`, a `CEnum` --
+    /// which is not the alias's. The same type to TypeScript either way: an
+    /// alias is transparent.
+    fn spelled_as_alias(&mut self, name: &str, ts: String) -> String {
+        let qualified = self.qualify(name);
+        let Some((ns, local)) = qualified.split_once('.') else {
+            return ts;
+        };
+        let repository: &'a Repository = self.repository;
+        let Some(namespace) = repository.namespaces.get(ns) else {
+            return ts;
+        };
+        let Some((alias, stands_for)) = namespace
+            .aliases
+            .iter()
+            .find(|alias| alias.name == local)
+            .and_then(|alias| named_alias(repository, namespace, alias))
+        else {
+            return ts;
+        };
+        let form = match stands_for {
+            AliasOf::Scalar(brand) => brand,
+            AliasOf::Record(record) => record,
+        };
+        let tokens: Vec<(usize, &str)> = super::naming::identifiers(&ts).collect();
+        if !tokens.iter().any(|(_, token)| *token == form)
+            || tokens
+                .iter()
+                .any(|(_, token)| matches!(*token, "AsNumber" | "CBool" | "CEnum"))
+        {
+            return ts;
+        }
+        let mut spelled = String::with_capacity(ts.len());
+        let mut copied = 0;
+        for (start, token) in tokens {
+            if token == form {
+                spelled.push_str(&ts[copied..start]);
+                spelled.push_str(alias);
+                copied = start + token.len();
+            }
+        }
+        spelled.push_str(&ts[copied..]);
+        if !std::ptr::eq(namespace, self.namespace) {
+            self.binding
+                .imports
+                .entry(module_of(namespace))
+                .or_default()
+                .insert(alias.to_owned());
+        }
+        spelled
     }
 
     /// The C type of the class or record `qualified` names, where its handle
@@ -3304,7 +3361,7 @@ impl<'a> Mapper<'a> {
             if let Some((_, brand, _)) = SCALARS.iter().find(|(gir, ..)| *gir == target) {
                 self.binding.brands.insert(brand);
                 return Mapped {
-                    ts: (*brand).to_owned(),
+                    ts: self.spelled_as_alias(name, (*brand).to_owned()),
                     ..mapped
                 };
             }
@@ -3354,13 +3411,15 @@ impl<'a> Mapper<'a> {
         };
         // An alias is the type it names -- `GLib.Quark` a `guint32` -- spelled
         // in C as the parameter says (`GQuark`), which the self-check compiles
-        // against the header's typedef.
+        // against the header's typedef, and in TypeScript by its own name.
         if let Some(target) = self.alias_target(name) {
             let mut aliased = param.clone();
             if let TypeRef::Named { name, .. } = &mut aliased.ty {
                 *name = target;
             }
-            return self.typed(&aliased);
+            let mapped = self.typed(&aliased)?;
+            let ts = self.spelled_as_alias(name, mapped.ts);
+            return Ok(Mapped { ts, ..mapped });
         }
         // Raw addresses use the same exact pointer vocabulary in every
         // direction. The former `object` input already refused managed values
@@ -4446,7 +4505,8 @@ impl<'a> Mapper<'a> {
                     let target = self.alias_target(&name).unwrap_or_else(|| name.clone());
                     if let Some((_, brand, _)) = SCALARS.iter().find(|(gir, ..)| *gir == target) {
                         self.binding.brands.insert(brand);
-                        fields.push((field.name.clone(), (*brand).to_owned()));
+                        let ts = self.spelled_as_alias(&name, (*brand).to_owned());
+                        fields.push((field.name.clone(), ts));
                         continue;
                     }
                     let value = Param {
@@ -5519,7 +5579,8 @@ mod tests {
     /// does -- storage the caller gives C to fill, a `const` pointer in -- and
     /// `SLayoutRun`, a boxed record's alias as Pango's `PangoLayoutRun` is a
     /// `PangoGlyphItem`, as a lent result. Each control is the same call
-    /// through the record's own name, which bound before.
+    /// through the record's own name, which bound before: the same but for
+    /// the name it is spelled by.
     #[test]
     fn a_records_alias_is_the_record() {
         use super::super::facts;
@@ -5593,7 +5654,10 @@ mod tests {
             ("s_area", "s_area_rect"),
             ("s_run", "s_run_itself"),
         ] {
-            assert_eq!(bound(alias), bound(record), "{alias}");
+            let by_record = bound(alias)
+                .replace("SAllocation", "SRect")
+                .replace("SLayoutRun", "SRun");
+            assert_eq!(by_record, bound(record), "{alias}");
         }
         let parameter = |symbol: &str| {
             binding
@@ -5606,8 +5670,8 @@ mod tests {
                 .ts
                 .clone()
         };
-        assert_eq!(parameter("s_fill"), "Ptr<SRect>");
-        assert_eq!(parameter("s_area"), "ConstPtr<SRect>");
+        assert_eq!(parameter("s_fill"), "Ptr<SAllocation>");
+        assert_eq!(parameter("s_area"), "ConstPtr<SAllocation>");
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
@@ -5682,6 +5746,96 @@ mod tests {
                 "Type = c_size_t"
             ]
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// Where GIR names an alias, the binding spells it by that name, in the
+    /// form it is declared as: a result, an out slot's value, a `Struct`
+    /// member, a record's `const` pointer -- `SQuark`, `ConstPtr<SAllocation>`
+    /// -- and on the `gi:` surface by its GIR name. The control is the one
+    /// position that changes the form: a 64-bit alias passed, which is
+    /// `AsNumber<BigInt64>`, not the `BigInt64` `SSpan` is declared as.
+    #[test]
+    fn an_alias_is_spelled_by_its_name_where_its_form_is() {
+        use super::super::{facts, naming};
+        use super::{TypeDecl, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-alias-spelling-test").expect("fixture directory");
+        let function = |name: &str, result: &str, parameter: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value transfer-ownership="none"><type {result}/></return-value><parameters>{parameter}</parameters></function>"#
+            )
+        };
+        let void = r#"name="none" c:type="void""#;
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<alias name="Quark" c:type="SQuark"><type name="guint32" c:type="guint32"/></alias>"#,
+            r#"<alias name="Span" c:type="SSpan"><type name="gint64" c:type="gint64"/></alias>"#,
+            r#"<alias name="Allocation" c:type="SAllocation"><type name="Rect" c:type="SRect"/></alias>"#,
+            r#"<record name="Rect" c:type="SRect"><field name="x" writable="1"><type name="gint" c:type="gint"/></field><field name="q" writable="1"><type name="Quark" c:type="SQuark"/></field></record>"#,
+            &function("intern", r#"name="Quark" c:type="SQuark""#, ""),
+            &function(
+                "wait",
+                void,
+                r#"<parameter name="span"><type name="Span" c:type="SSpan"/></parameter>"#,
+            ),
+            &function(
+                "lookup",
+                void,
+                r#"<parameter name="quark" direction="out" caller-allocates="0" transfer-ownership="full"><type name="Quark" c:type="SQuark*"/></parameter>"#,
+            ),
+            &function(
+                "area",
+                void,
+                r#"<parameter name="rect"><type name="Allocation" c:type="const SAllocation*"/></parameter>"#,
+            ),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: [("SRect".to_owned(), "_SRect".to_owned())].into(),
+            sizes: [("SRect".to_owned(), 8)].into(),
+            ..facts::Facts::default()
+        };
+        let namespace = &repository.namespaces["S"];
+        let binding = bind(&repository, namespace, &header);
+        assert!(binding.refused.is_empty(), "{:?}", binding.refused);
+        let spelled = |binding: &super::Binding, symbol: &str| {
+            let function = binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol} is not bound"));
+            function
+                .parameters
+                .first()
+                .map_or_else(|| function.result.ts.clone(), |(_, m)| m.ts.clone())
+        };
+        let member = |binding: &super::Binding| {
+            binding.types.iter().find_map(|decl| match decl {
+                TypeDecl::Struct { fields, .. } => fields
+                    .iter()
+                    .find(|(name, _)| name == "q")
+                    .map(|(_, ts)| ts.clone()),
+                TypeDecl::Class { .. } => None,
+            })
+        };
+        assert_eq!(spelled(&binding, "s_intern"), "SQuark");
+        assert_eq!(spelled(&binding, "s_lookup"), "Ptr<SQuark>");
+        assert_eq!(spelled(&binding, "s_area"), "ConstPtr<SAllocation>");
+        assert_eq!(member(&binding).as_deref(), Some("SQuark"));
+        assert_eq!(spelled(&binding, "s_wait"), "AsNumber<BigInt64>");
+        let gi = naming::gi(&binding, namespace, &naming::Names::of(&repository));
+        assert_eq!(spelled(&gi, "s_intern"), "Quark");
+        assert_eq!(spelled(&gi, "s_area"), "ConstPtr<Allocation>");
+        assert_eq!(member(&gi).as_deref(), Some("Quark"));
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
