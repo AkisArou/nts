@@ -116,6 +116,12 @@
 //   themed 6 document-open-recent  `new GThemedIcon({ name, use_default_fallbacks })`:
 //                 construct-only properties, given to `g_object_new` since no
 //                 setter writes them -- the name, and its five fallbacks
+//   located 1:2-2:1  a struct C names by its typedef alone, which has no tag:
+//                 where `GtkSvg` found an element it ignores, read through the
+//                 `const GtkSvgLocation *` its error hands back
+//   mutex none    a union C names by its typedef, `GMutex`: locked and waited
+//                 on through calls compiled against glib.h, which none runs
+//                 -- no program can own a `GMutex` before `Sized<A, N>`
 //   entry typed! 0  `GtkEditable`'s `set_text`, `get_text` and `text` on a
 //                 `GtkEntry`, and `GtkOrientable`'s orientation on a `GtkBox`:
 //                 an interface's methods on the classes implementing it
@@ -177,6 +183,11 @@ import {
   GtkStringList,
   gtk_string_list_new,
   gtk_builder_error_quark,
+  gtk_svg_error_get_end,
+  gtk_svg_error_get_start,
+  gtk_svg_load_from_bytes,
+  gtk_svg_new,
+  type GtkSvgLocation,
   type GtkWidget,
   GtkBox,
 } from "c:Gtk-4.0";
@@ -225,6 +236,10 @@ import {
   g_quark_to_string,
   g_unicode_script_to_iso15924,
   g_variant_parse,
+  g_cond_wait,
+  g_mutex_lock,
+  g_mutex_trylock,
+  g_mutex_unlock,
   G_KEY_FILE_DESKTOP_GROUP,
   g_access,
   g_atomic_ref_count_compare,
@@ -243,7 +258,7 @@ import {
   g_bytes_equal,
   g_bytes_hash,
 } from "c:GLib-2.0";
-import type { GData, GQuark } from "c:GLib-2.0";
+import type { GCond, GData, GMutex, GQuark } from "c:GLib-2.0";
 import {
   G_TYPE_STRING,
   g_signal_group_new,
@@ -290,7 +305,7 @@ import {
 import type { PangoRectangle } from "c:Pango-1.0";
 import type { CBool, ConstPtr, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
-import { local, sizeof, stringFrom, bytesFrom } from "c:memory";
+import { copy, local, sizeof, stringFrom, bytesFrom } from "c:memory";
 import { free, malloc } from "c:stdlib";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -751,6 +766,8 @@ function main(): void {
     buffer.set_text("", -1);
     buffer.insert_text(0, "x", -1);
     console.log("inserted " + inserted);
+    console.log("located " + svgLocated());
+    console.log("mutex " + waitLocked(null, null));
     // A detailed signal, as GJS connects one: `notify::label` runs for that
     // property's changes and no other's.
     let relabeled = 0;
@@ -836,6 +853,63 @@ function main(): void {
   console.log("kind=" + String(kind));
   console.log(folders);
   console.log("sorted=" + sortedByLastLetter(["apple", "kiwi", "banana"]));
+}
+
+/**
+ * A struct C names by its typedef alone, which has no tag: where GtkSvg
+ * found an element it ignores, read through the `const GtkSvgLocation *`
+ * its error hands back. Copied out whole, to be read where a field is read:
+ * through the program's own pointer, and not yet through C's `const` one.
+ */
+function svgLocated(): string {
+  const svg = gtk_svg_new();
+  let located = "none";
+  svg.connect("error", (_self, problem) => {
+    const start = gtk_svg_error_get_start(problem);
+    const end = gtk_svg_error_get_end(problem);
+    if (start !== null && end !== null) {
+      const from = local<GtkSvgLocation>();
+      const to = local<GtkSvgLocation>();
+      copy(from, start);
+      copy(to, end);
+      located = String(from.lines) + ":" + String(from.line_chars) + "-" +
+        String(to.lines) + ":" + String(to.line_chars);
+    }
+  });
+  gtk_svg_load_from_bytes(
+    svg,
+    g_bytes_new(ascii('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">\n<bogus/>\n</svg>\n')),
+  );
+  return located;
+}
+
+/** `text`'s characters as bytes, each below 128. */
+function ascii(text: string): Uint8Array {
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) {
+    bytes[i] = text.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * A union C names by its typedef, `GMutex`, compiled but not yet run: a
+ * program cannot own one, or a `GCond`, until `Sized<A, N>` gives it
+ * storage of the type's size -- nothing hands one out (`g_mutex_new` and
+ * `g_cond_new` are gone), and a union is held only by its handle. Called
+ * with nothing to lock, so each call here is compiled and checked against
+ * glib.h's prototype -- `GMutex *`, which `struct GMutex *` is not -- and
+ * none runs.
+ */
+function waitLocked(mutex: GMutex | null, cond: GCond | null): string {
+  if (mutex === null || cond === null) {
+    return "none";
+  }
+  g_mutex_lock(mutex);
+  g_cond_wait(cond, mutex);
+  const free = g_mutex_trylock(mutex);
+  g_mutex_unlock(mutex);
+  return String(free);
 }
 
 function lastLetter(item: unknown): string | null {
