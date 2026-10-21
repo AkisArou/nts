@@ -3010,7 +3010,99 @@ impl<'a> Mapper<'a> {
                 c: Type::Pointer(Pointee::Const(Box::new(Pointee::Scalar(Scalar::Char)))),
             });
         }
-        self.typed(param)
+        // A pointer GIR leaves unannotated -- no direction, no array, no
+        // caller-allocates -- deeper than the type it names is the C
+        // vocabulary's raw pointer. Only where nothing else maps it, so a
+        // later GIR annotation upgrades it by itself.
+        match self.typed(param) {
+            Err(Reason::PointerDepth(c_type)) if !param.caller_allocates => {
+                let TypeRef::Named { name, .. } = &param.ty else {
+                    return Err(Reason::PointerDepth(c_type));
+                };
+                self.raw_pointer(name, &c_type)
+                    .ok_or(Reason::PointerDepth(c_type))
+            }
+            other => other,
+        }
+    }
+
+    /// `c_type` as the raw pointer the header writes: `Ptr<…> | null` per
+    /// `*`, `ConstPtr<…> | null` where that level's pointee is `const`, down
+    /// to the first level this binder already maps -- a scalar by its brand
+    /// (never `AsNumber`), an enum, a handle, a `Struct`'s `Ptr`, `void`.
+    /// Owning nothing: no transfer applies. `None` where no level maps: a
+    /// pointee the program cannot name (`FILE`), or a `volatile` one.
+    fn raw_pointer(&mut self, name: &str, c_type: &str) -> Option<Mapped> {
+        if c_type.split_whitespace().any(|word| word == "volatile") {
+            return None;
+        }
+        let level = Param {
+            name: String::new(),
+            ty: TypeRef::Named {
+                name: name.to_owned(),
+                c_type: Some(c_type.to_owned()),
+            },
+            direction: Direction::In,
+            transfer: Transfer::None,
+            transfer_stated: false,
+            // What a pointer points at may be NULL as readily as not.
+            nullable: true,
+            optional: false,
+            caller_allocates: false,
+            scope: None,
+            closure: None,
+            destroy: None,
+        };
+        match self.typed(&level) {
+            Ok(mapped) => Some(self.raw_pointee(name, mapped)),
+            Err(Reason::PointerDepth(_)) => {
+                let star = c_type.rfind('*')?;
+                let pointee = c_type[..star].trim_end();
+                // `T * const *`: the level below is a const pointer.
+                let (pointee, constant) = match pointee.strip_suffix("const") {
+                    Some(rest) if rest.ends_with([' ', '*']) => (rest.trim_end(), true),
+                    _ => (
+                        pointee,
+                        !pointee.contains('*') && pointee.trim_start().starts_with("const "),
+                    ),
+                };
+                let inner = self.raw_pointer(name, pointee)?;
+                let pointee = match inner.c {
+                    Type::Scalar(scalar) => Pointee::Scalar(scalar),
+                    Type::Pointer(pointee) => Pointee::Pointer(Box::new(pointee)),
+                    _ => return None,
+                };
+                let (brand, pointee) = if constant {
+                    ("ConstPtr", Pointee::Const(Box::new(pointee)))
+                } else {
+                    ("Ptr", pointee)
+                };
+                self.binding.brands.insert(brand);
+                Some(Mapped {
+                    shape: Shape::Other,
+                    ts: format!("{brand}<{}> | null", inner.ts),
+                    c: Type::Pointer(pointee),
+                })
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// The innermost level of a raw pointer, as `typed` mapped it -- but a
+    /// scalar by its brand, as a `Struct` member is: `AsNumber` is how a call
+    /// hands a number over, not what memory holds.
+    fn raw_pointee(&mut self, name: &str, mapped: Mapped) -> Mapped {
+        if matches!(mapped.c, Type::Scalar(_)) {
+            let target = self.alias_target(name).unwrap_or_else(|| name.to_owned());
+            if let Some((_, brand, _)) = SCALARS.iter().find(|(gir, ..)| *gir == target) {
+                self.binding.brands.insert(brand);
+                return Mapped {
+                    ts: (*brand).to_owned(),
+                    ..mapped
+                };
+            }
+        }
+        mapped
     }
 
     /// A raw address has no element type, handle ownership, or guessed release.
@@ -4657,6 +4749,97 @@ mod tests {
         (dir, repository)
     }
 
+    /// A pointer GIR leaves unannotated is the raw pointer the header writes,
+    /// a level per `*`, its innermost type as this binder spells it -- a
+    /// scalar by its brand, a handle -- and its prototype the header's. The
+    /// controls each differ in one thing and stay as they were: a pointee no
+    /// type names (`FILE`), a `volatile` one, and the same `gint *` annotated
+    /// `out`, which stays a slot.
+    #[test]
+    fn an_unannotated_pointer_is_the_raw_pointer_the_header_writes() {
+        use super::super::{check, facts};
+        use super::{Reason, bind};
+        let dir = crate::bind_scratch::directory("gir-unannotated-pointer-test")
+            .expect("fixture directory");
+        std::fs::write(
+            dir.join("u.h"),
+            "#include <stdint.h>\n#include <stdio.h>\n\
+             typedef unsigned long gsize; typedef unsigned int guint32; typedef int gint;\n\
+             typedef struct _UData UData;\n\
+             void u_size(gsize *count); void u_codes(const guint32 *codes);\n\
+             void u_list(UData **list); void u_file(FILE *file);\n\
+             void u_slot(gint *value); void u_atomic(volatile gint *value);\n",
+        )
+        .expect("header");
+        let function = |name: &str, ty: &str, c_type: &str, flags: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="u_{name}"><return-value><type name="none" c:type="void"/></return-value>
+                <parameters><parameter name="p" {flags}><type name="{ty}" c:type="{c_type}"/></parameter></parameters></function>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="u.h"/><namespace name="U" version="1.0">
+            <record name="Data" c:type="UData" opaque="1"/>"#,
+            &function("size", "gsize", "gsize*", ""),
+            &function("codes", "guint32", "const guint32*", ""),
+            &function("list", "Data", "UData**", ""),
+            &function("file", "gpointer", "FILE*", ""),
+            &function(
+                "slot",
+                "gint",
+                "gint*",
+                r#"direction="out" caller-allocates="0""#,
+            ),
+            &function("atomic", "gint", "volatile gint*", ""),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("U-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("U-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: [("UData".to_owned(), "_UData".to_owned())].into(),
+            ..facts::Facts::default()
+        };
+        let mut binding = bind(&repository, &repository.namespaces["U"], &header);
+        check::against_headers(&mut binding, &[format!("-I{}", dir.display())])
+            .expect("header check");
+        let parameter = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .map(|f| f.parameters[0].1.ts.clone())
+        };
+        assert_eq!(parameter("u_size").as_deref(), Some("Ptr<c_size_t> | null"));
+        assert_eq!(
+            parameter("u_codes").as_deref(),
+            Some("ConstPtr<Uint32> | null"),
+            "{:?}",
+            binding.refused
+        );
+        assert_eq!(
+            parameter("u_list").as_deref(),
+            Some("Ptr<UData | null> | null")
+        );
+        assert_eq!(parameter("u_slot").as_deref(), Some("Ptr<c_int>"));
+        for refused in ["u_file", "u_atomic"] {
+            assert!(
+                parameter(refused).is_none()
+                    && binding
+                        .refused
+                        .iter()
+                        .any(|(n, r)| n == refused && matches!(r, Reason::PointerDepth(_))),
+                "{refused}: {:?}",
+                binding.refused
+            );
+        }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     #[test]
     fn raw_void_results_and_slots_follow_gir_and_the_header() {
         use super::super::{check, emit, facts};
@@ -4726,11 +4909,12 @@ mod tests {
                 .iter()
                 .any(|(n, r)| n == "raw_bad_depth" && matches!(r, Reason::PointerDepth(_)))
         );
-        assert!(
-            binding
-                .refused
-                .iter()
-                .any(|(n, r)| n == "raw_deep_input" && matches!(r, Reason::PointerDepth(_)))
+        // Unannotated and deeper than the type GIR names: the raw pointer the
+        // header writes. `raw_bad_depth`, the same depth annotated `out`, is
+        // refused above: an annotated form is never replaced.
+        assert_eq!(
+            function("raw_deep_input").parameters[0].1.ts,
+            "Ptr<Ptr<void> | null> | null"
         );
         check::against_headers(&mut binding, &[format!("-I{}", dir.display())])
             .expect("header check");
