@@ -63,7 +63,11 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot");
-    assert!(!snapshot.has_errors(), "{name} should typecheck");
+    assert!(
+        !snapshot.has_errors(),
+        "{name} should typecheck: {:?}",
+        snapshot.diagnostics
+    );
     let prepared = hir::prepare_with(
         &snapshot,
         &hir::Options {
@@ -88,11 +92,22 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
         .arg(format!("{}:{}", out.display(), jar.display()))
         .args(["nts.rt.NtsMain", "nts.gen.Program"])
         .output()
-        .expect("java runs");
+        .unwrap_or_else(|error| panic!("{name}: {} did not start: {error}", java.display()));
+    // **A JVM killed has no exit code, and the -1 standing in for one said
+    // nothing.** One failure under a gate's load
+    // (`exp_and_hypot_answer_as_node_does`, 2026-10-21) left no way to tell a
+    // JVM killed from one that answered wrong. Every call site prints `stderr`
+    // when the status is not 0, so a signal leads it; an exit code is printed
+    // by the assertion itself, and the tests that expect one read `stderr`
+    // exactly, so it stays as the program wrote it.
+    let mut stderr = String::from_utf8_lossy(&ran.stderr).into_owned();
+    if ran.status.code().is_none() {
+        stderr = format!("java ended by {}\n{stderr}", ran.status);
+    }
     Some((
         ran.status.code().unwrap_or(-1),
         String::from_utf8_lossy(&ran.stdout).into_owned(),
-        String::from_utf8_lossy(&ran.stderr).into_owned(),
+        stderr,
     ))
 }
 
