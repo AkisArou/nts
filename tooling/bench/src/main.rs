@@ -37,6 +37,7 @@ use serde::{Deserialize, Serialize};
 
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod count;
+mod results;
 
 /// One measurement.
 #[derive(Serialize, Deserialize)]
@@ -601,10 +602,37 @@ fn main() -> Result<()> {
         spoiled: spoiled.clone(),
         measured,
     };
-    let saved = run_file(&root);
-    std::fs::write(&saved, serde_json::to_string(&run)?)
+    finish(&root, &run, &rows, &cases)
+}
+
+/// Save a run, record what it measured, and rewrite the README if it may.
+///
+/// Every run records its cells, whether or not it may rewrite the README;
+/// `--render` re-reads an old run and records nothing, since its cells were
+/// measured at another time and commit.
+fn finish(root: &Utf8Path, run: &Run, rows: &[Row], cases: &[Utf8PathBuf]) -> Result<()> {
+    let saved = run_file(root);
+    std::fs::write(&saved, serde_json::to_string(run)?)
         .with_context(|| format!("writing {saved}"))?;
-    publish(&root, &rows, &cases, &requested, &spoiled, lanes.as_deref())
+    let (when, commit) = results::stamp(root);
+    results::record(
+        root,
+        rows,
+        &results::Run {
+            measured: when,
+            commit,
+            lanes: run.lanes.as_deref(),
+            spoiled: &run.spoiled,
+        },
+    )?;
+    publish(
+        root,
+        rows,
+        cases,
+        &run.requested,
+        &run.spoiled,
+        run.lanes.as_deref(),
+    )
 }
 
 /// Rewrite the README's generated benchmark table.
