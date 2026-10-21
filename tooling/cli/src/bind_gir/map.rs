@@ -362,6 +362,14 @@ pub(crate) enum Shape {
     Length {
         value: String,
     },
+    /// A string C writes into an out slot (`char **`), which a GJS-style
+    /// method returns as the copy it makes of it (`stringFrom`) -- `string`,
+    /// or `string | null` where GIR says C may write NULL -- and frees C's
+    /// after as `transfer` says: nothing of a borrowed one.
+    Text {
+        transfer: Transfer,
+        nullable: bool,
+    },
 }
 
 /// What an array C hands back holds, as the copy a values form makes of it.
@@ -1409,6 +1417,15 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                         label,
                         Reason::Array("an array an override hands back in C's memory"),
                     ));
+                }
+                // And a string through an out slot, likewise.
+                Ok(function)
+                    if function
+                        .parameters
+                        .iter()
+                        .any(|(_, mapped)| matches!(mapped.shape, Shape::Text { .. })) =>
+                {
+                    mapper.binding.refused.push((label, Reason::StringOut));
                 }
                 Ok(mut function) => {
                     let Some((class, _)) = function.method.clone() else {
@@ -2750,28 +2767,40 @@ impl<'a> Mapper<'a> {
             });
         };
         if name == "utf8" || name == "filename" {
-            // Only an optional one, which the caller leaves out (`omissible`):
-            // C's `char **` exactly, for a caller that does pass a slot.
-            if !param.optional {
-                return Err(Reason::StringOut);
-            }
             let constant = c_type
                 .as_deref()
                 .is_some_and(|c| c.trim_start().starts_with("const"));
             let char = Pointee::Scalar(Scalar::Char);
-            let (ts, char) = if constant {
-                (
-                    "Ptr<ConstPtr<c_char>> | null",
-                    Pointee::Const(Box::new(char)),
-                )
+            let (slot, char) = if constant {
+                ("Ptr<ConstPtr<c_char>>", Pointee::Const(Box::new(char)))
             } else {
-                ("Ptr<Ptr<c_char>> | null", char)
+                ("Ptr<Ptr<c_char>>", char)
             };
             self.binding.brands.extend(["Ptr", "ConstPtr", "c_char"]);
+            let c = Type::Pointer(Pointee::Pointer(Box::new(char)));
+            // An optional one, which the caller leaves out (`omissible`): C's
+            // `char **` exactly, for a caller that does pass a slot.
+            if param.optional {
+                return Ok(Mapped {
+                    shape: Shape::Other,
+                    ts: format!("{slot} | null"),
+                    c,
+                });
+            }
+            // A required one, the same slot, which the values form makes and
+            // copies the string out of (`Shape::Text`) -- out only: an inout
+            // slot holds a string C reads first (`pango_scan_word`'s `pos`),
+            // which a slot the values form makes would not.
+            if param.direction != Direction::Out {
+                return Err(Reason::StringOut);
+            }
             return Ok(Mapped {
-                shape: Shape::Other,
-                ts: ts.to_owned(),
-                c: Type::Pointer(Pointee::Pointer(Box::new(char))),
+                shape: Shape::Text {
+                    transfer: param.transfer,
+                    nullable: param.nullable,
+                },
+                ts: slot.to_owned(),
+                c,
             });
         }
         // The value's own C type, one `*` fewer than the parameter's.
@@ -6687,6 +6716,137 @@ mod tests {
                 .any(|(name, _)| name == "g_ptr_array_new"),
             "{:?}",
             binding.refused
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A binding of four functions, each with one string slot: `s_open`'s
+    /// `name_used`, an out slot C hands over; `s_peek`'s `encoding`, one it
+    /// lends and may leave NULL; `s_maybe`'s optional `etag`; and `s_skip`'s
+    /// inout `pos`, a string C reads first. And the scratch directory it was
+    /// read from, for the test to remove.
+    fn string_out_binding() -> (super::Binding, std::path::PathBuf) {
+        let dir = crate::bind_scratch::directory("gir-string-out-test").expect("fixture directory");
+        let function = |name: &str, more: &str, transfer: &str, c_type: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="gint" c:type="gint"/></return-value><parameters><parameter name="slot" {more} caller-allocates="0" transfer-ownership="{transfer}"><type name="utf8" c:type="{c_type}"/></parameter></parameters></function>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            &function("open", r#"direction="out""#, "full", "gchar**"),
+            &function(
+                "peek",
+                r#"direction="out" nullable="1""#,
+                "none",
+                "const char**",
+            ),
+            &function(
+                "maybe",
+                r#"direction="out" optional="1""#,
+                "full",
+                "gchar**",
+            ),
+            &function("skip", r#"direction="inout""#, "none", "const char**"),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = super::bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        (binding, dir)
+    }
+
+    /// A string C writes into an out slot (`char **`) is one the values form
+    /// copies (`Shape::Text`): `string` where GIR says C writes one, `string |
+    /// null` where it may write NULL, freed as the transfer says. The
+    /// controls: an optional slot, raw and left out of the values form as
+    /// before, and an inout one, whose string C reads first, refused.
+    #[test]
+    fn a_string_c_writes_into_an_out_slot_is_text() {
+        use super::{Shape, Transfer};
+        let (binding, dir) = string_out_binding();
+        let slot = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .map_or_else(
+                    || panic!("{symbol}: {:?}", binding.refused),
+                    |f| f.parameters[0].1.clone(),
+                )
+        };
+        assert_eq!(
+            slot("s_open").shape,
+            Shape::Text {
+                transfer: Transfer::Full,
+                nullable: false,
+            }
+        );
+        assert_eq!(
+            slot("s_peek").shape,
+            Shape::Text {
+                transfer: Transfer::None,
+                nullable: true,
+            }
+        );
+        let maybe = slot("s_maybe");
+        assert_eq!(
+            (maybe.shape, maybe.ts.as_str()),
+            (Shape::Other, "Ptr<Ptr<c_char>> | null")
+        );
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(name, reason)| name == "s_skip" && *reason == super::Reason::StringOut),
+            "{:?}",
+            binding.refused
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// The values form of a function whose string slot C writes: declared
+    /// first under the function's name, the raw form renamed, and bodied by
+    /// a copy of the string, freed where C handed it over and not where C
+    /// lends it -- and a NULL where GIR promised a string a broken promise.
+    #[test]
+    fn a_string_c_writes_into_an_out_slot_is_copied() {
+        use super::super::emit;
+        let (binding, dir) = string_out_binding();
+        let declarations = emit::declarations(&binding, "test");
+        for line in [
+            "   * @ntsCall s_open_values\n   */\n  export function s_open(): [c_int, string];",
+            "   * @ntsSymbol s_open\n   */\n  export function s_open_raw(slot: Ptr<Ptr<c_char>>): c_int;",
+            "  export function s_peek(): [c_int, string | null];",
+        ] {
+            assert!(
+                declarations.contains(line),
+                "missing {line:?}:\n{declarations}"
+            );
+        }
+        let companion = emit::companion(&binding, "test");
+        for line in [
+            "  const slot_text_read = stringFrom(slot[0]);",
+            "    console.error(\"s_open: slot is NULL\");",
+            "  g_free(slot[0]);",
+            "  const slot_text = stringFrom(slot[0]);",
+        ] {
+            assert!(companion.contains(line), "missing {line:?}:\n{companion}");
+        }
+        // One free, `s_open`'s: `s_peek` lends its string.
+        assert_eq!(
+            companion.matches("g_free(slot[0]);").count(),
+            1,
+            "{companion}"
         );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }

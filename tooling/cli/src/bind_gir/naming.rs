@@ -491,7 +491,7 @@ impl Renamer<'_> {
                 },
                 transfer: *transfer,
             },
-            other @ (Shape::Other | Shape::Once) => other.clone(),
+            other @ (Shape::Other | Shape::Once | Shape::Text { .. }) => other.clone(),
         };
         Mapped {
             ts: self.text(&mapped.ts),

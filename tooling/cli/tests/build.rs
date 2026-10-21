@@ -4986,7 +4986,7 @@ fn demo_gir(high: &str) -> String {
         <return-value><type name="none" c:type="void"/></return-value>
         <parameters>
           <instance-parameter name="thing"><type name="Thing" c:type="const DemoThing*"/></instance-parameter>
-          <parameter name="name" direction="out" caller-allocates="0" transfer-ownership="full"><type name="utf8" c:type="char**"/></parameter>
+          <parameter name="name" direction="out" caller-allocates="0" transfer-ownership="none"><type name="utf8" c:type="char**"/></parameter>
         </parameters>
       </method>
     </record>
@@ -5093,9 +5093,10 @@ fn gir_library(root: &Path, flag_signed: bool) {
 /// Each assertion is a decision the binder could get wrong in a way that still
 /// produces a plausible file: the struct tag read from the header rather than
 /// guessed, `const` kept, a callback's context and destroy function hidden,
-/// a nullable string, an enum signed because the compiler says so although
-/// GIR's value looks unsigned -- and `demo_wrong`, whose GIR is false about
-/// the header, absent from the binding and named in the report.
+/// a nullable string, a string C writes into an out slot copied by the
+/// values form, an enum signed because the compiler says so although GIR's
+/// value looks unsigned -- and `demo_wrong`, whose GIR is false about the
+/// header, absent from the binding and named in the report.
 #[test]
 fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
     let pkg_config = Command::new("pkg-config").arg("--version").output();
@@ -5229,11 +5230,11 @@ fn bind_gir_writes_what_the_headers_confirm_and_drops_what_they_contradict() {
                 && line.contains("the header disagrees")),
         "the contradicted virtual function was not reported as one:\n{refused}"
     );
+    // The static string `demo_thing_name` writes, borrowed: copied by the
+    // values form, and not freed.
     assert!(
-        refused
-            .lines()
-            .any(|line| line == "demo_thing_name\ta string out parameter"),
-        "a string out parameter was not refused as one:\n{refused}"
+        !refused.contains("demo_thing_name") && binding.contains("@ntsCall demo_thing_name_values"),
+        "a string out parameter was not copied:\n{refused}"
     );
 }
 

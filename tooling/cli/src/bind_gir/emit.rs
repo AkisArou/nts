@@ -827,21 +827,20 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
 
 /// Whether `function` has a values form (`values_forms`).
 fn has_values_form(function: &Function) -> bool {
-    (function.method.is_some() || hands_back_array(function))
+    (function.method.is_some() || hands_back_copy(function))
         && function.vfunc.is_none()
         && (matches!(function.result.shape, Shape::Array { .. })
-            || function.parameters.iter().any(|(_, mapped)| {
-                matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. })
-            }))
+            || function
+                .parameters
+                .iter()
+                .any(|(_, mapped)| made_by_values_form(&mapped.shape)))
         && function.parameters.iter().all(|(name, mapped)| {
             function.throws.as_deref() == Some(name.as_str())
                 // One the caller may leave out -- `g_file_load_contents`'
                 // `etag_out` -- which the values form leaves out too.
                 || function.omissible.contains_key(name)
-                || matches!(
-                    mapped.shape,
-                    Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
-                )
+                || made_by_values_form(&mapped.shape)
+                || matches!(mapped.shape, Shape::Handle { .. } | Shape::Lent { .. })
                 || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
         })
         && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
@@ -854,7 +853,21 @@ fn has_values_form(function: &Function) -> bool {
 /// match the raw form's own calls -- the values form's, a promise's -- and
 /// every call where the two take the same parameters.
 fn renamed(function: &Function) -> bool {
-    hands_back_array(function) && has_values_form(function)
+    hands_back_copy(function) && has_values_form(function)
+}
+
+/// Whether a parameter is a slot the values form makes, and does not take:
+/// a scalar it reads (`Out`), storage it fills (`Filled`), an array or a
+/// string C hands back through it (`Array`, `Text`), or an array's length.
+fn made_by_values_form(shape: &Shape) -> bool {
+    matches!(
+        shape,
+        Shape::Out { .. }
+            | Shape::Filled { .. }
+            | Shape::Array { .. }
+            | Shape::Length { .. }
+            | Shape::Text { .. }
+    )
 }
 
 /// The name a renamed raw form (`renamed`) is declared under, its C symbol
@@ -877,15 +890,16 @@ fn raw_call(function: &Function) -> String {
     }
 }
 
-/// Whether C hands back an array the values form copies (`Shape::Array`), as
-/// its result or through an out slot: a free function's values form too.
-fn hands_back_array(function: &Function) -> bool {
+/// Whether C hands back what the values form copies -- an array, as its
+/// result or through an out slot (`Shape::Array`), or a string through one
+/// (`Shape::Text`): a free function's values form too.
+fn hands_back_copy(function: &Function) -> bool {
     function
         .parameters
         .iter()
         .map(|(_, mapped)| &mapped.shape)
         .chain([&function.result.shape])
-        .any(|shape| matches!(shape, Shape::Array { .. }))
+        .any(|shape| matches!(shape, Shape::Array { .. } | Shape::Text { .. }))
 }
 
 /// The overload of a function that returns its out values and copies the
@@ -935,6 +949,9 @@ fn values_result(function: &Function) -> String {
                     Shape::Out { value } => Some(value.clone()),
                     Shape::Filled { class } => Some(class.clone()),
                     Shape::Array { element, .. } => Some(copied(element)),
+                    Shape::Text { nullable, .. } => {
+                        Some(if *nullable { "string | null" } else { "string" }.to_owned())
+                    }
                     _ => None,
                 }),
         )
@@ -959,13 +976,7 @@ fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
         .parameters
         .iter()
         .filter(|(name, mapped)| {
-            !matches!(
-                mapped.shape,
-                Shape::Out { .. }
-                    | Shape::Filled { .. }
-                    | Shape::Array { .. }
-                    | Shape::Length { .. }
-            ) && function.throws.as_deref() != Some(name.as_str())
+            !made_by_values_form(&mapped.shape) && function.throws.as_deref() != Some(name.as_str())
         })
         .cloned()
         .collect()
@@ -1360,7 +1371,7 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             Shape::Array {
                 element: Element::Strings,
                 ..
-            }
+            } | Shape::Text { .. }
         )
     });
     let copies = shapes().any(|shape| {
@@ -1368,6 +1379,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             shape,
             Shape::Array {
                 element: Element::Strings | Element::Scalar(_),
+                ..
+            } | Shape::Text {
+                nullable: false,
                 ..
             }
         )
@@ -1379,7 +1393,10 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
                 function.parameters.iter().any(|(_, mapped)| {
                     matches!(
                         mapped.shape,
-                        Shape::Out { .. } | Shape::Length { .. } | Shape::Array { .. }
+                        Shape::Out { .. }
+                            | Shape::Length { .. }
+                            | Shape::Array { .. }
+                            | Shape::Text { .. }
                     )
                 })
             })
@@ -1391,8 +1408,9 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     .flatten()
     .collect();
     // The free a buffer the caller owns takes: GLib's, where it is declared.
-    if shapes()
-        .any(|shape| matches!(shape, Shape::Array { transfer, .. } if *transfer != Transfer::None))
+    if shapes().any(|shape| {
+        matches!(shape, Shape::Array { transfer, .. } | Shape::Text { transfer, .. } if *transfer != Transfer::None)
+    })
     {
         imports
             .entry("c:GLib-2.0".to_owned())
@@ -1440,6 +1458,101 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
     out
 }
 
+/// The string C wrote into the out slot `slot` (`Shape::Text`), copied into
+/// `text` -- `string`, or `string | null` where GIR says C may write NULL --
+/// and C's freed after where the transfer makes it the caller's. A NULL GIR
+/// promised it would not write ends the process, as a broken promise does
+/// for an array (`copy_array`): `symbol` names the function in what it
+/// prints.
+fn copy_text(
+    after: &mut String,
+    symbol: &str,
+    slot: &str,
+    text: &str,
+    transfer: Transfer,
+    nullable: bool,
+) {
+    if nullable {
+        let _ = writeln!(after, "  const {text} = stringFrom({slot}[0]);");
+    } else {
+        let _ = writeln!(after, "  let {text} = \"\";");
+        let _ = writeln!(after, "  const {text}_read = stringFrom({slot}[0]);");
+        let _ = writeln!(after, "  if ({text}_read === null) {{");
+        let _ = writeln!(after, "    console.error(\"{symbol}: {slot} is NULL\");");
+        let _ = writeln!(after, "    exit(1);");
+        let _ = writeln!(after, "  }} else {{");
+        let _ = writeln!(after, "    {text} = {text}_read;");
+        let _ = writeln!(after, "  }}");
+    }
+    if transfer != Transfer::None {
+        let _ = writeln!(after, "  g_free({slot}[0]);");
+    }
+}
+
+/// One parameter's slot in a values form (`values_wrapper`): made in `body`
+/// where the values form makes it, read or copied out of in `after` once the
+/// call returns, and named in `read` where it is a value the form returns.
+/// `symbol` names the function in what a broken promise prints.
+fn slot(
+    (body, after, read): (&mut String, &mut String, &mut Vec<String>),
+    symbol: &str,
+    name: &str,
+    mapped: &Mapped,
+) {
+    // The slot a copied array or string is written through: the value type
+    // `Ptr<…>` points at.
+    let pointee = || {
+        mapped
+            .ts
+            .strip_prefix("Ptr<")
+            .and_then(|rest| rest.strip_suffix('>'))
+            .unwrap_or("never")
+            .to_owned()
+    };
+    match &mapped.shape {
+        Shape::Out { value } => {
+            let _ = writeln!(body, "  const {name} = local<{value}>();");
+            read.push(format!("{name}[0]"));
+        }
+        Shape::Length { value } => {
+            let _ = writeln!(body, "  const {name} = local<{value}>();");
+        }
+        Shape::Array {
+            element,
+            length,
+            transfer,
+        } => {
+            let _ = writeln!(body, "  const {name} = local<{}>();", pointee());
+            let copy = if *element == Element::Bytes {
+                format!("{name}_bytes")
+            } else {
+                format!("{name}_copy")
+            };
+            copy_array(
+                after,
+                symbol,
+                &format!("{name}[0]"),
+                &copy,
+                element,
+                length,
+                *transfer,
+            );
+            read.push(copy);
+        }
+        Shape::Filled { class } => {
+            let _ = writeln!(body, "  const {name} = new {class}();");
+            read.push(name.to_owned());
+        }
+        Shape::Text { transfer, nullable } => {
+            let _ = writeln!(body, "  const {name} = local<{}>();", pointee());
+            let text = format!("{name}_text");
+            copy_text(after, symbol, name, &text, *transfer, *nullable);
+            read.push(text);
+        }
+        _ => {}
+    }
+}
+
 /// `function` with its out slots as locals, read once it returns and handed
 /// back as `values_result` says. The error slot is left out of the call, so a
 /// failure is thrown here and propagates.
@@ -1479,47 +1592,12 @@ fn values_wrapper(out: &mut String, function: &Function) {
         read.push("nts_result".to_owned());
     }
     for (name, mapped) in &function.parameters {
-        match &mapped.shape {
-            Shape::Out { value } => {
-                let _ = writeln!(body, "  const {name} = local<{value}>();");
-                read.push(format!("{name}[0]"));
-            }
-            Shape::Length { value } => {
-                let _ = writeln!(body, "  const {name} = local<{value}>();");
-            }
-            Shape::Array {
-                element,
-                length,
-                transfer,
-            } => {
-                let slot = mapped
-                    .ts
-                    .strip_prefix("Ptr<")
-                    .and_then(|rest| rest.strip_suffix('>'))
-                    .unwrap_or("never");
-                let _ = writeln!(body, "  const {name} = local<{slot}>();");
-                let copy = if *element == Element::Bytes {
-                    format!("{name}_bytes")
-                } else {
-                    format!("{name}_copy")
-                };
-                copy_array(
-                    &mut after,
-                    &function.symbol,
-                    &format!("{name}[0]"),
-                    &copy,
-                    element,
-                    length,
-                    *transfer,
-                );
-                read.push(copy);
-            }
-            Shape::Filled { class } => {
-                let _ = writeln!(body, "  const {name} = new {class}();");
-                read.push(name.clone());
-            }
-            _ => {}
-        }
+        slot(
+            (&mut body, &mut after, &mut read),
+            &function.symbol,
+            name,
+            mapped,
+        );
     }
     let passed = function
         .parameters
