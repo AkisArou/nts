@@ -1,8 +1,8 @@
 {
   "run": "check",
   "category": "refused",
-  "nts": "not emitted: NTS2006 no declaration for `Generator0#resume` to take a signature from",
+  "nts": "NTS1001 a generator stepped as `Generator<…>`, which no generator in this program extends -- a `function*` declaration stored as a function type whose `Generator<…>` is not its own keeps its own",
   "node": null,
-  "measured_with": "97730667d3153ae8",
+  "measured_with": "55682175bc75e172",
   "source": "measured"
 }

@@ -9,7 +9,11 @@
 // control), but a declaration has none: it is written before it is stored, and
 // stored by name. Its frame extends its own generator, a value returned through
 // `Make` is typed as the other, and stepping it is a virtual call to a
-// resumption no frame overrides, so every backend declines `total` and `steps`.
+// resumption no frame overrides. Lowering refuses `total` and `steps` for it
+// by name (`suspend::refuse_uninhabited`), one sentence on every backend, where
+// each backend declined them for a callee it could not find. The same
+// declaration stored in a local and called there agrees: the call reaches
+// `counted` itself, and walks its own frame.
 type Make = () => Generator<number>;
 
 let first = 1;

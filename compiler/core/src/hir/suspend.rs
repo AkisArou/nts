@@ -63,7 +63,8 @@
 use nts_diagnostics::Diagnostic;
 
 use super::{
-    Field, Func, HirType, Layout, ManagedType, Op, OpKind, Program, Terminator, TypeId, ValueId,
+    Callee, Field, Func, HirType, Layout, ManagedType, Op, OpKind, Program, Terminator, TypeId,
+    ValueId,
 };
 
 /// Fixed frame fields, before the parameters.
@@ -401,7 +402,7 @@ pub fn transform(program: &mut Program) -> Vec<Diagnostic> {
     program.funcs.extend(added);
     answer_for_frames(program, &layouts);
     program.layouts.extend(layouts);
-    declare_resumptions(program);
+    refusals.extend(declare_resumptions(program));
     refusals
 }
 
@@ -465,8 +466,18 @@ fn answer_for_frames(program: &mut Program, frames: &[Layout]) {
 /// a third opinion none of them held.
 ///
 /// Here, after the resumptions exist. There is nothing to copy from before.
-fn declare_resumptions(program: &mut Program) {
+///
+/// **An abstract generator no frame extends has no resumption to copy**, and
+/// nothing to dispatch to: it is uninhabited. A `function*` declaration stored
+/// as `() => Generator<number>` keeps its own `Generator<number, void, any>`
+/// -- it is written before it is stored, so no context gives it another
+/// (`generator_in_context` in lowering) -- and a value stepped through the
+/// signature is typed as the one no frame extends. Every backend declined the
+/// stepping function for a callee it could not find; it is refused here by
+/// name instead ([`refuse_uninhabited`]).
+fn declare_resumptions(program: &mut Program) -> Vec<Diagnostic> {
     let mut declare: Vec<Func> = Vec::new();
+    let mut uninhabited: Vec<(String, &'static str)> = Vec::new();
     for at in 0..program.layouts.len() {
         let layout = &program.layouts[at];
         // An abstract generator is a layout some frame names as its base. The
@@ -497,6 +508,12 @@ fn declare_resumptions(program: &mut Program) {
                 program.funcs.iter().find(|func| func.name == *overrode)
             })
         else {
+            let spelled = if layout.name.starts_with("Async") {
+                "AsyncGenerator<…>"
+            } else {
+                "Generator<…>"
+            };
+            uninhabited.push((name, spelled));
             continue;
         };
         let mut shell = body.clone();
@@ -524,6 +541,65 @@ fn declare_resumptions(program: &mut Program) {
         declare.push(shell);
     }
     program.funcs.extend(declare);
+    refuse_uninhabited(program, &uninhabited)
+}
+
+/// Refuse every function that steps a generator through an abstract generator
+/// no frame extends, `(resumption, how its kind is spelled)`.
+///
+/// Each one dispatches to a resumption nothing defines or declares, and the
+/// sentence is about the generator rather than the callee: C and LLVM said "no
+/// declaration for `Generator0#resume`", the JVM "a virtual call to
+/// `Generator0#resume`, which is not in this program", and Wasm "callable
+/// `Generator0` declares no entry". Recorded in [`Program::uncompiled`] as well
+/// as reported, and removed, so its callers are refused after it by
+/// `drop_callers_of_refused`.
+fn refuse_uninhabited(
+    program: &mut Program,
+    uninhabited: &[(String, &'static str)],
+) -> Vec<Diagnostic> {
+    if uninhabited.is_empty() {
+        return Vec::new();
+    }
+    let mut refusals = Vec::new();
+    let mut refused: Vec<(String, String)> = Vec::new();
+    for func in &program.funcs {
+        let step = func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .find_map(|&op| {
+                let value = func.value(op);
+                let OpKind::Call {
+                    callee: Callee::Virtual { declared, .. },
+                    ..
+                } = &value.kind
+                else {
+                    return None;
+                };
+                let (_, spelled) = uninhabited.iter().find(|(name, _)| name == declared)?;
+                Some((value, *spelled))
+            });
+        let Some((value, spelled)) = step else {
+            continue;
+        };
+        let why = format!(
+            "a generator stepped as `{spelled}`, which no generator in this program extends -- a \
+             `function*` declaration stored as a function type whose `{spelled}` is not its own \
+             keeps its own"
+        );
+        refusals.push(Diagnostic::error(
+            "NTS1001",
+            why.clone(),
+            value.origin.location,
+        ));
+        refused.push((func.name.clone(), why));
+    }
+    program
+        .funcs
+        .retain(|func| !refused.iter().any(|(name, _)| *name == func.name));
+    program.uncompiled.extend(refused);
+    refusals
 }
 
 struct Rewritten {
