@@ -75,6 +75,8 @@
 //   made press false  `new GtkButton({ label: "press", has_frame: false })`:
 //                 `gtk_button_new`, then each setter the literal writes -- a
 //                 frame is on by default, so `false` is the setter's doing
+//   run true      a record known by its alias: a `PangoLayoutRun`, the
+//                 `PangoGlyphItem` the iterator of the button's layout lends
 //   compound 6    `label.width_chars |= 4` and `^= 0`: a property read through
 //                 its getter and written through its setter, one receiver
 //   themed 6 document-open-recent  `new GThemedIcon({ name, use_default_fallbacks })`:
@@ -96,6 +98,9 @@
 //                 connected first, still ran after the plain one
 //   idle          a closure given to `g_idle_add_full` ran
 //   label=tick 3  a timeout closure ticked three times, rewriting the label
+//   allocation laid  a `GtkAllocation`, which is a `GdkRectangle`: the
+//                 program's box, which GTK fills with the button's allocation
+//                 once the window is laid out -- the run waits for it
 //                 through its `label` property, as GJS writes it -- the
 //                 `gtk_label_set_label` and `gtk_label_get_label` GIR names
 //   ticks=3       and the count it captured is what `main` reads afterwards
@@ -122,6 +127,8 @@ import {
   GtkSortListModel,
   GtkStringObject,
   GtkStringSorter,
+  gtk_widget_create_pango_layout,
+  gtk_widget_get_allocation,
   gtk_window_present,
   gtk_window_set_child,
   Orientation,
@@ -198,7 +205,7 @@ import {
   g_type_class_unref,
 } from "c:GObject-2.0";
 import type { GTypeQuery } from "c:GObject-2.0";
-import { GdkRGBA, gdk_rgba_equal } from "c:Gdk-4.0";
+import { GdkRGBA, GdkRectangle, gdk_rgba_equal } from "c:Gdk-4.0";
 import { graphene_point_distance, graphene_point_t, graphene_point_zero } from "c:Graphene-1.0";
 import {
   GskPathPoint,
@@ -224,6 +231,8 @@ import {
   pango_context_new,
   pango_extents_to_pixels,
   pango_font_description_from_string,
+  pango_layout_get_iter,
+  pango_layout_iter_get_run,
   pango_parse_markup,
 } from "c:Pango-1.0";
 import type { PangoRectangle } from "c:Pango-1.0";
@@ -584,6 +593,11 @@ function main(): void {
     // property the literal writes, in its order.
     const button = new GtkButton({ label: "press", has_frame: false });
     console.log("made " + String(button.label) + " " + String(button.has_frame));
+    // A record known by its alias, as the record it stands for: a layout
+    // with the display's fonts, which a context of the program's own lacks.
+    const layout = gtk_widget_create_pango_layout(button, "hello");
+    const iter = pango_layout_get_iter(layout);
+    console.log("run " + String(pango_layout_iter_get_run(iter) !== null));
     // Construct-only properties, which no setter writes, given to
     // `g_object_new`: GJS's `new Gio.ThemedIcon({ name })`, with a boolean
     // one beside it that adds the name's fallbacks.
@@ -672,17 +686,25 @@ function main(): void {
       console.log("idle");
       return false;
     });
+    // The button's allocation, in a box of the program's that GTK fills: a
+    // `GtkAllocation` is a `GdkRectangle`. Empty until the window is laid
+    // out, which the timeout below waits for.
+    const allocation = new GdkRectangle();
+    const empty = new GdkRectangle();
     g_timeout_add_full(PRIORITY_DEFAULT, 10, () => {
       // Count only to three, and keep the source until the query, the
-      // directories and the awaited read have answered too: on a loaded
-      // machine any of them can outlast three ticks, and the log must read
-      // tick 3 after them either way.
+      // directories, the awaited read and the layout have answered too: on a
+      // loaded machine any of them can outlast three ticks, and the log must
+      // read tick 3 after them either way.
       if (ticks < 3) {
         ticks++;
         label.label = "tick " + String(ticks);
       }
-      if (ticks < 3 || kind === -1 || folders === "" || !awaited) return true;
+      gtk_widget_get_allocation(button, allocation);
+      const laid = !allocation.equal(empty);
+      if (ticks < 3 || kind === -1 || folders === "" || !awaited || !laid) return true;
       console.log("label=" + label.label);
+      console.log("allocation laid");
       application.quit();
       return false;
     });
