@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS5001 wasm declines `make`: a Managed(Map(Erased, Erased)) where a Managed(Map(Managed(String), Float { bits: 64 })) is wanted: no Wasm cast relates their storage",
+  "node": null,
+  "measured_with": "697ef6c7fb23e11d",
+  "source": "measured"
+}
