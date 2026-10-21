@@ -5794,6 +5794,59 @@ mod tests {
         .concat()
     }
 
+    /// A function GIR declares on an enum -- an error domain's `quark`, a
+    /// bitfield's own -- is the namespace's: bound once, by its C symbol on
+    /// `c:`, and on `gi:` by the name GIR gives the namespace's copy it marks
+    /// `moved-to` the enum (`thingErrorQuark`). That copy is not bound
+    /// again, and a function with no such copy is bound the same.
+    #[test]
+    fn a_function_declared_on_an_enum_is_the_namespaces() {
+        use super::super::{facts, naming};
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-enum-function-test").expect("fixture directory");
+        let returns = r#"<return-value><type name="guint32" c:type="guint32"/></return-value>"#;
+        let xml = format!(
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0" c:symbol-prefixes="s">
+            <enumeration name="ThingError" c:type="SThingError" glib:error-domain="s-thing-error-quark">
+            <member name="failed" value="0" c:identifier="S_THING_ERROR_FAILED"/>
+            <function name="quark" c:identifier="s_thing_error_quark">{returns}</function>
+            </enumeration>
+            <bitfield name="Flags" c:type="SFlags">
+            <member name="none" value="0" c:identifier="S_FLAGS_NONE"/>
+            <function name="count" c:identifier="s_flags_count">{returns}</function>
+            </bitfield>
+            <function name="thing_error_quark" c:identifier="s_thing_error_quark" moved-to="ThingError.quark">{returns}</function>
+            </namespace></repository>"#
+        );
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let namespace = &repository.namespaces["S"];
+        let binding = bind(&repository, namespace, &facts::Facts::default());
+        let mut symbols: Vec<&str> = binding
+            .functions
+            .iter()
+            .map(|f| f.symbol.as_str())
+            .collect();
+        symbols.sort_unstable();
+        assert_eq!(
+            symbols,
+            ["s_flags_count", "s_thing_error_quark"],
+            "{:?}",
+            binding.refused
+        );
+        let gi = naming::gi(&binding, namespace, &naming::Names::of(&repository));
+        let mut names: Vec<&str> = gi.functions.iter().map(|f| f.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["flagsCount", "thingErrorQuark"]);
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     /// A record with no `GType`, whose members the headers lay out, is a
     /// `Struct` -- private members too, a 64-bit one as its brand, a string
     /// as its raw `char *` -- and a pointer to one is the program's storage,

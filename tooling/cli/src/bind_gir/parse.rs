@@ -220,22 +220,48 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                     || attribute(node, "disguised") == Some("1"),
                 fields: fields(node),
             }),
-            kind @ ("enumeration" | "bitfield") => namespace.enums.push(Enum {
-                name: attribute(node, "name").unwrap_or_default().to_owned(),
-                c_type: c_attribute(node, "type").map(str::to_owned),
-                flags: kind == "bitfield",
-                members: node
-                    .children()
-                    .filter(|n| is(*n, "member"))
-                    .filter_map(|member| {
-                        Some(Member {
-                            name: attribute(member, "name")?.to_owned(),
-                            c_identifier: c_attribute(member, "identifier")?.to_owned(),
-                            value: attribute(member, "value")?.parse().ok()?,
+            kind @ ("enumeration" | "bitfield") => {
+                namespace.enums.push(Enum {
+                    name: attribute(node, "name").unwrap_or_default().to_owned(),
+                    c_type: c_attribute(node, "type").map(str::to_owned),
+                    flags: kind == "bitfield",
+                    members: node
+                        .children()
+                        .filter(|n| is(*n, "member"))
+                        .filter_map(|member| {
+                            Some(Member {
+                                name: attribute(member, "name")?.to_owned(),
+                                c_identifier: c_attribute(member, "identifier")?.to_owned(),
+                                value: attribute(member, "value")?.parse().ok()?,
+                            })
                         })
-                    })
-                    .collect(),
-            }),
+                        .collect(),
+                });
+                // A function GIR declares on the enum -- an error domain's
+                // `quark`, `gtk_svg_error_get_start` -- is the namespace's,
+                // under the name GIR gives the namespace's own copy of it,
+                // which it marks `moved-to` the enum: `svg_error_get_start`.
+                // No surface has a place for it on the enum: a `const enum`
+                // merges with nothing a function is declared in (TS2567).
+                let prefix = format!("{}_", namespace.symbol_prefix);
+                namespace
+                    .functions
+                    .extend(
+                        node.children()
+                            .filter(|n| is(*n, "function"))
+                            .map(|function| {
+                                let mut callable = callable(function, CallableKind::Function);
+                                if let Some(name) = callable
+                                    .c_identifier
+                                    .as_deref()
+                                    .and_then(|c| c.strip_prefix(&prefix))
+                                {
+                                    callable.name = name.to_owned();
+                                }
+                                callable
+                            }),
+                    );
+            }
             "alias" => namespace.aliases.extend(alias(node)),
             "callback" => namespace.callbacks.push(Callback {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
