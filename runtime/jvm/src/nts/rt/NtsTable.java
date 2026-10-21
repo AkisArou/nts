@@ -607,6 +607,93 @@ public abstract class NtsTable {
         return map.findObject(key) >= 0;
     }
 
+    /**
+     * The hash of a string key, reached with or without an {@link NtsValue}
+     * around it: {@link #hash}'s `STRING` arm and {@link #findString} both call
+     * it, so a key looked up unboxed cannot hash differently from the same key
+     * stored boxed. `String` caches its own `hashCode`. An `Object`, because
+     * a `STRING` box holds its `ref` as one and `hash` should not cast it.
+     */
+    private static int hashString(Object key) {
+        int h = key.hashCode() * 0x9e3779b9;
+        return h ^ (h >>> 16);
+    }
+
+    /**
+     * {@link #find}, for a string key that has not been boxed.
+     *
+     * <p>Exactly {@code find(NtsValue.ofString(key))}: {@code ofString} tags a
+     * non-null string {@code STRING}, {@code hash} sends that tag to
+     * {@link #hashString}, and {@code sameKey} compares two {@code STRING} keys
+     * by {@code equals}. So the stored key matches when it is tagged
+     * {@code STRING} and holds an equal string -- by contents, which is why this
+     * is not {@link #findObject}: a key built at run time is the same key as an
+     * equal literal without being the same reference. A null key is
+     * {@code NULL_VALUE} to {@code ofString}, so it delegates.
+     */
+    int findString(String key) {
+        if (key == null) { return find(NtsValue.NULL_VALUE); }
+        if (count == 0) { return -1; }
+        if (buckets.length == 0) {
+            for (int i = head; i < used; i++) {
+                NtsValue candidate = keys[i];
+                if (candidate != null && candidate.tag == NtsValue.STRING
+                        && (candidate.ref == key || candidate.ref.equals(key))) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+        int h = hashString(key);
+        int mask = buckets.length - 1;
+        int p = h & mask;
+        for (;;) {
+            long cell = buckets[p];
+            if (cell == 0L) { return -1; }
+            int slot = (int) cell - 1;
+            NtsValue candidate = keys[slot];
+            if ((int) (cell >>> 32) == h && candidate.tag == NtsValue.STRING
+                    && (candidate.ref == key || candidate.ref.equals(key))) {
+                return slot;
+            }
+            p = (p + 1) & mask;
+        }
+    }
+
+    /**
+     * {@code m.get(k)} where {@code k} is a string the caller holds unboxed.
+     *
+     * <p>**This one is worth something on HotSpot**, unlike {@link #getObject}.
+     * C2 scalar-replaces a key box only where the lookup inlines, and
+     * {@link #find} and {@link #insert} are "already compiled into a big
+     * method" where a hot loop calls them: `benchmarks/cases/record-word-counts`
+     * built 1,600 boxes a run, about 38 KB of its 70,768 bytes against the
+     * Java reference's 15,408. See `fuse::unboxed_keys`.
+     */
+    public static NtsValue getString(NtsTable map, String key) {
+        int at = map.findString(key);
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : map.values[at];
+    }
+
+    /** {@code m.has(k)} for an unboxed string key; see {@link #getString}. */
+    public static boolean hasString(NtsTable map, String key) {
+        return map.findString(key) >= 0;
+    }
+
+    /**
+     * {@code m.set(k, v)} for an unboxed string key: in place where the key is
+     * there, and through {@link #insert} with the key boxed where it is not --
+     * the one case the box is kept, as the stored key.
+     */
+    static void insertString(NtsTable map, String key, NtsValue value) {
+        int at = map.findString(key);
+        if (at >= 0) {
+            map.values[at] = value;
+            return;
+        }
+        insert(map, NtsValue.ofString(key), value);
+    }
+
     private static int hash(NtsValue value) {
         int h;
         switch (value.tag) {
@@ -618,8 +705,7 @@ public abstract class NtsTable {
                 h = value.num != 0.0 ? 1231 : 1237;
                 break;
             case NtsValue.STRING:
-                h = value.ref.hashCode() * 0x9e3779b9;
-                return h ^ (h >>> 16);
+                return hashString(value.ref);
             case NtsValue.UNDEFINED:
             case NtsValue.NULL:
                 h = 0;

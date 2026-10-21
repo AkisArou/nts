@@ -39,6 +39,12 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
         return map;
     }
 
+    /** {@link #set} for an unboxed string key; see {@link NtsTable#getString}. */
+    public static NtsMap setString(NtsMap map, String key, NtsValue value) {
+        insertString(map, key, value);
+        return map;
+    }
+
     /**
      * A shallow copy, which is a `Map` because the receiver is.
      *

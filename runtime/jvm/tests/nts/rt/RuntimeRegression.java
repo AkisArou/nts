@@ -1412,7 +1412,55 @@ public final class RuntimeRegression {
         testIntegerViewStores(); System.out.println("integer view stores passed");
         testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
         testProvedViewAccess(); System.out.println("proven view accesses passed");
+        testStringKeyDoors(); System.out.println("unboxed string keys passed");
         System.out.println("PASS " + checks + " assertions");
+    }
+
+    /**
+     * A string key passed unboxed finds what the same key boxed finds.
+     *
+     * <p>`getString`, `hasString` and `setString` hash through `hashString`,
+     * which `hash` also uses, and compare by `equals`, as `sameKey` compares two
+     * `STRING` keys. So every lookup here uses a copy equal to, and not the same
+     * string as, the one stored, both ways round: stored boxed and found unboxed,
+     * stored unboxed and found boxed. Under the linear limit and past it, since
+     * the two paths search differently. A number key is not the string that
+     * prints it, and a null key is what `ofString(null)` makes of it.
+     */
+    private static void testStringKeyDoors() {
+        for (int size : new int[] {4, 100}) {
+            NtsMap boxed = NtsMap.newTable(0);
+            NtsMap unboxed = NtsMap.newTable(0);
+            for (int i = 0; i < size; i++) {
+                NtsMap.set(boxed, NtsValue.ofString("w" + i), NtsValue.ofNumber(i));
+                NtsMap.setString(unboxed, "w" + i, NtsValue.ofNumber(i));
+            }
+            for (int i = 0; i < size; i++) {
+                String copy = new String("w" + i);
+                number(NtsTable.getString(boxed, copy).num, i, "stored boxed, read unboxed, " + size + " keys, w" + i);
+                number(NtsTable.get(unboxed, NtsValue.ofString(copy)).num, i, "stored unboxed, read boxed, " + size + " keys, w" + i);
+                check(NtsTable.hasString(boxed, copy) && NtsTable.has(unboxed, NtsValue.ofString(copy)), "has, " + size + " keys, w" + i);
+            }
+            check(NtsTable.getString(boxed, "w" + size) == NtsValue.UNDEFINED_VALUE, "a missing key, " + size + " keys");
+            check(!NtsTable.hasString(unboxed, "w" + size), "a missing key, has, " + size + " keys");
+            NtsMap.setString(boxed, new String("w1"), NtsValue.ofNumber(-1));
+            number(NtsTable.get(boxed, NtsValue.ofString("w1")).num, -1, "an update in place, " + size + " keys");
+            equal(boxed.size(), size, "an update in place adds no entry, " + size + " keys");
+            NtsMap.setString(unboxed, "w" + size, NtsValue.ofNumber(size));
+            number(NtsTable.get(unboxed, NtsValue.ofString("w" + size)).num, size, "an insert, " + size + " keys");
+            equal(unboxed.size(), size + 1, "an insert adds one entry, " + size + " keys");
+        }
+        NtsMap mixed = NtsMap.newMap(0);
+        NtsMap.set(mixed, NtsValue.ofNumber(1), NtsValue.ofNumber(10));
+        NtsMap.set(mixed, NtsValue.NULL_VALUE, NtsValue.ofNumber(20));
+        NtsMap.set(mixed, NtsValue.UNDEFINED_VALUE, NtsValue.ofNumber(30));
+        check(!NtsTable.hasString(mixed, "1"), "the number 1 is not the string \"1\"");
+        check(!NtsTable.hasString(mixed, "undefined") && !NtsTable.hasString(mixed, "null"),
+            "undefined and null are not their names");
+        number(NtsTable.getString(mixed, null).num, 20, "a null key is ofString(null), NULL_VALUE");
+        NtsMap.setString(mixed, "1", NtsValue.ofNumber(40));
+        number(NtsTable.get(mixed, NtsValue.ofNumber(1)).num, 10, "the string \"1\" leaves the number 1");
+        number(NtsTable.getString(mixed, "1").num, 40, "and is a key of its own");
     }
 
     /**
