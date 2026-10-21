@@ -110,6 +110,9 @@ pub(crate) enum FuncKey {
     Collection(u32, crate::collections::Helper),
     /// `Object.keys` of a collection, into an array of strings.
     CollectionKeys(u32, u32),
+    /// A collection's keys (or, `true`, its values) copied into an array of
+    /// one storage: `nts_map_keys_into` and `nts_map_values_into`.
+    CollectionInto(u32, u32, bool),
     Key(crate::collections::KeyHelper),
     IdentityHash,
     Promise(crate::promises::Helper),

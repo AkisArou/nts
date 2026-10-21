@@ -1581,6 +1581,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_map_keys_into",
+        returns: "void",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_map_keys_str",
         returns: "noalias nonnull ptr",
         params: &["ptr"],
@@ -1616,6 +1622,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "ptr",
             "i32",
         ],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_values_into",
+        returns: "void",
+        params: &["ptr", "ptr"],
         attributes: &[],
     },
     Signature {

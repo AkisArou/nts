@@ -326,6 +326,76 @@ int main(void) {
     nts_release(value);
   }
 
+  /* --- copied into an array in one call ----------------------------------
+   * node: m = new Map([[1,10],[2,20],[3,30],[4,40],[5,50]]);
+   *       m.delete(1); m.delete(5); m.delete(3); m.set(2, 21); m.set(1, 11)
+   *       [...m.keys()] => 2,4,1   [...m.values()] => 21,40,11
+   *       s = new Set([7,8,9]); s.delete(8); [...s.values()] => 7,9
+   *       [...new Map().keys()] => (empty)                                  */
+  {
+    NtsMap *m = nts_map_new(NTS_KEY_NUMBER);
+    for (int i = 1; i <= 5; i++) {
+      put(m, num(i), num(i * 10));
+    }
+    nts_map_delete(m, num(1));
+    nts_map_delete(m, num(5));
+    nts_map_delete(m, num(3));
+    put(m, num(2), num(21));
+    put(m, num(1), num(11));
+    NtsArray *keys = nts_array_of_numbers((double)m->header.length);
+    NtsArray *values = nts_array_of_numbers((double)m->header.length);
+    nts_map_keys_into(m, keys);
+    nts_map_values_into(m, values);
+    const double *k = NTS_ITEMS(keys, double);
+    const double *v = NTS_ITEMS(values, double);
+    check("keys come out live, in entry order, holes at both ends skipped",
+          keys->header.length == 3 && k[0] == 2.0 && k[1] == 4.0 &&
+              k[2] == 1.0);
+    check("values come out beside them, a replaced value as replaced",
+          v[0] == 21.0 && v[1] == 40.0 && v[2] == 11.0);
+    nts_release(&keys->header);
+    nts_release(&values->header);
+    nts_release(&m->header);
+
+    NtsMap *s = nts_set_new(NTS_KEY_NUMBER);
+    add(s, num(7));
+    add(s, num(8));
+    add(s, num(9));
+    nts_map_delete(s, num(8));
+    NtsArray *members = nts_array_of_numbers((double)s->header.length);
+    nts_map_values_into(s, members);
+    check("a set's values are its keys",
+          members->header.length == 2 && NTS_ITEMS(members, double)[0] == 7.0 &&
+              NTS_ITEMS(members, double)[1] == 9.0);
+    nts_release(&members->header);
+    nts_release(&s->header);
+
+    NtsMap *none = nts_map_new(NTS_KEY_NUMBER);
+    NtsArray *empty = nts_array_of_numbers(0);
+    nts_map_keys_into(none, empty);
+    check("an empty table fills an empty array", empty->header.length == 0);
+    nts_release(&empty->header);
+    nts_release(&none->header);
+  }
+  /* A reference key copied out is the array's as well as the table's. */
+  {
+    NtsString *shared = nts_string_from_utf8("copied", 6);
+    uintptr_t before = shared->reserved;
+    NtsMap *m = nts_map_new(NTS_KEY_STRING);
+    put(m, nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING), num(1));
+    NtsArray *keys = nts_array_new(&nts_desc_ref, (double)m->header.length);
+    nts_map_keys_into(m, keys);
+    check("a copied reference key is retained for the array",
+          NTS_ITEMS(keys, NtsHeader *)[0] == (NtsHeader *)shared &&
+              shared->reserved == before + 2);
+    nts_release(&keys->header);
+    nts_release(&m->header);
+    nts_collect_cycles();
+    check("and given back with the array and the table",
+          shared->reserved == before);
+    nts_release(shared);
+  }
+
   /* Every allocation above is gone, including the three side arrays each
    * table owns -- which is the leak `storage.c` covers for arrays, asked of
    * the type that has three of them. */

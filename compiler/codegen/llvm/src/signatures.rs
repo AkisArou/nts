@@ -1396,6 +1396,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_map_keys_into",
+        returns: "void",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_map_keys_str",
         returns: "noalias nonnull ptr",
         params: &["ptr"],
@@ -1423,6 +1429,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_map_value_at",
         returns: "{ i32, i64 }",
         params: &["ptr", "i32"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_values_into",
+        returns: "void",
+        params: &["ptr", "ptr"],
         attributes: &[],
     },
     Signature {

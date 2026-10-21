@@ -9321,6 +9321,99 @@ NtsArray *nts_map_keys_str(const NtsMap *map) {
   return out;
 }
 
+/* The live entries of `source` -- a table's keys or values, `used` written,
+ * holes where `keys` says so -- into `out` at its own element kind. The table
+ * holds every entry as an `NtsValue`; the destination is whatever the compiler
+ * allocated for the element type, which is the table's own type or erased, so
+ * each case reads the payload the tag already is. The kind is one for the
+ * whole copy, so it is chosen once and each case is a loop of its own. */
+static void nts_map_fill(const NtsMap *map, const NtsValue *source,
+                         NtsArray *out) {
+  const NtsDescriptor *descriptor = out->header.descriptor;
+  const NtsValue *keys = map->keys;
+  const uint32_t used = map->used;
+  uint32_t written = 0;
+  switch (descriptor->element) {
+  case NTS_ARRAY_VALUE:
+    for (uint32_t at = 0; at < used; at++) {
+      if (!nts_map_is_hole(keys[at])) {
+        nts_value_retain(source[at]);
+        NTS_ITEMS(out, NtsValue)[written++] = source[at];
+      }
+    }
+    break;
+  case NTS_ARRAY_REFERENCE:
+    for (uint32_t at = 0; at < used; at++) {
+      if (!nts_map_is_hole(keys[at])) {
+        NtsHeader *reference = NTS_TAG_IS_MANAGED(nts_value_tag(source[at]))
+                                   ? nts_value_reference(source[at])
+                                   : NULL;
+        nts_retain(reference);
+        NTS_ITEMS(out, NtsHeader *)[written++] = reference;
+      }
+    }
+    break;
+  case NTS_ARRAY_FLOAT:
+    if (descriptor->size == sizeof(float)) {
+      for (uint32_t at = 0; at < used; at++) {
+        if (!nts_map_is_hole(keys[at])) {
+          NTS_ITEMS(out, float)
+          [written++] = (float)nts_value_number(source[at]);
+        }
+      }
+    } else {
+      for (uint32_t at = 0; at < used; at++) {
+        if (!nts_map_is_hole(keys[at])) {
+          NTS_ITEMS(out, double)[written++] = nts_value_number(source[at]);
+        }
+      }
+    }
+    break;
+  case NTS_ARRAY_BOOL:
+    for (uint32_t at = 0; at < used; at++) {
+      if (!nts_map_is_hole(keys[at])) {
+        NTS_ITEMS(out, bool)[written++] = nts_value_boolean(source[at]);
+      }
+    }
+    break;
+  case NTS_ARRAY_BIGINT:
+    for (uint32_t at = 0; at < used; at++) {
+      if (!nts_map_is_hole(keys[at])) {
+        NTS_ITEMS(out, __int128)
+        [written++] = nts_bigint_unbox(
+            (const NtsBigIntBox *)nts_value_reference(source[at]));
+      }
+    }
+    break;
+  default:
+    /* A defect, not a refusal: the compiler emits this copy only where the
+     * array's element type is the table's own, and no table stores an
+     * integer-narrowed or foreign element. */
+    fprintf(stderr,
+            "nts: a table copied into `%s`, an array of element kind %u, "
+            "which no table stores\n",
+            descriptor->name ? descriptor->name : "?", descriptor->element);
+    abort();
+  }
+  /* The caller sized `out` at the live count, and every live entry is one
+   * slot: a count that disagrees is a contract broken on one side or the
+   * other, and the slots past it would read as zeros. One comparison a call. */
+  if (written != out->header.length) {
+    fprintf(stderr,
+            "nts: a table of %u live entries copied into an array of %u\n",
+            written, out->header.length);
+    abort();
+  }
+}
+
+void nts_map_keys_into(const NtsMap *map, NtsArray *out) {
+  nts_map_fill(map, map->keys, out);
+}
+
+void nts_map_values_into(const NtsMap *map, NtsArray *out) {
+  nts_map_fill(map, map->values ? map->values : map->keys, out);
+}
+
 NtsValue nts_map_key_at(const NtsMap *map, int32_t at) {
   nts_value_retain(map->keys[(uint32_t)at]);
   return map->keys[(uint32_t)at];

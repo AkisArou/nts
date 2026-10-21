@@ -72,6 +72,10 @@ pub(crate) enum Op {
     Copy,
     Extend,
     KeysStr,
+    /// The live keys copied into an array the caller sized at the live count.
+    KeysInto,
+    /// The live values (a Set's being its keys) copied likewise.
+    ValuesInto,
     /// `value instanceof Map` of an open value.
     IsMap,
     /// `value instanceof Set` of an open value.
@@ -135,6 +139,8 @@ pub(crate) fn external(name: &str) -> Option<Op> {
         "nts_map_copy" => Op::Copy,
         "nts_map_extend" => Op::Extend,
         "nts_map_keys_str" => Op::KeysStr,
+        "nts_map_keys_into" => Op::KeysInto,
+        "nts_map_values_into" => Op::ValuesInto,
         "nts_is_map" => Op::IsMap,
         "nts_is_set" => Op::IsSet,
         _ => return None,
@@ -236,7 +242,9 @@ pub(crate) fn call(
         | Op::Next
         | Op::KeyAt
         | Op::ValueAt
-        | Op::Extend => 2,
+        | Op::Extend
+        | Op::KeysInto
+        | Op::ValuesInto => 2,
         Op::Set => 3,
     };
     if args.len() != arity {
@@ -294,6 +302,13 @@ pub(crate) fn call(
             }
             let target = keys_str(b.m, &c, &b.ty(result).clone())?;
             b.load(subject)?;
+            b.call(target);
+        }
+        Op::KeysInto | Op::ValuesInto => {
+            contract::nonnull(b, args[1], "copying a collection into a null array")?;
+            let target = into(b.m, &c, &b.ty(args[1]).clone(), op == Op::ValuesInto)?;
+            b.load(subject)?;
+            b.load(args[1])?;
             b.call(target);
         }
     }
@@ -1598,6 +1613,153 @@ fn keys_str(m: &mut Builder<'_>, c: &Collection, result: &HirType) -> Result<Fun
             ]);
             f.instructions(&crate::arrays::wrapper(&m.types.arrays[&wrapper], -1));
             f.instruction(&I::End);
+            Ok(f)
+        },
+    )
+}
+
+/// `nts_map_keys_into` / `nts_map_values_into`: the live entries' keys (or
+/// values, a Set's being its keys) into `out`, which the caller allocated at
+/// the live count, in entry order.
+///
+/// Where nothing was ever deleted -- the live count is the count written --
+/// and the array stores elements as the collection does, the copy is one
+/// `array.copy`: no entry is a hole, so the first `live` entries are the
+/// elements in order. Otherwise each written entry whose hash is not zero (a
+/// hole's) is stored at the next slot, cast where the collection keeps an
+/// object erased and the array keeps it as its class.
+fn into(m: &mut Builder<'_>, c: &Collection, out: &HirType, values: bool) -> Result<Func, Failure> {
+    let (wrapper, backing_type, element_ty) = {
+        let array = m.types.array(out)?;
+        (array.wrapper, array.backing, array.element.clone())
+    };
+    let (source, stored) = match (values, c.values, &c.value) {
+        (true, Some(values), Some(stored)) => (c.value_field(), (values, stored.clone())),
+        _ => (c.key_field(), (c.keys, key_storage(c.key))),
+    };
+    let (source_array, stored) = stored;
+    let element = m.types.value_slot(&element_ty)?;
+    let held = m.types.value_slot(&stored)?;
+    // The array's storage is the collection's: copied as it is. An object the
+    // collection holds erased is cast to the array's class; anything else
+    // would convert, which the compiler does not ask of this call.
+    let cast = match (held, element) {
+        (held, element) if held == element => None,
+        (Physical::Reference(_), Physical::Reference(target)) if stored == HirType::Erased => {
+            Some(target)
+        }
+        _ => {
+            return Err(format!(
+                "a collection's {} stored as {stored:?} copied into {out:?}",
+                if values { "values" } else { "keys" }
+            )
+            .into());
+        }
+    };
+    let collection = c.clone();
+    m.helper(
+        FuncKey::CollectionInto(c.wrapper, wrapper, values),
+        format!(
+            "collection<{}>.{}Into<{}>",
+            c.wrapper,
+            if values { "values" } else { "keys" },
+            wrapper
+        ),
+        vec![
+            map_physical(c),
+            Physical::Reference(RefType {
+                nullable: false,
+                heap_type: HeapType::Concrete(wrapper),
+            }),
+        ],
+        None,
+        move |_| {
+            let c = &collection;
+            let (backing, used, entry, written) = (2, 3, 4, 5);
+            let mut f = Function::new([
+                concrete(backing_type),
+                ValType::I32,
+                ValType::I32,
+                ValType::I32,
+            ]);
+            f.instructions(&[
+                I::LocalGet(1),
+                I::StructGet {
+                    struct_type_index: wrapper,
+                    field_index: gc::ARRAY_BACKING,
+                },
+                I::LocalSet(backing),
+                I::LocalGet(0),
+                field(c, c.used()),
+                I::LocalSet(used),
+            ]);
+            if cast.is_none() {
+                f.instructions(&[
+                    I::LocalGet(0),
+                    field(c, c.live()),
+                    I::LocalGet(used),
+                    I::I32Eq,
+                    I::If(BlockType::Empty),
+                    I::LocalGet(backing),
+                    I::I32Const(0),
+                    I::LocalGet(0),
+                    field(c, source),
+                    I::I32Const(0),
+                    I::LocalGet(used),
+                    I::ArrayCopy {
+                        array_type_index_dst: backing_type,
+                        array_type_index_src: source_array,
+                    },
+                    I::Return,
+                    I::End,
+                ]);
+            }
+            f.instructions(&[
+                I::I32Const(0),
+                I::LocalSet(entry),
+                I::I32Const(0),
+                I::LocalSet(written),
+                I::Block(BlockType::Empty),
+                I::Loop(BlockType::Empty),
+                I::LocalGet(entry),
+                I::LocalGet(used),
+                I::I32GeU,
+                I::BrIf(1),
+                I::LocalGet(0),
+                field(c, c.hashes()),
+                I::LocalGet(entry),
+                I::ArrayGet(c.ints),
+                I::If(BlockType::Empty),
+                I::LocalGet(backing),
+                I::LocalGet(written),
+                I::LocalGet(0),
+                field(c, source),
+                I::LocalGet(entry),
+                I::ArrayGet(source_array),
+            ]);
+            if let Some(target) = cast {
+                f.instruction(&if target.nullable {
+                    I::RefCastNullable(target.heap_type)
+                } else {
+                    I::RefCastNonNull(target.heap_type)
+                });
+            }
+            f.instructions(&[
+                I::ArraySet(backing_type),
+                I::LocalGet(written),
+                I::I32Const(1),
+                I::I32Add,
+                I::LocalSet(written),
+                I::End,
+                I::LocalGet(entry),
+                I::I32Const(1),
+                I::I32Add,
+                I::LocalSet(entry),
+                I::Br(0),
+                I::End,
+                I::End,
+                I::End,
+            ]);
             Ok(f)
         },
     )

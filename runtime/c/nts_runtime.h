@@ -1793,6 +1793,24 @@ NTS_ALLOCATES NtsMap *nts_map_copy(const NtsMap *map);
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source);
 /* `Object.keys` of one, as an array of the keys it holds. */
 NTS_ALLOCATES NtsArray *nts_map_keys_str(const NtsMap *map);
+/* A table's keys, or its values, copied into `out` in one call:
+ * `Array.from(set)`, `[...map.keys()]`, `Array.from(map.values())` and the rest
+ * patterns over them, which walked the table entry by entry through
+ * `nts_map_next` and `nts_map_key_at` -- a call pair per element that was half
+ * of `Array.from`'s time on C.
+ *
+ * The contract every backend keeps for these two:
+ *   - `out` is fresh, allocated by the caller at the table's live count (its
+ *     `header.length`) immediately before the call;
+ *   - its slots `[0, live)` take the live entries in entry order, holes
+ *     skipped, each converted to `out`'s element kind and retained where it
+ *     holds a reference; nothing else is written;
+ *   - a Set's values are its keys, as `set.values()` says, so `values_into`
+ *     of a Set copies its keys.
+ * The compiler emits them only where `out`'s element type is the table's own
+ * key or value type, or erased, so the conversion never narrows. */
+void nts_map_keys_into(const NtsMap *map, NtsArray *out);
+void nts_map_values_into(const NtsMap *map, NtsArray *out);
 
 /* How many code units the code point at `at` occupies: 2 for a surrogate pair
  * and 1 otherwise. A string iterates by code point, so this is the step. */
