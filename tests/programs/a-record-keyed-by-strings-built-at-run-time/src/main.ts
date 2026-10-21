@@ -7,10 +7,11 @@
 //
 // `countBuilt` stores under built keys and reads under literals, `countLiteral`
 // the other way round, through `||`, `??` and `in`; `tally` does both through
-// a `Map`. The control a key that may be absent wants -- `undefined` and the
-// string "undefined" as two keys of one `Map` -- is a core defect today, its
-// erasure claiming the key cannot be absent, and is recorded where defects
-// are: tests/outcomes/a-map-key-that-may-be-absent-erased-as-a-string.
+// a `Map`. `undefinedKeys` is the control: a key that may be absent keeps its
+// box, because the erasure says so, and `undefined` and the string
+// "undefined" stay two keys of one `Map`. Until 4ac6f9901 the absence was
+// erased as though it could not happen; the guard for that is
+// tests/outcomes/a-map-key-that-may-be-absent-erased-as-a-string.
 
 export function countBuilt(seed: number): number {
   const counts: Record<string, number> = {};
@@ -38,4 +39,13 @@ export function tally(seed: number): number {
     seen.set(word, (seen.get(word) ?? 0) + i);
   }
   return (seen.get("k0") ?? 0) * 10000 + (seen.get("k1") ?? 0) * 100 + (seen.has("k2") ? 1 : 0);
+}
+
+export function undefinedKeys(seed: number): number {
+  const keys = new Map<string | undefined, number>();
+  keys.set(undefined, 1);
+  keys.set("undefined", 2);
+  const pick: string | undefined = (seed | 0) % 2 === 0 ? undefined : "undef" + "ined";
+  keys.set(pick, (keys.get(pick) ?? 0) + 10);
+  return keys.size * 1000 + (keys.get(undefined) ?? 0) * 100 + (keys.get("undefined") ?? 0);
 }

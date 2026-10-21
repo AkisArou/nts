@@ -1,14 +1,11 @@
-//! A string key that cannot be absent reaches a table unboxed.
+//! A string key that cannot be absent reaches a table unboxed, and one that
+//! may be absent keeps its box.
 //!
 //! `tests/programs/a-record-keyed-by-strings-built-at-run-time` stores and
-//! reads under built and literal keys. That program's own directory says what
-//! it answers on every backend; this reads the class for the door each lookup
-//! took (`fuse::unboxed_keys`).
-//!
-//! The control -- a key that may be absent keeps its box -- has no program yet:
-//! lowering erases a `string | undefined` as though it could not be absent
-//! (tests/outcomes/a-map-key-that-may-be-absent-erased-as-a-string), so the
-//! rule is asked about an absent key by `body.rs`'s unit test instead.
+//! reads under built and literal keys, and its control keys a `Map` by
+//! `string | undefined`. That program's own directory says what it answers on
+//! every backend; this reads the class for the door each lookup took
+//! (`fuse::unboxed_keys`).
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -95,6 +92,27 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
         method(&listing, "tally")
             .contains("nts/rt/NtsMap.hasString:(Lnts/rt/NtsTable;Ljava/lang/String;)Z"),
         "`tally`'s `has` took its key boxed"
+    );
+    // `pick` may be undefined, so its erasure says so and the key keeps its
+    // box, which `undefined` and "undefined" need to stay two keys. Counted,
+    // not found: the literal `undefined` key is boxed whatever the rule does,
+    // so one boxed `set` is there either way. Boxed, the literal `undefined`
+    // and `pick` -- a `set` and a `get` each; through the doors, the literal
+    // "undefined" once each. A rule that unboxed `pick` moves one of each.
+    let control = method(&listing, "undefinedKeys");
+    let count = |call: &str| control.matches(call).count();
+    let counts = (
+        count(
+            "nts/rt/NtsMap.set:(Lnts/rt/NtsMap;Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+        ),
+        count("nts/rt/NtsTable.get:(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;"),
+        count("nts/rt/NtsMap.setString:"),
+        count("nts/rt/NtsMap.getString:"),
+    );
+    assert_eq!(
+        counts,
+        (2, 2, 1, 1),
+        "boxed set, boxed get, setString, getString in `undefinedKeys`:\n{control}"
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
