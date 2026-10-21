@@ -1146,6 +1146,12 @@ public abstract class NtsTable {
         map.store(at >= 0 ? at : map.slotForString(key), value);
     }
 
+    /** {@link #insertString} for a number value, unboxed: the door is the same shape. */
+    static void insertString(NtsTable map, String key, double value) {
+        int at = map.findString(key);
+        map.storeNumber(at >= 0 ? at : map.slotForString(key), value);
+    }
+
     /**
      * {@link #slotFor} for a string key, unboxed: {@link #findString}'s probe,
      * and the key boxed only when it is appended. {@link #insertString}'s

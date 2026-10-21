@@ -8565,10 +8565,10 @@ fn of_holding(ty: &HirType) -> &'static str {
     if holds_values(ty) { "ofValues" } else { "of" }
 }
 
-/// `new Map()` and `new Set()`: the factory whose columns the table's static
-/// type lets it keep unboxed -- `NtsTable`'s number key and value columns --
-/// or `member` itself. A Record is a `Table` and keeps its boxes: its keys are
-/// strings.
+/// `new Map()`, `new Set()` and a Record: the factory whose columns the
+/// table's static type lets it keep unboxed -- `NtsTable`'s number key and
+/// value columns -- or `member` itself. A Record's keys are strings, so only
+/// its values can be numbers.
 ///
 /// The type is a storage choice and not a promise: a table handed a key or a
 /// value its column cannot hold turns that column into boxes, so a wrong guess
@@ -8581,6 +8581,14 @@ fn table_constructor(member: &'static str, made: &HirType) -> &'static str {
             } else {
                 "newMapOfNumberKeys"
             }
+        }
+        ("newMap", HirType::Managed(ManagedType::Map(_, value))) if **value == HirType::NUMBER => {
+            "newMapOfNumberValues"
+        }
+        ("newTable", HirType::Managed(ManagedType::Table(_, value)))
+            if **value == HirType::NUMBER =>
+        {
+            "newTableOfNumberValues"
         }
         ("newSet", HirType::Managed(ManagedType::Set(key))) if **key == HirType::NUMBER => {
             "newSetOfNumbers"

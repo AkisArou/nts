@@ -78,14 +78,17 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
     );
     let listing = String::from_utf8_lossy(&listed.stdout);
 
+    // The three tables are `Record<string, number>` and `Map<string, number>`,
+    // so their values have a number column too, and `set` takes the value as
+    // a `double` beside the key (`fuse`'s `(String, Some(Number))` form).
     for name in ["countBuilt", "countLiteral", "tally"] {
         let body = method(&listing, name);
         assert!(
-            body.contains("nts/rt/NtsMap.getString:(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;")
-                && body.contains(
-                    "nts/rt/NtsMap.setString:(Lnts/rt/NtsMap;Ljava/lang/String;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;"
-                )
-                && !body.contains("nts/rt/NtsValue.ofString:"),
+            body.contains(
+                "nts/rt/NtsMap.getString:(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;"
+            ) && body.contains(
+                "nts/rt/NtsMap.setString:(Lnts/rt/NtsMap;Ljava/lang/String;D)Lnts/rt/NtsMap;"
+            ) && !body.contains("nts/rt/NtsValue.ofString:"),
             "`{name}` built a box for a key it could pass unboxed:\n{body}"
         );
     }

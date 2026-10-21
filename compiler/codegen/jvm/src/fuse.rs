@@ -150,7 +150,8 @@ struct Keyed {
 /// No object form for `set`: an object key is stored as its box, and nothing
 /// measured wants one. A number key has a form everywhere, because a number
 /// key column stores no box at all (`NtsTable`'s columns); a number value has
-/// one beside a number key, the only table whose values have a number column.
+/// one beside a number key or a string key, the tables whose values the
+/// emitter gives a number column and whose `set` is in a loop.
 const KEYED: &[Keyed] = &[
     Keyed {
         name: "nts_map_get",
@@ -222,6 +223,12 @@ const KEYED: &[Keyed] = &[
                 None,
                 "setString",
                 "(Lnts/rt/NtsMap;Ljava/lang/String;Lnts/rt/NtsValue;)Lnts/rt/NtsMap;",
+            ),
+            (
+                Unboxed::String,
+                Some(Unboxed::Number),
+                "setString",
+                "(Lnts/rt/NtsMap;Ljava/lang/String;D)Lnts/rt/NtsMap;",
             ),
             (
                 Unboxed::Number,

@@ -36,8 +36,14 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
     /** `new Map<number, number>()`: the keys and the values in number columns. */
     public static NtsMap newMapOfNumbers(double kind) { return new NtsMap(true, true); }
 
+    /** `new Map<K, number>()` for keys of any other type: the values in a number column. */
+    public static NtsMap newMapOfNumberValues(double kind) { return new NtsMap(false, true); }
+
     /** A dictionary, which is a `Map`'s storage printing as an object. */
     public static NtsMap newTable(double kind) { return new NtsDictionary(); }
+
+    /** A `Record<string, number>`: a dictionary whose values are a number column. */
+    public static NtsMap newTableOfNumberValues(double kind) { return new NtsDictionary(true); }
 
     /**
      * Insert, and hand back the receiver.
@@ -55,6 +61,12 @@ public class NtsMap<K, V> extends NtsTable implements java.util.Map<K, V> {
 
     /** {@link #set} for an unboxed string key; see {@link NtsTable#getString}. */
     public static NtsMap setString(NtsMap map, String key, NtsValue value) {
+        insertString(map, key, value);
+        return map;
+    }
+
+    /** {@link #set} for an unboxed string key and an unboxed number value. */
+    public static NtsMap setString(NtsMap map, String key, double value) {
         insertString(map, key, value);
         return map;
     }

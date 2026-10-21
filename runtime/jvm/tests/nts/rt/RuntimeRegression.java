@@ -1415,6 +1415,7 @@ public final class RuntimeRegression {
         testStringKeyDoors(); System.out.println("unboxed string keys passed");
         testTableFills(); System.out.println("table fills passed");
         testNumberColumns(); System.out.println("number columns passed");
+        testNumberValues(); System.out.println("number values beside boxed keys passed");
         System.out.println("PASS " + checks + " assertions");
     }
 
@@ -1653,6 +1654,85 @@ public final class RuntimeRegression {
             at++;
         }
         check(refuses(() -> NtsTable.keysInto(dense, new boolean[dense.size()])), "a boolean read of a number column refuses");
+    }
+
+    /**
+     * A `Map<string, number>` or a `Record<string, number>` keeps its values in
+     * a number column beside its boxed keys, and answers what a boxed table
+     * answers: through `setString` with a `double` and with a box, the boxed
+     * `set`, `getString` and the boxed `get`, against a boxed control and a
+     * `LinkedHashMap` model. The keys are under the linear limit and past it,
+     * with holes, a clear, and values that are `-0` and `NaN`, which a number
+     * column must keep as they are. Then a string value turns the column into
+     * boxes, keeping every entry; and a Record's `Object.keys` order -- array
+     * indices first -- reads the boxed key column as before.
+     */
+    private static void testNumberValues() {
+        for (boolean record : new boolean[] {false, true}) {
+            for (int span : new int[] {6, 40}) {
+                Random random = new Random(span * 7 + (record ? 1 : 0));
+                NtsMap table = record ? NtsMap.newTableOfNumberValues(0) : NtsMap.newMapOfNumberValues(0);
+                NtsMap control = record ? NtsMap.newTable(0) : NtsMap.newMap(0);
+                java.util.LinkedHashMap<String, Double> model = new java.util.LinkedHashMap<>();
+                for (int round = 0; round < 20000; ++round) {
+                    String key = "k" + random.nextInt(span);
+                    double value = random.nextInt(9) == 0 ? -0.0 : random.nextInt(9) == 0 ? Double.NaN : random.nextInt(50) - 25;
+                    int action = random.nextInt(100);
+                    String at = (record ? "record" : "map") + ", " + span + " keys, round " + round;
+                    if (action < 45) {
+                        int how = random.nextInt(3);
+                        if (how == 0) { NtsMap.setString(table, key, value); }
+                        else if (how == 1) { NtsMap.setString(table, new String(key), NtsValue.ofNumber(value)); }
+                        else { NtsMap.set(table, NtsValue.ofString(key), NtsValue.ofNumber(value)); }
+                        NtsMap.set(control, NtsValue.ofString(key), NtsValue.ofNumber(value));
+                        model.put(key, value);
+                    } else if (action < 70) {
+                        boolean gone = NtsTable.delete(table, NtsValue.ofString(key));
+                        check(gone == model.containsKey(key) && NtsTable.delete(control, NtsValue.ofString(key)) == gone, "delete, " + at);
+                        model.remove(key);
+                    } else if (action == 99) {
+                        NtsTable.clear(table); NtsTable.clear(control); model.clear();
+                    } else {
+                        NtsValue got = random.nextBoolean() ? NtsTable.getString(table, new String(key)) : NtsTable.get(table, NtsValue.ofString(key));
+                        Double held = model.get(key);
+                        if (held == null) { check(got.tag == NtsValue.UNDEFINED && got.num == 0.0, "a miss is undefined, " + at); }
+                        else { check(got.tag == NtsValue.NUMBER, "a hit is a number, " + at); number(got.num, held, "get, " + at); }
+                        check(NtsTable.hasString(table, key) == (held != null), "has, " + at);
+                    }
+                    check(table.size() == model.size() && control.size() == model.size(), "size, " + at);
+                    if (round % 97 == 0) {
+                        int cursor = NtsTable.nextI(table, 0);
+                        for (java.util.Map.Entry<String, Double> entry : model.entrySet()) {
+                            equal(NtsTable.keyAtI(table, cursor).ref, entry.getKey(), "key order, " + at);
+                            number(NtsTable.valueAtI(table, cursor).num, entry.getValue(), "value by cursor, " + at);
+                            cursor = NtsTable.nextI(table, cursor + 1);
+                        }
+                        check(cursor == -1, "the walk ends with the model, " + at);
+                        double[] values = new double[table.size()];
+                        NtsTable.valuesInto(table, values);
+                        int i = 0;
+                        for (double held : model.values()) { number(values[i++], held, "a values fill, " + at); }
+                    }
+                }
+            }
+        }
+        NtsMap turned = NtsMap.newTableOfNumberValues(0);
+        for (int i = 0; i < 12; i++) { NtsMap.setString(turned, "w" + i, i * 2.0); }
+        NtsTable.delete(turned, NtsValue.ofString("w3"));
+        NtsMap.setString(turned, "w5", NtsValue.ofString("v"));
+        equal(turned.size(), 11, "a value turn keeps every entry");
+        number(NtsTable.getString(turned, "w4").num, 8.0, "a number beside a turned value");
+        equal(NtsTable.getString(turned, "w5").ref, "v", "the value that turned it");
+        check(!NtsTable.hasString(turned, "w3"), "a hole stays a hole through a value turn");
+        NtsMap indexed = NtsMap.newTableOfNumberValues(0);
+        NtsMap.setString(indexed, "b", 1);
+        NtsMap.setString(indexed, "2", 2);
+        NtsMap.setString(indexed, "a", 3);
+        NtsMap.setString(indexed, "1", 4);
+        Object[] names = NtsTable.keysStr(indexed);
+        check(names.length == 4 && "1".equals(names[0]) && "2".equals(names[1]) && "b".equals(names[2]) && "a".equals(names[3]),
+            "a Record's keys put array indices first, ascending");
+        check(NtsMap.copy(indexed).numberValues != null, "a copy keeps the number value column");
     }
 
     /** One walk of each table by cursor, against the model's order and values. */

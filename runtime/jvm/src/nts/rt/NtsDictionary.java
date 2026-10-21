@@ -9,4 +9,8 @@ package nts.rt;
  * `nts_desc_table`; here the class is the descriptor.
  */
 public final class NtsDictionary extends NtsMap<Object, Object> {
+    public NtsDictionary() { this(false); }
+
+    /** With {@code numberValues}, the values in a number column; see {@link NtsTable}. */
+    NtsDictionary(boolean numberValues) { super(false, numberValues); }
 }
