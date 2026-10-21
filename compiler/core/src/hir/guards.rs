@@ -150,6 +150,105 @@ pub fn retract(program: &mut super::Program) -> usize {
     unchanged.len()
 }
 
+/// A call from inside the program to a guarded root, made to its `#whole`
+/// copy directly where every argument the guard tests is proven to pass it.
+///
+/// **The guard is for callers outside the program**, whose arguments nothing
+/// here can see. A caller inside it often already holds an integer, and went
+/// through the guard anyway: `work#whole` held `at` as an `i32`, converted it
+/// to a double to call `scanNumber`'s entry, whose test converted it back
+/// with `ToInt32` and compared, then called `scanNumber#whole` and the result
+/// was converted again. On the JVM the entry -- the test plus the whole
+/// floating-point body -- was too large to inline, so every token paid two
+/// calls and `NtsRuntime.toInt32` was 19% of json-scan; node-utf8
+/// (`utf8Write`, `utf8Decode`, `utf8Length`) and json-stringify-typed
+/// (`firstEscapeIndex`) did the same.
+///
+/// The test asks, of each float parameter, whether it is a whole number in
+/// `int32` -- and, where the body can tell the two zeros apart, not zero. So a
+/// call goes direct when each such argument's facts say integral, not NaN and
+/// within `int32`, and, for a parameter whose zero's sign the copy observes,
+/// never `-0`. A zero of the other sign takes the copy safely: the test sends
+/// both zeros to the slow path only to keep `-0`'s sign. The arguments are
+/// converted to the copy's narrower parameters by `specialize`, as every other
+/// call's are; on this path the conversion is exact, because the facts that
+/// admitted the call say so.
+pub fn call_whole_directly(
+    program: &mut super::Program,
+    analyses: &[super::flow::Analysis],
+) -> usize {
+    // Each root still guarded: its copy, its tested slots, and which of them
+    // must not be `-0`.
+    let mut guarded: rustc_hash::FxHashMap<String, (String, Vec<usize>, FxHashSet<usize>)> =
+        rustc_hash::FxHashMap::default();
+    for clone in &program.funcs {
+        let Some(root) = clone.name.strip_suffix("#whole") else {
+            continue;
+        };
+        let Some(func) = program.funcs.iter().find(|func| func.name == root) else {
+            continue;
+        };
+        if !matches!(
+            func.blocks.first().map(|block| &block.terminator),
+            Some(Terminator::Branch { .. })
+        ) {
+            continue;
+        }
+        let slots: Vec<usize> = (0..func.params.len())
+            .filter(|slot| matches!(func.params[*slot].ty, HirType::Float { .. }))
+            .collect();
+        let observed = zero_sign::observed(clone);
+        let signed: FxHashSet<usize> = clone
+            .values
+            .iter()
+            .enumerate()
+            .filter_map(|(index, op)| match op.kind {
+                OpKind::Param(slot) => observed
+                    .contains(&ValueId(u32::try_from(index).unwrap_or(u32::MAX)))
+                    .then_some(slot as usize),
+                _ => None,
+            })
+            .collect();
+        guarded.insert(root.to_owned(), (clone.name.clone(), slots, signed));
+    }
+    let passes = |facts: &Facts, signed: bool| {
+        facts.integral()
+            && !facts.maybe_nan
+            && facts.lo >= f64::from(i32::MIN)
+            && facts.hi <= f64::from(i32::MAX)
+            && !(signed && facts.maybe_negative_zero)
+    };
+    let mut made = 0;
+    for (func, analysis) in program.funcs.iter_mut().zip(analyses) {
+        // The guard's own call to its copy is the fast path, already direct.
+        if guarded.contains_key(&func.name) {
+            continue;
+        }
+        for op in &mut func.values {
+            let OpKind::Call {
+                callee: Callee::Direct(name),
+                args,
+                ..
+            } = &mut op.kind
+            else {
+                continue;
+            };
+            let Some((clone, slots, signed)) = guarded.get(name.as_str()) else {
+                continue;
+            };
+            let admitted = slots.iter().all(|slot| {
+                args.get(*slot)
+                    .is_some_and(|arg| passes(&analysis.get(*arg), signed.contains(slot)))
+            });
+            if admitted {
+                *name = clone.clone();
+                made += 1;
+            }
+        }
+    }
+    made
+}
+
 /// Whether a body runs often enough to amortise a test and a copy.
 ///
 /// A back edge or a call to itself. Both mean the body is entered many times

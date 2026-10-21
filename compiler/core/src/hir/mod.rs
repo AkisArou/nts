@@ -7652,6 +7652,10 @@ fn specialize_numbers_of(
     let expected = signatures::expected(program);
 
     let analyses = interprocedural::analyze_program(program, roots);
+    // A caller inside the program that already proves what a guard tests calls
+    // the guard's copy directly; `specialize` then converts its arguments to
+    // the copy's narrower parameters, as for any call.
+    guards::call_whole_directly(program, &analyses);
     for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
         let report = specialize::specialize(func, analysis, &expected);
         specialized += report.specialized;
