@@ -589,8 +589,7 @@ mod tests {
     /// notified callback with its `user_data` and destroy beside it, an enum.
     #[test]
     fn a_fragment_reads_as_the_model() {
-        let dir = std::env::temp_dir().join(format!("nts-gir-parse-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::bind_scratch::directory("gir-parse-test").unwrap();
         std::fs::write(
             dir.join("Demo-1.0.gir"),
             r#"<?xml version="1.0"?>
@@ -621,7 +620,7 @@ mod tests {
 </repository>"#,
         )
         .unwrap();
-        let search = [camino::Utf8PathBuf::from_path_buf(dir).unwrap()];
+        let search = [camino::Utf8PathBuf::from_path_buf(dir.clone()).unwrap()];
         let repository = super::repository("Demo-1.0", &search).unwrap();
         let demo = &repository.namespaces["Demo"];
         assert_eq!(demo.headers, ["demo/demo.h"]);
@@ -638,5 +637,6 @@ mod tests {
         let align = &demo.enums[0];
         assert_eq!(align.members[1].value, -1);
         assert_eq!(align.members[1].c_identifier, "DEMO_ALIGN_END");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }
