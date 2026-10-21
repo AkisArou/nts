@@ -38895,36 +38895,16 @@ impl<'a> FuncBuilder<'a> {
         self.test_loop(cond, &record);
         self.switch_to(record.body);
 
-        let element = self.walk_element(&walk, sequence_value, at, stepped, &origin)?;
-        let element = self.coerce(element, element_ty, sequence)?;
+        let element = self.collected_element(
+            &walk,
+            sequence,
+            sequence_value,
+            (at, stepped),
+            element_ty,
+            &origin,
+        )?;
         if counted {
-            let position = self.bindings[&filled];
-            self.push(
-                OpKind::ArraySet {
-                    array: out,
-                    index: position,
-                    value: element,
-                    // Checked, and `hir::bounds` is what should remove it: the
-                    // array was allocated at the walk's own length and the
-                    // position advances once per element, so a proof exists.
-                    // Asserting it here instead would be this lowering
-                    // promising something no pass had verified.
-                    checked: true,
-                },
-                HirType::Void,
-                origin.clone(),
-            );
-            let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
-            let next = self.push(
-                OpKind::Binary {
-                    op: BinOp::Add,
-                    lhs: position,
-                    rhs: one,
-                },
-                HirType::NUMBER,
-                origin.clone(),
-            );
-            self.bindings.insert(filled, next);
+            self.store_and_advance(out, filled, element, &origin);
         } else {
             self.append_collection_value(append, out, element, &origin);
         }
@@ -39020,11 +39000,88 @@ impl<'a> FuncBuilder<'a> {
         }
         let (sequence, forced) = self.sequence_source(argument);
         let sequence_value = self.lower_expression(sequence)?;
-        let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
+        let walk = self.collection_walk(sequence, sequence_value, forced)?;
         let ty = self
             .type_of(id)
             .ok_or_else(|| self.unrepresentable(id, "what `Array.from` builds"))?;
         self.collect_a_walk(id, sequence, sequence_value, walk, &ty)
+    }
+
+    /// The walk a collection reads its source with: a pair per element where
+    /// the source yields pairs -- a `Map` itself, and any `entries()` -- and
+    /// the one-name walk otherwise.
+    ///
+    /// `Array.from`, a spread and a rest element all collect, and asking here
+    /// is what keeps them building the same array. [`Self::pair_walk`] is the
+    /// answer `for (const [k, v] of ...)` already uses, and it is the same
+    /// set: a bare `Map` iterates its entries, a bare `Set` or array its
+    /// elements.
+    fn collection_walk(
+        &mut self,
+        sequence: NodeId,
+        value: ValueId,
+        forced: Option<&'static str>,
+    ) -> Result<Walk, Diagnostic> {
+        match Self::pair_walk(&self.values[value.0 as usize].ty, forced) {
+            Some(walk) => Ok(walk),
+            None => self.walk_of(sequence, value, forced, 1),
+        }
+    }
+
+    /// A counted collection's store: the element at the position `filled`
+    /// holds, and the position advanced past it.
+    fn store_and_advance(&mut self, out: ValueId, filled: u32, element: ValueId, origin: &Origin) {
+        let position = self.bindings[&filled];
+        self.push(
+            OpKind::ArraySet {
+                array: out,
+                index: position,
+                value: element,
+                // Checked, and `hir::bounds` is what should remove it: the
+                // array was allocated at the walk's own length and the
+                // position advances once per element, so a proof exists.
+                // Asserting it here instead would be this lowering
+                // promising something no pass had verified.
+                checked: true,
+            },
+            HirType::Void,
+            origin.clone(),
+        );
+        let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
+        let next = self.push(
+            OpKind::Binary {
+                op: BinOp::Add,
+                lhs: position,
+                rhs: one,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        self.bindings.insert(filled, next);
+    }
+
+    /// The element a collection stores for one turn of its walk, at the
+    /// collected array's element type: the walk's one value, coerced, or --
+    /// for a `Map`'s entries, a `Set`'s or an array's -- its two reads and the
+    /// pair the language says the element is, built where it is stored.
+    fn collected_element(
+        &mut self,
+        walk: &Walk,
+        sequence: NodeId,
+        sequence_value: ValueId,
+        (at, stepped): (ValueId, Option<ValueId>),
+        element_ty: &HirType,
+        origin: &Origin,
+    ) -> Result<ValueId, Diagnostic> {
+        if walks_pairs(walk) {
+            let read = self.read_element(walk, sequence_value, at, origin)?;
+            let pair: [ValueId; 2] = read
+                .try_into()
+                .map_err(|_| self.unsupported(sequence, "a pair walk that read other than two"))?;
+            return self.pair_of(sequence, element_ty, pair);
+        }
+        let element = self.walk_element(walk, sequence_value, at, stepped, origin)?;
+        self.coerce(element, element_ty, sequence)
     }
 
     /// The one value a walk hands the body, whichever kind of walk it is.
@@ -39197,7 +39254,7 @@ impl<'a> FuncBuilder<'a> {
                 }
             };
             let value = if pairs {
-                self.entry_pair(id, &element, &name, read)?
+                self.object_entry(id, &element, &name, read)?
             } else {
                 self.coerce(read, &element, id)?
             };
@@ -39215,14 +39272,36 @@ impl<'a> FuncBuilder<'a> {
         Ok(array)
     }
 
-    /// One `[name, value]` of `Object.entries`.
-    fn entry_pair(
+    /// One `[name, value]` of `Object.entries`: the name a constant, the pair
+    /// [`Self::pair_of`]'s.
+    fn object_entry(
         &mut self,
         id: NodeId,
         element: &HirType,
         name: &str,
         read: ValueId,
     ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
+        let key = self.push(
+            OpKind::ConstString(name.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin,
+        );
+        self.pair_of(id, element, [key, read])
+    }
+
+    /// One pair, `[first, second]`, at the representation its array holds:
+    /// `Object.entries`' `[name, value]`, and a collected `Map`'s `[key,
+    /// value]`, `Set`'s `[v, v]` or array's `[index, element]`. One builder,
+    /// so a pair walked out of a table and a pair written as a literal beside
+    /// it are the same object.
+    fn pair_of(
+        &mut self,
+        id: NodeId,
+        element: &HirType,
+        pair: [ValueId; 2],
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         // **A pair of two like things is an array, not a struct.** `[string,
         // number]` is laid out as an object with two differently typed fields;
         // `[string, string]` is two strings in a row, which is an array of
@@ -39230,9 +39309,8 @@ impl<'a> FuncBuilder<'a> {
         // are the same tuple to the checker and both have to be built here.
         if let HirType::Managed(ManagedType::Array(slot)) = element {
             let slot = (**slot).clone();
-            let origin = self.origin(id);
             let length = self.push(OpKind::ConstFloat(2.0), HirType::NUMBER, origin.clone());
-            let pair = self.push(
+            let built = self.push(
                 OpKind::ArrayNew {
                     length,
                     fill: ArrayFill::Holes,
@@ -39240,13 +39318,8 @@ impl<'a> FuncBuilder<'a> {
                 element.clone(),
                 origin.clone(),
             );
-            let key = self.push(
-                OpKind::ConstString(name.to_owned()),
-                slot.clone(),
-                origin.clone(),
-            );
-            let value = self.coerce(read, &slot, id)?;
-            for (at, value) in [key, value].into_iter().enumerate() {
+            for (at, value) in pair.into_iter().enumerate() {
+                let value = self.coerce(value, &slot, id)?;
                 #[allow(clippy::cast_precision_loss)]
                 let position = at as f64;
                 let index = self.push(
@@ -39256,7 +39329,7 @@ impl<'a> FuncBuilder<'a> {
                 );
                 self.push(
                     OpKind::ArraySet {
-                        array: pair,
+                        array: built,
                         index,
                         value,
                         checked: false,
@@ -39265,42 +39338,25 @@ impl<'a> FuncBuilder<'a> {
                     origin.clone(),
                 );
             }
-            return Ok(pair);
+            return Ok(built);
         }
         let HirType::Managed(ManagedType::Object(tuple)) = element else {
-            return Err(self.unsupported(id, "`Object.entries` over a pair that is not a tuple"));
+            return Err(self.unsupported(id, "a pair held as something that is not a tuple"));
         };
-        let pair = self.layout_of(id, *tuple)?;
-        let [key_slot, value_slot] = pair.fields.as_slice() else {
-            return Err(self.unsupported(id, "`Object.entries` over a pair of unexpected shape"));
+        let layout = self.layout_of(id, *tuple)?;
+        let [first, second] = layout.fields.as_slice() else {
+            return Err(self.unsupported(id, "a pair held as a tuple of other than two"));
         };
-        let (key_ty, value_ty) = (key_slot.ty.clone(), value_slot.ty.clone());
-        let origin = self.origin(id);
+        let slots = [first.ty.clone(), second.ty.clone()];
         let built = self.push(
             OpKind::ObjectNew { frame: false },
             element.clone(),
             origin.clone(),
         );
-        let key = self.push(OpKind::ConstString(name.to_owned()), key_ty, origin.clone());
-        self.push(
-            OpKind::FieldSet {
-                object: built,
-                field: 0,
-                value: key,
-            },
-            HirType::Void,
-            origin.clone(),
-        );
-        let value = self.coerce(read, &value_ty, id)?;
-        self.push(
-            OpKind::FieldSet {
-                object: built,
-                field: 1,
-                value,
-            },
-            HirType::Void,
-            origin,
-        );
+        for (field, (value, slot)) in (0u32..).zip(pair.into_iter().zip(slots)) {
+            let value = self.coerce(value, &slot, id)?;
+            self.field_set(built, field, value, &origin);
+        }
         Ok(built)
     }
 
@@ -43060,9 +43116,10 @@ impl<'a> FuncBuilder<'a> {
             //
             // `values()` is the same walk written the other way, which is what
             // JavaScript says too. `entries()` is **not** here: with one name it
-            // would bind the `[index, element]` pair, which is a tuple this
-            // cannot represent, so it falls to the refusal below rather than
-            // quietly walking elements -- the hazard `sequence_source` names.
+            // would bind the `[index, element]` pair, which a collection builds
+            // (`collection_walk`) and a `for...of` does not yet, so it falls to
+            // the refusal below rather than quietly walking elements -- the
+            // hazard `sequence_source` names.
             (
                 HirType::Managed(ManagedType::Array(element) | ManagedType::View(element)),
                 None | Some("values"),
@@ -43096,10 +43153,10 @@ impl<'a> FuncBuilder<'a> {
                 read: "nts_map_value_at",
                 element: (**value).clone(),
             }),
-            // Iterating a `Map` itself yields a `[key, value]` pair, which is a
-            // tuple this compiler cannot represent and which is only useful
-            // through a destructuring binding. Both are real features and
-            // neither is this one, so it says which.
+            // Iterating a `Map` itself yields a `[key, value]` pair. A
+            // collection builds one per entry (`collection_walk`); a `for...of`
+            // binding one name would bind it, and building it there is a
+            // feature of its own, so it says which.
             (HirType::Managed(ManagedType::Map(_, _)), None) => Err(self.unsupported(
                 sequence,
                 "a `for...of` over a `Map` binding one name, which would be the \
@@ -59032,9 +59089,14 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 *element
             };
-            let value = if spread {
-                self.lower_expression(node)?
+            let collected = if spread {
+                self.collect_spread(*element, node, ty)?
             } else {
+                None
+            };
+            let value = match collected {
+                Some(collected) => collected,
+                None if spread => self.lower_expression(node)?,
                 // A written element, lowered expecting the element type and
                 // coerced to it, as the literal without a spread lowers each
                 // one. Lowered bare, an inner literal took the *outer* one's
@@ -59042,8 +59104,10 @@ impl<'a> FuncBuilder<'a> {
                 // array of string arrays and stored strings in it, which one
                 // pointer type hid on a native backend and Wasm's typed arrays
                 // refused.
-                let value = self.lower_expecting(node, &element_ty)?;
-                self.coerce(value, &element_ty, node)?
+                None => {
+                    let value = self.lower_expecting(node, &element_ty)?;
+                    self.coerce(value, &element_ty, node)?
+                }
             };
             if spread
                 && !matches!(
@@ -59116,26 +59180,42 @@ impl<'a> FuncBuilder<'a> {
             .children(spread)
             .first()
             .ok_or_else(|| self.unsupported(spread, "a spread of nothing"))?;
-        // A Set, or a Map's keys or values, spread whole is `Array.from` of
-        // it: the same table walk, which `collect_a_walk` fills in one call.
-        // A Map itself and `entries()` are pairs, which the walk does not
-        // build, and keep the copy's refusal.
+        if let Some(collected) = self.collect_spread(spread, inner, ty)? {
+            return Ok(collected);
+        }
+        self.lower_array_copy(inner, ty, origin)
+    }
+
+    /// A spread of something that is not an array, collected into an array
+    /// of `ty`: a `Set`, a `Map` (its pairs), or what `keys()`, `values()` or
+    /// `entries()` yield. `[...x]` is `Array.from(x)` -- the same walk, which
+    /// fills a table's keys or values in one call -- and inside a longer
+    /// literal it is that array, extended like any other. Collected at the
+    /// literal's own type, so a walked pair and a written one beside it share
+    /// one representation.
+    ///
+    /// None where the source is an array itself, which is copied.
+    fn collect_spread(
+        &mut self,
+        spread: NodeId,
+        inner: NodeId,
+        ty: &HirType,
+    ) -> Result<Option<ValueId>, Diagnostic> {
         let (sequence, forced) = self.sequence_source(inner);
-        let table = match self.type_of(sequence) {
-            Some(HirType::Managed(ManagedType::Set(_))) => {
-                matches!(forced, None | Some("keys" | "values"))
-            }
-            Some(HirType::Managed(ManagedType::Map(..))) => {
-                matches!(forced, Some("keys" | "values"))
+        let collects = match self.type_of(sequence) {
+            Some(HirType::Managed(ManagedType::Set(_) | ManagedType::Map(..))) => true,
+            Some(HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))) => {
+                forced.is_some()
             }
             _ => false,
         };
-        if table {
-            let sequence_value = self.lower_expression(sequence)?;
-            let walk = self.walk_of(sequence, sequence_value, forced, 1)?;
-            return self.collect_a_walk(spread, sequence, sequence_value, walk, ty);
+        if !collects {
+            return Ok(None);
         }
-        self.lower_array_copy(inner, ty, origin)
+        let sequence_value = self.lower_expression(sequence)?;
+        let walk = self.collection_walk(sequence, sequence_value, forced)?;
+        self.collect_a_walk(spread, sequence, sequence_value, walk, ty)
+            .map(Some)
     }
 
     /// The whole of an array, copied: `[...xs]` and `Array.from(xs)` alike.
@@ -64956,7 +65036,7 @@ impl<'a> FuncBuilder<'a> {
                      an array either, so there is nothing to collect the iterator into",
                 ));
             };
-            let walk = self.walk_of(element, value, None, 1)?;
+            let walk = self.collection_walk(element, value, None)?;
             return self.collect_a_walk(element, element, value, walk, &built);
         }
         let origin = self.origin(element);
@@ -85255,6 +85335,19 @@ struct IteratorMethods {
     has: NativeMethod,
     current: NativeMethod,
     advance: NativeMethod,
+}
+
+/// Whether a walk reads two values a turn -- a `Map`'s or `Set`'s entries,
+/// an array's `[index, element]` -- which a collection stores as one pair.
+fn walks_pairs(walk: &Walk) -> bool {
+    matches!(
+        walk,
+        Walk::Entries { .. }
+            | Walk::Counted {
+                binds: Binds::PositionAndElement,
+                ..
+            }
+    )
 }
 
 /// The helper that copies a table's keys (`nts_map_key_at`'s walk) or values

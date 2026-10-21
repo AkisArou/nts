@@ -1,0 +1,38 @@
+ideal 36
+allocated 22
+because seventeen pairs and the array that holds them, beside the `Map`.
+because
+because Allocations: twenty-two, and eighteen of them are the collection's.
+because
+because   1  the `Map` object
+because   3  its table, grown 0 -> 8 -> 16 -> 32, as `array-from`'s `Set`'s
+because  17  the pairs, `[key, value]`, one per live entry: the language makes
+because      each one fresh, so none of them can be shared or skipped
+because   1  the array, sized at the table's live count before the walk
+because
+because The array is not grown: a table keeps its live count where an array
+because keeps its length, so the collection asks it once and allocates once.
+because Two numbers make a pair of like things, so each pair is a two-slot
+because number array rather than a tuple object; the count is the same either
+because way.
+because
+because Operations: nineteen are the ones a person can justify. Dropping the
+because array walks its elements once, one release per pair, and the array
+because itself is the eighteenth; the `Map` is the nineteenth. No pair is
+because retained: each is built where it is stored and dies there, so the
+because reference moves into the slot.
+because
+because The other seventeen are one release per pair of the slot it is stored
+because over, which is always empty: the array is allocated `Filled`, zeroed,
+because and the release is a call on a null. `hir::rc` drops that release for
+because an array allocated `Uninitialized`, where each slot is written once
+because by construction, and the counted collection walk is that shape -- one
+because store a slot, no source code and no throw between -- but it says
+because `Filled` today. Saying `Uninitialized` there would take these seventeen
+because to nineteen and skip the zeroing besides; it is its own change, for
+because every counted walk (`Array.from` of an array's elements, a table's
+because keys of another type), not this case's.
+because
+because Recorded as 36 rather than an aspiration of 19 because 36 is what runs.
+because The argument for 19 is above, and the ratchet moves when the compiler
+because earns it.
