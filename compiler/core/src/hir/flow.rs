@@ -336,12 +336,16 @@ pub struct Written {
     /// The C ABIs the program is built for: a read of a written kind is what
     /// C may hand in on any of them. Every row where nothing names them.
     pub targets: super::native::Targets,
+    /// For each function answering a `bool`, the parameter slots whose `true`
+    /// answer proves them not NaN ([`nan_excluding_predicates`]).
+    pub predicates: FxHashMap<String, Vec<bool>>,
 }
 
 impl Written {
     #[must_use]
     pub fn of(program: &super::Program) -> Self {
         let targets = program.targets;
+        let predicates = nan_excluding_predicates(program);
         let returns = program
             .funcs
             .iter()
@@ -401,6 +405,7 @@ impl Written {
             fields,
             globals,
             targets,
+            predicates,
         }
     }
 }
@@ -1473,8 +1478,9 @@ fn transfer_block(
         } => {
             // Each edge carries what taking it proves. This is the only place
             // a value learns something its definition did not say.
-            let on_then = refine_edge(func, refinements, values, *cond, true);
-            let on_else = refine_edge(func, refinements, values, *cond, false);
+            let predicates = &context.written.predicates;
+            let on_then = refine_edge(func, predicates, refinements, values, *cond, true);
+            let on_else = refine_edge(func, predicates, refinements, values, *cond, false);
             changed |= send(func, *then_target, then_args, &on_then, values, entry);
             changed |= send(func, *else_target, else_args, &on_else, values, entry);
             let then_held = narrowed_by(&held, &on_then);
@@ -1785,6 +1791,7 @@ const fn negate(op: BinOp) -> BinOp {
 /// Facts that hold on one side of a branch.
 fn refine_edge(
     func: &Func,
+    predicates: &FxHashMap<String, Vec<bool>>,
     refinements: &Refinements,
     values: &[Facts],
     cond: ValueId,
@@ -1801,9 +1808,35 @@ fn refine_edge(
         operand,
     } = func.values[cond.0 as usize].kind
     {
-        return refine_edge(func, refinements, values, operand, !taken);
+        return refine_edge(func, predicates, refinements, values, operand, !taken);
     }
     let mut refined = refinements.clone();
+    // A predicate of the program's whose `true` proves an argument not NaN
+    // (`isDigit(code)`, `code >= 48 && code <= 57`): taken, that argument is
+    // not NaN, and where it is a checked read, the read was in range. The
+    // shape json-parse's scanners branch on, through a call this compiler
+    // does not inline (`inline`'s record 0027).
+    if taken
+        && let OpKind::Call {
+            callee: Callee::Direct(name),
+            args,
+            ..
+        } = &func.values[cond.0 as usize].kind
+        && let Some(slots) = predicates.get(name)
+    {
+        for (arg, _) in args.iter().zip(slots).filter(|(_, proves)| **proves) {
+            let facts = lookup(&refined, values, *arg);
+            refined.insert(
+                *arg,
+                Facts {
+                    maybe_nan: false,
+                    ..facts
+                },
+            );
+            answered_in_range(func, values, &mut refined, *arg);
+        }
+        return refined;
+    }
     // `Number.isInteger(x)` taken: `x` is a finite integer -- whole and not
     // NaN, which a guard on its bounds then makes integral. `-0` passes it.
     if let OpKind::Call {
@@ -1863,7 +1896,144 @@ fn refine_edge(
     let b = lookup(refinements, values, *rhs);
     refined.insert(*lhs, refine(holds, a, b, excludes_nan));
     refined.insert(*rhs, refine(flip(holds), b, a, excludes_nan));
+    // **A checked read that answered was in range.** `charCodeAt` answers NaN
+    // past either end, so on the edge where its result passed a comparison
+    // that rules NaN out, the index it read at is a position of the string --
+    // though nothing compared the index with the length. `while
+    // (isDigit(s.charCodeAt(at))) at++` is the shape: `at` had no upper bound,
+    // widened past the safe integers where `at + 1` stops being exact, and
+    // the field it was stored into (json-parse's `Scanner.at`) became a double
+    // for every one of its stores. Only a whole index: `charCodeAt(1.5)` reads
+    // position 1, so a fractional one that answered proves less.
+    if excludes_nan {
+        for side in [*lhs, *rhs] {
+            answered_in_range(func, values, &mut refined, side);
+        }
+    }
     refined
+}
+
+/// Where `value` is a checked string read that answered -- proven not NaN on
+/// this edge -- its index is a position of the string: below the longest a
+/// string can be. Only a whole index; see [`refine_edge`].
+fn answered_in_range(func: &Func, values: &[Facts], refined: &mut Refinements, value: ValueId) {
+    let Some(index) = unit_read_index(func, value) else {
+        return;
+    };
+    let facts = lookup(refined, values, index);
+    if facts.whole {
+        refined.insert(
+            index,
+            facts.narrow(Facts::new(
+                0.0,
+                super::facts::MAX_LENGTH - 1.0,
+                true,
+                false,
+                true,
+            )),
+        );
+    }
+}
+
+/// For each function answering a `bool`, the parameter slots whose `true`
+/// answer proves them not NaN: every value it can return that may be `true`
+/// is a comparison of the parameter that NaN fails (`<`, `<=`, `>`, `>=`,
+/// `===`). Read from each body alone, once, before any fixpoint: it is a fact
+/// about the code, not about what callers pass.
+fn nan_excluding_predicates(program: &super::Program) -> FxHashMap<String, Vec<bool>> {
+    let mut found = FxHashMap::default();
+    for func in program
+        .funcs
+        .iter()
+        .filter(|func| func.return_type == super::HirType::Bool)
+    {
+        let returned: Vec<ValueId> = func
+            .blocks
+            .iter()
+            .filter_map(|block| match block.terminator {
+                Terminator::Return(Some(value)) => Some(value),
+                _ => None,
+            })
+            .collect();
+        if returned.is_empty() {
+            continue;
+        }
+        let incoming = super::loops::predecessors(func);
+        let slots: Vec<bool> = (0..func.params.len())
+            .map(|slot| {
+                let slot = u32::try_from(slot).unwrap_or(u32::MAX);
+                let mut seen = rustc_hash::FxHashSet::default();
+                returned
+                    .iter()
+                    .all(|value| true_only_if_not_nan(func, &incoming, *value, slot, &mut seen))
+            })
+            .collect();
+        if slots.iter().any(|proves| *proves) {
+            found.insert(func.name.clone(), slots);
+        }
+    }
+    found
+}
+
+/// Whether `value` can be `true` only where parameter `slot` is not NaN.
+fn true_only_if_not_nan(
+    func: &Func,
+    incoming: &[Vec<(BlockId, Vec<ValueId>)>],
+    value: ValueId,
+    slot: u32,
+    seen: &mut rustc_hash::FxHashSet<ValueId>,
+) -> bool {
+    // Around a cycle, the value is only ever one of the others.
+    if !seen.insert(value) {
+        return true;
+    }
+    match &func.values[value.0 as usize].kind {
+        OpKind::ConstBool(false) => true,
+        OpKind::Binary {
+            op: BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq,
+            lhs,
+            rhs,
+        } => is_param(func, *lhs, slot) || is_param(func, *rhs, slot),
+        OpKind::BlockParam(_) => {
+            let Some((block, at)) = func.blocks.iter().enumerate().find_map(|(index, block)| {
+                block
+                    .params
+                    .iter()
+                    .position(|param| *param == value)
+                    .map(|at| (index, at))
+            }) else {
+                return false;
+            };
+            incoming[block].iter().all(|(_, args)| {
+                args.get(at)
+                    .is_some_and(|arg| true_only_if_not_nan(func, incoming, *arg, slot, seen))
+            })
+        }
+        _ => false,
+    }
+}
+
+/// Whether `value` is parameter `slot`, through conversions that keep it.
+fn is_param(func: &Func, value: ValueId, slot: u32) -> bool {
+    match func.values[value.0 as usize].kind {
+        OpKind::Param(at) => at == slot,
+        OpKind::Convert(from) => is_param(func, from, slot),
+        _ => false,
+    }
+}
+
+/// The index of the checked string read `value` is, through the conversions
+/// that widen a unit without changing it.
+fn unit_read_index(func: &Func, value: ValueId) -> Option<ValueId> {
+    match func.values[value.0 as usize].kind {
+        OpKind::StringUnitAt {
+            index,
+            checked: true,
+            ..
+        } => Some(index),
+        OpKind::Convert(from) => unit_read_index(func, from),
+        _ => None,
+    }
 }
 
 /// Narrow `a` to an interval, keeping the flags an interval cannot express.
