@@ -76,6 +76,15 @@ pub(crate) enum Op {
     KeysInto,
     /// The live values (a Set's being its keys) copied likewise.
     ValuesInto,
+    /// A key read and then written, looked up once (`hir::entries`): the
+    /// lookup, answering the entry -- the table's generation and the index
+    /// slot the key holds or would take.
+    EntryOf,
+    /// `get` through an entry, or the plain `get` where the entry is stale.
+    EntryGet,
+    /// `set` through an entry, or the plain `set` where the entry is stale or
+    /// the key is new.
+    EntrySet,
     /// `value instanceof Map` of an open value.
     IsMap,
     /// `value instanceof Set` of an open value.
@@ -101,6 +110,14 @@ pub(crate) enum Helper {
     /// `get` as the entry it found, or -1: for a get whose users read the
     /// value typed (`typed_gets`), so nothing is boxed.
     Entry,
+    /// The entry a read and a write of one key share (`nts_map_entry`).
+    EntryOf,
+    /// `get` through that entry.
+    EntryGet,
+    /// `get` through that entry as the entry number, or -1, as `Entry` is.
+    EntryAt,
+    /// `set` through that entry.
+    EntrySet,
     Grow,
     Put,
     Get,
@@ -141,6 +158,9 @@ pub(crate) fn external(name: &str) -> Option<Op> {
         "nts_map_keys_str" => Op::KeysStr,
         "nts_map_keys_into" => Op::KeysInto,
         "nts_map_values_into" => Op::ValuesInto,
+        "nts_map_entry" => Op::EntryOf,
+        "nts_map_entry_get" => Op::EntryGet,
+        "nts_map_entry_set" => Op::EntrySet,
         "nts_is_map" => Op::IsMap,
         "nts_is_set" => Op::IsSet,
         _ => return None,
@@ -244,8 +264,10 @@ pub(crate) fn call(
         | Op::ValueAt
         | Op::Extend
         | Op::KeysInto
-        | Op::ValuesInto => 2,
-        Op::Set => 3,
+        | Op::ValuesInto
+        | Op::EntryOf => 2,
+        Op::Set | Op::EntryGet => 3,
+        Op::EntrySet => 4,
     };
     if args.len() != arity {
         return Err(format!("collection {op:?} arity mismatch").into());
@@ -262,6 +284,7 @@ pub(crate) fn call(
             }
         }
         Op::Get | Op::Has | Op::Delete | Op::Add | Op::Set => entry(b, result, op, &c, args)?,
+        Op::EntryOf | Op::EntryGet | Op::EntrySet => shared(b, result, op, &c, args)?,
         Op::Clear | Op::Copy => {
             let helper = if op == Op::Clear {
                 Helper::Clear
@@ -388,6 +411,47 @@ fn entry(
     Ok(())
 }
 
+/// A read and a write of one key sharing one lookup (`hir::entries`): the
+/// entry taken, then the `get` and the `set` through it. A typed `get` --
+/// one whose users read the value as the stored type (`typed_gets`) -- answers
+/// the entry number, as a plain typed `get` does.
+fn shared(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    op: Op,
+    c: &Collection,
+    args: &[ValueId],
+) -> Result<(), Failure> {
+    if c.values.is_none() {
+        return Err(format!("`{op:?}` on a Set").into());
+    }
+    let helper = match op {
+        Op::EntryOf => Helper::EntryOf,
+        Op::EntryGet if b.typed_get(result).is_some() => Helper::EntryAt,
+        Op::EntryGet => Helper::EntryGet,
+        _ => Helper::EntrySet,
+    };
+    let target = callee(b.m, c, helper)?;
+    b.load(args[0])?;
+    let key = if op == Op::EntryOf {
+        args[1]
+    } else {
+        b.load(args[1])?;
+        args[2]
+    };
+    key_operand(b, c, key)?;
+    if op == Op::EntrySet {
+        value_operand(b, c, args[3])?;
+    }
+    strings::constant(b, &b.func.name.clone());
+    b.call(target);
+    // `set` answers the collection.
+    if op == Op::EntrySet && b.types().slot(&b.ty(result).clone())?.is_some() {
+        b.load(args[0])?;
+    }
+    Ok(())
+}
+
 /// The `get`s of a Map or a table holding numbers or booleans typed whose
 /// every user reads the value typed: a tag test, a truthiness test, or a read
 /// as the stored type itself (`hir::erased_uses`). Each answers its entry
@@ -407,7 +471,9 @@ pub(crate) fn typed_gets(
         else {
             continue;
         };
-        let (Some(Op::Get), [map, _]) = (external(name), args.as_slice()) else {
+        let ((Some(Op::Get), [map, _]) | (Some(Op::EntryGet), [map, _, _])) =
+            (external(name), args.as_slice())
+        else {
             continue;
         };
         let Ok(c) = plan.collection(&func.value(*map).ty) else {
@@ -641,6 +707,9 @@ pub(crate) fn empty(c: &Collection) -> Vec<I<'static>> {
             array_size: 0,
         });
     }
+    if c.generation.is_some() {
+        code.push(I::I32Const(0));
+    }
     code.push(I::StructNew(c.wrapper));
     code
 }
@@ -757,6 +826,7 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
     let key = key_physical(c.key);
     let value = value_physical(c);
     let i32 = Physical::Scalar(Slot::I32);
+    let i64 = Physical::Scalar(Slot::I64);
     let (params, result) = match helper {
         Helper::Find => (vec![map, key, i32], Some(i32)),
         Helper::Grow | Helper::Clear => (vec![map], None),
@@ -771,6 +841,18 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
         ),
         Helper::Has | Helper::Delete | Helper::Entry => {
             (vec![map, key, strings::STRING], Some(i32))
+        }
+        Helper::EntryOf => (vec![map, key, strings::STRING], Some(i64)),
+        Helper::EntryGet => (
+            vec![map, i64, key, strings::STRING],
+            Some(Physical::Reference(RefType::ANYREF)),
+        ),
+        Helper::EntryAt => (vec![map, i64, key, strings::STRING], Some(i32)),
+        Helper::EntrySet => {
+            let mut params = vec![map, i64, key];
+            params.extend(value);
+            params.push(strings::STRING);
+            (params, None)
         }
         Helper::Set => {
             let mut params = vec![map, key];
@@ -802,6 +884,10 @@ pub(crate) fn callee(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Res
                 lookup(m, &collection, helper)
             }
             Helper::Set => set(m, &collection),
+            Helper::EntryOf => entry_of(m, &collection),
+            Helper::EntryGet | Helper::EntryAt | Helper::EntrySet => {
+                through(m, &collection, helper)
+            }
             Helper::Clear => Ok(clear(&collection)),
             Helper::Next => Ok(next(&collection)),
             Helper::Copy | Helper::Extend => copy(m, &collection, helper),
@@ -1041,6 +1127,7 @@ fn grow(c: &Collection) -> Function {
         I::RefAsNonNull,
         store(c, c.index()),
     ]);
+    f.instructions(&moved(c));
     rebuild_index(&mut f, c, (used, slots, entry, slot, hash, index));
     f.instructions(&[I::End]);
     f
@@ -1209,8 +1296,9 @@ fn put_body(c: &Collection, find: Func, grow: Func) -> Function {
         I::I32Const(1),
         I::I32Add,
         store(c, c.live()),
-        I::End,
     ]);
+    f.instructions(&moved(c));
+    f.instruction(&I::End);
     f
 }
 
@@ -1299,7 +1387,190 @@ fn lookup(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Result<Functio
                 I::I32Const(1),
                 I::I32Sub,
                 store(c, c.live()),
+            ]);
+            f.instructions(&moved(c));
+            f.instruction(&I::I32Const(1));
+        }
+    }
+    f.instruction(&I::End);
+    Ok(f)
+}
+
+/// A structural write -- a key inserted, a delete, a clear, growth -- moves
+/// the generation, so an entry taken before it is not trusted after; nothing
+/// where no entry is taken of this storage. The collection is parameter 0 of
+/// every helper that makes one.
+fn moved(c: &Collection) -> Vec<I<'static>> {
+    c.generation.map_or_else(Vec::new, |generation| {
+        vec![
+            I::LocalGet(0),
+            I::LocalGet(0),
+            field(c, generation),
+            I::I32Const(1),
+            I::I32Add,
+            store(c, generation),
+        ]
+    })
+}
+
+/// The generation's field, which a storage an entry is taken of has.
+fn generation(c: &Collection) -> Result<u32, Failure> {
+    c.generation
+        .ok_or_else(|| Failure::Invariant("an entry of a storage that keeps no generation".into()))
+}
+
+/// `nts_map_entry`: hash and probe once, answering the table's generation in
+/// the high half and, in the low, the index slot the key holds or would take
+/// -- C's entry, read by C's test (`through`).
+///
+/// Params: map, key, name.
+fn entry_of(m: &mut Builder<'_>, c: &Collection) -> Result<Function, Failure> {
+    let hash = key_callee(m, KeyHelper::Hash(c.key))?;
+    let find = callee(m, c, Helper::Find)?;
+    let generation = generation(c)?;
+    let mut f = Function::new([]);
+    f.instructions(&[
+        I::LocalGet(0),
+        field(c, generation),
+        I::I64ExtendI32U,
+        I::I64Const(32),
+        I::I64Shl,
+        I::LocalGet(0),
+        I::LocalGet(1),
+        I::LocalGet(1),
+        I::LocalGet(2),
+    ]);
+    f.call(hash);
+    f.call(find);
+    f.instructions(&[I::I64ExtendI32U, I::I64Or, I::End]);
+    Ok(f)
+}
+
+/// Whether the entry (parameter 1) is stale: taken at another generation, or
+/// naming a slot past the index -- an empty table's index has none to name.
+/// C's test, `nts_map_entry_current`, negated. Leaves the slot in `slot`.
+fn stale(c: &Collection, generation: u32, slot: u32) -> [I<'static>; 15] {
+    [
+        I::LocalGet(1),
+        I::I64Const(32),
+        I::I64ShrU,
+        I::I32WrapI64,
+        I::LocalGet(0),
+        field(c, generation),
+        I::I32Ne,
+        I::LocalGet(1),
+        I::I32WrapI64,
+        I::LocalTee(slot),
+        I::LocalGet(0),
+        field(c, c.index()),
+        I::ArrayLen,
+        I::I32GeU,
+        I::I32Or,
+    ]
+}
+
+/// `get` and `set` through an entry (`EntryGet`, `EntryAt`, `EntrySet`).
+///
+/// An entry is current when it was taken at the table's generation and its
+/// slot is inside the index -- C's test -- and then the slot holds the key's
+/// entry plus one, or says it has none: only a structural write changes the
+/// index, and every one moves the generation. A stale entry takes the plain
+/// helper, which is why the key is still passed: the answer never depends on
+/// the entry. A `set` of a new key takes the plain `set` too, which hashes the
+/// key again: this table keeps each entry's hash beside it, and an entry has
+/// no room for one. A key is new once and updated many times.
+///
+/// Params: map, entry, key, [value], name. Locals: slot, at.
+fn through(m: &mut Builder<'_>, c: &Collection, helper: Helper) -> Result<Function, Failure> {
+    let values = c
+        .values
+        .ok_or_else(|| Failure::Invariant("an entry of a Set".into()))?;
+    let generation = generation(c)?;
+    let setting = helper == Helper::EntrySet;
+    let name = if setting { 4 } else { 3 };
+    let (slot, at) = (name + 1, name + 2);
+    let plain = callee(
+        m,
+        c,
+        match helper {
+            Helper::EntryGet => Helper::Get,
+            Helper::EntryAt => Helper::Entry,
+            _ => Helper::Set,
+        },
+    )?;
+    let mut f = Function::new([ValType::I32, ValType::I32]);
+    // The plain helper, on the stale or missing path.
+    let fallback = |f: &mut Function| {
+        f.instructions(&[I::LocalGet(0), I::LocalGet(2)]);
+        if setting {
+            f.instruction(&I::LocalGet(3));
+        }
+        f.instruction(&I::LocalGet(name));
+        f.call(plain);
+        f.instruction(&I::Return);
+    };
+    f.instructions(&stale(c, generation, slot));
+    f.instruction(&I::If(BlockType::Empty));
+    fallback(&mut f);
+    f.instructions(&[
+        I::End,
+        I::LocalGet(0),
+        field(c, c.index()),
+        I::LocalGet(slot),
+        I::ArrayGet(c.ints),
+        I::LocalSet(at),
+    ]);
+    match helper {
+        // The entry's number, or -1, as `Entry` answers it.
+        Helper::EntryAt => f.instructions(&[
+            I::LocalGet(at),
+            I::I32Const(1),
+            I::I32Sub,
+            I::I32Const(-1),
+            I::LocalGet(at),
+            I::I32Const(0),
+            I::I32GtS,
+            I::Select,
+        ]),
+        Helper::EntryGet => {
+            f.instructions(&[
+                I::LocalGet(at),
+                I::I32Const(0),
+                I::I32LeS,
+                I::If(BlockType::Empty),
+            ]);
+            let undefined = erased::singleton(m, Singleton::Undefined)?;
+            f.global_get(undefined);
+            f.instructions(&[
+                I::Return,
+                I::End,
+                I::LocalGet(0),
+                field(c, c.value_field()),
+                I::LocalGet(at),
                 I::I32Const(1),
+                I::I32Sub,
+                I::ArrayGet(values),
+            ]);
+            erase_value(m, c, &mut f)?;
+        }
+        _ => {
+            // A new key: the plain `set`, which hashes it again.
+            f.instructions(&[
+                I::LocalGet(at),
+                I::I32Const(0),
+                I::I32LeS,
+                I::If(BlockType::Empty),
+            ]);
+            fallback(&mut f);
+            f.instructions(&[
+                I::End,
+                I::LocalGet(0),
+                field(c, c.value_field()),
+                I::LocalGet(at),
+                I::I32Const(1),
+                I::I32Sub,
+                I::LocalGet(3),
+                I::ArraySet(values),
             ]);
         }
     }
@@ -1418,8 +1689,9 @@ fn clear(c: &Collection) -> Function {
         I::LocalGet(0),
         I::I32Const(0),
         store(c, c.live()),
-        I::End,
     ]);
+    f.instructions(&moved(c));
+    f.instruction(&I::End);
     f
 }
 

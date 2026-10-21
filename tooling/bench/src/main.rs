@@ -2423,7 +2423,13 @@ fn wasm_prepare(
         .first()
         .cloned()
         .with_context(|| format!("{case}/case.ts declares no `export const seed`"))?;
-    let mut program = prepared_program(tsconfig, entry, true, hir::Provider::HostGc)?;
+    let mut program = prepared_program(
+        tsconfig,
+        entry,
+        true,
+        hir::Provider::HostGc,
+        nts_codegen_common::Backend::Wasm,
+    )?;
     // The harness calls one function, so that is the module's whole public
     // surface: a benchmark is an executable whose entry is its workload, which
     // is how `prepared_program` roots it. An export it never calls --
@@ -2615,7 +2621,13 @@ fn jvm_case(
     } else {
         Some(workload(case)?)
     };
-    let program = prepared_program(tsconfig, entry, true, provider)?;
+    let program = prepared_program(
+        tsconfig,
+        entry,
+        true,
+        provider,
+        nts_codegen_common::Backend::Jvm,
+    )?;
     let mismatches = nts_codegen_common::provider::host_gc_diagnostics(&program, "jvm");
     if !mismatches.is_empty() {
         let messages = mismatches
@@ -3025,7 +3037,12 @@ fn emit(
     provider: hir::Provider,
     llvm: bool,
 ) -> Result<String> {
-    let program = prepared_program(tsconfig, entry, specialize, provider)?;
+    let backend = if llvm {
+        nts_codegen_common::Backend::Llvm
+    } else {
+        nts_codegen_common::Backend::C
+    };
+    let program = prepared_program(tsconfig, entry, specialize, provider, backend)?;
     if llvm {
         let emitted = nts_codegen_llvm::emit(&program, nts_codegen_llvm::Platform::SYSV_X86_64);
         // Silent by default: the second backend refuses whole categories of
@@ -3053,11 +3070,16 @@ fn emit(
 /// LLVM columns do -- including the `Roots::Entry` argument the comment below
 /// exists to justify, which is the difference between measuring a benchmark and
 /// measuring a library.
+/// The program one backend's column measures, prepared as that backend's
+/// driver prepares it: the provider, and whether its tables answer a key's
+/// entry (`Backend::table_entries`), since this links the compiler directly
+/// and a choice the CLI makes and this did not would be measured as nobody's.
 fn prepared_program(
     tsconfig: &Utf8Path,
     entry: &[String],
     specialize: bool,
     provider: hir::Provider,
+    backend: nts_codegen_common::Backend,
 ) -> Result<hir::Program> {
     // `NTS_TSGO`, then the frontend this repository builds, and only then the
     // bare name -- the order the CLI, the suite and the differential all use.
@@ -3104,6 +3126,7 @@ fn prepared_program(
             // callback returns to.
             callbacks_checkpoint: false,
             targets: nts_core::hir::native::Targets::only(hir::HOST),
+            table_entries: backend.table_entries(),
         },
     ) {
         Ok(prepared) => prepared,

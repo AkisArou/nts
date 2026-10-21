@@ -615,18 +615,9 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_map_clear", Support::WasmHelper),
     ("nts_map_copy", Support::WasmHelper),
     ("nts_map_delete", Support::WasmHelper),
-    (
-        "nts_map_entry",
-        Support::Decline("host-GC preparation keeps a table's plain get and set (hir::entries)"),
-    ),
-    (
-        "nts_map_entry_get",
-        Support::Decline("host-GC preparation keeps a table's plain get and set (hir::entries)"),
-    ),
-    (
-        "nts_map_entry_set",
-        Support::Decline("host-GC preparation keeps a table's plain get and set (hir::entries)"),
-    ),
+    ("nts_map_entry", Support::WasmHelper),
+    ("nts_map_entry_get", Support::WasmHelper),
+    ("nts_map_entry_set", Support::WasmHelper),
     ("nts_map_extend", Support::WasmHelper),
     ("nts_map_get", Support::WasmHelper),
     ("nts_map_has", Support::WasmHelper),

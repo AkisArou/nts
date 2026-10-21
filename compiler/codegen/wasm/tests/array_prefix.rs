@@ -35,6 +35,7 @@ fn run_fixture(name: &str, driver: &str) -> serde_json::Value {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::HostGc,
+            table_entries: nts_codegen_common::Backend::Wasm.table_entries(),
             ..hir::Options::default()
         },
     )

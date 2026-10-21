@@ -273,6 +273,43 @@ pub(crate) fn collection_value(value: &HirType) -> HirType {
     }
 }
 
+/// The collection storages `program` takes an entry of (`hir::entries`): the
+/// table every `nts_map_entry` reads, by its storage.
+fn entered_storages(program: &Program) -> FxHashSet<CollectionKey> {
+    let mut entered = FxHashSet::default();
+    for func in &program.funcs {
+        for op in &func.values {
+            let nts_core::hir::OpKind::Call {
+                callee: nts_core::hir::Callee::External(name),
+                args,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            if name != nts_core::hir::entries::ENTRY {
+                continue;
+            }
+            let Some(table) = args.first() else {
+                continue;
+            };
+            let (key, value, table) = match &func.value(*table).ty {
+                HirType::Managed(ManagedType::Map(key, value)) => (key, value, false),
+                HirType::Managed(ManagedType::Table(key, value)) => (key, value, true),
+                _ => continue,
+            };
+            if let Ok(key) = collection_key(key) {
+                entered.insert(CollectionKey {
+                    key,
+                    value: Some(collection_value(value)),
+                    table,
+                });
+            }
+        }
+    }
+    entered
+}
+
 /// What a collection type's keys are, or why they are refused.
 pub(crate) fn collection_key(key: &HirType) -> Result<KeyKind, String> {
     match key {
@@ -311,6 +348,13 @@ pub(crate) struct Collection {
     /// The first field after the object root's.
     pub(crate) base: u32,
     pub(crate) descriptor: u32,
+    /// The generation's field, where the program takes an entry of this
+    /// storage (`nts_map_entry`): moved by every structural write -- a key
+    /// inserted, a delete, a clear, growth -- and by nothing else, it is what
+    /// an entry is checked against before the index slot it names is
+    /// trusted. The last field, so no other moved to make room for it. A
+    /// storage no entry is taken of keeps none, and its writes pay nothing.
+    pub(crate) generation: Option<u32>,
 }
 
 impl Collection {
@@ -714,6 +758,9 @@ struct Builder<'a> {
     array_elements: FxHashMap<NodeId, HirType>,
     backings: FxHashMap<NodeId, NodeId>,
     collections: FxHashMap<CollectionKey, NodeId>,
+    /// The collection storages the program takes an entry of, which alone
+    /// keep a generation (`Collection::generation`).
+    entered: FxHashSet<CollectionKey>,
     /// Each collection node's key and value storage, and its arrays once
     /// completed: keys, values, ints.
     collection_shapes: FxHashMap<NodeId, (CollectionKey, Option<CollectionArrays>)>,
@@ -769,6 +816,7 @@ impl<'a> Builder<'a> {
             array_elements: FxHashMap::default(),
             backings: FxHashMap::default(),
             collections: FxHashMap::default(),
+            entered: entered_storages(program),
             collection_shapes: FxHashMap::default(),
             plain_arrays: FxHashMap::default(),
             root: None,
@@ -2071,6 +2119,10 @@ impl<'a> Builder<'a> {
         if let Some(values) = values {
             fields.push(Field::value(PendingSlot::Defined(values, false), true));
         }
+        if self.entered.contains(&shape) {
+            // The generation (`Collection::generation`).
+            fields.push(Field::value(PendingSlot::Scalar(Slot::I32), true));
+        }
         self.nodes[id.0].shape = Shape::Struct(fields);
         self.collection_shapes
             .insert(id, (shape, Some((keys, values, ints))));
@@ -2263,6 +2315,12 @@ impl<'a> Builder<'a> {
                     ints: indices[ints.0],
                     base,
                     descriptor,
+                    // After the root's fields, live, used, keys, hashes and
+                    // the index, then the values a Map has and a Set has not.
+                    generation: self
+                        .entered
+                        .contains(shape)
+                        .then(|| base + 5 + u32::from(values.is_some())),
                 },
             );
         }

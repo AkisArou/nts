@@ -22,6 +22,7 @@ fn module() -> Vec<u8> {
         ints: 0,
         base: 0,
         descriptor: 0,
+        generation: None,
     };
     let mut types = TypeSection::new();
     types.ty().array(&StorageType::Val(ValType::I32), true);

@@ -16,6 +16,12 @@
 // `std::sort`, and `ArrayList<Map.Entry<String, Double>>` with `List.sort`.
 //
 // Everything depends on `seed`, and the trip count carries it so nothing folds.
+//
+// The count's read and write of one word share one lookup (`hir::entries`)
+// on every backend whose tables answer an entry -- Wasm's as well as the C
+// runtime's -- and not on the JVM's, which answer none:
+// expect-ir: c llvm wasm: count call.extern(nts_map_entry) in topWords >= 1
+// expect-ir: jvm: count call.extern(nts_map_entry) in topWords == 0
 const vocabulary: string[] = [];
 for (let i = 0; i < 256; i++) {
   vocabulary.push("word" + i);

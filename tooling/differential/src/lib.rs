@@ -466,6 +466,7 @@ pub fn check(
     // runtime's defines, and nowhere else.
     let options = hir::Options {
         provider,
+        table_entries: backend.table_entries(),
         ..hir::Options::default()
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {

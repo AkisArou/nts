@@ -28,18 +28,18 @@
 //! nothing writes in between -- and the window between the two operations
 //! writes nothing at all: no call, no store, no table operation, no suspension.
 //!
-//! In preparation, and only where the tables are the C runtime's: the JVM's and
-//! Wasm's own tables answer no entry yet, so a program prepared for a host's
-//! heap keeps the plain `get` and `set` and every optimization those backends
-//! make of them. A backend that gains a fast path opts in at [`share`]. For
-//! Wasm that is measured: its record-word-counts with the write reusing the
-//! read's entry, by hand, was 20.6 points faster than with the read unboxed
-//! alone (2026-10-21), and the three helpers' shape here is the one it would
-//! implement.
+//! In preparation, and only where the backend's tables answer an entry
+//! ([`super::PreparationOptions::table_entries`]): the C runtime's, behind
+//! every native provider, and Wasm's, which says so. The JVM's answer none,
+//! so a program prepared for it keeps the plain `get` and `set` and every
+//! optimization it makes of them. For Wasm the gain was measured before it
+//! was built: its record-word-counts with the write reusing the read's entry,
+//! by hand, was 20.6 points faster than with the read unboxed alone
+//! (2026-10-21).
 
 use rustc_hash::FxHashSet;
 
-use super::{BlockId, Callee, Func, HirType, OpKind, Program, Provider, ValueId};
+use super::{BlockId, Callee, Func, HirType, OpKind, Program, ValueId};
 
 /// The lookup that answers an entry: `(table, key) -> u64`.
 pub const ENTRY: &str = "nts_map_entry";
@@ -95,16 +95,14 @@ fn writes(func: &Func, op: ValueId) -> bool {
         )
 }
 
-/// Share lookups across `program` where its tables are the C runtime's: one
-/// prepared for a host's heap keeps its plain `get` and `set`.
-pub fn share(program: &mut Program, provider: Provider) {
-    match provider {
-        Provider::NoGc | Provider::ReferenceCounting => {
-            for func in &mut program.funcs {
-                share_entries(func);
-            }
-        }
-        Provider::HostGc => {}
+/// Share lookups across `program` where its backend's tables answer an
+/// entry; one whose tables do not keeps its plain `get` and `set`.
+pub fn share(program: &mut Program, table_entries: bool) {
+    if !table_entries {
+        return;
+    }
+    for func in &mut program.funcs {
+        share_entries(func);
     }
 }
 

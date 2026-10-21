@@ -2681,6 +2681,7 @@ fn prepare_as(
             || emission::default_roots(configured, backend),
             hir::reachable::Roots::Entry,
         ),
+        table_entries: backend.table_entries(),
         ..hir::Options::default()
     };
     // An invalid program is exactly the one worth reading, so the

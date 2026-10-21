@@ -4,7 +4,8 @@
 //! node, which the plain calls answer as well, so which shapes pair is asserted
 //! here: the update idioms do, one read feeds a write on either arm, and a call
 //! between, another key or another table does not. A program prepared for a
-//! host's heap -- the JVM's, Wasm's -- keeps the plain calls.
+//! host's heap keeps the plain calls unless its backend's tables answer an
+//! entry (`Options::table_entries`): the JVM's do not, Wasm's do.
 //!
 //! Skips only when `tsgo` is not built.
 
@@ -17,6 +18,10 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 const PROGRAM: &str = "a-table-key-updated-in-place";
 
 fn prepared(provider: Provider) -> Option<hir::Program> {
+    prepared_with(provider, None)
+}
+
+fn prepared_with(provider: Provider, table_entries: Option<bool>) -> Option<hir::Program> {
     let tsgo = nts_frontend_ts::tsgo::locate()?;
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/programs")
@@ -29,6 +34,7 @@ fn prepared(provider: Provider) -> Option<hir::Program> {
         .expect("snapshot should succeed");
     let options = Options {
         provider,
+        table_entries,
         ..Options::default()
     };
     Some(
@@ -109,15 +115,42 @@ fn a_write_that_might_not_be_the_read_keeps_its_own_lookup() {
     }
 }
 
-/// A host's tables answer no entry: the JVM and Wasm keep the plain calls,
-/// and every optimization they make of them.
+/// A host's heap answers no entry unless its backend says its tables do: the
+/// JVM keeps the plain calls, and every optimization it makes of them, with
+/// the flag unset -- the default does not inherit native's answer -- and Wasm,
+/// which sets it, shares exactly the lookups native preparation shares.
 #[test]
-fn a_host_heap_keeps_the_plain_calls() {
-    let Some(program) = prepared(Provider::HostGc) else {
+fn a_host_heap_shares_only_where_its_backend_says_so() {
+    let Some(plain) = prepared(Provider::HostGc) else {
+        return;
+    };
+    let Some(shared) = prepared_with(Provider::HostGc, Some(true)) else {
+        return;
+    };
+    let Some(native) = prepared(Provider::NoGc) else {
         return;
     };
     for name in ["recordCounts", "mapCounts", "eitherArm"] {
-        assert_eq!(calls(&program, name, hir::entries::ENTRY), 0, "`{name}`");
-        assert!(calls(&program, name, "nts_map_set") > 0, "`{name}`");
+        assert_eq!(calls(&plain, name, hir::entries::ENTRY), 0, "`{name}`");
+        assert!(calls(&plain, name, "nts_map_set") > 0, "`{name}`");
+    }
+    for name in [
+        "recordCounts",
+        "mapCounts",
+        "negativeZeroKey",
+        "eitherArm",
+        "deleteBetweenUpdates",
+    ] {
+        for helper in [
+            hir::entries::ENTRY,
+            hir::entries::ENTRY_GET,
+            hir::entries::ENTRY_SET,
+        ] {
+            assert_eq!(
+                calls(&shared, name, helper),
+                calls(&native, name, helper),
+                "`{helper}` in `{name}`"
+            );
+        }
     }
 }

@@ -5469,6 +5469,19 @@ pub struct Options<'a> {
     /// scalar kind must fit it on every one ([`native::Scalar::range_on`]):
     /// C's `long` is 32 bits on Windows and 64 elsewhere.
     pub targets: native::Targets,
+    /// Whether the backend's tables answer a key's entry, so a key read and
+    /// then written is looked up once ([`entries::share`]). A capability of
+    /// the backend's table rather than of the memory discipline: Wasm's do,
+    /// the JVM's do not, and both are a host's heap.
+    ///
+    /// `None` is "as the provider answers": the C runtime's tables, behind
+    /// every native provider, answer it; a host's heap does not unless its
+    /// backend says so (`nts_codegen_common::Backend::table_entries`).
+    /// Resolved where it is used ([`PreparationOptions::table_entries`]),
+    /// because a default computed here would be the *default* provider's:
+    /// `Options { provider: HostGc, ..default() }` would inherit native's
+    /// answer.
+    pub table_entries: Option<bool>,
 }
 
 impl Default for Options<'_> {
@@ -5494,6 +5507,8 @@ impl Default for Options<'_> {
             },
             // The host, until a build names its targets.
             targets: native::Targets::only(HOST),
+            // As the provider answers, resolved with it.
+            table_entries: None,
         }
     }
 }
@@ -5522,6 +5537,21 @@ pub struct PreparationOptions<'a> {
     pub specialize_numbers: bool,
     pub roots: reachable::Roots<'a>,
     pub targets: native::Targets,
+    /// [`Options::table_entries`]: `None` until [`Self::table_entries`]
+    /// resolves it against the provider, so a caller building these directly
+    /// with `..default()` inherits no other provider's answer.
+    pub table_entries: Option<bool>,
+}
+
+impl PreparationOptions<'_> {
+    /// Whether the backend's tables answer a key's entry: as the backend said,
+    /// or else as the provider answers -- the C runtime's tables do, a host's
+    /// heap's do not.
+    #[must_use]
+    pub fn table_entries(&self) -> bool {
+        self.table_entries
+            .unwrap_or(self.provider != Provider::HostGc)
+    }
 }
 
 impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
@@ -5532,6 +5562,7 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
             specialize_numbers: options.specialize_numbers,
             roots: options.roots,
             targets: options.targets,
+            table_entries: options.table_entries,
         }
     }
 }
@@ -7773,10 +7804,10 @@ fn prepare_lowered(
     boxing::materialize(&mut program);
 
     // A table key read and then written looks the key up once, where the
-    // tables are the C runtime's (`entries::share`). After simplification,
+    // backend's tables answer an entry (`entries::share`). After simplification,
     // which leaves the reads and writes the program keeps; before escape and
     // counting, which have to see the calls that replace them.
-    entries::share(&mut program, options.provider);
+    entries::share(&mut program, options.table_entries());
 
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code

@@ -116,6 +116,7 @@ impl Metadata {
             callbacks_checkpoint: matches!(backend, Backend::C | Backend::Llvm)
                 && emission.host.checkpoints_after_callbacks(),
             targets: emission.scalar_targets(),
+            table_entries: backend.table_entries(),
             ..hir::PreparationOptions::default()
         })
     }

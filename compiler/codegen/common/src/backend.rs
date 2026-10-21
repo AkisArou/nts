@@ -29,6 +29,23 @@ pub enum Backend {
 }
 
 impl Backend {
+    /// Whether this backend's tables answer a key's entry (`hir::entries`),
+    /// so a key read and then written is looked up once: `Some` where the
+    /// backend says so over its provider's answer, `None` to take the
+    /// provider's. Wasm's tables do, though a host owns its heap; the JVM's
+    /// do not, which is a host heap's answer; C's and LLVM's are the C
+    /// runtime's, which do. Every driver that prepares for a backend --
+    /// the CLI, the differential, the benchmarks, the tests -- sets
+    /// `hir::Options::table_entries` from here, so none prepares one
+    /// backend's program as another's.
+    #[must_use]
+    pub const fn table_entries(self) -> Option<bool> {
+        match self {
+            Self::Wasm => Some(true),
+            Self::C | Self::Llvm | Self::Jvm => None,
+        }
+    }
+
     /// The spelling `NTS_BACKEND` takes, and the one a gate step prints.
     #[must_use]
     pub const fn name(self) -> &'static str {

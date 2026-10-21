@@ -5,6 +5,7 @@ mod common;
 use camino::Utf8PathBuf;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+use std::fmt::Write as _;
 use std::path::Path;
 
 fn prepared_project(fixture: &Path) -> hir::Program {
@@ -19,6 +20,7 @@ fn prepared_project(fixture: &Path) -> hir::Program {
         &snapshot,
         &hir::Options {
             provider: hir::Provider::HostGc,
+            table_entries: nts_codegen_common::Backend::Wasm.table_entries(),
             ..hir::Options::default()
         },
     )
@@ -1946,4 +1948,159 @@ fn every_defined_function_declares_each_local_type_in_one_run() {
         // Not vacuous: functions with locals of more than one type were checked.
         assert!(mixed > 0, "{fixture}: no function has locals of two types");
     }
+}
+
+/// An entry the write through it outlives. `grown` reads and writes one key
+/// through a shared entry (`hir::entries`); this widens the window between
+/// the two with plain `set`s of a hundred new keys, so the table grows and
+/// rebuilds its index under the entry -- a program the pass never makes, since
+/// it pairs only across a window that writes nothing, and the helper's
+/// fallback is what answers it. The write must see the generation moved and
+/// take the plain `set`. Every entry is listed, so a write that trusted the
+/// stale slot -- landing on another key's value, or lost -- changes the answer.
+#[test]
+fn a_table_entry_outlived_by_growth_falls_back() {
+    let fixture = common::repository().join("tests/wasm/a-table-entry-outlived-by-growth");
+    let mut program = prepared_project(&fixture);
+    // Both functions, and every copy specialization made of them.
+    let mut widened = 0;
+    for func in &mut program.funcs {
+        if (func.name.starts_with("grown") || func.name.starts_with("appended")) && widen(func) {
+            widened += 1;
+        }
+    }
+    assert!(
+        widened >= 2,
+        "`grown` and `appended` each write through an entry"
+    );
+    let emitted = nts_codegen_wasm::emit(&program).expect("the widened program emits");
+    let artifact = common::write_artifact(
+        "a-table-entry-outlived-by-growth",
+        &emitted,
+        nts_codegen_wasm::Host::Node,
+    );
+    let module = artifact.join(nts_codegen_wasm::PROGRAM_FILE);
+    let script = format!(
+        "const m = await import({:?}); for (const n of [0, 1, 2, 3, 5]) console.log(m.grown(n) + '|' + m.appended(n));",
+        module.display().to_string()
+    );
+    let output = std::process::Command::new("node")
+        .args(["--input-type=module", "-e", &script])
+        .output()
+        .expect("node runs");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let answers = String::from_utf8(output.stdout).unwrap();
+    // Six keys, the one read and written bumped by `n`, then the hundred the
+    // widening inserted -- before the write, which updates a present key in
+    // place and so leaves the order alone.
+    let expected: String = [0, 1, 2, 3, 5]
+        .iter()
+        .map(|&n| {
+            let mut out = String::new();
+            for i in 0..6 {
+                let bumped = i == (n & 3);
+                let value = i * 10 + if bumped { n } else { 0 };
+                let _ = write!(out, "k{i}={value},");
+            }
+            for i in 0..100 {
+                let _ = write!(out, "x{i}=7,");
+            }
+            out += "|";
+            for i in 0..6 {
+                let bumped = if i == (n & 3) { "!" } else { "" };
+                let _ = write!(out, "k{i}=v{i}{bumped},");
+            }
+            for i in 0..100 {
+                let _ = write!(out, "x{i}=7,");
+            }
+            out + "\n"
+        })
+        .collect();
+    assert_eq!(answers, expected);
+}
+
+/// Plain `set`s of a hundred new keys inserted just before `func`'s write
+/// through an entry, on the table it writes: the window the pass proved
+/// empty, filled. Whether `func` had such a write.
+fn widen(func: &mut hir::Func) -> bool {
+    let Some((block, at, table)) = func.blocks.iter().enumerate().find_map(|(block, b)| {
+        b.ops
+            .iter()
+            .enumerate()
+            .find_map(|(at, id)| match &func.value(*id).kind {
+                hir::OpKind::Call {
+                    callee: hir::Callee::External(name),
+                    args,
+                    ..
+                } if name == hir::entries::ENTRY_SET => Some((block, at, args[0])),
+                _ => None,
+            })
+    }) else {
+        return false;
+    };
+    let table_ty = func.value(table).ty.clone();
+    let text = matches!(
+        &table_ty,
+        hir::HirType::Managed(hir::ManagedType::Map(_, value))
+            if **value == hir::HirType::Managed(hir::ManagedType::String)
+    );
+    let origin = func.value(table).origin.clone();
+    let push = |func: &mut hir::Func, kind: hir::OpKind, ty: hir::HirType| {
+        let id = hir::ValueId(u32::try_from(func.values.len()).unwrap());
+        func.values.push(hir::Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        });
+        id
+    };
+    let mut ops = Vec::new();
+    for i in 0..100 {
+        let key = push(
+            func,
+            hir::OpKind::ConstString(format!("x{i}")),
+            hir::HirType::Managed(hir::ManagedType::String),
+        );
+        // 7, as the type the table holds its values as.
+        let value = if text {
+            push(
+                func,
+                hir::OpKind::ConstString("7".into()),
+                hir::HirType::Managed(hir::ManagedType::String),
+            )
+        } else {
+            push(func, hir::OpKind::ConstFloat(7.0), hir::HirType::NUMBER)
+        };
+        let erase = |func: &mut hir::Func, of| {
+            push(
+                func,
+                hir::OpKind::Erase {
+                    value: of,
+                    absent: hir::Absent::Impossible,
+                    slots: hir::Absent::Impossible,
+                },
+                hir::HirType::Erased,
+            )
+        };
+        let (erased_key, erased_value) = (erase(func, key), erase(func, value));
+        let set = push(
+            func,
+            hir::OpKind::Call {
+                callee: hir::Callee::External("nts_map_set".into()),
+                args: vec![table, erased_key, erased_value],
+                frame: None,
+            },
+            table_ty.clone(),
+        );
+        ops.extend([key, value, erased_key, erased_value, set]);
+    }
+    let block = &mut func.blocks[block].ops;
+    let tail = block.split_off(at);
+    block.extend(ops);
+    block.extend(tail);
+    true
 }
