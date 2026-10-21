@@ -370,6 +370,13 @@ pub(crate) enum Shape {
         transfer: Transfer,
         nullable: bool,
     },
+    /// A string the callee takes and frees (`transfer full`): on the raw
+    /// form the GLib-allocated pointer itself, `Ptr<c_char>`, which the
+    /// program must have from `GLib`; on the values form a `string`, which it
+    /// passes as `GLib`'s copy of it (`g_strdup_raw`).
+    Taken {
+        nullable: bool,
+    },
 }
 
 /// What an array C hands back holds, as the copy a values form makes of it.
@@ -899,6 +906,47 @@ pub(crate) fn bind<'a>(
     vfuncs(&mut mapper, namespace);
     set_by_name(&mut mapper, namespace);
     signals(&mut mapper, namespace);
+    // GLib's copier, as the raw pointer it returns: what a values form passes
+    // a function that takes a string (`Shape::Taken`), which GLib frees.
+    // Declared beside `g_strdup`, under its own name, in GLib's binding only,
+    // and for a string only: `g_strdup` answers NULL for NULL alone, and
+    // aborts rather than answer NULL when memory runs out.
+    if namespace.name == "GLib"
+        && let Some(strdup) = mapper
+            .binding
+            .functions
+            .iter()
+            .find(|function| function.symbol == "g_strdup")
+            .cloned()
+    {
+        mapper.binding.brands.extend(["Ptr", "c_char"]);
+        let parameters = strdup
+            .parameters
+            .iter()
+            .map(|(name, mapped)| {
+                (
+                    name.clone(),
+                    Mapped {
+                        ts: "string".to_owned(),
+                        ..mapped.clone()
+                    },
+                )
+            })
+            .collect();
+        mapper.binding.functions.push(Function {
+            name: STRDUP_RAW.to_owned(),
+            gir_name: Some("strdup_raw".to_owned()),
+            parameters,
+            result: Mapped {
+                shape: Shape::Other,
+                ts: "Ptr<c_char>".to_owned(),
+                c: strdup.result.c.clone(),
+            },
+            free: None,
+            raw_result_owned: false,
+            ..strdup
+        });
+    }
     mapper.binding.functions.sort_by(|a, b| a.name.cmp(&b.name));
     // Two GIR entries can name one C symbol (a function and a method moved to
     // it); the first is the binding. Signal connects share a symbol and have
@@ -1436,6 +1484,16 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                         .any(|(_, mapped)| matches!(mapped.shape, Shape::Text { .. })) =>
                 {
                     mapper.binding.refused.push((label, Reason::StringOut));
+                }
+                // And a string C hands the override to free, which it would
+                // hold as a raw pointer.
+                Ok(function)
+                    if function
+                        .parameters
+                        .iter()
+                        .any(|(_, mapped)| matches!(mapped.shape, Shape::Taken { .. })) =>
+                {
+                    mapper.binding.refused.push((label, Reason::OwnedString));
                 }
                 Ok(mut function) => {
                     let Some((class, _)) = function.method.clone() else {
@@ -3592,7 +3650,25 @@ impl<'a> Mapper<'a> {
                     .ok_or_else(|| Reason::PointerDepth(c_type.to_owned()));
             }
             if param.transfer != Transfer::None {
-                return Err(Reason::OwnedString);
+                // A string the callee takes, and frees with GLib's `g_free`:
+                // GLib must allocate it, so only GLib's copy of a string can
+                // be given, and only where GLib is in the closure.
+                if param.transfer != Transfer::Full || self.frees(Transfer::Full).is_err() {
+                    return Err(Reason::OwnedString);
+                }
+                self.binding.brands.extend(["Ptr", "c_char"]);
+                return Ok(Mapped {
+                    shape: Shape::Taken {
+                        nullable: param.nullable,
+                    },
+                    ts: if param.nullable {
+                        "Ptr<c_char> | null"
+                    } else {
+                        "Ptr<c_char>"
+                    }
+                    .to_owned(),
+                    c: Type::Pointer(Pointee::Scalar(Scalar::Char)),
+                });
             }
             // `char *` without `const` is a buffer the callee may write into
             // (`g_strlcat`'s destination), which GIR still calls `utf8`. A
@@ -5240,6 +5316,10 @@ fn in_lengths(signature: &super::model::Signature) -> BTreeMap<usize, usize> {
         .collect()
 }
 
+/// `GLib`'s copier, declared as the raw pointer it returns (`g_strdup`'s
+/// symbol): what a values form passes a function that takes a string.
+pub(crate) const STRDUP_RAW: &str = "g_strdup_raw";
+
 /// Why a borrowed array a values form would copy is refused
 /// (`borrows_an_argument`).
 const BORROWED_FROM_AN_ARGUMENT: &str =
@@ -6786,6 +6866,127 @@ mod tests {
             "{:?}",
             binding.refused
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A string the callee takes and frees (`transfer full`): the raw form
+    /// takes the pointer, which must be GLib-allocated and says so, and the
+    /// values form takes the program's string and passes `GLib`'s copy of it
+    /// (`g_strdup_raw`). The control: with no `GLib` in the closure to copy
+    /// with, it stays refused.
+    #[test]
+    fn a_string_the_callee_takes_is_glibs_copy() {
+        use super::super::emit;
+        use super::{Reason, Shape, bind};
+        let binding_of = |glib: bool| {
+            let dir =
+                crate::bind_scratch::directory("gir-taken-string-test").expect("fixture directory");
+            let include = if glib {
+                r#"<include name="GLib" version="2.0"/>"#
+            } else {
+                ""
+            };
+            let xml = format!(
+                r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            {include}<c:include name="s.h"/><namespace name="S" version="1.0">
+            <function name="take" c:identifier="s_take"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="value" transfer-ownership="full"><type name="utf8" c:type="char*"/></parameter></parameters></function>
+            </namespace></repository>"#
+            );
+            std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+            if glib {
+                glib_beside(&dir);
+            }
+            let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+            let repository =
+                super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+            let binding = bind(
+                &repository,
+                &repository.namespaces["S"],
+                &super::super::facts::Facts::default(),
+            );
+            std::fs::remove_dir_all(dir).expect("remove fixture");
+            binding
+        };
+        let binding = binding_of(true);
+        let take = binding
+            .functions
+            .iter()
+            .find(|f| f.symbol == "s_take")
+            .unwrap_or_else(|| panic!("{:?}", binding.refused));
+        assert_eq!(
+            (
+                &take.parameters[0].1.shape,
+                take.parameters[0].1.ts.as_str()
+            ),
+            (&Shape::Taken { nullable: false }, "Ptr<c_char>")
+        );
+        let declarations = emit::declarations(&binding, "test");
+        for line in [
+            "   * @ntsCall s_take_values\n   */\n  export function s_take(value: string): void;",
+            "   * `value` must be GLib-allocated: the callee frees it (`g_strdup_raw` makes one).",
+            "  export function s_take_raw(value: Ptr<c_char>): void;",
+        ] {
+            assert!(
+                declarations.contains(line),
+                "missing {line:?}:\n{declarations}"
+            );
+        }
+        let companion = emit::companion(&binding, "test");
+        for line in [
+            "import { g_strdup_raw } from \"c:GLib-2.0\";",
+            "export function s_take_values(value: string): void {",
+            "  s_take_raw(g_strdup_raw(value));",
+        ] {
+            assert!(companion.contains(line), "missing {line:?}:\n{companion}");
+        }
+        let unfreed = binding_of(false);
+        assert!(
+            unfreed
+                .refused
+                .iter()
+                .any(|(name, reason)| name == "s_take" && *reason == Reason::OwnedString),
+            "{:?}",
+            unfreed.refused
+        );
+    }
+
+    /// `GLib`'s binding declares its copier as the raw pointer it returns,
+    /// `g_strdup_raw`, beside `g_strdup`, which still copies its result into
+    /// a `string`: what a values form passes a function that takes a string.
+    #[test]
+    fn glib_declares_its_copier_raw() {
+        use super::super::emit;
+        use super::bind;
+        let dir = crate::bind_scratch::directory("gir-strdup-raw-test").expect("fixture directory");
+        std::fs::write(
+            dir.join("GLib-2.0.gir"),
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="glib.h"/><namespace name="GLib" version="2.0" c:symbol-prefixes="g">
+            <function name="strdup" c:identifier="g_strdup"><return-value transfer-ownership="full" nullable="1"><type name="utf8" c:type="gchar*"/></return-value><parameters><parameter name="str" nullable="1"><type name="utf8" c:type="const gchar*"/></parameter></parameters></function>
+            </namespace></repository>"#,
+        )
+        .expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("GLib-2.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["GLib"],
+            &super::super::facts::Facts::default(),
+        );
+        let declarations = emit::declarations(&binding, "test");
+        for line in [
+            "  export function g_strdup(str: string | null): string | null;",
+            "   * @ntsSymbol g_strdup\n   */\n  export function g_strdup_raw(str: string): Ptr<c_char>;",
+        ] {
+            assert!(
+                declarations.contains(line),
+                "missing {line:?}:\n{declarations}"
+            );
+        }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

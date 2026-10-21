@@ -5,7 +5,9 @@ use std::fmt::Write;
 
 use nts_core::hir::native::Spelling;
 
-use super::map::{ArrayLength, Binding, Constructor, Element, Function, Mapped, Shape, TypeDecl};
+use super::map::{
+    ArrayLength, Binding, Constructor, Element, Function, Mapped, STRDUP_RAW, Shape, TypeDecl,
+};
 use super::model::Transfer;
 
 /// The module's head: what wrote it, its headers, and the types it imports.
@@ -827,20 +829,22 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
 
 /// Whether `function` has a values form (`values_forms`).
 fn has_values_form(function: &Function) -> bool {
-    (function.method.is_some() || hands_back_copy(function))
+    (function.method.is_some() || copies(function))
         && function.vfunc.is_none()
         && (matches!(function.result.shape, Shape::Array { .. })
-            || function
-                .parameters
-                .iter()
-                .any(|(_, mapped)| made_by_values_form(&mapped.shape)))
+            || function.parameters.iter().any(|(_, mapped)| {
+                made_by_values_form(&mapped.shape) || matches!(mapped.shape, Shape::Taken { .. })
+            }))
         && function.parameters.iter().all(|(name, mapped)| {
             function.throws.as_deref() == Some(name.as_str())
                 // One the caller may leave out -- `g_file_load_contents`'
                 // `etag_out` -- which the values form leaves out too.
                 || function.omissible.contains_key(name)
                 || made_by_values_form(&mapped.shape)
-                || matches!(mapped.shape, Shape::Handle { .. } | Shape::Lent { .. })
+                || matches!(
+                    mapped.shape,
+                    Shape::Handle { .. } | Shape::Lent { .. } | Shape::Taken { .. }
+                )
                 || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
         })
         && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
@@ -853,7 +857,7 @@ fn has_values_form(function: &Function) -> bool {
 /// match the raw form's own calls -- the values form's, a promise's -- and
 /// every call where the two take the same parameters.
 fn renamed(function: &Function) -> bool {
-    hands_back_copy(function) && has_values_form(function)
+    copies(function) && has_values_form(function)
 }
 
 /// Whether a parameter is a slot the values form makes, and does not take:
@@ -890,16 +894,22 @@ fn raw_call(function: &Function) -> String {
     }
 }
 
-/// Whether C hands back what the values form copies -- an array, as its
-/// result or through an out slot (`Shape::Array`), or a string through one
-/// (`Shape::Text`): a free function's values form too.
-fn hands_back_copy(function: &Function) -> bool {
+/// Whether the values form copies a value across the call -- an array C
+/// hands back, as its result or through an out slot (`Shape::Array`), a
+/// string through one (`Shape::Text`), or a string C takes, which it passes
+/// as `GLib`'s copy (`Shape::Taken`): a free function's values form too.
+fn copies(function: &Function) -> bool {
     function
         .parameters
         .iter()
         .map(|(_, mapped)| &mapped.shape)
         .chain([&function.result.shape])
-        .any(|shape| matches!(shape, Shape::Array { .. } | Shape::Text { .. }))
+        .any(|shape| {
+            matches!(
+                shape,
+                Shape::Array { .. } | Shape::Text { .. } | Shape::Taken { .. }
+            )
+        })
 }
 
 /// The overload of a function that returns its out values and copies the
@@ -956,10 +966,12 @@ fn values_result(function: &Function) -> String {
                 }),
         )
         .collect();
-    if values.len() == 1 {
-        values[0].clone()
-    } else {
-        format!("[{}]", values.join(", "))
+    match values.as_slice() {
+        // Nothing comes back: a values form that only passes a string C
+        // takes (`Shape::Taken`).
+        [] => "void".to_owned(),
+        [value] => value.clone(),
+        _ => format!("[{}]", values.join(", ")),
     }
 }
 
@@ -978,7 +990,18 @@ fn values_taken(function: &Function) -> Vec<(String, Mapped)> {
         .filter(|(name, mapped)| {
             !made_by_values_form(&mapped.shape) && function.throws.as_deref() != Some(name.as_str())
         })
-        .cloned()
+        .map(|(name, mapped)| match mapped.shape {
+            // A string C takes is the program's string here, which the values
+            // form passes as GLib's copy of it.
+            Shape::Taken { nullable } => (
+                name.clone(),
+                Mapped {
+                    ts: if nullable { "string | null" } else { "string" }.to_owned(),
+                    ..mapped.clone()
+                },
+            ),
+            _ => (name.clone(), mapped.clone()),
+        })
         .collect()
 }
 
@@ -1185,6 +1208,14 @@ fn notes(
         notes.push(
             "Caller owns the raw pointer result; this binding names no deallocator.".to_owned(),
         );
+    }
+    // The one ownership the type cannot check: a raw string C takes and frees.
+    for (name, mapped) in &function.parameters {
+        if matches!(mapped.shape, Shape::Taken { .. }) {
+            notes.push(format!(
+                "`{name}` must be GLib-allocated: the callee frees it (`{STRDUP_RAW}` makes one)."
+            ));
+        }
     }
     for name in &function.no_escape {
         notes.push(format!("@ntsNoEscape {name}"));
@@ -1417,6 +1448,13 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             .or_default()
             .push("g_free".to_owned());
     }
+    // GLib's copy of a string the callee takes (`Shape::Taken`).
+    if shapes().any(|shape| matches!(shape, Shape::Taken { .. })) {
+        imports
+            .entry("c:GLib-2.0".to_owned())
+            .or_default()
+            .push(STRDUP_RAW.to_owned());
+    }
     // What a broken promise ends the process with (`copy_array`).
     if copies {
         imports
@@ -1603,7 +1641,15 @@ fn values_wrapper(out: &mut String, function: &Function) {
         .parameters
         .iter()
         .filter(|(name, _)| function.throws.as_deref() != Some(name.as_str()))
-        .map(|(name, _)| name.as_str())
+        .map(|(name, mapped)| match mapped.shape {
+            // GLib's copy of the program's string, which the callee frees;
+            // NULL stays NULL.
+            Shape::Taken { nullable: false } => format!("{STRDUP_RAW}({name})"),
+            Shape::Taken { nullable: true } => {
+                format!("{name} === null ? null : {STRDUP_RAW}({name})")
+            }
+            _ => name.clone(),
+        })
         .collect::<Vec<_>>()
         .join(", ");
     let call = format!("{}({passed})", raw_call(function));
@@ -1612,16 +1658,16 @@ fn values_wrapper(out: &mut String, function: &Function) {
     } else {
         writeln!(body, "  const nts_result = {call};")
     };
-    let returned = if read.len() == 1 {
-        read[0].clone()
-    } else {
-        format!("[{}]", read.join(", "))
+    let returned = match read.as_slice() {
+        [] => String::new(),
+        [value] => format!(" {value}"),
+        _ => format!(" [{}]", read.join(", ")),
     };
     let _ = writeln!(
         out,
         "\n/** `{symbol}`, returning its out values. */\n\
          export function {symbol}_values({declared}): {result} {{\n\
-         {body}{after}\x20 return {returned};\n\
+         {body}{after}\x20 return{returned};\n\
          }}",
         symbol = function.symbol,
         result = values_result(function),
