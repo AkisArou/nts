@@ -344,6 +344,26 @@ public abstract class NtsView extends NtsAnyView {
         return view.offset + (i << view.shift);
     }
 
+    /**
+     * The byte index of element `i`, which the middle end proved in range.
+     *
+     * <p>No test, because none is left to make. `checked: false` on a view's
+     * `array.get` or `array.set` is `hir::bounds` answering that `i` is in
+     * `[0, length)` there, and it takes a view's length only where nothing in
+     * between can detach or resize the buffer: a constructed length only in a
+     * program that does neither, and a guard by `.length` only up to the first
+     * call (tests/programs/a-view-read-guarded-by-its-length-across-a-detaching-call).
+     * C indexes `NTS_VIEW_ITEMS` with the bare index for the same op.
+     *
+     * <p>What is left is the JVM's own check on the caller's `bytes` access: a
+     * transfer leaves the source no bytes, so a wrong proof past it faults,
+     * while a shrinking `resize` keeps them, so one past that reads a stale
+     * element, as it does in C.
+     */
+    static int atProved(NtsView view, int i) {
+        return view.offset + (i << view.shift);
+    }
+
     private static int outside(double index, int length) {
         throw new NtsRefusal(
             "index " + NtsRuntime.numberText(index) + " is outside [0, " + length + ")");

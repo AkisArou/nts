@@ -52,21 +52,17 @@ public final class NtsViewU32 extends NtsView {
 
     public static double get(NtsViewU32 view, double index) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        return (((b[a] & 0xFFL) | ((b[a + 1] & 0xFFL) << 8) | ((b[a + 2] & 0xFFL) << 16) | ((b[a + 3] & 0xFFL) << 24)));
+        return load(view.buffer.bytes, a) & 0xFFFFFFFFL;
     }
 
     public static void set(NtsViewU32 view, double index, double v) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        int x = NtsRuntime.toInt32(v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+        store(view.buffer.bytes, a, NtsRuntime.toInt32(v));
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static double getAt(NtsViewU32 view, int index) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        return (((b[a] & 0xFFL) | ((b[a + 1] & 0xFFL) << 8) | ((b[a + 2] & 0xFFL) << 16) | ((b[a + 3] & 0xFFL) << 24)));
+        return getInt(view, index) & 0xFFFFFFFFL;
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
@@ -74,21 +70,17 @@ public final class NtsViewU32 extends NtsView {
         setInt(view, index, NtsRuntime.toInt32(v));
     }
 
-    /** A view of the same buffer, not a copy. */
     /**
-     * The element as the JVM holds it -- and the one class that cannot get
-     * there by narrowing its own `double`.
+     * The element as the JVM holds it: the wrapped representation, in which a
+     * `u32` above 2^31 is the negative `int` with its bits.
      *
-     * <p>`getAt` answers a `u32` as an unsigned value up to 4294967295. `d2i`
-     * *saturates*, so 3000000000 would come back as 2147483647 rather than as
-     * the wrapped -1294967296 this backend holds a `u32` in. The bytes are read
-     * again here instead, which is the same work `getAt` does without the
-     * widening that has to be undone.
+     * <p>`getAt` answers the unsigned value, up to 4294967295, by widening
+     * this. The other way round fails: `d2i` *saturates*, so narrowing
+     * 3000000000 gives 2147483647 rather than the wrapped -1294967296.
      */
     public static int getInt(NtsViewU32 view, int index) {
         int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        return (b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24);
+        return load(view.buffer.bytes, a);
     }
 
     /**
@@ -99,10 +91,30 @@ public final class NtsViewU32 extends NtsView {
      */
     public static void setInt(NtsViewU32 view, int index, int value) {
         int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
+        store(view.buffer.bytes, a, value);
+    }
+
+    /** A read the middle end proved in range; see {@link NtsView#atProved}. */
+    public static int getProved(NtsViewU32 view, int index) {
+        return load(view.buffer.bytes, atProved(view, index));
+    }
+
+    /** A store the middle end proved in range; see {@link NtsView#atProved}. */
+    public static void setProved(NtsViewU32 view, int index, int value) {
+        store(view.buffer.bytes, atProved(view, index), value);
+    }
+
+    /** The element at byte `a`, as `getInt` answers it: every read goes through here. */
+    private static int load(byte[] b, int a) {
+        return (b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24);
+    }
+
+    /** And every store, of an `int` whose low bits are the element's. */
+    private static void store(byte[] b, int a, int value) {
         b[a] = (byte) value; b[a + 1] = (byte) (value >> 8); b[a + 2] = (byte) (value >> 16); b[a + 3] = (byte) (value >> 24);
     }
 
+    /** A view of the same buffer, not a copy. */
     public static NtsViewU32 subarray(NtsViewU32 view, double begin, double end) {
         int n = count(view);
         int from = relative(begin, n);

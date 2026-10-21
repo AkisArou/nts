@@ -52,46 +52,59 @@ public final class NtsViewF32 extends NtsView {
 
     public static double get(NtsViewF32 view, double index) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        return Float.intBitsToFloat((b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24));
+        return load(view.buffer.bytes, a);
     }
 
     public static void set(NtsViewF32 view, double index, double v) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        int x = Float.floatToRawIntBits((float) v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+        store(view.buffer.bytes, a, (float) v);
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static double getAt(NtsViewF32 view, int index) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        return Float.intBitsToFloat((b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24));
+        return getFloat(view, index);
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static void setAt(NtsViewF32 view, int index, double v) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        int x = Float.floatToRawIntBits((float) v); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+        setFloat(view, index, (float) v);
     }
 
-    /** A view of the same buffer, not a copy. */
     /**
-     * The element as an `F`, which is what `Float{32}` is here.
-     *
-     * <p>Narrowing is exact: `getAt` widened a `float` it had just read, and
-     * this undoes exactly that -- including the NaN payload, since
-     * `intBitsToFloat` produced it and `d2f` of a widened float is the float.
+     * The element as an `F`, which is what `Float{32}` is here: the `float`
+     * the bytes hold, which `getAt` widens.
      */
     public static float getFloat(NtsViewF32 view, int index) {
-        return (float) getAt(view, index);
+        int a = atInt(view, index);
+        return load(view.buffer.bytes, a);
     }
 
     public static void setFloat(NtsViewF32 view, int index, float value) {
-        setAt(view, index, value);
+        int a = atInt(view, index);
+        store(view.buffer.bytes, a, value);
     }
 
+    /** A read the middle end proved in range; see {@link NtsView#atProved}. */
+    public static float getProved(NtsViewF32 view, int index) {
+        return load(view.buffer.bytes, atProved(view, index));
+    }
+
+    /** A store the middle end proved in range; see {@link NtsView#atProved}. */
+    public static void setProved(NtsViewF32 view, int index, float value) {
+        store(view.buffer.bytes, atProved(view, index), value);
+    }
+
+    /** The element at byte `a`: every read goes through here. */
+    private static float load(byte[] b, int a) {
+        return Float.intBitsToFloat((b[a] & 0xFF) | ((b[a + 1] & 0xFF) << 8) | ((b[a + 2] & 0xFF) << 16) | (b[a + 3] << 24));
+    }
+
+    /** And every store. */
+    private static void store(byte[] b, int a, float value) {
+        int x = Float.floatToRawIntBits(value); b[a] = (byte) x; b[a + 1] = (byte) (x >> 8); b[a + 2] = (byte) (x >> 16); b[a + 3] = (byte) (x >> 24);
+    }
+
+    /** A view of the same buffer, not a copy. */
     public static NtsViewF32 subarray(NtsViewF32 view, double begin, double end) {
         int n = count(view);
         int from = relative(begin, n);

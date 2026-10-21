@@ -1411,7 +1411,74 @@ public final class RuntimeRegression {
         testPresenceHas(); System.out.println("presenceHas passed");
         testIntegerViewStores(); System.out.println("integer view stores passed");
         testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
+        testProvedViewAccess(); System.out.println("proven view accesses passed");
         System.out.println("PASS " + checks + " assertions");
+    }
+
+    /**
+     * A proven access touches the bytes the checked one does.
+     *
+     * <p>`getProved` and `setProved` compute the byte index with no test, so all
+     * they share with `getInt` and `setInt` is the layout, and the offset and
+     * the element width are where a position computed a second way goes wrong.
+     * Every class is used through a window that starts past its buffer's first
+     * element: stored proven into one buffer and checked into another, the two
+     * buffers compared whole, then read back both ways.
+     */
+    private static void testProvedViewAccess() {
+        int[] ints = {0, 1, -1, 127, -128, 255, 256, 300, 65535, -32769, 0x12345678,
+            Integer.MAX_VALUE, Integer.MIN_VALUE};
+        double[] numbers = {0.0, -0.0, 1.5, -2.25, 3.4028234663852886e38, 1e-45, Math.PI,
+            Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY};
+        NtsBuffer checked = NtsBuffer.allocate(64);
+        NtsBuffer proved = NtsBuffer.allocate(64);
+        NtsViewI8 i8 = NtsViewI8.part(checked, 8, 4), i8p = NtsViewI8.part(proved, 8, 4);
+        NtsViewU8 u8 = NtsViewU8.part(checked, 8, 4), u8p = NtsViewU8.part(proved, 8, 4);
+        NtsViewU8C u8c = NtsViewU8C.part(checked, 8, 4), u8cp = NtsViewU8C.part(proved, 8, 4);
+        NtsViewI16 i16 = NtsViewI16.part(checked, 8, 4), i16p = NtsViewI16.part(proved, 8, 4);
+        NtsViewU16 u16 = NtsViewU16.part(checked, 8, 4), u16p = NtsViewU16.part(proved, 8, 4);
+        NtsViewI32 i32 = NtsViewI32.part(checked, 8, 4), i32p = NtsViewI32.part(proved, 8, 4);
+        NtsViewU32 u32 = NtsViewU32.part(checked, 8, 4), u32p = NtsViewU32.part(proved, 8, 4);
+        NtsViewF32 f32 = NtsViewF32.part(checked, 8, 4), f32p = NtsViewF32.part(proved, 8, 4);
+        NtsViewF64 f64 = NtsViewF64.part(checked, 8, 4), f64p = NtsViewF64.part(proved, 8, 4);
+        for (int v : ints) {
+            for (int i = 0; i < 4; i++) {
+                int x = v + i * 0x01010101;
+                String at = x + " at " + i;
+                NtsViewI8.setInt(i8, i, x); NtsViewI8.setProved(i8p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Int8Array, stored " + at);
+                equal(NtsViewI8.getProved(i8p, i), NtsViewI8.getInt(i8, i), "Int8Array, read " + at);
+                NtsViewU8.setInt(u8, i, x); NtsViewU8.setProved(u8p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Uint8Array, stored " + at);
+                equal(NtsViewU8.getProved(u8p, i), NtsViewU8.getInt(u8, i), "Uint8Array, read " + at);
+                NtsViewU8C.setInt(u8c, i, x); NtsViewU8C.setProved(u8cp, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Uint8ClampedArray, stored " + at);
+                equal(NtsViewU8C.getProved(u8cp, i), NtsViewU8C.getInt(u8c, i), "Uint8ClampedArray, read " + at);
+                NtsViewI16.setInt(i16, i, x); NtsViewI16.setProved(i16p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Int16Array, stored " + at);
+                equal(NtsViewI16.getProved(i16p, i), NtsViewI16.getInt(i16, i), "Int16Array, read " + at);
+                NtsViewU16.setInt(u16, i, x); NtsViewU16.setProved(u16p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Uint16Array, stored " + at);
+                equal(NtsViewU16.getProved(u16p, i), NtsViewU16.getInt(u16, i), "Uint16Array, read " + at);
+                NtsViewI32.setInt(i32, i, x); NtsViewI32.setProved(i32p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Int32Array, stored " + at);
+                equal(NtsViewI32.getProved(i32p, i), NtsViewI32.getInt(i32, i), "Int32Array, read " + at);
+                NtsViewU32.setInt(u32, i, x); NtsViewU32.setProved(u32p, i, x);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Uint32Array, stored " + at);
+                equal(NtsViewU32.getProved(u32p, i), NtsViewU32.getInt(u32, i), "Uint32Array, read " + at);
+            }
+        }
+        for (double v : numbers) {
+            for (int i = 0; i < 4; i++) {
+                String at = v + " at " + i;
+                NtsViewF32.setFloat(f32, i, (float) v); NtsViewF32.setProved(f32p, i, (float) v);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Float32Array, stored " + at);
+                number(NtsViewF32.getProved(f32p, i), NtsViewF32.getFloat(f32, i), "Float32Array, read " + at);
+                NtsViewF64.setAt(f64, i, v); NtsViewF64.setProved(f64p, i, v);
+                check(Arrays.equals(checked.bytes, proved.bytes), "Float64Array, stored " + at);
+                number(NtsViewF64.getProved(f64p, i), NtsViewF64.getAt(f64, i), "Float64Array, read " + at);
+            }
+        }
     }
 
     /** ToInt32 from its definition, by exact arithmetic rather than the runtime's. */

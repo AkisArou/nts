@@ -50,28 +50,44 @@ public final class NtsViewF64 extends NtsView {
 
     public static double get(NtsViewF64 view, double index) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        return Double.longBitsToDouble(read64(b, a));
+        return load(view.buffer.bytes, a);
     }
 
     public static void set(NtsViewF64 view, double index, double v) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        write64(b, a, Double.doubleToRawLongBits(v));
+        store(view.buffer.bytes, a, v);
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static double getAt(NtsViewF64 view, int index) {
         int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        return Double.longBitsToDouble(read64(b, a));
+        return load(view.buffer.bytes, a);
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static void setAt(NtsViewF64 view, int index, double v) {
         int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        write64(b, a, Double.doubleToRawLongBits(v));
+        store(view.buffer.bytes, a, v);
+    }
+
+    /** A read the middle end proved in range; see {@link NtsView#atProved}. */
+    public static double getProved(NtsViewF64 view, int index) {
+        return load(view.buffer.bytes, atProved(view, index));
+    }
+
+    /** A store the middle end proved in range; see {@link NtsView#atProved}. */
+    public static void setProved(NtsViewF64 view, int index, double value) {
+        store(view.buffer.bytes, atProved(view, index), value);
+    }
+
+    /** The element at byte `a`: every read goes through here. */
+    private static double load(byte[] b, int a) {
+        return Double.longBitsToDouble(read64(b, a));
+    }
+
+    /** And every store. */
+    private static void store(byte[] b, int a, double value) {
+        write64(b, a, Double.doubleToRawLongBits(value));
     }
 
     /** A view of the same buffer, not a copy. */

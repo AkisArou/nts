@@ -52,45 +52,36 @@ public final class NtsViewU8C extends NtsView {
 
     public static double get(NtsViewU8C view, double index) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        return b[a] & 0xFF;
+        return load(view.buffer.bytes, a);
     }
 
     public static void set(NtsViewU8C view, double index, double v) {
         int a = at(view, index);
-        byte[] b = view.buffer.bytes;
-        b[a] = (byte) clamp(v);
+        store(view.buffer.bytes, a, clamp(v));
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static double getAt(NtsViewU8C view, int index) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        return b[a] & 0xFF;
+        return getInt(view, index);
     }
 
     /** The index already an `int`; see {@link NtsView#atInt}. */
     public static void setAt(NtsViewU8C view, int index, double v) {
-        int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
-        b[a] = (byte) clamp(v);
+        setInt(view, index, clamp(v));
     }
 
-    /** A view of the same buffer, not a copy. */
     /**
      * The element as the JVM holds it, for the indexing path.
      *
      * <p>`getAt` answers in a `double` because that is what the language reads
      * out of a typed array, but HIR types `array.get xs[i]` as the *element* --
      * `u8`, which is an `I` here -- so a backend that used `getAt` would emit a
-     * `d2i` per element to undo a widening the runtime had just done.
-     *
-     * <p>Narrowing back is exact for every element this returns: the widest is
-     * `i32`, and a `double` holds every one of those without loss. `u32` is the
-     * exception and has its own body -- see there.
+     * `d2i` per element to undo a widening the runtime had just done. `getAt`
+     * is this, widened.
      */
     public static int getInt(NtsViewU8C view, int index) {
-        return (int) getAt(view, index);
+        int a = atInt(view, index);
+        return load(view.buffer.bytes, a);
     }
 
     /**
@@ -101,10 +92,30 @@ public final class NtsViewU8C extends NtsView {
      */
     public static void setInt(NtsViewU8C view, int index, int value) {
         int a = atInt(view, index);
-        byte[] b = view.buffer.bytes;
+        store(view.buffer.bytes, a, value);
+    }
+
+    /** A read the middle end proved in range; see {@link NtsView#atProved}. */
+    public static int getProved(NtsViewU8C view, int index) {
+        return load(view.buffer.bytes, atProved(view, index));
+    }
+
+    /** A store the middle end proved in range; see {@link NtsView#atProved}. */
+    public static void setProved(NtsViewU8C view, int index, int value) {
+        store(view.buffer.bytes, atProved(view, index), value);
+    }
+
+    /** The element at byte `a`, as `getInt` answers it: every read goes through here. */
+    private static int load(byte[] b, int a) {
+        return b[a] & 0xFF;
+    }
+
+    /** And every store, of an `int` whose low bits are the element's, clamped. */
+    private static void store(byte[] b, int a, int value) {
         b[a] = (byte) (value < 0 ? 0 : value > 255 ? 255 : value);
     }
 
+    /** A view of the same buffer, not a copy. */
     public static NtsViewU8C subarray(NtsViewU8C view, double begin, double end) {
         int n = count(view);
         int from = relative(begin, n);
