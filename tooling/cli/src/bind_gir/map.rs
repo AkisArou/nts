@@ -418,6 +418,12 @@ pub(crate) enum Reason {
     /// program holds it in would free it too.
     BoxedTakenOver,
     StringOut,
+    /// Something C hands over (`transfer full`) that the values form would
+    /// copy and free, in a namespace whose closure has no `GLib`: GIR's
+    /// ownership means `GLib`'s allocator, `g_free`, which the form can name
+    /// only from `GLib`, and a guess at another would corrupt the heap where a
+    /// program and the library link different C runtimes.
+    Unfreeable,
     CallerAllocates,
     /// An array shape no lending or copying here covers; the detail
     /// says which shape, so the refusal ledger separates a missing
@@ -482,6 +488,10 @@ impl fmt::Display for Reason {
                 "a boxed record a parameter hands over, which the program's box would also free"
             ),
             Self::StringOut => write!(f, "a string out parameter"),
+            Self::Unfreeable => write!(
+                f,
+                "transfer full, and no GLib in the closure to free it with"
+            ),
             Self::CallerAllocates => {
                 write!(f, "an out parameter whose storage the caller allocates")
             }
@@ -2794,6 +2804,7 @@ impl<'a> Mapper<'a> {
             if param.direction != Direction::Out {
                 return Err(Reason::StringOut);
             }
+            self.frees(param.transfer)?;
             return Ok(Mapped {
                 shape: Shape::Text {
                     transfer: param.transfer,
@@ -3217,6 +3228,7 @@ impl<'a> Mapper<'a> {
             .and_then(|index| parameters.get(index))
             .map(|param| identifier(&param.name))
             .ok_or(Reason::Array("its length is not beside it"))?;
+        self.frees(result.transfer)?;
         let owned = match result.transfer {
             Transfer::None => false,
             Transfer::Full => true,
@@ -3287,6 +3299,18 @@ impl<'a> Mapper<'a> {
     /// strings, or numbers, and C's own -- one `*` more than its element has,
     /// or two through an out slot (`slot`); an array the caller allocates is
     /// spelled with fewer (`hb_face_get_table_tags`' `hb_tag_t *`).
+    /// Whether the values form can free what C hands over with `transfer`
+    /// once it has copied it: there is nothing to free, or `GLib` is in the
+    /// closure to free it with -- `g_free`, GIR's allocator for what a
+    /// library hands over ([`Reason::Unfreeable`]).
+    fn frees(&self, transfer: Transfer) -> Result<(), Reason> {
+        if transfer == Transfer::None || self.repository.namespaces.contains_key("GLib") {
+            Ok(())
+        } else {
+            Err(Reason::Unfreeable)
+        }
+    }
+
     fn copyable(&self, array: &ArrayRef, slot: bool) -> bool {
         let (Some(element), Some(c_type)) = (array.element.as_deref(), array.c_type.as_deref())
         else {
@@ -3436,6 +3460,9 @@ impl<'a> Mapper<'a> {
             {
                 return Err(Reason::Array(BORROWED_FROM_AN_ARGUMENT));
             }
+            if self.copyable(array, false) {
+                self.frees(signature.result.transfer)?;
+            }
             if let Some(mapped) =
                 self.returned_array(&signature.result, array, &signature.parameters)
             {
@@ -3481,6 +3508,9 @@ impl<'a> Mapper<'a> {
             {
                 return Err(Reason::Array(BORROWED_FROM_AN_ARGUMENT));
             }
+            if self.copyable(array, true) && param.direction == Direction::Out {
+                self.frees(param.transfer)?;
+            }
             if let Some(mapped) = self.out_array(param, array, &signature.parameters) {
                 return Ok(Some(mapped));
             }
@@ -3507,6 +3537,7 @@ impl<'a> Mapper<'a> {
         array: &ArrayRef,
         length: &str,
     ) -> Result<Mapped, Reason> {
+        self.frees(param.transfer)?;
         let owned = match param.transfer {
             Transfer::None => false,
             Transfer::Full => true,
@@ -6572,7 +6603,7 @@ mod tests {
             r#"<repository version="1.2"
             xmlns="http://www.gtk.org/introspection/core/1.0"
             xmlns:c="http://www.gtk.org/introspection/c/1.0">
-            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            <include name="GLib" version="2.0"/><c:include name="s.h"/><namespace name="S" version="1.0">"#,
             r#"<function name="names" c:identifier="s_names"><return-value transfer-ownership="full"><array length="0" zero-terminated="0" c:type="gchar**"><type name="utf8"/></array></return-value><parameters>"#,
             &length("count"),
             "</parameters></function>",
@@ -6592,6 +6623,7 @@ mod tests {
         ]
         .concat();
         std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        glib_beside(&dir);
         let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
         let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
         let binding = bind(
@@ -6720,12 +6752,50 @@ mod tests {
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
+    /// A `GLib` of no more than its name, beside a fixture namespace that
+    /// includes it (`<include name="GLib" version="2.0"/>`): what puts
+    /// `g_free` in the closure, which a values form frees what C hands over
+    /// with.
+    fn glib_beside(dir: &std::path::Path) {
+        std::fs::write(
+            dir.join("GLib-2.0.gir"),
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="glib.h"/><namespace name="GLib" version="2.0" c:symbol-prefixes="g"></namespace></repository>"#,
+        )
+        .expect("GLib GIR");
+    }
+
+    /// With no `GLib` in the closure, what C hands over has no allocator GIR
+    /// names to free it with: `s_open`'s string is refused as that, where
+    /// `s_peek`'s, which C lends, is still copied.
+    #[test]
+    fn what_c_hands_over_with_no_glib_to_free_it_is_refused() {
+        let (binding, dir) = string_out_binding(false);
+        assert!(
+            binding
+                .refused
+                .iter()
+                .any(|(name, reason)| name == "s_open" && *reason == super::Reason::Unfreeable),
+            "{:?}",
+            binding.refused
+        );
+        assert!(
+            binding.functions.iter().any(|f| f.symbol == "s_peek"),
+            "{:?}",
+            binding.refused
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     /// A binding of four functions, each with one string slot: `s_open`'s
     /// `name_used`, an out slot C hands over; `s_peek`'s `encoding`, one it
     /// lends and may leave NULL; `s_maybe`'s optional `etag`; and `s_skip`'s
-    /// inout `pos`, a string C reads first. And the scratch directory it was
-    /// read from, for the test to remove.
-    fn string_out_binding() -> (super::Binding, std::path::PathBuf) {
+    /// inout `pos`, a string C reads first -- with `GLib` in the closure where
+    /// `glib` says. And the scratch directory it was read from, for the test
+    /// to remove.
+    fn string_out_binding(glib: bool) -> (super::Binding, std::path::PathBuf) {
         let dir = crate::bind_scratch::directory("gir-string-out-test").expect("fixture directory");
         let function = |name: &str, more: &str, transfer: &str, c_type: &str| {
             format!(
@@ -6733,10 +6803,17 @@ mod tests {
             )
         };
         let xml = [
-            r#"<repository version="1.2"
+            if glib {
+                r#"<repository version="1.2"
             xmlns="http://www.gtk.org/introspection/core/1.0"
             xmlns:c="http://www.gtk.org/introspection/c/1.0">
-            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            <include name="GLib" version="2.0"/><c:include name="s.h"/><namespace name="S" version="1.0">"#
+            } else {
+                r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#
+            },
             &function("open", r#"direction="out""#, "full", "gchar**"),
             &function(
                 "peek",
@@ -6755,6 +6832,9 @@ mod tests {
         ]
         .concat();
         std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        if glib {
+            glib_beside(&dir);
+        }
         let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
         let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
         let binding = super::bind(
@@ -6773,7 +6853,7 @@ mod tests {
     #[test]
     fn a_string_c_writes_into_an_out_slot_is_text() {
         use super::{Shape, Transfer};
-        let (binding, dir) = string_out_binding();
+        let (binding, dir) = string_out_binding(true);
         let slot = |symbol: &str| {
             binding
                 .functions
@@ -6821,7 +6901,7 @@ mod tests {
     #[test]
     fn a_string_c_writes_into_an_out_slot_is_copied() {
         use super::super::emit;
-        let (binding, dir) = string_out_binding();
+        let (binding, dir) = string_out_binding(true);
         let declarations = emit::declarations(&binding, "test");
         for line in [
             "   * @ntsCall s_open_values\n   */\n  export function s_open(): [c_int, string];",
@@ -6866,7 +6946,7 @@ mod tests {
             r#"<repository version="1.2"
             xmlns="http://www.gtk.org/introspection/core/1.0"
             xmlns:c="http://www.gtk.org/introspection/c/1.0">
-            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            <include name="GLib" version="2.0"/><c:include name="s.h"/><namespace name="S" version="1.0">"#,
             r#"<function name="names" c:identifier="s_names"><return-value transfer-ownership="none"><array c:type="gchar**"><type name="utf8"/></array></return-value></function>"#,
             r#"<function name="output" c:identifier="s_output"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="output" direction="out" caller-allocates="0" transfer-ownership="full"><array zero-terminated="1" c:type="gchar**"><type name="guint8"/></array></parameter></parameters></function>"#,
             r#"<function name="buffer" c:identifier="s_buffer"><return-value transfer-ownership="full"><array name="GLib.PtrArray" c:type="GPtrArray*"><type name="utf8"/></array></return-value></function>"#,
@@ -6874,6 +6954,7 @@ mod tests {
         ]
         .concat();
         std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        glib_beside(&dir);
         let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
         let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
         let binding = bind(
