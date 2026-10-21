@@ -12686,6 +12686,7 @@ fn objc_field_properties(
                         dispatch: super::Dispatch::Selector(selector),
                         function: func.name.clone(),
                         signature: std::sync::Arc::new(imp),
+                        declared_at: None,
                     });
                     lowered.program.funcs.push(func);
                     layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
@@ -16719,9 +16720,9 @@ fn collect_declared_facts(program: &mut Program, snapshot: &SemanticSnapshot) ->
 
 /// Gather the headers, macros and pkg-config packages of the native binding
 /// modules the program holds a declaration from -- a function it calls, a
-/// record it lays out -- and the frameworks and libraries of the functions it
-/// calls. A package a module names that is not one pkg-config could take is
-/// refused, at the module.
+/// record it lays out, a virtual function it overrides -- and the frameworks
+/// and libraries of the functions it calls. A package a module names that is
+/// not one pkg-config could take is refused, at the module.
 ///
 /// A scan rather than a traversal: an ambient `declare module` is not reached
 /// by lowering, which follows values, and there is exactly one pass over the
@@ -16772,6 +16773,13 @@ fn collect_native_headers(program: &mut Program, snapshot: &SemanticSnapshot) ->
                 collect_native_modules(pointee, &mut reached, &mut seen);
             }
         }
+    }
+    // And a virtual function a class of the program's overrides: the module
+    // declaring it is one the program holds a declaration from, whose headers
+    // the witness asks about the slot -- whether or not the program also
+    // calls into that module.
+    for class in &program.foreign_classes {
+        reached.extend(class.methods.iter().filter_map(|method| method.declared_at));
     }
     let (mut headers, mut defines) = (Vec::new(), Vec::new());
     let (mut packages, mut refused) = (Vec::new(), Vec::new());
@@ -24246,6 +24254,7 @@ impl<'a> FuncBuilder<'a> {
             dispatch: super::Dispatch::Selector(slot),
             function,
             signature: std::sync::Arc::new(entry),
+            declared_at: self.declaring_module(declaration),
         };
         Ok((func, Some(method)))
     }
@@ -24591,6 +24600,7 @@ impl<'a> FuncBuilder<'a> {
             dispatch: super::Dispatch::Selector(format!("callback {name}")),
             function: func.name.clone(),
             signature: std::sync::Arc::new(entry),
+            declared_at: None,
         };
         Ok((func, Some(method)))
     }
@@ -24791,6 +24801,7 @@ impl<'a> FuncBuilder<'a> {
             dispatch: super::Dispatch::Slot { iid, slot },
             function: func.name.clone(),
             signature: std::sync::Arc::new(adapter),
+            declared_at: None,
         };
         Ok((func, Some(method)))
     }
@@ -25083,6 +25094,7 @@ impl<'a> FuncBuilder<'a> {
             dispatch: super::Dispatch::Selector(selector),
             function: func.name.clone(),
             signature: std::sync::Arc::new(imp),
+            declared_at: None,
         };
         Ok((func, Some(method)))
     }

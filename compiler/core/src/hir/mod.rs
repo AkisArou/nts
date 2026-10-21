@@ -2902,6 +2902,11 @@ pub struct ForeignMethod {
     pub dispatch: Dispatch,
     pub function: String,
     pub signature: std::sync::Arc<native::FnPointer>,
+    /// For a `GObject` override, the binding module declaring the virtual
+    /// function it fills: one the program holds a declaration from, whose
+    /// headers the witness asks about the slot. `None` for an Objective-C or
+    /// COM method, and a template's callback.
+    pub declared_at: Option<nts_semantic_schema::NodeId>,
 }
 
 /// How a foreign runtime reaches a method of a class the program writes: an
