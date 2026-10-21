@@ -238,8 +238,16 @@ export function withCachedObjects(printed, out, tools) {
 }
 
 /**
- * `sh -c 'ulimit -v <cap>; exec "$0" "$@"'` -- the argv that runs `command`
- * under an address-space cap, or with none when `tools.memoryCapKb` is unset.
+ * `sh -c 'ulimit -c 0; ulimit -v <cap>; exec "$0" "$@"'` -- the argv that runs
+ * `command` with no core file and under an address-space cap, or with no cap
+ * when `tools.memoryCapKb` is unset.
+ *
+ * **Why no core file.** A program this runs ends by `abort` whenever it
+ * declines a case -- that is its answer, not a crash -- and each abort had
+ * `systemd-coredump` capture, compress and store a core: about 13,000 in six
+ * hours of checks on 2026-10-21, on every CPU, the measurement CPUs among
+ * them. With the limit at 0 it still records the crash and stores nothing
+ * (`coredumpctl` says `none`); the signal still reaches the verdict.
  *
  * **Why a cap at all.** `identifiers/start-unicode-16.0.0-escaped.js` is 65 KB of
  * source and takes the frontend to **7.2 GB** resident and ten seconds: tsgo
@@ -258,8 +266,8 @@ export function withCachedObjects(printed, out, tools) {
  */
 export function capped(tools, command, args) {
   const cap = tools.memoryCapKb;
-  if (!cap) return ["-c", 'exec "$0" "$@"', command, ...args];
-  return ["-c", `ulimit -v ${Number(cap)}; exec "$0" "$@"`, command, ...args];
+  if (!cap) return ["-c", 'ulimit -c 0; exec "$0" "$@"', command, ...args];
+  return ["-c", `ulimit -c 0; ulimit -v ${Number(cap)}; exec "$0" "$@"`, command, ...args];
 }
 
 /**

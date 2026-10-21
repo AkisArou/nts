@@ -122,10 +122,18 @@ const REFUSALS: usize = 16;
 /// there is none. `prlimit` and `timeout` rather than the equivalents in this
 /// process: the limits have to apply to the child and to whatever it spawns,
 /// and both utilities are already how this runs its children.
+///
+/// **And no core file.** A case the compiled program declines ends it by
+/// `abort` -- that is the program answering, not crashing -- and each one had
+/// `systemd-coredump` capture, compress and store a core: 52,596 in one day of
+/// checks, most of them `nts check` binaries under `outcomes` and `agree`, on
+/// the measurement CPUs as readily as anywhere else. With the limit at 0 it
+/// still records the crash and stores nothing; the signal is unchanged.
 fn bounded(program: &str) -> std::process::Command {
     let mut command = std::process::Command::new("prlimit");
     command
         .arg(format!("--as={MEMORY}"))
+        .arg("--core=0")
         .arg("timeout")
         .arg(TIMEOUT)
         .arg(program);
@@ -159,8 +167,10 @@ fn bounded_native(program: &str) -> std::process::Command {
     if !address_sanitized() {
         return bounded(program);
     }
-    let mut command = std::process::Command::new("timeout");
+    let mut command = std::process::Command::new("prlimit");
     command
+        .arg("--core=0")
+        .arg("timeout")
         .arg(TIMEOUT)
         .arg(program)
         .env("ASAN_OPTIONS", "detect_leaks=0");
