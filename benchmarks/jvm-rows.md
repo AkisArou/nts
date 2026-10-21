@@ -16,7 +16,7 @@ meets them. This is the map; the row table below it is the current state.
 
 - 2026-10-15: six losing rows and a cause for each
 - 2026-10-17: store/remainder on the widened base, and four closure repeats
-- 2026-10-21: six losing rows of 68, and what moved
+- 2026-10-21: fifteen losing rows of 67, and what moved
 - Where the rows stand
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
@@ -263,13 +263,24 @@ conditions and compiler hashes are kept at
 `measurement-files-sha256.json` seals those raw files. Source/binary provenance
 and the five-phase binary/case list are in `manifest.json`.
 
-## 2026-10-21: six losing rows of 68, and what moved
+## 2026-10-21: fifteen losing rows of 67, and what moved
+
+**Corrected the same afternoon: this section first said 6 of 68.** The filter
+that counted split each line on spaces, so every row named `x (rc)` fell out
+of it, and the total came from a different parse that kept them.
 
 A full JVM sitting on main 3eb556096, 09:04-09:16: `nts-bench` with
 `NTS_BENCH_LANES=jvm`, CPU 4, `NTS_BENCH_ALONE=0`, load 15-37, **no quiet-core
-claim** -- ratios within the one run. 6 of 68 rows lose to node, against 14 of
-66 in the 2026-10-20 22:14 sitting at f3fa503b7; the string keys came after
-this one, and their row is re-measured below.
+claim** -- ratios within the one run. **15 of 67 rows lose to node**, against
+14 of 66 in the 2026-10-20 22:14 sitting at f3fa503b7:
+
+    objects 2.23  uniform-callback 1.89  json-stringify-inline 1.82  loop 1.71
+    uniform-callback-default 1.71  array-from 1.65  map-and-set 1.43  bytes 1.39
+    record-word-counts 1.34  json-scan 1.20  awfy-queens 1.20
+    uniform-callback-arguments 1.20  json-stringify-typed 1.06
+    generic-classes 1.03  node-utf8 1.02
+
+The six with a cause named so far, the string keys after this sitting:
 
 | row | jvm/node | jvm/Java | share | state |
 | --- | --- | --- | --- | --- |
@@ -279,6 +290,28 @@ this one, and their row is re-measured below.
 | `json-scan` | 1.20 | -- | `NtsRuntime.charCodeAt(String, D)D` is 21.9% of the profile: the checked read past the end that `scanNumber` relies on to answer NaN | open |
 | `awfy-queens` | 1.20 | 2.42 | core's threshold widening; the fractional-read fix costs it about 6.7% | core (MainClaude's queue) |
 | `generic-classes` | 1.03 | 1.22 | -- | near parity |
+
+**A second full sitting, on main e378abd7e, 15:36-15:49, with 4-5 quiet
+(with-lock's wait), load 15-52: 13 of 67 lose to node.**
+
+    loop 1.69  json-serialize 1.70  array-mutations 1.47  bytes 1.40
+    awfy-queens 1.28  map-and-set 1.26  uniform-callback 1.22
+    uniform-callback-default 1.18  json-scan 1.18  objects 1.14
+    generic-classes 1.07  node-utf8 1.05  json-stringify-typed 1.02
+
+`record-word-counts` (0.78) and `array-from` (0.88, d79bf53d3's table fill)
+left the list.
+
+**Two full sittings do not measure a row.** Rows nobody touched moved between
+them as far as the rows that changed: `json-serialize` 0.95 -> 1.70x node,
+`json-stringify-inline` 1.82 -> 0.91, `objects` 2.23 -> 1.14. The three that
+read as JVM regressions -- `json-serialize` (JVM time 1.83x the first
+sitting's, node's 1.03x), `json-parse` (1.48 / 1.14) and `bigint`
+(1.60 / 1.18) -- were then paired in one sitting, each compiler's classes
+under the bench's own driver, eight alternating rounds with 4-5 quiet:
+e378abd7e over e4003674c read 0.975-1.022, 0.999-1.056 and 0.893-1.094,
+medians about 1.00. Noise. A row's change is read from a pair, never from
+two sittings.
 
 **A proven typed-array access costs nothing to check on HotSpot.** ca427cfa8 /
 fa9548ea3 gave every view class one byte layout and `getProved`/`setProved` for
