@@ -360,15 +360,32 @@ function underTheLock(sha: string, tree: string): void {
   process.exit(r.status ?? 1);
 }
 
-/** The old marker, which lanes not yet using this tool still read. */
+/**
+ * The old marker, which lanes not yet using this tool still read.
+ *
+ * **A `land` marker found here is a dead landing's.** Only the landing that
+ * holds the landing lock writes one, and this process holds it now -- the lock
+ * is released when its holder exits, however it exits, while the marker is
+ * removed only by a `finally` that a killed process never reaches. On
+ * 2026-10-21 a landing whose session was killed left its marker twice, and the
+ * next landing waited on it forever while every lane queued behind; both times
+ * someone removed it by hand. A marker another tool wrote (a gate run by hand)
+ * is still waited for.
+ */
 function claimMarker(sha: string): void {
   let waiting = false;
   for (;;) {
     try {
-      writeFileSync(MARKER, `land ${sha} ${new Date().toISOString()}\n`, { flag: "wx" });
+      writeFileSync(MARKER, `land ${sha} ${new Date().toISOString()} pid ${process.pid}\n`, { flag: "wx" });
       return;
     } catch {
-      if (!waiting) say(`waiting for ${MARKER}: ${readFileSync(MARKER, "utf8").trim() || "(empty)"}`);
+      const held = existsSync(MARKER) ? readFileSync(MARKER, "utf8").trim() : "";
+      if (held.startsWith("land ")) {
+        say(`removing a dead landing's marker (this landing holds the lock it was written under): ${held}`);
+        rmSync(MARKER, { force: true });
+        continue;
+      }
+      if (!waiting) say(`waiting for ${MARKER}: ${held || "(empty)"}`);
       waiting = true;
       spawnSync("sleep", ["30"]);
     }

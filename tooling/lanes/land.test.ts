@@ -159,6 +159,18 @@ test("the gate and its grandchild exclude the measurement core, preserving an E-
   }
 });
 
+test("a marker a dead landing left behind does not stop the next", async () => {
+  const s = scratch();
+  const marker = join(s.home, ".cache/nts-parallel-20261004/mainctl/GATE-RUNNING");
+  writeFileSync(marker, "land deadbeef0000 2026-10-21T19:37:31.275Z\n");
+  const a = lane(s, "a", { "a.txt": "a\n" });
+  const r = await land(s, a).done;
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /removing a dead landing's marker/);
+  assert.ok(onMain(s, "a.txt"));
+  assert.ok(!existsSync(marker), "the landing removes its own marker when it is done");
+});
+
 test("one gate lands every landing queued behind the lock", async () => {
   const s = scratch();
   const a = lane(s, "a", { "a.txt": "a\n" });
