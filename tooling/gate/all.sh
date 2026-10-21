@@ -1324,7 +1324,11 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # green run. "Left ratcheting" above was right while this lane was climbing;
   # it has arrived, and a new example that disagrees now fails the day it
   # lands, as it does on the JVM.
-  backend_examples 393 "through the LLVM backend" exact 10 ); }
+  #
+  # 393 -> 663, 2026-10-21: the official LLVM step in landing gate
+  # b535ed908510 measured 663 of 663, the same ten partials.
+  # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/llvm.log.
+  backend_examples 663 "through the LLVM backend" exact 10 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: TypeScript objects live in the platform collector's
@@ -1632,7 +1636,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # a-cache-entry-prefix-read-from-an-erased-array graduating out of
   # refusals), same ten partials.
   # Evidence: ~/.cache/nts-jvm-codex/inherited-faces-20261019/pinned-faces2.log.
-  backend_examples 622 "through the JVM backend" exact 10 ); }
+  # 622 -> 663, 2026-10-21: the official JVM step in landing gate
+  # b535ed908510 measured 663 of 663, the same ten partials.
+  # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/jvm.log.
+  backend_examples 663 "through the JVM backend" exact 10 ); }
 # The programs through the WebAssembly backend, by the same `nts check` as
 # every other backend: the module the WasmGC backend emits, run by node through
 # its generated glue, against node running the source -- one pool, one order,
@@ -1647,7 +1654,10 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
 # where node answers. The partial ceiling tracks those remaining parity gaps;
 # the program floor tracks the measured corpus, including prior main changes.
 wasm() { ( NTS_BACKEND=wasm; export NTS_BACKEND
-  backend_examples 614 "through the Wasm backend" exact 10 ); }
+  # 614 -> 663, 2026-10-21: the official Wasm step in landing gate
+  # b535ed908510 measured 663 of 663, the same ten partials.
+  # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/wasm.log.
+  backend_examples 663 "through the Wasm backend" exact 10 ); }
 corpus() {
   # `NTS_SUITE_BIN` for the same reason `NTS_BIN` exists two steps up: under
   # `pinned.sh` the binaries are built into `CARGO_TARGET_DIR`, which is not
