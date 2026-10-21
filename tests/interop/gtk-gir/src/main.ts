@@ -51,6 +51,9 @@
 //                 storage the program allocates, set to 1 and raised to 2 by
 //                 GLib; and a `GData **`, an empty datalist the program
 //                 allocates, given a flag and asked for it back
+//   quark nts     an alias GLib declares, named as its C documentation names
+//                 it: a `GQuark`, the `Uint32` a string is interned as, and
+//                 the string it is the quark of
 //   font Sans     a record a function hands over, set on a context, and the
 //                 one the context's getter lends back, copied into a box
 //   lists 0 0 2   `null` for a lent `CStrings | null`, as NULL: to
@@ -177,6 +180,8 @@ import {
   g_key_file_load_from_data,
   g_key_file_new,
   g_key_file_unref,
+  g_quark_from_string,
+  g_quark_to_string,
   g_access,
   g_atomic_ref_count_compare,
   g_atomic_ref_count_inc,
@@ -193,7 +198,7 @@ import {
   g_bytes_equal,
   g_bytes_hash,
 } from "c:GLib-2.0";
-import type { GData } from "c:GLib-2.0";
+import type { GData, GQuark } from "c:GLib-2.0";
 import {
   G_TYPE_STRING,
   g_signal_group_new,
@@ -379,6 +384,9 @@ function boxedRecords(): void {
   }
   free(count);
   free(datalist);
+  // A name GLib gives a scalar, which the program names too.
+  const quark: GQuark = g_quark_from_string("nts");
+  console.log("quark " + g_quark_to_string(quark));
   // One handed over, and one a getter lends back, which the program copies.
   const given = pango_font_description_from_string("Sans 12");
   const context = pango_context_new();
