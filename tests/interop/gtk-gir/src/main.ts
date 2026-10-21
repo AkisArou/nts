@@ -99,6 +99,10 @@
 //                 values form and freed: the name of the file
 //                 `g_file_open_tmp` made, which existed, and does not once the
 //                 program closes and removes it
+//   records true 2 1.5  records C lays out with bit-fields and inline runs,
+//                 `Struct`s in the program's storage: a recursive mutex locked
+//                 twice by one thread, a log attribute's flags, a time
+//                 coordinate's axes
 //   taken 1 kept  a string the callee takes and frees: the program's, passed
 //                 to `gtk_string_list_take` as GLib's copy of it, which the
 //                 list then holds
@@ -131,7 +135,8 @@
 //                 `const GtkSvgLocation *` its error hands back
 //   mutex none    a union C names by its typedef, `GMutex`: locked and waited
 //                 on through calls compiled against glib.h, which none runs
-//                 -- no program can own a `GMutex` before `Sized<A, N>`
+//                 -- no program can own a `GMutex` before `Sized<A, N>` --
+//                 beside a `GCond` in the program's storage
 //   entry typed! 0  `GtkEditable`'s `set_text`, `get_text` and `text` on a
 //                 `GtkEntry`, and `GtkOrientable`'s orientation on a `GtkBox`:
 //                 an interface's methods on the classes implementing it
@@ -254,7 +259,14 @@ import {
   FileTest,
   g_byte_array_new,
   g_bytes_get_data,
+  g_cond_clear,
+  g_cond_init,
   g_cond_wait,
+  g_rec_mutex_clear,
+  g_rec_mutex_init,
+  g_rec_mutex_lock,
+  g_rec_mutex_trylock,
+  g_rec_mutex_unlock,
   g_mutex_lock,
   g_mutex_trylock,
   g_mutex_unlock,
@@ -276,7 +288,7 @@ import {
   g_bytes_equal,
   g_bytes_hash,
 } from "c:GLib-2.0";
-import type { GCond, GData, GMutex, GQuark } from "c:GLib-2.0";
+import type { GCond, GData, GMutex, GQuark, GRecMutex } from "c:GLib-2.0";
 import {
   G_TYPE_STRING,
   g_signal_group_new,
@@ -289,6 +301,7 @@ import {
 } from "c:GObject-2.0";
 import type { GTypeQuery } from "c:GObject-2.0";
 import { GdkRGBA, GdkRectangle, gdk_rgba_equal } from "c:Gdk-4.0";
+import type { GdkTimeCoord } from "c:Gdk-4.0";
 import { GdkPixbufAnimation, gdk_pixbuf_animation_is_static_image } from "c:GdkPixbuf-2.0";
 import { graphene_point_distance, graphene_point_t, graphene_point_zero } from "c:Graphene-1.0";
 import {
@@ -320,7 +333,7 @@ import {
   pango_layout_iter_get_run,
   pango_parse_markup,
 } from "c:Pango-1.0";
-import type { PangoRectangle } from "c:Pango-1.0";
+import type { PangoLogAttr, PangoRectangle } from "c:Pango-1.0";
 import type { CBool, ConstPtr, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
 import { local, sizeof, stringFrom, bytesFrom } from "c:memory";
@@ -587,6 +600,7 @@ function outParameters(): void {
   const taken = gtk_string_list_new(null);
   taken.take("kept");
   console.log("taken " + String(taken.get_n_items()) + " " + (taken.get_string(0) ?? "none"));
+  console.log("records " + records());
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
@@ -805,7 +819,7 @@ function main(): void {
     buffer.insert_text(0, "x", -1);
     console.log("inserted " + inserted);
     console.log("located " + svgLocated());
-    console.log("mutex " + waitLocked(null, null));
+    console.log("mutex " + waitLocked(null));
     // A detailed signal, as GJS connects one: `notify::label` runs for that
     // property's changes and no other's.
     let relabeled = 0;
@@ -927,22 +941,60 @@ function ascii(text: string): Uint8Array {
 
 /**
  * A union C names by its typedef, `GMutex`, compiled but not yet run: a
- * program cannot own one, or a `GCond`, until `Sized<A, N>` gives it
- * storage of the type's size -- nothing hands one out (`g_mutex_new` and
- * `g_cond_new` are gone), and a union is held only by its handle. Called
- * with nothing to lock, so each call here is compiled and checked against
- * glib.h's prototype -- `GMutex *`, which `struct GMutex *` is not -- and
- * none runs.
+ * program cannot own one until `Sized<A, N>` gives it storage of the type's
+ * size -- nothing hands one out (`g_mutex_new` is gone), and a union is held
+ * only by its handle. Called with nothing to lock, so the lock and the wait
+ * are compiled and checked against glib.h's prototypes -- `GMutex *`, which
+ * `struct GMutex *` is not -- and do not run. The `GCond` is the program's
+ * own, a `Struct` in heap storage -- a pointer GIR says nothing of may be
+ * kept, for all the binding can tell -- made and cleared either way.
  */
-function waitLocked(mutex: GMutex | null, cond: GCond | null): string {
-  if (mutex === null || cond === null) {
-    return "none";
+function waitLocked(mutex: GMutex | null): string {
+  const cond = malloc<GCond>(sizeof<GCond>());
+  if (cond === null) {
+    return "no-memory";
   }
-  g_mutex_lock(mutex);
-  g_cond_wait(cond, mutex);
-  const free = g_mutex_trylock(mutex);
-  g_mutex_unlock(mutex);
-  return String(free);
+  g_cond_init(cond);
+  let waited = "none";
+  if (mutex !== null) {
+    g_mutex_lock(mutex);
+    g_cond_wait(cond, mutex);
+    waited = String(g_mutex_trylock(mutex));
+    g_mutex_unlock(mutex);
+  }
+  g_cond_clear(cond);
+  free(cond);
+  return waited;
+}
+
+/**
+ * Records C lays out with bit-fields and runs of scalars inline, now
+ * `Struct`s in the program's storage: a recursive mutex, locked twice by one
+ * thread; a log attribute's flags (`Bits`); a time coordinate's axes
+ * (`CArray`).
+ */
+function records(): string {
+  // Heap storage, which C may hold the address of, as the `GCond` above.
+  const lock = malloc<GRecMutex>(sizeof<GRecMutex>());
+  if (lock === null) {
+    return "no-memory";
+  }
+  g_rec_mutex_init(lock);
+  g_rec_mutex_lock(lock);
+  const again = g_rec_mutex_trylock(lock);
+  if (again) {
+    g_rec_mutex_unlock(lock);
+  }
+  g_rec_mutex_unlock(lock);
+  g_rec_mutex_clear(lock);
+  free(lock);
+  const attr = local<PangoLogAttr>();
+  attr.is_line_break = 1;
+  attr.is_word_start = 1;
+  const coord = local<GdkTimeCoord>();
+  coord.axes[2] = 1.5;
+  return String(again) + " " + String(attr.is_line_break + attr.is_word_start + attr.is_white) + " " +
+    String(coord.axes[2]);
 }
 
 function lastLetter(item: unknown): string | null {
