@@ -89,6 +89,9 @@
 //   read 3 104,105,33  the caller's buffer a read fills, lent for the call: a
 //                 `Uint8Array` of the program's, which `g_input_stream_read`
 //                 writes into, answering how many bytes
+//   domain gtk-builder-error-quark 1281455214  functions GIR declares on an
+//                 enum, and not on the namespace: an error domain's quark, and
+//                 `g_unicode_script_to_iso15924`'s code for Latin, "Latn"
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -173,6 +176,7 @@ import {
   GtkLabel,
   GtkStringList,
   gtk_string_list_new,
+  gtk_builder_error_quark,
   type GtkWidget,
   GtkBox,
 } from "c:Gtk-4.0";
@@ -219,6 +223,7 @@ import {
   g_key_file_unref,
   g_quark_from_string,
   g_quark_to_string,
+  g_unicode_script_to_iso15924,
   g_variant_parse,
   G_KEY_FILE_DESKTOP_GROUP,
   g_access,
@@ -230,6 +235,7 @@ import {
   g_timeout_add_full,
   ChecksumType,
   KeyFileFlags,
+  UnicodeScript,
   type GError,
   g_bytes_new,
   g_datalist_get_flags,
@@ -522,6 +528,11 @@ function outParameters(): void {
   const read = g_input_stream_read(stream, buffer, null);
   console.log(
     "read " + String(read) + " " + String(buffer[0]) + "," + String(buffer[1]) + "," + String(buffer[2]),
+  );
+  // Functions GIR declares on an enum, and not on the namespace.
+  console.log(
+    "domain " + g_quark_to_string(gtk_builder_error_quark()) + " " +
+      String(g_unicode_script_to_iso15924(UnicodeScript.LATIN)),
   );
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
