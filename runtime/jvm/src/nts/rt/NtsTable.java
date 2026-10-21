@@ -41,6 +41,20 @@ import java.util.Arrays;
  * version tested the number fields first, and `map-entries-top-k` ran at
  * 1.058 of main in a paired run, 1.001 with the boxed column read first.
  *
+ * <p>**A door's cold path calls a real method directly, never a wrapper.**
+ * The doors -- `getString`, `setString`, `getNumber` and the rest -- are
+ * worth something only where C2 inlines them into the program's loop, and it
+ * declines a callee whose own compiled code is past `InlineSmallCode`, 2,500
+ * bytes. A method of 35 bytes or fewer (`MaxInlineSize`) inlines at any call
+ * site however cold, and inside it its own call counts as hot as every call
+ * to the wrapper, so a cold path through a small wrapper pulls everything
+ * behind it into the door. `insertString`'s miss through such a wrapper
+ * compiled `setString` to 5,232 bytes and `record-word-counts` ran at 1.032
+ * of main. So a door stores once, into the slot it found or the one a direct
+ * call to the slot method appends: `store(at >= 0 ? at : slotForString(k), v)`.
+ * A door's C2 size is printed by `-XX:+LogCompilation` (`stub_offset` of its
+ * `nmethod`), and a change to one says it.
+ *
  * <p>Cursors are absolute insertion positions. base lets clear() and removal of
  * an all-dead prefix reuse storage without invalidating outstanding cursors.
  * Interior holes cannot be reused: a surviving old entry may precede them.
@@ -319,11 +333,8 @@ public abstract class NtsTable {
         if (numberKeys == null) { return slotFor(NtsValue.ofNumber(key)); }
         long[] table = buckets;
         if (table.length == 0) {
-            int existing = findNumber(key);
-            if (existing >= 0) { return existing; }
-            reserveEntry();
-            if (used - head < LINEAR_LIMIT) { return appendNumber(key); }
-            rehash(16);
+            int found = slotForNumberUnindexed(key);
+            if (found >= 0) { return found; }
             table = buckets;
         }
         int h = hashNumber(key);
@@ -340,6 +351,26 @@ public abstract class NtsTable {
         int slot = appendNumber(key);
         buckets[p] = cell(h, slot);
         return slot;
+    }
+
+    /**
+     * {@link #slotForNumber} while the table has no index: the slot the scan
+     * finds or appends, or -1 when this append is the one that built the
+     * index, which the caller then probes.
+     *
+     * <p>A method of its own so the door carries one probe: inlined, this
+     * scan brought a whole {@link #findNumber} into `setNumber`, which
+     * compiled to 2,416 bytes beside `InlineSmallCode`'s 2,500. Whichever
+     * half a program's tables keep hot -- this one under the linear limit,
+     * the index above it -- is the half C2 inlines.
+     */
+    private int slotForNumberUnindexed(double key) {
+        int existing = findNumber(key);
+        if (existing >= 0) { return existing; }
+        reserveEntry();
+        if (used - head < LINEAR_LIMIT) { return appendNumber(key); }
+        rehash(16);
+        return -1;
     }
 
     /**
@@ -506,12 +537,7 @@ public abstract class NtsTable {
     private int findNumber(double key) {
         if (count == 0) { return -1; }
         double[] column = numberKeys;
-        if (buckets.length == 0) {
-            for (int i = head; i < used; i++) {
-                if (sameNumber(column[i], key) && !hole(i)) { return i; }
-            }
-            return -1;
-        }
+        if (buckets.length == 0) { return findNumberUnindexed(key, column); }
         int h = hashNumber(key);
         int mask = buckets.length - 1;
         int p = h & mask;
@@ -524,8 +550,16 @@ public abstract class NtsTable {
         }
     }
 
+    /** {@link #findNumber} before the table has an index; see {@link #findStringUnindexed}. */
+    private int findNumberUnindexed(double key, double[] column) {
+        for (int i = head; i < used; i++) {
+            if (sameNumber(column[i], key) && !hole(i)) { return i; }
+        }
+        return -1;
+    }
+
     /** The slot of a number key in any table: unboxed in a number key column, boxed in another. */
-    private int findNumberKey(double key) {
+    int findNumberKey(double key) {
         return keys == null ? findNumber(key) : find(NtsValue.ofNumber(key));
     }
 
@@ -962,15 +996,7 @@ public abstract class NtsTable {
         // A number key column holds nothing else.
         NtsValue[] column = keys;
         if (count == 0 || column == null) { return -1; }
-        if (buckets.length == 0) {
-            for (int i = head; i < used; i++) {
-                NtsValue candidate = column[i];
-                if (candidate != null && keyedByIdentity(candidate.tag) && candidate.ref == key) {
-                    return i;
-                }
-            }
-            return -1;
-        }
+        if (buckets.length == 0) { return findObjectUnindexed(key, column); }
         int h = hashObject(key);
         int mask = buckets.length - 1;
         int p = h & mask;
@@ -984,6 +1010,17 @@ public abstract class NtsTable {
             }
             p = (p + 1) & mask;
         }
+    }
+
+    /** {@link #findObject} before the table has an index; see {@link #findStringUnindexed}. */
+    private int findObjectUnindexed(Object key, NtsValue[] column) {
+        for (int i = head; i < used; i++) {
+            NtsValue candidate = column[i];
+            if (candidate != null && keyedByIdentity(candidate.tag) && candidate.ref == key) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -1040,16 +1077,7 @@ public abstract class NtsTable {
         // A number key column holds nothing else.
         NtsValue[] column = keys;
         if (count == 0 || column == null) { return -1; }
-        if (buckets.length == 0) {
-            for (int i = head; i < used; i++) {
-                NtsValue candidate = column[i];
-                if (candidate != null && candidate.tag == NtsValue.STRING
-                        && (candidate.ref == key || candidate.ref.equals(key))) {
-                    return i;
-                }
-            }
-            return -1;
-        }
+        if (buckets.length == 0) { return findStringUnindexed(key, column); }
         int h = hashString(key);
         int mask = buckets.length - 1;
         int p = h & mask;
@@ -1064,6 +1092,22 @@ public abstract class NtsTable {
             }
             p = (p + 1) & mask;
         }
+    }
+
+    /**
+     * {@link #findString} before the table has an index: a scan of the slots.
+     * Apart from the probe so a door inlines only the half its table keeps
+     * hot (the class doc).
+     */
+    private int findStringUnindexed(String key, NtsValue[] column) {
+        for (int i = head; i < used; i++) {
+            NtsValue candidate = column[i];
+            if (candidate != null && candidate.tag == NtsValue.STRING
+                    && (candidate.ref == key || candidate.ref.equals(key))) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -1092,20 +1136,50 @@ public abstract class NtsTable {
      */
     static void insertString(NtsTable map, String key, NtsValue value) {
         int at = map.findString(key);
-        if (at >= 0) {
-            map.store(at, value);
-            return;
+        // **A cold path calls a real method directly** (the class doc): one
+        // store, into the slot found or the one `slotForString` appends. A
+        // string probe is too large to carry twice, so the door finds, and
+        // only a miss -- rare where a table counts -- calls the append. Through
+        // `insert`, a wrapper, C2 took all of `slotFor` in: `setString`
+        // compiled to 5,232 bytes against `InlineSmallCode`'s 2,500, and
+        // `record-word-counts` ran at 1.032 of main, 19 rounds in 20.
+        map.store(at >= 0 ? at : map.slotForString(key), value);
+    }
+
+    /**
+     * {@link #slotFor} for a string key, unboxed: {@link #findString}'s probe,
+     * and the key boxed only when it is appended. {@link #insertString}'s
+     * miss, which is why it is a method of its own.
+     */
+    int slotForString(String key) {
+        if (key == null || keys == null) { return slotFor(NtsValue.ofString(key)); }
+        long[] table = buckets;
+        if (table.length == 0) {
+            int existing = findString(key);
+            if (existing >= 0) { return existing; }
+            reserveEntry();
+            if (used - head < LINEAR_LIMIT) { return append(NtsValue.ofString(key)); }
+            rehash(16);
+            table = buckets;
         }
-        // **`slotFor` itself, not `insert`.** `insert` is a wrapper small
-        // enough to inline anywhere, and inlined here its call to `slotFor`
-        // counts as hot as every `insert` does, so C2 took all of `slotFor`
-        // into this door: `setString` compiled to 5,232 bytes, past the
-        // 2,500 of `InlineSmallCode`, and stopped inlining at
-        // `record-word-counts`' hot site -- 1.032 of main with main's classes
-        // and this jar, 19 rounds in 20. Called directly, this miss's own
-        // frequency decides, and `slotFor` stays a call, as the old 268-byte
-        // `insert` did.
-        map.store(map.slotFor(NtsValue.ofString(key)), value);
+        int h = hashString(key);
+        int mask = table.length - 1;
+        int p = h & mask;
+        long cell;
+        while ((cell = table[p]) != 0L) {
+            int slot = (int) cell - 1;
+            NtsValue candidate = keys[slot];
+            if ((int) (cell >>> 32) == h && candidate.tag == NtsValue.STRING
+                    && (candidate.ref == key || candidate.ref.equals(key))) {
+                return slot;
+            }
+            p = (p + 1) & mask;
+        }
+        reserveEntry();
+        p = growIndex(h, p);
+        int slot = append(NtsValue.ofString(key));
+        buckets[p] = cell(h, slot);
+        return slot;
     }
 
     private static int hash(NtsValue value) {
