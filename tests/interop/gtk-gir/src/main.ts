@@ -194,7 +194,6 @@ import {
   gtk_svg_error_get_start,
   gtk_svg_load_from_bytes,
   gtk_svg_new,
-  type GtkSvgLocation,
   type GtkWidget,
   GtkBox,
 } from "c:Gtk-4.0";
@@ -321,7 +320,7 @@ import {
 import type { PangoRectangle } from "c:Pango-1.0";
 import type { CBool, ConstPtr, Ptr } from "c:types";
 import type { c_int, c_char } from "@nts/scalars";
-import { copy, local, sizeof, stringFrom, bytesFrom } from "c:memory";
+import { local, sizeof, stringFrom, bytesFrom } from "c:memory";
 import { free, malloc } from "c:stdlib";
 
 // G_PRIORITY_DEFAULT, which GLib defines as a macro rather than an enum.
@@ -890,8 +889,7 @@ function main(): void {
 /**
  * A struct C names by its typedef alone, which has no tag: where GtkSvg
  * found an element it ignores, read through the `const GtkSvgLocation *`
- * its error hands back. Copied out whole, to be read where a field is read:
- * through the program's own pointer, and not yet through C's `const` one.
+ * its error hands back.
  */
 function svgLocated(): string {
   const svg = gtk_svg_new();
@@ -900,12 +898,8 @@ function svgLocated(): string {
     const start = gtk_svg_error_get_start(problem);
     const end = gtk_svg_error_get_end(problem);
     if (start !== null && end !== null) {
-      const from = local<GtkSvgLocation>();
-      const to = local<GtkSvgLocation>();
-      copy(from, start);
-      copy(to, end);
-      located = String(from.lines) + ":" + String(from.line_chars) + "-" +
-        String(to.lines) + ":" + String(to.line_chars);
+      located = String(start.lines) + ":" + String(start.line_chars) + "-" +
+        String(end.lines) + ":" + String(end.line_chars);
     }
   });
   gtk_svg_load_from_bytes(
