@@ -308,4 +308,7 @@ pub(crate) struct ArrayRef {
     /// Ends with a zero element. GIR's default when neither a length nor a
     /// fixed size is given.
     pub(crate) zero_terminated: bool,
+    /// The `GLib` container it is, where GIR names one (`GLib.ByteArray`,
+    /// `GLib.PtrArray`): a struct, not a C array.
+    pub(crate) container: Option<String>,
 }

@@ -458,6 +458,7 @@ fn param(node: Node<'_, '_>, result: bool) -> Param {
                 Some(value) => value == "1",
                 None => length.is_none() && !fixed,
             },
+            container: attribute(array, "name").map(str::to_owned),
         })
     } else if child(node, "varargs").is_some() {
         TypeRef::Varargs

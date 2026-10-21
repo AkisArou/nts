@@ -486,6 +486,7 @@ impl Renamer<'_> {
                 element: element.clone(),
                 length: match length {
                     ArrayLength::Slot(slot) => ArrayLength::Slot(parameter(slot)),
+                    ArrayLength::Zero => ArrayLength::Zero,
                 },
                 transfer: *transfer,
             },

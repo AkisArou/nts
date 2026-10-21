@@ -378,6 +378,8 @@ pub(crate) enum Element {
 pub(crate) enum ArrayLength {
     /// The out slot named so, which the call fills (`Shape::Length`).
     Slot(String),
+    /// A zero after the last element: NULL after the last string.
+    Zero,
 }
 
 /// A signal's handler parameters as TypeScript spells them, and the named
@@ -3240,7 +3242,18 @@ impl<'a> Mapper<'a> {
         else {
             return false;
         };
+        // A GLib container (`GByteArray`) is a struct with its own accessors.
+        if array.container.is_some() {
+            return false;
+        }
         let strings = matches!(element, "utf8" | "filename");
+        // Bytes with no length beside them, ended by a zero (`g_spawn_sync`'s
+        // `standard_output`): those with one are `is_bytes`.
+        if matches!(element, "guint8" | "gchar" | "guchar") {
+            return array.length.is_none()
+                && array.zero_terminated
+                && c_type.matches('*').count() == 1 + usize::from(slot);
+        }
         let target = self
             .alias_target(element)
             .unwrap_or_else(|| element.to_owned());
@@ -3269,6 +3282,16 @@ impl<'a> Mapper<'a> {
         if matches!(element, "utf8" | "filename") {
             return Some((Element::Strings, self.raw_pointer("gchar", c_type)?));
         }
+        // Bytes as C spells them, `char` or not: `g_spawn_sync`'s `guint8`
+        // are a `gchar *`.
+        if matches!(element, "guint8" | "gchar" | "guchar") {
+            let spelled = if c_type.contains("char") && !c_type.contains("uchar") {
+                "gchar"
+            } else {
+                "guint8"
+            };
+            return Some((Element::Bytes, self.raw_pointer(spelled, c_type)?));
+        }
         let target = self
             .alias_target(element)
             .unwrap_or_else(|| element.to_owned());
@@ -3279,10 +3302,13 @@ impl<'a> Mapper<'a> {
     }
 
     /// Where an array C hands back says its length: the out slot GIR names,
-    /// which the call fills.
+    /// which the call fills, or else the zero ending it.
     fn array_length(array: &ArrayRef, parameters: &[Param]) -> Option<ArrayLength> {
+        let Some(index) = array.length else {
+            return array.zero_terminated.then_some(ArrayLength::Zero);
+        };
         let length = parameters
-            .get(array.length?)
+            .get(index)
             .filter(|param| param.direction != Direction::In)?;
         Some(ArrayLength::Slot(identifier(&length.name)))
     }
@@ -6365,6 +6391,86 @@ mod tests {
             ),
             "{declarations}"
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// An array C hands back ended by a zero is counted to it and copied:
+    /// strings to NULL, bytes to 0. A function whose copying form takes the
+    /// same parameters as its raw form declares the raw one under its own
+    /// name, so neither shadows the other, and the values form calls it. The
+    /// control is a `GLib` container, `GByteArray`, which is a struct: not
+    /// copied.
+    #[test]
+    fn an_array_ended_by_a_zero_is_copied() {
+        use super::super::emit;
+        use super::{ArrayLength, Element, Shape, bind};
+        let dir = crate::bind_scratch::directory("gir-zero-array-test").expect("fixture directory");
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<function name="names" c:identifier="s_names"><return-value transfer-ownership="none"><array c:type="gchar**"><type name="utf8"/></array></return-value></function>"#,
+            r#"<function name="output" c:identifier="s_output"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="output" direction="out" caller-allocates="0" transfer-ownership="full"><array zero-terminated="1" c:type="gchar**"><type name="guint8"/></array></parameter></parameters></function>"#,
+            r#"<function name="buffer" c:identifier="s_buffer"><return-value transfer-ownership="full"><array name="GLib.ByteArray" c:type="GByteArray*"><type name="guint8"/></array></return-value></function>"#,
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        let function = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol}: {:?}", binding.refused))
+        };
+        assert_eq!(
+            function("s_names").result.shape,
+            Shape::Array {
+                element: Element::Strings,
+                length: ArrayLength::Zero,
+                transfer: super::Transfer::None,
+            }
+        );
+        assert_eq!(
+            function("s_output").parameters[0].1.shape,
+            Shape::Array {
+                element: Element::Bytes,
+                length: ArrayLength::Zero,
+                transfer: super::Transfer::Full,
+            }
+        );
+        assert!(
+            binding.refused.iter().any(|(name, _)| name == "s_buffer"),
+            "{:?}",
+            binding.refused
+        );
+        let declarations = emit::declarations(&binding, "test");
+        for line in [
+            "   * @ntsCall s_names_values\n   */\n  export function s_names(): string[];",
+            "   * @ntsSymbol s_names\n   */\n  export function s_names_raw(): Ptr<Ptr<c_char> | null> | null;",
+        ] {
+            assert!(
+                declarations.contains(line),
+                "missing {line:?}:\n{declarations}"
+            );
+        }
+        let companion = emit::companion(&binding, "test");
+        for line in [
+            "  const nts_result = s_names_raw();",
+            "    while (nts_copy_at[nts_copy_length] !== null) {",
+            "    while (output_bytes_at[output_bytes_length] !== 0) {",
+            "  const output_bytes = bytesFrom(output_bytes_at, output_bytes_length);",
+        ] {
+            assert!(companion.contains(line), "missing {line:?}:\n{companion}");
+        }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

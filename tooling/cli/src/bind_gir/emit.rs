@@ -123,7 +123,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     if outs.contains(function.symbol.as_str()) {
                         values_method(&mut out, function);
                     }
-                    method(&mut out, function);
+                    method(&mut out, function, binding.self_typed);
                     if let Some(finish) = promises.get(function.symbol.as_str()) {
                         promise_method(&mut out, function, &promise_result(finish));
                     }
@@ -241,14 +241,15 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         .iter()
         .filter(|function| !function.method_only)
     {
-        if outs.contains(function.symbol.as_str()) && hands_back_array(function) {
+        let raw = renamed(function);
+        if raw {
             values_function(&mut out, function);
         }
         let defaulted = defaults(function, &function.parameters);
         notes(
             &mut out,
             function,
-            function.name != function.symbol,
+            function.name != function.symbol || raw,
             &defaulted,
             "  ",
         );
@@ -258,10 +259,15 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
             .map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts))
             .collect::<Vec<_>>()
             .join(", ");
+        let name = if raw {
+            raw_name(&function.name, binding.self_typed)
+        } else {
+            function.name.clone()
+        };
         let _ = writeln!(
             out,
-            "  export function {}({parameters}): {};",
-            function.name, function.result.ts
+            "  export function {name}({parameters}): {};",
+            function.result.ts
         );
     }
     out.push_str("}\n");
@@ -643,9 +649,14 @@ fn static_member(out: &mut String, function: &Function) {
 }
 
 /// A function as a method of its class: `this` is its instance.
-fn method(out: &mut String, function: &Function) {
+fn method(out: &mut String, function: &Function, gi: bool) {
     let Some((_, name)) = &function.method else {
         return;
+    };
+    let name = if renamed(function) {
+        raw_name(name, gi)
+    } else {
+        name.clone()
     };
     let defaulted = defaults(function, &function.parameters);
     let mut parameters = function.parameters.iter();
@@ -705,7 +716,7 @@ fn implementation(out: &mut String, binding: &Binding, name: &str, tag: &str, ow
     let _ = writeln!(out, "    readonly __c_methods?: {name}Methods;");
     for function in vfuncs {
         let mut member = String::new();
-        method(&mut member, function);
+        method(&mut member, function, false);
         // Optional, as C leaves a slot it does not fill to the default.
         let _ = write!(out, "{}", member.replacen("(this: ", "?(this: ", 1));
     }
@@ -779,26 +790,60 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
     binding
         .functions
         .iter()
-        .filter(|function| {
-            (function.method.is_some() || hands_back_array(function))
-                && function.vfunc.is_none()
-                && function.parameters.iter().any(|(_, mapped)| {
-                    matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. })
-                })
-                && function.parameters.iter().all(|(name, mapped)| {
-                    function.throws.as_deref() == Some(name.as_str())
-                        // One the caller may leave out -- `g_file_load_contents`'
-                        // `etag_out` -- which the values form leaves out too.
-                        || function.omissible.contains_key(name)
-                        || matches!(
-                            mapped.shape,
-                            Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
-                        )
-                        || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
-                })
-                && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
-        })
+        .filter(|function| has_values_form(function))
         .collect()
+}
+
+/// Whether `function` has a values form (`values_forms`).
+fn has_values_form(function: &Function) -> bool {
+    (function.method.is_some() || hands_back_array(function))
+        && function.vfunc.is_none()
+        && (matches!(function.result.shape, Shape::Array { .. })
+            || function.parameters.iter().any(|(_, mapped)| {
+                matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. })
+            }))
+        && function.parameters.iter().all(|(name, mapped)| {
+            function.throws.as_deref() == Some(name.as_str())
+                // One the caller may leave out -- `g_file_load_contents`'
+                // `etag_out` -- which the values form leaves out too.
+                || function.omissible.contains_key(name)
+                || matches!(
+                    mapped.shape,
+                    Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. } | Shape::Handle { .. } | Shape::Lent { .. }
+                )
+                || (mapped.shape == Shape::Other && !mapped.ts.starts_with("Ptr<") && !mapped.ts.contains("Closure<"))
+        })
+        && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
+}
+
+/// Whether the raw form of `function` is declared under its own name
+/// (`raw_name`): where it hands back an array its values form copies, whose
+/// copying form takes the function's name. TypeScript calls the first
+/// overload a call matches, and the copying form, declared first, would
+/// match the raw form's own calls -- the values form's, a promise's -- and
+/// every call where the two take the same parameters.
+fn renamed(function: &Function) -> bool {
+    hands_back_array(function) && has_values_form(function)
+}
+
+/// The name a renamed raw form (`renamed`) is declared under, its C symbol
+/// unchanged: `g_key_file_get_string_list_raw`, `getStringListRaw` on the
+/// `gi:` surface.
+fn raw_name(name: &str, gi: bool) -> String {
+    if gi {
+        format!("{name}Raw")
+    } else {
+        format!("{name}_raw")
+    }
+}
+
+/// What a generated wrapper calls for `function` itself: its raw form.
+fn raw_call(function: &Function) -> String {
+    if renamed(function) {
+        raw_name(&function.name, false)
+    } else {
+        function.symbol.clone()
+    }
 }
 
 /// Whether C hands back an array the values form copies (`Shape::Array`), as
@@ -1205,9 +1250,12 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         std::collections::BTreeMap::new();
     let promises = promise_forms(binding);
     for (start, finish) in &promises {
+        let through = !(read(finish) == 2 && settles(&finish.result));
         let own = imports.entry(binding.module.clone()).or_default();
         own.push(start.symbol.clone());
-        own.push(finish.symbol.clone());
+        if !through {
+            own.push(raw_call(finish));
+        }
         // Every name the wrapper's signature prints, to import from where it
         // is declared: read from the spelling, since the spelling is exactly
         // what has to resolve, and a `Declared<GtkBox, GtkWidget>` names two.
@@ -1232,7 +1280,7 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
         imports
             .entry(binding.module.clone())
             .or_default()
-            .push(function.symbol.clone());
+            .push(raw_call(function));
         // A record the wrapper makes is a value it imports, `new GtkTextIter()`.
         for (_, mapped) in &function.parameters {
             if let Shape::Filled { class } = &mapped.shape
@@ -1449,7 +1497,7 @@ fn values_wrapper(out: &mut String, function: &Function) {
         .map(|(name, _)| name.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    let call = format!("{}({passed})", function.symbol);
+    let call = format!("{}({passed})", raw_call(function));
     let _ = if function.result.ts == "void" {
         writeln!(body, "  {call};")
     } else {
@@ -1496,17 +1544,42 @@ fn copy_array(
     length: &ArrayLength,
     transfer: Transfer,
 ) {
+    // An array ended by a zero is counted to it first: NULL after its last
+    // string, 0 after its last number or byte.
+    let at = format!("{copy}_at");
     let count = match length {
         ArrayLength::Slot(slot) => format!("{slot}[0]"),
+        ArrayLength::Zero => {
+            let count = format!("{copy}_length");
+            let end = if *element == Element::Strings {
+                "null"
+            } else {
+                "0"
+            };
+            let _ = writeln!(after, "  const {at} = {pointer};");
+            let _ = writeln!(after, "  let {count} = 0;");
+            let _ = writeln!(after, "  if ({at} !== null) {{");
+            let _ = writeln!(after, "    while ({at}[{count}] !== {end}) {{");
+            let _ = writeln!(after, "      {count}++;");
+            let _ = writeln!(after, "    }}");
+            let _ = writeln!(after, "  }}");
+            count
+        }
     };
+    let counted = matches!(length, ArrayLength::Zero);
     let at = match element {
-        Element::Bytes => {
+        Element::Bytes if !counted => {
             let _ = writeln!(after, "  const {copy} = bytesFrom({pointer}, {count});");
             pointer.to_owned()
         }
+        Element::Bytes => {
+            let _ = writeln!(after, "  const {copy} = bytesFrom({at}, {count});");
+            at
+        }
         Element::Strings | Element::Scalar(_) => {
-            let at = format!("{copy}_at");
-            let _ = writeln!(after, "  const {at} = {pointer};");
+            if !counted {
+                let _ = writeln!(after, "  const {at} = {pointer};");
+            }
             let _ = writeln!(after, "  const {copy}: {} = [];", copied(element));
             let _ = writeln!(after, "  if ({at} !== null) {{");
             let _ = writeln!(after, "    for (let i = 0; i < {count}; i++) {{");
@@ -1650,7 +1723,7 @@ fn promise_wrapper(
         finish = if through {
             format!("{}_values", finish.symbol)
         } else {
-            finish.symbol.clone()
+            raw_call(finish)
         },
     );
 }
