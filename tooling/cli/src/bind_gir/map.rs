@@ -2523,9 +2523,13 @@ impl<'a> Mapper<'a> {
                 continue;
             }
             if let TypeRef::Array(array) = &param.ty
-                && param.direction == Direction::In
+                && (param.direction == Direction::In || lent_buffer(param, signature))
             {
-                let mapped = self.array_parameter(param, array, at, &signature.parameters)?;
+                let lent = Param {
+                    direction: Direction::In,
+                    ..param.clone()
+                };
+                let mapped = self.array_parameter(&lent, array, at, &signature.parameters)?;
                 c_parameters.push(mapped.c.clone());
                 no_escape.push(identifier(&param.name));
                 parameters.push((identifier(&param.name), mapped));
@@ -5145,7 +5149,11 @@ fn in_lengths(signature: &super::model::Signature) -> BTreeMap<usize, usize> {
         .iter()
         .enumerate()
         .filter_map(|(at, param)| match &param.ty {
-            TypeRef::Array(array) if param.direction == Direction::In => Some((array.length?, at)),
+            TypeRef::Array(array)
+                if param.direction == Direction::In || lent_buffer(param, signature) =>
+            {
+                Some((array.length?, at))
+            }
             _ => None,
         })
         .collect()
@@ -5171,6 +5179,36 @@ fn borrows_an_argument(transfer: Transfer, parameters: &[Param]) -> bool {
                     _ => false,
                 }
         })
+}
+
+/// Whether an out array is the caller's own buffer, which C writes into
+/// during the call and the program lends as it lends bytes in
+/// (`array_parameter`): bytes the caller allocates, `void *buffer` with its
+/// size in `gsize count` beside it -- `g_input_stream_read`'s. Not where C
+/// keeps it past the call, a read finished later (`Scope::Async`), which a
+/// lent array may not be.
+fn lent_buffer(param: &Param, signature: &super::model::Signature) -> bool {
+    let TypeRef::Array(array) = &param.ty else {
+        return false;
+    };
+    param.direction == Direction::Out
+        && param.caller_allocates
+        && matches!(
+            array.element.as_deref(),
+            Some("guint8" | "gchar" | "guchar")
+        )
+        && array
+            .c_type
+            .as_deref()
+            .is_some_and(|c| c.matches('*').count() == 1)
+        && array
+            .length
+            .and_then(|index| signature.parameters.get(index))
+            .is_some_and(|length| length.direction == Direction::In)
+        && !signature
+            .parameters
+            .iter()
+            .any(|p| p.scope == Some(Scope::Async))
 }
 
 /// An array of bytes with its length beside it: `guint8`, or a `gchar` array
@@ -6527,6 +6565,65 @@ mod tests {
                 && !companion.contains("4 !== 0"),
             "{companion}"
         );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// The caller's buffer a read fills -- `void *buffer` beside its `gsize
+    /// count` -- is lent as an array in is: the program's `Uint8Array`, which
+    /// C writes into during the call. The controls are each refused: the same
+    /// buffer kept past the call, by a read that finishes later, and one
+    /// spelled `gchar *`, whose writable spelling a lent array has no
+    /// qualifier for yet.
+    #[test]
+    fn the_callers_buffer_a_read_fills_is_lent() {
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-lent-buffer-test").expect("fixture directory");
+        let read = |name: &str, c_type: &str, more: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="gssize" c:type="gssize"/></return-value><parameters><parameter name="buffer" direction="out" caller-allocates="1" transfer-ownership="none"><array length="1" zero-terminated="0" c:type="{c_type}"><type name="guint8"/></array></parameter><parameter name="count"><type name="gsize" c:type="gsize"/></parameter>{more}</parameters></function>"#
+            )
+        };
+        let later = r#"<parameter name="callback" scope="async" closure="3"><type name="ReadyFunc" c:type="SReadyFunc"/></parameter><parameter name="user_data"><type name="gpointer" c:type="gpointer"/></parameter>"#;
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<callback name="ReadyFunc" c:type="SReadyFunc"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="user_data" closure="0"><type name="gpointer" c:type="gpointer"/></parameter></parameters></callback>"#,
+            &read("read", "void*", ""),
+            &read("read_later", "void*", later),
+            &read("receive", "gchar*", ""),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        let read = binding
+            .functions
+            .iter()
+            .find(|f| f.symbol == "s_read")
+            .unwrap_or_else(|| panic!("{:?}", binding.refused));
+        assert_eq!(
+            read.parameters
+                .iter()
+                .map(|(name, mapped)| format!("{name}: {}", mapped.ts))
+                .collect::<Vec<_>>(),
+            ["buffer: Counted<CBytes<\"void\">, AsNumber<c_size_t>, \"after\">"]
+        );
+        for refused in ["s_read_later", "s_receive"] {
+            assert!(
+                binding.refused.iter().any(|(name, _)| name == refused),
+                "{refused}: {:?}",
+                binding.refused
+            );
+        }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
