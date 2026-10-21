@@ -35,8 +35,8 @@ use crate::{
     numeric, objects, strings,
     types::{Physical, Slot},
 };
-use nts_core::hir::{Absent, Callee, HirType, ManagedType, OpKind, ValueId};
-use std::collections::{BTreeMap, BTreeSet};
+use nts_core::hir::{Absent, Callee, HirType, ManagedType, OpKind, UnOp, ValueId};
+use std::collections::BTreeMap;
 use wasm_encoder::{BlockType, HeapType, Instruction as I, RefType, ValType};
 
 #[cfg(test)]
@@ -370,10 +370,10 @@ fn entry(
 }
 
 /// The `get`s of a Map or a table holding numbers or booleans typed whose
-/// every user reads the value typed: a tag test, or a read as the stored type
-/// itself. Each answers its entry (`Helper::Entry`) in an `i32` local, and
-/// its users read the entry: nothing is boxed to be unboxed. Mapped to the
-/// collection the get reads.
+/// every user reads the value typed: a tag test, a truthiness test, or a read
+/// as the stored type itself (`hir::erased_uses`). Each answers its entry
+/// (`Helper::Entry`) in an `i32` local, and its users read the entry: nothing
+/// is boxed to be unboxed. Mapped to the collection the get reads.
 pub(crate) fn typed_gets(
     func: &nts_core::hir::Func,
     plan: &gc::Plan,
@@ -399,36 +399,13 @@ pub(crate) fn typed_gets(
             candidates.insert(id, (*map, stored.clone()));
         }
     }
-    if candidates.is_empty() {
-        return BTreeMap::new();
-    }
-    let mut boxed = BTreeSet::new();
-    for block in &func.blocks {
-        for &id in &block.ops {
-            let op = func.value(id);
-            for operand in nts_core::hir::operands_of(&op.kind) {
-                let Some((_, stored)) = candidates.get(&operand) else {
-                    continue;
-                };
-                let read_typed = match &op.kind {
-                    OpKind::TagOf { .. } => true,
-                    OpKind::Unerase { .. } => &op.ty == stored,
-                    _ => false,
-                };
-                if !read_typed {
-                    boxed.insert(operand);
-                }
-            }
-        }
-        boxed.extend(
-            nts_core::hir::operands_of_terminator(&block.terminator)
-                .into_iter()
-                .filter(|operand| candidates.contains_key(operand)),
-        );
-    }
+    let uses = nts_core::hir::erased_uses(func, &candidates.keys().copied().collect());
     candidates
         .into_iter()
-        .filter(|(id, _)| !boxed.contains(id))
+        .filter(|(id, (_, stored))| {
+            uses.get(id)
+                .is_some_and(|read| !read.erased && read.unerased_to.iter().all(|ty| ty == stored))
+        })
         .map(|(id, (map, _))| (id, map))
         .collect()
 }
@@ -472,29 +449,11 @@ pub(crate) fn typed_reads(
             candidates.insert(id, stored);
         }
     }
-    if candidates.is_empty() {
-        return BTreeMap::new();
-    }
-    let mut erased = BTreeSet::new();
-    for block in &func.blocks {
-        for &id in &block.ops {
-            let op = func.value(id);
-            for operand in nts_core::hir::operands_of(&op.kind) {
-                let Some(stored) = candidates.get(&operand) else {
-                    continue;
-                };
-                if !matches!(op.kind, OpKind::Unerase { .. } if &op.ty == stored) {
-                    erased.insert(operand);
-                }
-            }
-        }
-        erased.extend(
-            nts_core::hir::operands_of_terminator(&block.terminator)
-                .into_iter()
-                .filter(|operand| candidates.contains_key(operand)),
-        );
-    }
-    candidates.retain(|id, _| !erased.contains(id));
+    let uses = nts_core::hir::erased_uses(func, &candidates.keys().copied().collect());
+    candidates.retain(|id, stored| {
+        uses.get(id)
+            .is_some_and(|read| read.only_unerased_to(stored))
+    });
     candidates
 }
 
@@ -557,6 +516,38 @@ pub(crate) fn typed_value(
     b.instruction(&field(&c, c.value_field()));
     b.load(entry)?;
     b.instruction(&I::ArrayGet(values));
+    Ok(())
+}
+
+/// Whether a typed get's value is truthy: there, and its stored number or
+/// boolean truthy as `numeric` tests one. `(counts[w] || 0) + 1` asks this of
+/// every lookup, and answered it from a box built for the test.
+pub(crate) fn typed_truthy(
+    b: &mut Body<'_, '_>,
+    op: UnOp,
+    entry: ValueId,
+    map: ValueId,
+) -> Result<(), Failure> {
+    let c = b.types().collection(b.ty(map))?.clone();
+    let (Some(values), Some(stored)) = (c.values, c.value.as_ref()) else {
+        return Err(Failure::Invariant("a typed get of a Set".into()));
+    };
+    let slot = crate::types::value_slot(stored)?;
+    b.load(entry)?;
+    b.instructions(&[
+        I::I32Const(0),
+        I::I32GeS,
+        I::If(BlockType::Result(ValType::I32)),
+    ]);
+    b.load(map)?;
+    b.instruction(&field(&c, c.value_field()));
+    b.load(entry)?;
+    b.instruction(&I::ArrayGet(values));
+    numeric::truth_on_stack(&mut b.code, slot);
+    b.instructions(&[I::Else, I::I32Const(0), I::End]);
+    if op == UnOp::Not {
+        b.instruction(&I::I32Eqz);
+    }
     Ok(())
 }
 

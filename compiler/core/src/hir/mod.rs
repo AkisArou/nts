@@ -29,6 +29,7 @@ mod boxing;
 pub mod builtin;
 pub mod dce;
 pub mod elements;
+mod erased_uses;
 pub mod escape;
 mod exposure;
 pub mod facts;
@@ -98,6 +99,10 @@ use nts_semantic_schema::{Origin, SemanticSnapshot, TypeId};
 /// [`Layout`]'s `types` and an [`OpKind::InstanceOf`]'s `classes` are both made
 /// of these -- and a backend that has to read one needs to be able to name it.
 pub use nts_semantic_schema::TypeId as ClassId;
+
+/// How the uses of an erased answer take it: the walk each backend reads
+/// before it decides a box need not be built.
+pub use erased_uses::{ErasedUses, erased_uses};
 
 /// How a value is represented in a machine.
 ///

@@ -220,6 +220,9 @@ pub(crate) fn truthy(b: &mut Body<'_, '_>, op: UnOp, value: ValueId) -> Result<(
     if !matches!(op, UnOp::Truthy | UnOp::Not) {
         return Err(format!("erased unary {op:?}").into());
     }
+    if let Some(map) = b.typed_get(value) {
+        return crate::collections::typed_truthy(b, op, value, map);
+    }
     b.load(value)?;
     erased::call(b, Helper::Truthy)?;
     if op == UnOp::Not {

@@ -425,6 +425,60 @@ fn source_collection_tables_agree_with_node() {
     assert_eq!(output["cases"], 132, "{output}");
 }
 
+/// A record's entry asked whether it is truthy -- `||`, `!`, an `if`, a
+/// conditional -- is read from the entry its lookup found, a stored number or
+/// boolean as itself: no `get` builds a box for `value.truthy` to test. A read
+/// handed on erased keeps both. (A write's erased value may still be boxed and
+/// dropped beside a `set`; that box is not the read's.)
+#[test]
+fn a_record_entry_asked_whether_truthy_is_read_from_its_entry() {
+    let fixture = common::repository().join("tests/wasm/record-truthiness");
+    let emitted = emit_project(&fixture);
+    let names = common::function_names(&emitted.bytes);
+    let imported = imported_functions(&emitted.bytes);
+    let boxing: Vec<usize> = names
+        .iter()
+        .enumerate()
+        .filter(|(_, name)| {
+            *name == "value.truthy" || (name.starts_with("collection<") && name.ends_with(">.Get"))
+        })
+        .map(|(at, _)| at)
+        .collect();
+    let calls = |caller: &str| -> Vec<&String> {
+        let bodies: Vec<usize> = names
+            .iter()
+            .enumerate()
+            .filter(|(_, name)| *name == caller || name.starts_with(&format!("{caller}#")))
+            .map(|(at, _)| at)
+            .collect();
+        assert!(!bodies.is_empty(), "no function `{caller}` in {names:?}");
+        bodies
+            .into_iter()
+            .flat_map(|at| calls_from(&emitted.bytes, at - imported))
+            .filter(|callee| boxing.contains(callee))
+            .map(|callee| &names[callee])
+            .collect()
+    };
+    for caller in ["either", "tested", "counted", "seen"] {
+        let boxed = calls(caller);
+        assert!(boxed.is_empty(), "`{caller}` still boxes through {boxed:?}");
+    }
+    assert!(
+        !calls("passed").is_empty(),
+        "`passed` hands its read on erased and must keep the box"
+    );
+    let output = common::run_with_node_flags(
+        "record-truthiness",
+        &emitted,
+        "tooling/wasm/check-example.mjs",
+        &[&fixture.join("src/main.ts")],
+        &["--experimental-transform-types"],
+    );
+    assert_eq!(output["cases"], 85, "{output}");
+    assert_eq!(output["declined"], 0, "{output}");
+    assert_eq!(output["refused"], serde_json::json!({}), "{output}");
+}
+
 /// Objects as collection keys compare by identity: same-shaped objects are two
 /// keys, an identity hash survives growth, and erased objects and functions
 /// hash the same way.

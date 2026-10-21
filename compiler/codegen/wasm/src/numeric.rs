@@ -306,7 +306,7 @@ fn push_as(b: &mut Body<'_, '_>, value: ValueId, ty: &HirType) -> Result<(), Fai
     convert(b, &from, ty)
 }
 
-fn truth_on_stack(code: &mut ir::Code, slot: Slot) {
+pub(crate) fn truth_on_stack(code: &mut ir::Code, slot: Slot) {
     // abs(x)>0 is false for both zeroes AND NaN; x!=0 would be true for NaN.
     match slot {
         Slot::I32 => {
