@@ -137,13 +137,43 @@ done
 
 # Only reached when *this* shell created the directory, which is the whole point.
 echo $$ > "$lock/pid"
-trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
+# The lock goes with the shell, however it ends -- and a signal *ends* it. A
+# trap on INT or TERM that only released the lock let the shell carry on from
+# where the signal found it: a `kill` during the quiet wait released the lock
+# and then ran the command anyway, unlocked. On 2026-10-21 that started a
+# no-GC count driver the caller had just stopped, and it was OOM-killed at
+# 21.9 GB. So a signal exits, with the shell's own status for it, and the exit
+# releases.
+#
+# **And it ends now, with what it started.** A shell runs a trap only once its
+# *foreground* command has finished, so a `kill` during the quiet wait took
+# effect when the wait did, minutes later, holding the lock and the CPUs until
+# then. Each child therefore runs in a session of its own and is waited for:
+# `wait` returns at the signal, and the signal goes to the child's whole
+# process group -- a count script's drivers, `perf`'s program -- rather than
+# to the one process `$!` names. The command reads no standard input: an
+# asynchronous command's is /dev/null, and nothing measured here reads one.
+child=
+stop() {
+    if [ -n "$child" ]; then
+        kill -TERM -- "-$child" 2>/dev/null || true
+    fi
+    exit "$1"
+}
+trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null || true' EXIT
+trap 'stop 130' INT
+trap 'stop 143' TERM
+run() {
+    setsid "$@" &
+    child=$!
+    wait "$child"
+}
 
 if [ "$quiet_wait" = true ]; then
-    node "$(dirname -- "$0")/measurement.ts"
+    run node "$(dirname -- "$0")/measurement.ts"
 else
     echo "with-lock: --no-quiet-wait: lock held, reserved-core quiet wait skipped (instruction counting admits per cell; no quiet-core claim)" >&2
 fi
 NTS_BENCH_CPUS=4
 export NTS_BENCH_CPUS
-"$@"
+run "$@"
