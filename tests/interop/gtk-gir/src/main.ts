@@ -76,6 +76,11 @@
 //   keyfile true 5 no-error
 //                 a key file loaded -- its `gboolean` answer a boolean -- and
 //                 read, and the `GError **` slot beside each call left null
+//   copied x|y|z 1,2,3 argv a|b c  arrays C hands back with their length in
+//                 a slot, copied and freed as their transfer says: a key
+//                 file's string list by the method's values form, its integer
+//                 list by the free function's, and `g_shell_parse_argv`'s
+//                 `argv`, an array C writes into an out slot
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -192,6 +197,8 @@ import {
   g_error_free,
   g_idle_add_full,
   g_key_file_get_integer,
+  g_key_file_get_integer_list,
+  g_shell_parse_argv,
   g_free,
   g_malloc0,
   g_memdup2,
@@ -481,6 +488,15 @@ function outParameters(): void {
   const loaded = g_key_file_load_from_data(keys, text, text.length, KeyFileFlags.NONE, error);
   const k = g_key_file_get_integer(keys, "a", "k", error);
   console.log("keyfile " + String(loaded) + " " + String(k) + " " + (error[0] === null ? "no-error" : "error"));
+  // Arrays C hands back, their length in a slot, copied.
+  const lists = g_key_file_new();
+  const listed = "[l]\ns=x;y;z\nn=1;2;3\n";
+  g_key_file_load_from_data(lists, listed, listed.length, KeyFileFlags.NONE, error);
+  console.log(
+    "copied " + lists.get_string_list("l", "s").join("|") + " " +
+      g_key_file_get_integer_list(lists, "l", "n").join(",") + " argv " +
+      g_shell_parse_argv("a 'b c'").join("|"),
+  );
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
