@@ -21,6 +21,7 @@ meets them. This is the map; the row table below it is the current state.
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
 - Asked and answered -- do not spend a second evening on these
+  - `json-scan`'s checked `charCodeAt` is platform, and an `int` door does not move it
   - The worktree these numbers were taken from was eight hours stale
   - `absences` is the `uirem` residual, and it is 34%
   - `in-narrowing`, characterised: everything matches except the slot traffic
@@ -682,6 +683,30 @@ way. Ask what a value is held as, not how many instructions move it.
   emit. There is no codegen gap in this row. It is `arrays_can_grow` being
   whole-program -- one `push` anywhere puts every array behind the wrapper --
   and per-array growability is `hir::elements`', not this lane's.
+
+### `json-scan`'s checked `charCodeAt` is platform, and an `int` door does not move it
+
+2026-10-21. `json-scan` loses to node on the JVM (1.13-1.24x across six
+rounds) and `NtsRuntime.charCodeAt(String, D)D` is 21.9% of its profile:
+`scanNumber` reads past the end on purpose, the NaN there stops each digit
+loop, so its reads stay checked. **Core's share is small**: C pays the same
+checked reads and runs the row at 0.64-0.70x node. **The JVM's own spelling
+is not it either.** The cursor is an `i32`, and the call widened it for the
+`double` form to truncate back, so a branch (jvm/int-unit-at, 182798246)
+gave a checked read at an Int-kind index `charCodeAt(String, int)`:
+
+    json-scan, JVM, int door / main, per round (alternating, CPU 4, load 10-33,
+    no quiet-core claim): 0.955 1.014 0.996 1.000 1.062 1.004 -- median 1.00
+
+C2 had removed the round trip itself. With the door in place `charCodeAt` is
+still 23.8% of samples, beside `String.length`, `String.checkIndex` and
+`StringLatin1.charAt`: the cost is HotSpot's `String` read -- our range test,
+its length, `charAt`'s own index check and the compact-string coder branch --
+where C makes one test over a unit array. **Platform**, and not landed.
+
+Of those four tests only the first is ours, and it goes wherever core proves
+a read in range (MainClaude's bounds work, re-reads first), so the column may
+move a little then with no JVM change.
 
 ### The worktree these numbers were taken from was eight hours stale
 
