@@ -368,7 +368,10 @@ fn check(rest: &[String]) -> Result<()> {
 /// `.values.ts` and one `.refused.txt` each. Any `--gir-dir` is searched
 /// first, then `GI_GIR_PATH`, `XDG_DATA_DIRS` and the system directories.
 /// `--header`, `--package` and `--define`, each `Namespace:value`, add to that
-/// namespace what its GIR does not name (`bind_gir::Extra`).
+/// namespace what its GIR does not name (`bind_gir::Extra`), after what a
+/// build adds by default (`gir_surface::command_extras`): the command binds
+/// what a program built against the namespace sees, and the first line of
+/// each file it writes names both.
 fn bind_gir(rest: &[String]) -> Result<()> {
     let root = rest
         .iter()
@@ -410,6 +413,7 @@ fn bind_gir(rest: &[String]) -> Result<()> {
         };
         into.push(value.to_owned());
     }
+    let extras = gir_surface::command_extras(root, &search, &extras);
     bind_gir::run(&bind_gir::Request {
         root: root.clone(),
         search,

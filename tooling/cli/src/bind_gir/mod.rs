@@ -89,8 +89,10 @@ pub(crate) fn request_of(extras: &Extras) -> String {
 
 /// The request's extras added to the closure, each checked: the namespace is
 /// in the closure, and each header compiles under its namespace's flags and
-/// macros. A header that declares none of the namespace's callables its own
-/// headers do not is said so, since it would bind nothing.
+/// macros. A header that declares none of the namespace's callables the
+/// headers before it do not is said so by name, since it would bind nothing:
+/// judged in order, so a default a build adds first (`gio/gnetworking.h`)
+/// hides no idle header the command names after it.
 fn apply(repository: &mut model::Repository, root: &str, extras: &Extras) -> Result<()> {
     // The request names a namespace as the root is named, `Gio-2.0`; the
     // repository keys it by name alone.
@@ -137,15 +139,18 @@ fn apply(repository: &mut model::Repository, root: &str, extras: &Extras) -> Res
             })?;
         }
         let callables = callables(namespace);
-        let mut all = namespace.headers.clone();
-        all.extend(extra.headers.iter().cloned());
-        let with = crate::bind_header::preamble(&namespace.defines, &all);
-        let (before, _) = facts::prototypes(&own, &flags, &callables, &[])?;
-        let (after, _) = facts::prototypes(&with, &flags, &callables, &[])?;
-        if after.len() <= before.len() {
-            eprintln!(
-                "  warning: the requested headers declare none of {name}'s callables its own do not"
-            );
+        let mut headers = namespace.headers.clone();
+        let mut before = facts::prototypes(&own, &flags, &callables, &[])?.0.len();
+        for header in &extra.headers {
+            headers.push(header.clone());
+            let with = crate::bind_header::preamble(&namespace.defines, &headers);
+            let after = facts::prototypes(&with, &flags, &callables, &[])?.0.len();
+            if after <= before {
+                eprintln!(
+                    "  warning: `--header {name}:{header}` declares none of {name}'s callables the headers before it do not"
+                );
+            }
+            before = after;
         }
     }
     for (name, extra) in extras {

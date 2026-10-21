@@ -77,18 +77,45 @@ const DEFAULTS: &[PlatformExtra] = &[
 /// `extras` over [`DEFAULTS`]: each namespace's defaults first, then what
 /// the project adds, each value once and in the order given.
 fn with_defaults(extras: &bind_gir::Extras) -> bind_gir::Extras {
+    with_defaults_within(extras, |_| true)
+}
+
+/// What `nts bind-gir {root}` binds with: [`DEFAULTS`] for the namespaces
+/// `root`'s closure holds, then the command's own `extras` -- each checked
+/// as given, so one naming a namespace outside the closure is still an
+/// error. The defaults a build of `root` binds with, so the command binds
+/// what a program built against it sees.
+pub(crate) fn command_extras(
+    root: &str,
+    search: &[Utf8PathBuf],
+    extras: &bind_gir::Extras,
+) -> bind_gir::Extras {
+    let closure = bind_gir::closure_namespaces(root, search);
+    with_defaults_within(extras, |namespace| {
+        closure.iter().any(|held| held == namespace)
+    })
+}
+
+/// `extras` over the [`DEFAULTS`] of the namespaces `within` holds.
+fn with_defaults_within(
+    extras: &bind_gir::Extras,
+    within: impl Fn(&str) -> bool,
+) -> bind_gir::Extras {
     let mut merged = bind_gir::Extras::new();
-    let defaults = DEFAULTS.iter().map(|default| {
-        let owned = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect();
-        (
-            default.namespace.to_owned(),
-            bind_gir::Extra {
-                packages: owned(default.packages),
-                defines: owned(default.defines),
-                headers: owned(default.headers),
-            },
-        )
-    });
+    let defaults = DEFAULTS
+        .iter()
+        .filter(|default| within(default.namespace))
+        .map(|default| {
+            let owned = |values: &[&str]| values.iter().map(|v| (*v).to_owned()).collect();
+            (
+                default.namespace.to_owned(),
+                bind_gir::Extra {
+                    packages: owned(default.packages),
+                    defines: owned(default.defines),
+                    headers: owned(default.headers),
+                },
+            )
+        });
     for (namespace, extra) in defaults.chain(extras.clone()) {
         let into = merged.entry(namespace).or_default();
         for (into, from) in [
