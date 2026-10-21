@@ -747,6 +747,32 @@ fn entry_module(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<Utf8
         return Ok(source.display_path.clone());
     }
 
+    // **The module nothing imports.** Without a `main.ts`, the first module
+    // decoded was taken -- and a program's first decoded module is whatever
+    // its root imports first: every Are We Fast Yet case's `case.ts` imports
+    // its base class, so the base class was the entry, its exports were the
+    // surface, and `nts check` said "nothing to check" for all of them. The
+    // `bench-agree` step had never compared one. The root is the module no
+    // other module of the program imports; a declaration file is never one.
+    let imported: std::collections::HashSet<nts_semantic_schema::ModuleId> = snapshot
+        .modules
+        .iter()
+        .flat_map(|module| module.imports.iter().copied())
+        .collect();
+    let root = snapshot
+        .modules
+        .iter()
+        .enumerate()
+        .find_map(|(index, module)| {
+            let id = nts_semantic_schema::ModuleId(u32::try_from(index).ok()?);
+            let source = snapshot.sources.get(module.file.0 as usize)?;
+            (!imported.contains(&id) && !source.display_path.as_str().ends_with(".d.ts"))
+                .then(|| source.display_path.clone())
+        });
+    if let Some(root) = root {
+        return Ok(root);
+    }
+
     let module = snapshot
         .modules
         .first()
