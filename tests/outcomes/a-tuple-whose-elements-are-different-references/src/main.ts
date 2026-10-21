@@ -18,6 +18,9 @@
 // GTK's `gtk_cell_area_get_cell_at_position` (`[GtkCellRenderer, GdkRectangle]`),
 // filled natively. node cannot run that, so it is not an arm here.
 //
+// **Fixed 2026-10-21**: such a tuple is an array of erased values, and every
+// arm builds and agrees, so the record is now that agreement.
+//
 // **A guard, recorded before the reader changes.** Each refused arm's top-level
 // call is cut, so `ran` shows the arms that still run: the boundaries, which
 // must keep agreeing. `[number, number]` is homogeneous. `[string, number]` is

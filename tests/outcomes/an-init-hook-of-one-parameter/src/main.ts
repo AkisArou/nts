@@ -15,13 +15,13 @@
 // The keys name the arity. Under node the module's native half is its
 // `bindings.node.mjs`, which the outcomes preload installs.
 //
-// **Blocked upstream of any hook, by a pinned defect.** `AsyncHook#enable`
-// calls `addHook`, which reads `const [registry, fields] = mutableRegistry()`
-// -- a `[Map, HookCounts]` tuple, represented as an array of its first
-// element's type (`a-tuple-whose-elements-are-different-references` pins
-// it). So the three `.enable()` statements are cut and every hook is silent,
-// the control included. When that tuple builds, this record moves to the
-// arity arms.
+// **Blocked upstream of any hook.** `AsyncHook#enable` calls `addHook`,
+// which reads `const [registry, fields] = mutableRegistry()` -- a `[Map,
+// HookCounts]` tuple, an array of its first element's type until 2026-10-21,
+// and refused for it. That tuple builds now (an array of erased values), so
+// the record has moved to the arity arms: a parameter typed `CallableFunction
+// | undefined` -- an optional hook's `init` -- is what is refused, and the
+// three `.enable()` statements are still cut.
 import { AsyncResource, createHook } from "@nts/runtime/node/async_hooks/src/main.ts";
 
 let four = "";

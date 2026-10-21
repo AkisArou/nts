@@ -19917,32 +19917,31 @@ fn tuple_representation(
     }
     if mixed {
         // Elements that disagree but are **all references** are an array of
-        // references, which is what a pointer-sized slot holds either way.
-        // `[string[], number[]]` is two pointers; a struct with two fields and
-        // an `NtsArray` of two are the same bytes, and the array is the one a
-        // C binding can build -- `nts_os_cpus` builds exactly that today and
-        // could not be declared against the struct.
+        // erased values. It was an array of the *first* element's type, on the
+        // reading that a pointer-sized slot holds either -- true of C's bytes
+        // and of the JVM's `Object[]`, and a lie in the type all the same:
+        // `[string, Point]` claimed to hold strings and held a `Point`, which a
+        // read converted back. Wasm types an array's element, so it could
+        // neither store nor read one, and every pass trusting an element type
+        // trusted that claim. A C binding that built such an array
+        // (`nts_os_cpus`) was the reason; it no longer exists.
         //
-        // The element type is the **first**, and any of them would do: in C a
-        // managed element descriptor is `nts_desc_ref` whatever it holds, and
-        // on the JVM `wrapper` sends every non-`double`, non-`boolean` element
-        // to `NtsArrayL`, which holds `Ljava/lang/Object;`. So both backends
-        // produce one representation and the read restores the static type.
+        // An array rather than a struct, because a tuple's length may vary: a
+        // pattern's defaults make its elements optional (`[a = f, b = g] =
+        // []`), and a struct has a slot for every one. Erased is the type that
+        // holds any reference truthfully, and a read unerases to its slot's.
         //
-        // Mixed *storage* still needs the struct: `[string, number]` is a
-        // pointer beside a double, and no array of one width holds both.
-        let first = elements
-            .first()
-            .and_then(|element| representation_within(snapshot, *element, path, subst));
-        if let Some(first @ HirType::Managed(_)) = first
-            && elements.iter().all(|element| {
-                matches!(
-                    representation_within(snapshot, *element, path, subst),
-                    Some(HirType::Managed(_))
-                )
-            })
-        {
-            return Some(HirType::Managed(ManagedType::Array(Box::new(first))));
+        // Mixed *storage* is the struct: `[string, number]` is a pointer beside
+        // a double, and no array of one width holds both.
+        if elements.iter().all(|element| {
+            matches!(
+                representation_within(snapshot, *element, path, subst),
+                Some(HirType::Managed(_))
+            )
+        }) {
+            return Some(HirType::Managed(ManagedType::Array(Box::new(
+                HirType::Erased,
+            ))));
         }
         return Some(HirType::Managed(ManagedType::Object(ty)));
     }

@@ -19,6 +19,10 @@
 //
 // Found on 2026-10-11 by the JVM lane, from MainCodex's 1c probe
 // `tuple-context`.
+//
+// **Fixed 2026-10-21, and kept as a guard:** a tuple of unlike references is
+// an array of erased values, so each element is tagged as what it is and the
+// erased iteration answers `object,string` as node does.
 
 interface Source {
   read(): number;
