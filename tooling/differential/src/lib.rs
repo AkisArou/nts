@@ -1141,8 +1141,18 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // must not happen is *growth* between one case and the last, and a
     // collection is forced at each point so that what is merely awaiting the
     // cycle collector is not counted as held.
+    //
+    // **The jobs the cases queued run first**, as they do on node's side: its
+    // driver is a module calling each synchronous case in turn, so a reaction
+    // one of them queued runs at the next `await` or when evaluation ends, and
+    // never not at all. Here nothing ran them after the last synchronous case,
+    // so `f().catch(() => {})` left its promise, its reaction and the closure
+    // queued, and the count below took them for a leak: five or six objects a
+    // case (`parameters-bound-where-the-call-answers`, whose controls leaked
+    // as much as its arms). An asynchronous case already drives the loop, and
+    // runs what was queued before it, as node's `await` does.
     main.push_str(
-        "#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   return 0;\n}\n",
+        "    nts_checkpoint();\n#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   return 0;\n}\n",
     );
     main
 }
