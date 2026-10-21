@@ -92,6 +92,7 @@ pub(crate) struct Binding {
     pub(crate) types: Vec<TypeDecl>,
     pub(crate) functions: Vec<Function>,
     pub(crate) enums: Vec<EnumDecl>,
+    pub(crate) aliases: Vec<AliasDecl>,
     /// What each other module contributes to this one's signatures.
     pub(crate) imports: BTreeMap<String, BTreeSet<String>>,
     /// The `c:types` names the signatures use.
@@ -282,6 +283,17 @@ pub(crate) struct EnumDecl {
     pub(crate) c_type: Option<String>,
     /// `(name, value, C identifier)`.
     pub(crate) members: Vec<(String, i64, String)>,
+}
+
+/// A name GIR gives another type (`<alias>`), declared by the name C gives
+/// it -- `GQuark` for `Uint32`, `GtkAllocation` for `GdkRectangle` -- as GTK's
+/// C documentation names it.
+#[derive(Debug, Clone)]
+pub(crate) struct AliasDecl {
+    pub(crate) name: String,
+    /// What it stands for, as this binding spells it: a scalar's brand, the
+    /// form C holds and a `Struct` member spells; a record's type.
+    pub(crate) ts: String,
 }
 
 /// A type as the binding spells it, and as C spells it.
@@ -724,6 +736,7 @@ pub(crate) fn bind<'a>(
     };
     mapper.types();
     mapper.enums();
+    mapper.aliases();
     mapper.constants();
     // Each with the class it is declared in, which is what a constructor
     // returns whatever its return type says.
@@ -1491,6 +1504,77 @@ fn method_of(callable: &Callable, parameters: &[(String, Mapped)]) -> Option<(St
     }
 }
 
+/// The type the alias `qualified` names, followed to the end of a chain of
+/// aliases: qualified by the alias's own namespace where it names a type of
+/// one, and bare where it names a C one (`guint32`). `None` for a name that
+/// is not an alias.
+fn alias_target(repository: &Repository, qualified: &str) -> Option<String> {
+    let mut at = qualified.to_owned();
+    let mut found = None;
+    // Bounded: a chain of aliases is a handful long, and a cycle is GIR's
+    // error, not a reason to hang.
+    for _ in 0..8 {
+        let (ns, local) = at.split_once('.')?;
+        let namespace = repository.namespaces.get(ns)?;
+        let Some(Alias { target, .. }) = namespace.aliases.iter().find(|alias| alias.name == local)
+        else {
+            break;
+        };
+        let target = if target.contains('.') || SCALARS.iter().any(|(gir, ..)| gir == target) {
+            target.clone()
+        } else {
+            format!("{ns}.{target}")
+        };
+        found = Some(target.clone());
+        if !target.contains('.') {
+            break;
+        }
+        at = target;
+    }
+    found
+}
+
+/// The C type of the record `qualified` names.
+fn record_c_type<'a>(repository: &'a Repository, qualified: &str) -> Option<&'a str> {
+    let (ns, local) = qualified.split_once('.')?;
+    repository
+        .namespaces
+        .get(ns)?
+        .records
+        .iter()
+        .find(|record| record.name == local)?
+        .c_type
+        .as_deref()
+}
+
+/// What an alias a program can name stands for.
+pub(super) enum AliasOf<'a> {
+    /// A scalar, by its brand: `GQuark` is a `Uint32`.
+    Scalar(&'static str),
+    /// A record, by its C type: `GtkAllocation` is a `GdkRectangle`.
+    Record(&'a str),
+}
+
+/// An alias of `namespace`'s a program can name, by its C name, with what it
+/// stands for: a scalar or a record. Not one standing for nothing a program
+/// holds -- `GMutexLocker`, a `typedef void` for `g_autoptr` -- nor one for
+/// a type no single spelling is (`GStrv`'s `utf8`), nor a callback's, which
+/// waits on callback members. One rule, for the binding that declares it and
+/// for the `gi:` surface's names (`naming::Names`).
+pub(super) fn named_alias<'a>(
+    repository: &'a Repository,
+    namespace: &Namespace,
+    alias: &'a Alias,
+) -> Option<(&'a str, AliasOf<'a>)> {
+    let name = alias.c_type.as_deref().filter(|c| is_type_name(c))?;
+    let target = alias_target(repository, &format!("{}.{}", namespace.name, alias.name))?;
+    let stands_for = match SCALARS.iter().find(|(gir, ..)| *gir == target) {
+        Some((_, brand, _)) => AliasOf::Scalar(brand),
+        None => AliasOf::Record(record_c_type(repository, &target)?),
+    };
+    Some((name, stands_for))
+}
+
 /// What a qualified GIR name refers to.
 enum Resolved<'a> {
     Class(&'a Namespace, &'a Class),
@@ -1509,35 +1593,9 @@ impl<'a> Mapper<'a> {
         }
     }
 
-    /// The type an alias names, followed to the end of a chain of aliases:
-    /// qualified by the alias's own namespace where it names a type of one,
-    /// and bare where it names a C one (`guint32`). `None` for a name that is
-    /// not an alias.
+    /// The type an alias names (`alias_target`), for a name in this namespace.
     fn alias_target(&self, name: &str) -> Option<String> {
-        let mut at = self.qualify(name);
-        let mut found = None;
-        // Bounded: a chain of aliases is a handful long, and a cycle is GIR's
-        // error, not a reason to hang.
-        for _ in 0..8 {
-            let (ns, local) = at.split_once('.')?;
-            let namespace = self.repository.namespaces.get(ns)?;
-            let Some(Alias { target, .. }) =
-                namespace.aliases.iter().find(|alias| alias.name == local)
-            else {
-                break;
-            };
-            let target = if target.contains('.') || SCALARS.iter().any(|(gir, ..)| gir == target) {
-                target.clone()
-            } else {
-                format!("{ns}.{target}")
-            };
-            found = Some(target.clone());
-            if !target.contains('.') {
-                break;
-            }
-            at = target;
-        }
-        found
+        alias_target(self.repository, &self.qualify(name))
     }
 
     /// A record's alias as the record it stands for: `typedef GdkRectangle
@@ -1568,16 +1626,7 @@ impl<'a> Mapper<'a> {
             .c_type
             .as_deref()?;
         let target = self.alias_target(name)?;
-        let (ns, local) = target.split_once('.')?;
-        let record = self
-            .repository
-            .namespaces
-            .get(ns)?
-            .records
-            .iter()
-            .find(|record| record.name == local)?
-            .c_type
-            .as_deref()?;
+        let record = record_c_type(self.repository, &target)?;
         let (constant, spelled) = match c_type.strip_prefix("const ") {
             Some(rest) => ("const ", rest),
             None => ("", c_type.as_str()),
@@ -2285,6 +2334,33 @@ impl<'a> Mapper<'a> {
                     .iter()
                     .map(|m| (m.name.to_ascii_uppercase(), m.value, m.c_identifier.clone()))
                     .collect(),
+            });
+        }
+    }
+
+    /// Each `<alias>` a program can name (`named_alias`), as the type it
+    /// stands for.
+    fn aliases(&mut self) {
+        let namespace = self.namespace;
+        for alias in &namespace.aliases {
+            let Some((name, stands_for)) = named_alias(self.repository, namespace, alias) else {
+                continue;
+            };
+            let ts = match stands_for {
+                AliasOf::Scalar(brand) => {
+                    self.binding.brands.insert(brand);
+                    brand.to_owned()
+                }
+                AliasOf::Record(record) => {
+                    let Some(owner) = self.c_types.get(record).copied() else {
+                        continue;
+                    };
+                    self.name_in(owner, record)
+                }
+            };
+            self.binding.aliases.push(AliasDecl {
+                name: name.to_owned(),
+                ts,
             });
         }
     }
@@ -5532,6 +5608,80 @@ mod tests {
         };
         assert_eq!(parameter("s_fill"), "Ptr<SRect>");
         assert_eq!(parameter("s_area"), "ConstPtr<SRect>");
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// An alias a program can name is declared once, in its namespace: by
+    /// its C name as the type it stands for -- a scalar's brand, 64-bit too
+    /// (`BigInt64`, what C holds), a record's type -- and on the `gi:` surface
+    /// by its GIR name, the record's renamed with it. `GType` too, which GIR
+    /// also writes bare. The controls are each kind not declared: a `typedef
+    /// void` (`GMutexLocker`), a string list's `utf8` (`GStrv`), a callback's.
+    #[test]
+    fn an_alias_is_declared_by_its_c_name_and_its_gir_name() {
+        use super::super::{emit, facts, naming};
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-alias-names-test").expect("fixture directory");
+        let alias = |name: &str, c_type: &str, target: &str| {
+            format!(r#"<alias name="{name}" c:type="{c_type}"><type name="{target}"/></alias>"#)
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            &alias("Quark", "SQuark", "guint32"),
+            &alias("Span", "SSpan", "gint64"),
+            &alias("Allocation", "SAllocation", "Rect"),
+            &alias("Locker", "SLocker", "none"),
+            &alias("Strv", "SStrv", "utf8"),
+            &alias("Type", "GType", "gsize"),
+            &alias("Callback", "SCallbackAlias", "Func"),
+            r#"<record name="Rect" c:type="SRect"><field name="x" writable="1"><type name="gint" c:type="gint"/></field></record>"#,
+            r#"<callback name="Func" c:type="SFunc"><return-value><type name="none" c:type="void"/></return-value></callback>"#,
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: [("SRect".to_owned(), "_SRect".to_owned())].into(),
+            sizes: [("SRect".to_owned(), 4)].into(),
+            ..facts::Facts::default()
+        };
+        let namespace = &repository.namespaces["S"];
+        let binding = bind(&repository, namespace, &header);
+        let declared = |binding: &super::Binding| {
+            binding
+                .aliases
+                .iter()
+                .map(|a| format!("{} = {}", a.name, a.ts))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            declared(&binding),
+            [
+                "SQuark = Uint32",
+                "SSpan = BigInt64",
+                "SAllocation = SRect",
+                "GType = c_size_t"
+            ]
+        );
+        let text = emit::declarations(&binding, "test");
+        assert!(text.contains("  export type SQuark = Uint32;\n"), "{text}");
+        let gi = naming::gi(&binding, namespace, &naming::Names::of(&repository));
+        assert_eq!(
+            declared(&gi),
+            [
+                "Quark = Uint32",
+                "Span = BigInt64",
+                "Allocation = Rect",
+                "Type = c_size_t"
+            ]
+        );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 

@@ -29,8 +29,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::map::{
-    Accessor, Binding, Cast, Constructed, Constructor, Function, Mapped, Reason, Shape, TypeDecl,
-    Vfunc,
+    Accessor, AliasDecl, Binding, Cast, Constructed, Constructor, Function, Mapped, Reason, Shape,
+    TypeDecl, Vfunc,
 };
 use super::model::{Namespace, Repository};
 
@@ -68,7 +68,12 @@ impl Names {
                 .iter()
                 .filter(|r| !r.class_struct)
                 .filter_map(|r| Some((r.c_type.clone()?, r.name.clone())));
-            for (c_type, name) in classes.chain(records) {
+            // An alias the binding declares, by the same rule.
+            let aliases = namespace.aliases.iter().filter_map(|alias| {
+                super::map::named_alias(repository, namespace, alias)
+                    .map(|(c_type, _)| (c_type.to_owned(), alias.name.clone()))
+            });
+            for (c_type, name) in classes.chain(records).chain(aliases) {
                 types
                     .entry(c_type)
                     .or_insert_with(|| (namespace.name.clone(), name));
@@ -250,6 +255,14 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
             ..decl.clone()
         })
         .collect();
+    out.aliases = binding
+        .aliases
+        .iter()
+        .map(|alias| AliasDecl {
+            name: rename.class(&alias.name),
+            ts: rename.text(&alias.ts),
+        })
+        .collect();
     out.constants = binding
         .constants
         .iter()
@@ -338,6 +351,7 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
         })
         .collect();
     taken.extend(out.enums.iter().map(|e| e.name.clone()));
+    taken.extend(out.aliases.iter().map(|a| a.name.clone()));
     taken.extend(out.constants.iter().map(|c| c.name.clone()));
     for function in &binding.functions {
         let mut function = rename.function(function);
@@ -368,6 +382,7 @@ pub(crate) fn gi(binding: &Binding, namespace: &Namespace, names: &Names) -> Bin
                 .chain([f.result.ts.as_str()])
         })
         .chain(binding.constants.iter().map(|c| c.ts.as_str()))
+        .chain(binding.aliases.iter().map(|a| a.ts.as_str()))
         .chain(
             binding
                 .constructed

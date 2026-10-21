@@ -64,6 +64,7 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     let mut out = preamble(binding, command);
     out.push('\n');
     enums(&mut out, binding);
+    aliases(&mut out, binding);
     // The methods of each class, from the functions the self-check kept.
     let promises: std::collections::BTreeMap<&str, &Function> = promise_forms(binding)
         .into_iter()
@@ -1125,6 +1126,17 @@ fn enums(out: &mut String, binding: &Binding) {
         }
     }
     if !binding.enums.is_empty() {
+        out.push('\n');
+    }
+}
+
+/// Each alias GIR declares, by the name it is given -- `GQuark`, and `Quark`
+/// on the `gi:` surface -- as the type it stands for.
+fn aliases(out: &mut String, binding: &Binding) {
+    for alias in &binding.aliases {
+        let _ = writeln!(out, "  export type {} = {};", alias.name, alias.ts);
+    }
+    if !binding.aliases.is_empty() {
         out.push('\n');
     }
 }
