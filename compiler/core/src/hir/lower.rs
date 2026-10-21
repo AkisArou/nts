@@ -19294,6 +19294,46 @@ fn key_kind_of(key: &HirType) -> u32 {
     }
 }
 
+/// A collection nothing in the program chose the contents of: every type
+/// parameter erased, which is what a library overload answers when an
+/// allocation names none -- `new Array(n)`'s `any[]`, `new Map()`'s
+/// `Map<any, any>` (the zero-argument `new (): Map<any, any>`), and `Set<any>`.
+///
+/// Such a type says nothing about the elements, so it gives way to where the
+/// value goes: see [`chooses`].
+fn an_unchosen_collection(ty: &HirType) -> bool {
+    match ty {
+        HirType::Managed(ManagedType::Array(element) | ManagedType::Set(element)) => {
+            **element == HirType::Erased
+        }
+        HirType::Managed(ManagedType::Map(key, value)) => {
+            **key == HirType::Erased && **value == HirType::Erased
+        }
+        _ => false,
+    }
+}
+
+/// Whether `wanted` is the collection an [`an_unchosen_collection`] stands
+/// for: one of the same kind that chooses something. A `Map<any, number>`
+/// chooses its values; a context that is itself unchosen, or another kind of
+/// thing, chooses nothing, and the allocation keeps the library's answer.
+fn chooses(unchosen: &HirType, wanted: &HirType) -> bool {
+    let same_kind = matches!(
+        (unchosen, wanted),
+        (
+            HirType::Managed(ManagedType::Array(_)),
+            HirType::Managed(ManagedType::Array(_))
+        ) | (
+            HirType::Managed(ManagedType::Map(..)),
+            HirType::Managed(ManagedType::Map(..))
+        ) | (
+            HirType::Managed(ManagedType::Set(_)),
+            HirType::Managed(ManagedType::Set(_))
+        )
+    );
+    same_kind && !an_unchosen_collection(wanted)
+}
+
 #[must_use]
 pub fn describe(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
     if let Some(name) = super::native::pointer(snapshot, ty) {
@@ -56866,16 +56906,13 @@ impl<'a> FuncBuilder<'a> {
     /// stored into does. Are We Fast Yet's `Vector` allocates exactly so, and
     /// four of its benchmarks stopped there.
     fn allocated_array_type(&mut self, id: NodeId) -> Result<HirType, Diagnostic> {
-        let concrete = |ty: &HirType| matches!(ty, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased);
+        let concrete = |ty: &HirType| {
+            matches!(ty, HirType::Managed(ManagedType::Array(_))) && !an_unchosen_collection(ty)
+        };
+        let unchosen = HirType::Managed(ManagedType::Array(Box::new(HirType::Erased)));
         self.type_of(id)
             .filter(concrete)
-            .or_else(|| self.contextual_type(id, 0).filter(concrete))
-            .or_else(|| {
-                let destination = self.past_the_choices(id);
-                (destination != id)
-                    .then(|| self.contextual_type(destination, 0).filter(concrete))
-                    .flatten()
-            })
+            .or_else(|| Some(self.instead_of_an_unchosen_collection(id, unchosen)).filter(concrete))
             .or_else(|| self.contextual_type(id, 0))
             .or_else(|| {
                 self.type_of(id)
@@ -57091,6 +57128,12 @@ impl<'a> FuncBuilder<'a> {
 
         let ty = self.type_of(id);
         let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
+        // `new Map()` is the library's zero-argument `Map<any, any>` wherever it
+        // is written (and `new Set()` may be `Set<any>`), so where it goes says
+        // what it holds: a `return` into a `Map<string, number>` builds that
+        // table, string-hashed, rather than an erased one handed over
+        // unconverted.
+        let ty = self.instead_of_an_unchosen_collection(id, ty);
         // The three the runtime builds rather than the program: a class's `new`
         // is a call to its constructor, and none of these has one.
         if let Some(built) = self.lower_new_provided(id, &ty) {
@@ -60955,29 +60998,46 @@ impl<'a> FuncBuilder<'a> {
                 .type_of(id)
                 .ok_or_else(|| self.unrepresentable(id, "a conditional"))?,
         };
-        let ty = self.instead_of_an_erased_array(id, ty);
+        let ty = self.instead_of_an_unchosen_collection(id, ty);
         self.lower_branching_value_at(id, ty, condition, then_branch, else_branch)
     }
 
-    /// The array a choice is, where the checker's answer is `any[]` only
-    /// because an arm is a bare `new Array(n)`.
+    /// The collection `id` is, where its type is [`an_unchosen_collection`]
+    /// only because a library overload answered for it: the collection where
+    /// it goes, if that one [`chooses`] something.
+    ///
+    /// One rule at every place such a type arrives: the allocation itself
+    /// (`new Array(n)` in [`Self::allocated_array_type`], `new Map()` and
+    /// `new Set()` in [`Self::lower_new`]), the choice an allocation is an arm
+    /// of, and what that choice tells its arms
+    /// ([`Self::what_the_whole_expression_is`]), so all of them agree.
     ///
     /// `size === 0 ? null : new Array(size)` is typed `any[]`: the `null` is
     /// absorbed and `new Array`'s declared `any[]` is what is left, which is the
     /// library's overload and nothing the program chose. Where the choice is
     /// stored into a typed array -- a `Vector<E>`'s `E[] | null` storage -- that
-    /// array is what the choice is, as [`Self::allocated_array_type`] already
-    /// decides for the arm itself. Only from an erased array to a concrete one:
+    /// array is what the choice is. `seed ? undefined : new Map()` returned as
+    /// a `Map<string, number> | undefined` is the same with the zero-argument
+    /// `new (): Map<any, any>`, and Wasm, which builds a table's storage from
+    /// its type, declined the erased one handed to the typed return.
+    ///
+    /// Where the expression is first, then past any choice that passes it on.
+    /// Only from an unchosen collection to a chosen one of the same kind: a
+    /// `const m = new Map()` with nothing around it keeps `Map<any, any>`, and
     /// an arm that really is erased then fails the width check and is refused,
     /// never reinterpreted.
-    fn instead_of_an_erased_array(&self, id: NodeId, ty: HirType) -> HirType {
-        let erased = matches!(&ty, HirType::Managed(ManagedType::Array(element)) if **element == HirType::Erased);
-        if !erased {
+    fn instead_of_an_unchosen_collection(&self, id: NodeId, ty: HirType) -> HirType {
+        if !an_unchosen_collection(&ty) {
             return ty;
         }
-        self.contextual_type(self.past_the_choices(id), 0)
-            .filter(|destination| {
-                matches!(destination, HirType::Managed(ManagedType::Array(element)) if **element != HirType::Erased)
+        let destination = self.past_the_choices(id);
+        self.contextual_type(id, 0)
+            .filter(|wanted| chooses(&ty, wanted))
+            .or_else(|| {
+                (destination != id)
+                    .then(|| self.contextual_type(destination, 0))
+                    .flatten()
+                    .filter(|wanted| chooses(&ty, wanted))
             })
             .unwrap_or(ty)
     }
@@ -82507,9 +82567,9 @@ impl<'a> FuncBuilder<'a> {
     /// and this is what tells the operands so. See [`Self::holds_only_absences`].
     fn what_the_whole_expression_is(&self, parent: NodeId, depth: u32) -> Option<HirType> {
         // The same answer the choice itself lowers at, so that every arm of it
-        // agrees: see [`Self::instead_of_an_erased_array`].
+        // agrees: see [`Self::instead_of_an_unchosen_collection`].
         self.type_of(parent)
-            .map(|ty| self.instead_of_an_erased_array(parent, ty))
+            .map(|ty| self.instead_of_an_unchosen_collection(parent, ty))
             .or_else(|| {
                 let ty = self.snapshot.node_types.get(&parent).copied()?;
                 self.holds_only_absences(ty).then_some(HirType::Erased)

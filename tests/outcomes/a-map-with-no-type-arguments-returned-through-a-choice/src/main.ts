@@ -14,6 +14,14 @@
 //
 // The one-change control, `...-control`, writes `new Map<string, number>()`
 // and agrees on all four.
+//
+// **Since 2026-10-21 it agrees, a guard.** An allocation whose type is a
+// collection nothing chose -- `any[]`, `Map<any, any>`, `Set<any>` -- takes
+// the type of where it goes (`instead_of_an_unchosen_collection`), at the
+// allocation, at the choice over it and at what the choice tells its arms: the
+// table is built string-keyed and the conditional is one, so Wasm emits it and
+// agrees. tests/programs/an-unchosen-table-takes-its-type-from-where-it-goes
+// holds the other destinations.
 
 function make(seed: number): Map<string, number> | undefined {
   return (seed & 1) === 0 ? undefined : new Map();
