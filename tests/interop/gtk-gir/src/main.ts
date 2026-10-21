@@ -54,6 +54,8 @@
 //   store true true  a `GType` property, crossing as the `gsize` C holds it
 //                 in: a list store's `item-type`, given at construction, read
 //                 back by its method and as its property, `g_object_get`'s
+//   pid true      a C typedef Gio names as a type of its own, `pid_t`: the
+//                 integer the headers make it, this process's id
 //   refcount 2 true flags 1  pointers GIR leaves unannotated, which the binding
 //                 spells as the header writes them: a `gatomicrefcount *` in
 //                 storage the program allocates, set to 1 and raised to 2 by
@@ -177,6 +179,7 @@ import {
   g_output_stream_write,
   GOutputStream,
   GListStore,
+  g_credentials_new,
   GThemedIcon,
   IOErrorEnum,
   type GCancellable,
@@ -406,6 +409,8 @@ function boxedRecords(): void {
     "store " + String(store.get_item_type() === gtk_button_get_type()) + " " +
       String(store.item_type === gtk_button_get_type()),
   );
+  // A C typedef Gio names as a type of its own: the integer it is.
+  console.log("pid " + String(g_credentials_new().get_unix_pid() > 0));
   // Raw pointers to storage the program allocates and frees: a count C reads
   // and raises, and a datalist C keeps its flags in. Heap storage, since a
   // pointer GIR says nothing about may be kept, for all the binding can tell.
