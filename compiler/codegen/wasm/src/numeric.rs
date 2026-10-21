@@ -8,7 +8,7 @@ use crate::{
     types::{self, Slot},
 };
 use nts_core::hir::{BinOp, HirType, UnOp, ValueId};
-use wasm_encoder::Instruction as I;
+use wasm_encoder::{Instruction as I, ValType};
 
 /// A runtime number conversion or test answered at its call site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -634,6 +634,11 @@ fn arithmetic(
         );
     }
     if op == BinOp::Rem && matches!(slot, Slot::F32 | Slot::F64) {
+        if let Some((dividend, divisor)) =
+            nts_core::hir::specialize::integral_remainder(b.func, b.func.value(result))
+        {
+            return integral_remainder(b, dividend, divisor);
+        }
         push_as(b, lhs, &HirType::Float { bits: 64 })?;
         push_as(b, rhs, &HirType::Float { bits: 64 })?;
         b.helper(Helper::Remainder)?;
@@ -668,6 +673,53 @@ fn arithmetic(
     b.load(lhs)?;
     b.load(rhs)?;
     b.instruction(&instruction);
+    Ok(())
+}
+
+/// `a % b` of two whole numbers, answered as a double by
+/// `specialize::integral_remainder`'s rule, which every backend spells exactly
+/// so: a zero divisor answers NaN, a zero remainder of a negative dividend
+/// answers -0, anything else is the integer remainder. Three tests and an
+/// `i32.rem_s` -- which, unlike C's `%`, answers zero for `i32::MIN % -1` and
+/// traps only on a zero divisor, so that alone is guarded -- where the host's
+/// `%` was a call out of the module: `event-state` draws six a call.
+fn integral_remainder(
+    b: &mut Body<'_, '_>,
+    dividend: ValueId,
+    divisor: ValueId,
+) -> Result<(), Failure> {
+    let (by, remainder) = (b.fresh_local(ValType::I32), b.fresh_local(ValType::I32));
+    b.load(divisor)?;
+    b.instruction(&I::LocalSet(by));
+    // The remainder by the divisor, or by 1 where it is zero.
+    b.load(dividend)?;
+    b.instructions(&[
+        I::I32Const(1),
+        I::LocalGet(by),
+        I::LocalGet(by),
+        I::I32Eqz,
+        I::Select,
+        I::I32RemS,
+        I::LocalSet(remainder),
+        // NaN where the divisor is zero, else -0 for a zero remainder of a
+        // negative dividend, else the remainder.
+        I::F64Const(f64::NAN.into()),
+        I::F64Const((-0.0_f64).into()),
+        I::LocalGet(remainder),
+        I::F64ConvertI32S,
+        I::LocalGet(remainder),
+        I::I32Eqz,
+    ]);
+    b.load(dividend)?;
+    b.instructions(&[
+        I::I32Const(0),
+        I::I32LtS,
+        I::I32And,
+        I::Select,
+        I::LocalGet(by),
+        I::I32Eqz,
+        I::Select,
+    ]);
     Ok(())
 }
 
