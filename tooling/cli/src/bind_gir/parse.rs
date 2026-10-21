@@ -560,7 +560,7 @@ fn fields(record: Node<'_, '_>) -> Vec<Field> {
             } else {
                 TypeRef::Missing
             },
-            bits: attribute(node, "bits").is_some(),
+            bits: attribute(node, "bits").and_then(|n| n.parse().ok()),
         })
         .collect()
 }

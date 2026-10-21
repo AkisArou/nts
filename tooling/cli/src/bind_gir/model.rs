@@ -174,8 +174,8 @@ pub(crate) enum RecordKind {
 pub(crate) struct Field {
     pub(crate) name: String,
     pub(crate) ty: TypeRef,
-    /// `bits="n"`: a bit-field.
-    pub(crate) bits: bool,
+    /// `bits="n"`: a bit-field, `n` bits wide.
+    pub(crate) bits: Option<u32>,
 }
 
 #[derive(Debug)]

@@ -1588,6 +1588,10 @@ enum StructMember {
     String { constant: bool },
     /// Another plain record, held by value, by its C type.
     Nested(String),
+    /// A bit-field: `width` bits of the integer `brand` is (`Bits`).
+    Bits { brand: &'static str, width: u32 },
+    /// A fixed run of `size` scalars of `brand`, inline (`CArray`).
+    Array { brand: &'static str, size: u64 },
 }
 
 /// A type name as `namespace` writes it, qualified so it resolves from any
@@ -4863,12 +4867,36 @@ impl<'a> Mapper<'a> {
 
     /// What a record's member is to a `Struct`: a value `typed` spells -- a
     /// scalar, an enum, a `void *` -- by its type's qualified name; a
-    /// string's raw `char *`; or another plain record held by value, by its
-    /// C type. `None` for what no `Struct` spells here: a bit-field, a
-    /// `volatile` member, a handle, an array, a callback, a union.
+    /// string's raw `char *`; another plain record held by value, by its C
+    /// type; an integer bit-field; or a fixed run of scalars inline. `None`
+    /// for what no `Struct` spells here: a `volatile` member, a handle, an
+    /// array of anything else, a callback, a union.
     fn member(&self, namespace: &Namespace, field: &Field, depth: usize) -> Option<StructMember> {
-        if field.bits {
-            return None;
+        // A bit-field -- `PangoLogAttr`'s `guint is_line_break : 1` -- is
+        // `width` bits of its integer's storage unit (`Bits<T, N>`), which C
+        // packs with the bit-fields beside it. Only an integer of a width a
+        // `number` holds: C has no floating bit-field.
+        if let Some(width) = field.bits {
+            let TypeRef::Named { name, .. } = &field.ty else {
+                return None;
+            };
+            let name = qualified_in(namespace, name);
+            let target = self.alias_target(&name).unwrap_or(name);
+            let (_, brand, scalar) = SCALARS.iter().find(|(gir, ..)| *gir == target)?;
+            let integer = !matches!(
+                scalar,
+                Scalar::Float | Scalar::Double | Scalar::Int64 | Scalar::UInt64
+            );
+            return integer.then_some(StructMember::Bits { brand, width });
+        }
+        // A fixed run of scalars inline in the record -- `GdkTimeCoord`'s
+        // `double axes[GDK_AXIS_LAST]` -- as `CArray<T, N>`.
+        if let TypeRef::Array(array) = &field.ty {
+            let size = array.fixed_size.filter(|_| array.length.is_none())?;
+            let element = qualified_in(namespace, array.element.as_deref()?);
+            let target = self.alias_target(&element).unwrap_or(element);
+            let (_, brand, _) = SCALARS.iter().find(|(gir, ..)| *gir == target)?;
+            return Some(StructMember::Array { brand, size });
         }
         let TypeRef::Named { name, c_type } = &field.ty else {
             return None;
@@ -4923,6 +4951,14 @@ impl<'a> Mapper<'a> {
                 StructMember::Nested(c_type) => {
                     let owner = self.c_types.get(c_type.as_str()).copied()?;
                     self.name_in(owner, &c_type)
+                }
+                StructMember::Bits { brand, width } => {
+                    self.binding.brands.extend(["Bits", brand]);
+                    format!("Bits<{brand}, {width}>")
+                }
+                StructMember::Array { brand, size } => {
+                    self.binding.brands.extend(["CArray", brand]);
+                    format!("CArray<{brand}, {size}>")
                 }
                 StructMember::Value(name) => {
                     let TypeRef::Named { c_type, .. } = &field.ty else {
@@ -6115,6 +6151,91 @@ mod tests {
                 },
                 "{symbol}"
             );
+        }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// A record whose members include bit-fields and a fixed run of scalars
+    /// inline is a `Struct` too: each bit-field `Bits<T, N>` of its integer,
+    /// the run `CArray<T, N>` -- `PangoLogAttr`'s flags, `GdkTimeCoord`'s
+    /// `axes`. The controls stay handles: a 64-bit bit-field, which no
+    /// `number` holds, and a run of records rather than scalars.
+    #[test]
+    fn bit_fields_and_inline_runs_are_struct_members() {
+        use super::super::facts;
+        use super::{TypeDecl, bind};
+        let dir =
+            crate::bind_scratch::directory("gir-struct-members-test").expect("fixture directory");
+        let bits = |name: &str, ty: &str, c_type: &str, width: u32| {
+            format!(
+                r#"<field name="{name}" bits="{width}"><type name="{ty}" c:type="{c_type}"/></field>"#
+            )
+        };
+        let run = |name: &str, element: &str, size: u32| {
+            format!(
+                r#"<field name="{name}"><array zero-terminated="0" fixed-size="{size}"><type name="{element}"/></array></field>"#
+            )
+        };
+        let record = |name: &str, fields: &str| {
+            format!(r#"<record name="{name}" c:type="S{name}">{fields}</record>"#)
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            &record(
+                "Attr",
+                &[
+                    bits("is_break", "guint", "guint", 1),
+                    bits("level", "guint", "guint", 3),
+                    run("axes", "gdouble", 4),
+                ]
+                .concat(),
+            ),
+            &record("Wide", &bits("stamp", "guint64", "guint64", 40)),
+            &record(
+                "Point",
+                r#"<field name="x"><type name="gint" c:type="gint"/></field>"#,
+            ),
+            &record("Runs", &run("points", "Point", 2)),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: ["SAttr", "SWide", "SPoint", "SRuns"]
+                .map(|c| (c.to_owned(), format!("_{c}")))
+                .into(),
+            sizes: [("SAttr", 40), ("SWide", 8), ("SPoint", 4), ("SRuns", 8)]
+                .map(|(c, size)| (c.to_owned(), size))
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["S"], &header);
+        let fields = |wanted: &str| {
+            binding.types.iter().find_map(|decl| match decl {
+                TypeDecl::Struct { name, fields, .. } if name == wanted => Some(
+                    fields
+                        .iter()
+                        .map(|(field, ts)| format!("{field}: {ts}"))
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+        };
+        assert_eq!(
+            fields("SAttr").expect("SAttr a Struct"),
+            [
+                "is_break: Bits<c_uint, 1>",
+                "level: Bits<c_uint, 3>",
+                "axes: CArray<Float64, 4>",
+            ]
+        );
+        for control in ["SWide", "SRuns"] {
+            assert!(fields(control).is_none(), "{control} became a Struct");
         }
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
