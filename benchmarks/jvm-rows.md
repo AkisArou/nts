@@ -16,6 +16,7 @@ meets them. This is the map; the row table below it is the current state.
 
 - 2026-10-15: six losing rows and a cause for each
 - 2026-10-17: store/remainder on the widened base, and four closure repeats
+- 2026-10-21: six losing rows of 68, and what moved
 - Where the rows stand
 - bytes/op, re-taken from the current tree
   - `arrays`: the only row where we allocate and the reference allocates nothing
@@ -260,6 +261,33 @@ conditions and compiler hashes are kept at
 `paired-summary.json` contains every ratio and its input columns;
 `measurement-files-sha256.json` seals those raw files. Source/binary provenance
 and the five-phase binary/case list are in `manifest.json`.
+
+## 2026-10-21: six losing rows of 68, and what moved
+
+A full JVM sitting on main 3eb556096, 09:04-09:16: `nts-bench` with
+`NTS_BENCH_LANES=jvm`, CPU 4, `NTS_BENCH_ALONE=0`, load 15-37, **no quiet-core
+claim** -- ratios within the one run. 6 of 68 rows lose to node, against 14 of
+66 in the 2026-10-20 22:14 sitting at f3fa503b7; the string keys came after
+this one, and their row is re-measured below.
+
+| row | jvm/node | jvm/Java | share | state |
+| --- | --- | --- | --- | --- |
+| `loop` | 1.71 | 0.76 | platform: the Java reference itself is 2.25x node | -- |
+| `bytes` | 1.39 | 1.08 | platform 1.29; the rest is `uirem`'s guard, 74.5% of the profile in `NtsRuntime.uirem` | core: the `[0, 2^31)` range fact (MainClaude's queue) |
+| `record-word-counts` | 1.34 | 3.40 | JVM-only: a key box per lookup, 1,600 a run, because `NtsTable::find` and `insert` are "already compiled into a big method" and the key escapes | **moved**, b535ed908 (string-key doors): 70,768 -> 21,616 bytes a run (Java 15,408); time 0.853-0.878 of main, median 0.86, eight alternating rounds on CPU 4 with 4-5 quiet, load 16-17 -- near 1.15x node by arithmetic, not measured against node in one run. The landed message quotes a loaded first sitting (0.82); this is the claim |
+| `json-scan` | 1.20 | -- | `NtsRuntime.charCodeAt(String, D)D` is 21.9% of the profile: the checked read past the end that `scanNumber` relies on to answer NaN | open |
+| `awfy-queens` | 1.20 | 2.42 | core's threshold widening; the fractional-read fix costs it about 6.7% | core (MainClaude's queue) |
+| `generic-classes` | 1.03 | 1.22 | -- | near parity |
+
+**A proven typed-array access costs nothing to check on HotSpot.** ca427cfa8 /
+fa9548ea3 gave every view class one byte layout and `getProved`/`setProved` for
+`checked: false`, as C indexes `NTS_VIEW_ITEMS` bare. With view-lengths under
+it, so that `bytes` really calls them (javap: 2 `getProved`, 2 `setProved`, no
+`getInt`), `bytes` read proved/base median 1.023, best of eight 0.998, range
+0.959-1.050: neutral. The reason was in the profile before the change: no
+samples in `atInt` or any view accessor. C2 hoists or predicates the tests,
+where Wasm priced the same tests at 10.5% of the row. Kept for the layout and
+the lowering C shares; no speedup claimed.
 
 ## Where the rows stand
 
