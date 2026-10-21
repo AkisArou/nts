@@ -294,6 +294,10 @@ pub fn native_shape(pointee: &crate::hir::native::Pointee, abi: NativeAbi) -> Op
             size: s.size,
             align: 1,
         }),
+        // The same bytes, only read: a `const` changes neither size nor
+        // alignment, and a record behind one is still sized as a record --
+        // which the catch-all below, asking for a scalar element, could not.
+        Pointee::Const(inner) => native_shape(inner, abi),
         _ => shape_of(&pointee.abi_element_type(abi)?),
     }
 }

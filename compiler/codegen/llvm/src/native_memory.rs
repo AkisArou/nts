@@ -91,8 +91,16 @@ pub(super) fn operation(
             bit_field(func, kind, storage, field, &base, out, platform)?
         }
         OpKind::NativeFieldAddress { field, .. } => {
-            let Pointee::Record(layout) = storage else {
-                return Err(refuse(func, "field address without a native struct"));
+            // The record, or the record made `const`: a `const` view's member
+            // is at the same offset and only read. Not an unaligned view, whose
+            // member loads would need the alignment this does not carry.
+            let layout = match storage {
+                Pointee::Record(layout) => layout,
+                Pointee::Const(inner) => match inner.as_ref() {
+                    Pointee::Record(layout) => layout,
+                    _ => return Err(refuse(func, "field address without a native struct")),
+                },
+                _ => return Err(refuse(func, "field address without a native struct")),
             };
             let placed = nts_core::hir::layout::native_place(layout, platform.abi)
                 .ok_or_else(|| refuse(func, "native struct without a layout"))?;

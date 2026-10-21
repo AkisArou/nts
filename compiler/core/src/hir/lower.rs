@@ -59393,13 +59393,22 @@ impl<'a> FuncBuilder<'a> {
                     .last()
                     .and_then(|index| self.type_of(*index))
                     .is_some_and(|ty| matches!(ty, HirType::Int { .. } | HirType::Float { .. }));
-            let named_field = match &pointee {
-                super::native::Pointee::Record(layout) => children
+            // A record, or the record made `const` -- what a `ConstPtr` points
+            // at, whose fields are the same fields and only read.
+            let record = match &pointee {
+                super::native::Pointee::Record(layout) => Some(layout),
+                super::native::Pointee::Const(inner) => match inner.as_ref() {
+                    super::native::Pointee::Record(layout) => Some(layout),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let named_field = record.is_some_and(|layout| {
+                children
                     .last()
                     .and_then(|member| self.native_member_key(id, *member))
-                    .is_some_and(|name| layout.fields.iter().any(|f| f.name == name)),
-                _ => false,
-            };
+                    .is_some_and(|name| layout.fields.iter().any(|f| f.name == name))
+            });
             // A binding's property, read through the method its tag names.
             let accessor = self.kind_of(id) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
                 && children.last().is_some_and(|member| {

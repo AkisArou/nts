@@ -1443,8 +1443,9 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
             },
             // Through a view as well as a plain pointer, and with the same two
             // reasons to hand back an unaligned one: the record is packed, or
-            // it was reached through something that was. Lowering applies both,
-            // so this has to.
+            // it was reached through something that was. And through a `const`
+            // view, a `const` one: the member of a `const T *` is only read.
+            // Lowering applies all three, so this has to.
             OpKind::NativeFieldAddress { field, .. } => match element.viewed() {
                 super::native::Pointee::Record(layout) => {
                     layout.fields.get(*field as usize).map(|f| {
@@ -1454,6 +1455,11 @@ fn check_native_memory(func: &Func, problems: &mut Vec<Invalid>) {
                             super::native::Pointee::Unaligned(Box::new(f.ty.clone()))
                         } else {
                             f.ty.clone()
+                        };
+                        let slot = if matches!(element, super::native::Pointee::Const(_)) {
+                            super::native::Pointee::Const(Box::new(slot))
+                        } else {
+                            slot
                         };
                         HirType::NativePointer(slot)
                     })

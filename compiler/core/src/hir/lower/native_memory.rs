@@ -41,13 +41,11 @@ impl FuncBuilder<'_> {
         pointer: ValueId,
         index: ValueId,
     ) -> Result<ValueId, Diagnostic> {
+        // The element address of a `const T *` is a `const T *`: the type is
+        // kept whole, qualifier and all, so a read through it loads and a store
+        // is refused where stores are made. `addrOf`, the one way to hand it to
+        // the program, refuses it there.
         let ty = self.values[pointer.0 as usize].ty.clone();
-        // Same reason as the field case: the element address of a `const T *`
-        // is a `const T *`, and handing back a writable one would launder the
-        // qualifier this view exists to carry.
-        if matches!(&ty, HirType::NativePointer(Pointee::Const(_))) {
-            return Err(self.unsupported(id, "the address of an element of a `const` native view"));
-        }
         if !matches!(&ty, HirType::NativePointer(p) if !matches!(p, Pointee::Opaque(_))) {
             return Err(self.unsupported(id, "address arithmetic without a native element layout"));
         }
@@ -124,19 +122,14 @@ impl FuncBuilder<'_> {
         pointer: ValueId,
         name: &str,
     ) -> Result<ValueId, Diagnostic> {
-        // Named before the general refusal, because "without a native struct
-        // layout" is true of a const view and says nothing a reader can act on.
-        //
-        // The address of a member of a `const T *` is a `const U *` in C, and
-        // that is what it would have to be here -- an address that dropped the
-        // qualifier would launder it, and `addrOf` returns a writable pointer.
-        // Giving it back as const needs the surface to tell a const slot from a
-        // mutable one, and today `Slot<T>` is the same type in both, the
-        // read-only-ness living on the container. Refused until it can be
-        // returned with the qualifier it must carry.
-        if let HirType::NativePointer(Pointee::Const(_)) = &self.values[pointer.0 as usize].ty {
-            return Err(self.unsupported(id, "the address of a member of a `const` native view"));
-        }
+        // The address of a member of a `const T *` is a `const U *`, as C has
+        // it: a read loads through it, and a store through it is refused where
+        // stores are made. `addrOf` is the one way to hand such an address to
+        // the program, and refuses it there (`native_address_of`).
+        let constant = matches!(
+            &self.values[pointer.0 as usize].ty,
+            HirType::NativePointer(Pointee::Const(_))
+        );
         // Through an unaligned view as well as a plain one. A record reached
         // *through* a packed member is itself at an unpredictable address, so
         // its own members are too however it was declared -- the property
@@ -171,6 +164,11 @@ impl FuncBuilder<'_> {
             Pointee::Unaligned(Box::new(slot.ty.clone()))
         } else {
             slot.ty.clone()
+        };
+        let slot = if constant {
+            Pointee::Const(Box::new(slot))
+        } else {
+            slot
         };
         let ty = HirType::NativePointer(slot);
         Ok(self.push(
@@ -1526,6 +1524,16 @@ impl FuncBuilder<'_> {
         }
         let (receiver, member) = (children[0], children[children.len() - 1]);
         let pointer = self.lower_expression(receiver)?;
+        // The address of a member of a `const T *` is a `const U *`, and
+        // `addrOf` answers a writable `Ptr`: handing it over would launder the
+        // qualifier. Giving it back as const needs the surface to tell a const
+        // slot from a mutable one, and today `Slot<T>` is the same type in
+        // both, the read-only-ness living on the container. Refused until it
+        // can be returned with the qualifier it must carry. A read through the
+        // view needs no address the program sees, and is not this.
+        if let HirType::NativePointer(Pointee::Const(_)) = &self.values[pointer.0 as usize].ty {
+            return Err(self.unsupported(id, "the address of a member of a `const` native view"));
+        }
         let index_type = self.type_of(member);
         let address = if kind == Some(syntax::ELEMENT_ACCESS_EXPRESSION)
             && matches!(

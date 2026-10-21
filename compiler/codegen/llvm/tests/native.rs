@@ -5694,6 +5694,88 @@ int signal_value_int(__sigval_t *v) { return v->sival_int; }
     );
 }
 
+/// A record's fields read through a `const` pointer to it: `view.x`, with
+/// `view` a `ConstPtr<Point>`, is C's `view->x`, a read `const` permits.
+/// Bindings hand such pointers back -- `gtk_svg_error_get_start` answers
+/// `const GtkSvgLocation *` -- and a field read through one was refused,
+/// because the member's address had no `const` spelling to be given. It is a
+/// `const U *` now, as C has it: a read loads through it, a store through it
+/// is refused where stores are made, and `addrOf`, which answers a writable
+/// `Ptr`, still refuses to hand one to the program.
+///
+/// Each read is one shape of the path: a field, two fields, a field of a
+/// record stored inline (the record's own address, then its field), and a
+/// field of the second record behind the pointer (an element address).
+/// Found by the Sdk lane writing gtk-gir's `GtkSvgLocation` witness
+/// (2026-10-21), which copied the record into the program's storage to read
+/// it.
+#[test]
+fn a_record_is_read_through_a_const_pointer_on_both_backends() {
+    let source = r#"
+import { addrOf, local } from "c:memory";
+import type { ConstPtr, Struct } from "c:types";
+import type { c_int } from "@nts/scalars";
+type Point = Struct<{ x: c_int; y: c_int }>;
+type Outer = Struct<{ inner: Point; z: c_int }>;
+function one(): number {
+    const point = local<Point>();
+    point.x = 3;
+    const view: ConstPtr<Point> = point;
+    return view.x;
+}
+function both(): number {
+    const point = local<Point>();
+    point.x = 2;
+    point.y = 4;
+    const view: ConstPtr<Point> = point;
+    return view.x + view.y * 10;
+}
+function nested(): number {
+    const outer = local<Outer>();
+    outer.inner.x = 5;
+    outer.z = 6;
+    const view: ConstPtr<Outer> = outer;
+    return view.inner.x * 10 + view.z;
+}
+function second(): number {
+    const points = local<Point>(2);
+    points[1].x = 8;
+    const view: ConstPtr<Point> = points;
+    return view[1].x;
+}
+export function run(): number {
+    return one() + both() * 10 + nested() * 1000 + second() * 100000;
+}
+"#;
+    for provider in [hir::Provider::NoGc, hir::Provider::ReferenceCounting] {
+        let caller = counted_caller(r#"printf("%.0f", run());"#, "run();");
+        let Some((_, outputs)) = run_on_both_backends("const-read", source, provider, "", &caller)
+        else {
+            return;
+        };
+        for output in outputs {
+            // 3, then 42, 56 and 8 at their places.
+            assert_eq!(output, expect("856423", provider), "{provider:?}");
+        }
+    }
+    // The address itself is still not the program's to have: `addrOf` answers
+    // a writable `Ptr`, which would drop the qualifier.
+    let laundered = source.replace(
+        "export function run(): number {",
+        "export function address(): number {\n    const point = local<Point>();\n    const view: ConstPtr<Point> = point;\n    return addrOf(view.x)[0];\n}\nexport function run(): number {",
+    );
+    let Some((_, prepared)) = prepare("const-read-address", &laundered) else {
+        return;
+    };
+    assert!(
+        prepared.diagnostics.iter().any(|d| d
+            .message
+            .contains("the address of a member of a `const` native view")),
+        "addrOf through a const view was accepted: {:?}",
+        prepared.diagnostics
+    );
+}
+
 /// A promise that settles with a C handle, awaited: GIO's
 /// `await file.query_info_async(…)`, whose `_finish` returns a
 /// `GFileInfo *`.
