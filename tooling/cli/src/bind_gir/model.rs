@@ -133,10 +133,12 @@ pub(crate) struct Signal {
     pub(crate) detailed: bool,
 }
 
-/// A C struct GIR describes: boxed types and plain records alike.
+/// A C struct GIR describes: boxed types and plain records alike -- and a
+/// union (`<union>`, `GMutex`), which a binding holds only by its handle.
 #[derive(Debug)]
 pub(crate) struct Record {
     pub(crate) name: String,
+    pub(crate) kind: RecordKind,
     pub(crate) c_type: Option<String>,
     /// The instance-class structs of `GObject` types (`GtkWidgetClass`), which a
     /// binding never needs a handle to.
@@ -154,6 +156,16 @@ pub(crate) struct Record {
     pub(crate) opaque: bool,
     /// Its members, in order, private ones too: each is layout.
     pub(crate) fields: Vec<Field>,
+}
+
+/// Whether a record's members follow one another, or share their storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RecordKind {
+    /// `<record>`: a C struct.
+    Struct,
+    /// `<union>`: a C union, whose members share their storage, which no
+    /// `Struct` lays out -- so the program holds one only by its handle.
+    Union,
 }
 
 /// A record's member as GIR lists it. A nested `<union>` is one with no

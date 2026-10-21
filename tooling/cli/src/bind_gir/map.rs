@@ -20,11 +20,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use crate::bind_header::ctype::CType;
-use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Type};
+use nts_core::hir::native::{FnPointer, Handle, Pointee, Scalar, Spelling, Type};
 
 use super::model::{
     Alias, ArrayRef, Callable, CallableKind, Callback, Class, Direction, Field, Namespace, Param,
-    Record, Repository, Scope, Transfer, TypeRef,
+    Record, RecordKind, Repository, Scope, Transfer, TypeRef,
 };
 
 /// A type named from another module, or this one: `(module, name)`, the module
@@ -191,9 +191,12 @@ pub(crate) enum TypeDecl {
     /// `counted` for a `GObject`, which the compiler counts: `GObjectClass`.
     /// `interface` for a `GObject` interface (`GObjectInterface`), and
     /// `implements` the interfaces a class declares, as `(name, tag)`.
+    /// `spelling` how C names the type: after `struct` by `tag`, or by the
+    /// typedef `tag` is (`Typedef<Class<"GMutex">>`).
     Class {
         name: String,
         tag: String,
+        spelling: Spelling,
         parent: Option<(String, String)>,
         counted: bool,
         interface: bool,
@@ -208,6 +211,7 @@ pub(crate) enum TypeDecl {
     Struct {
         name: String,
         tag: String,
+        spelling: Spelling,
         fields: Vec<(String, String)>,
     },
 }
@@ -930,7 +934,7 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
         let Some(c_type) = class.c_type.clone() else {
             continue;
         };
-        if class.interface || !mapper.facts.tags.contains_key(&c_type) {
+        if class.interface || mapper.facts.handle(&c_type).is_none() {
             continue;
         }
         for property in &class.properties {
@@ -1789,7 +1793,7 @@ impl<'a> Mapper<'a> {
             .find(|r| r.name == local)?
             .c_type
             .clone()?;
-        (self.c_types.contains_key(c_type.as_str()) && self.facts.tags.contains_key(&c_type))
+        (self.c_types.contains_key(c_type.as_str()) && self.facts.handle(&c_type).is_some())
             .then_some((namespace, c_type))
     }
 
@@ -1860,9 +1864,14 @@ impl<'a> Mapper<'a> {
             let Some(c_type) = &class.c_type else {
                 continue;
             };
-            let Some(tag) = self.facts.tags.get(c_type).cloned() else {
+            // `GtkParamSpecExpression`'s struct has no tag: C names it by
+            // its typedef, as it does a record's.
+            let Some(Handle { tag, spelling, .. }) = self.facts.handle(c_type) else {
                 continue;
             };
+            if spelling == Spelling::Typedef {
+                self.binding.brands.insert("Typedef");
+            }
             // An interface's base is the first class above it, and the
             // interfaces between are ones it implements.
             let (parent, implied) = if class.interface {
@@ -1960,6 +1969,7 @@ impl<'a> Mapper<'a> {
             self.binding.types.push(TypeDecl::Class {
                 name: c_type.clone(),
                 tag,
+                spelling,
                 parent,
                 counted,
                 interface,
@@ -1975,21 +1985,25 @@ impl<'a> Mapper<'a> {
                 continue;
             };
             // A pointer record's handle is the struct its typedef points at.
-            let Some(tag) = self
-                .facts
-                .tags
-                .get(c_type)
-                .or_else(|| self.facts.pointers.get(c_type).map(|p| &p.tag))
-            else {
+            let Some(Handle { tag, spelling, .. }) = self.facts.handle(c_type).or_else(|| {
+                self.facts
+                    .pointers
+                    .get(c_type)
+                    .map(|p| Handle::from(p.tag.as_str()))
+            }) else {
                 continue;
             };
+            if spelling == Spelling::Typedef {
+                self.binding.brands.insert("Typedef");
+            }
             if self.plain_struct(c_type).is_some()
                 && let Some(fields) = self.struct_fields(record)
             {
                 self.binding.brands.insert("Struct");
                 self.binding.types.push(TypeDecl::Struct {
                     name: c_type.clone(),
-                    tag: tag.clone(),
+                    tag,
+                    spelling,
                     fields,
                 });
                 continue;
@@ -2004,7 +2018,8 @@ impl<'a> Mapper<'a> {
             }
             self.binding.types.push(TypeDecl::Class {
                 name: c_type.clone(),
-                tag: tag.clone(),
+                tag,
+                spelling,
                 parent: None,
                 counted: false,
                 interface: false,
@@ -3800,29 +3815,28 @@ impl<'a> Mapper<'a> {
             && let Some(namespace) = self.c_types.get(base).copied()
         {
             let local = self.name_in(namespace, base);
-            return Ok(self.handle(local, &pointer.tag, pointer.constant, param.nullable));
+            let handle = Handle::from(pointer.tag);
+            return Ok(self.handle(local, handle, pointer.constant, param.nullable));
         }
         // A plain record's pointer points at its `Struct`, which the program
         // reads and writes through: `Ptr<PangoRectangle>`, and `ConstPtr<…>`
         // where C points `const`.
         if depth == 1
             && let Some((namespace, _)) = self.plain_struct(base)
-            && let Some(tag) = self.facts.tags.get(base).cloned()
+            && let Some(handle) = self.facts.handle(base)
         {
             let local = self.name_in(namespace, base);
-            return Ok(self.struct_pointer(&local, &tag, constant, param.nullable));
+            return Ok(self.struct_pointer(&local, handle, constant, param.nullable));
         }
         if depth == 1
             && let Some(namespace) = self.c_types.get(base).copied()
         {
-            let tag = self
+            let handle = self
                 .facts
-                .tags
-                .get(base)
-                .cloned()
+                .handle(base)
                 .ok_or_else(|| Reason::NoTag(base.to_owned()))?;
             let local = self.name_in(namespace, base);
-            return Ok(self.handle(local, &tag, constant, param.nullable));
+            return Ok(self.handle(local, handle, constant, param.nullable));
         }
         match self.resolve(&qualified) {
             Some(Resolved::Enum(namespace, e, scalar)) if depth == 0 => {
@@ -4103,8 +4117,8 @@ impl<'a> Mapper<'a> {
                 .push(nts_codegen_c::GOBJECT_HEADER_NAME.to_owned());
         }
         // `self: GtkButton` names the class's handle, which exists only for a
-        // tagged struct.
-        if !self.facts.tags.contains_key(&c_type) {
+        // struct the headers define.
+        if self.facts.handle(&c_type).is_none() {
             return Err(Reason::NoTag(c_type));
         }
         let prefix = class.symbol_prefix.as_deref().ok_or(Reason::NoSymbol)?;
@@ -4501,7 +4515,7 @@ impl<'a> Mapper<'a> {
         let (object_tag, value_tag) = (tag("GObject")?, tag("GValue")?);
         let object = self.name_in(objects, "GObject");
         let value = self.name_in(objects, "GValue");
-        let result = self.handle(object, &object_tag, false, false);
+        let result = self.handle(object, Handle::from(object_tag), false, false);
         let result = self.declared(result, class);
         let floating = self.descends(self.namespace, class, "GInitiallyUnowned");
         let result = self.owned(result, !floating);
@@ -4536,7 +4550,7 @@ impl<'a> Mapper<'a> {
             ),
             (
                 "values".to_owned(),
-                self.handle(value, &value_tag, true, true),
+                self.handle(value, Handle::from(value_tag), true, true),
             ),
         ];
         Ok(Function {
@@ -4586,7 +4600,7 @@ impl<'a> Mapper<'a> {
             return result;
         };
         if c_type == declared
-            || !self.facts.tags.contains_key(c_type)
+            || self.facts.handle(c_type).is_none()
             || !self.descends(namespace, class, &declared)
         {
             return result;
@@ -4657,8 +4671,14 @@ impl<'a> Mapper<'a> {
 
     /// A pointer to a plain record's `Struct`: `Ptr<PangoRectangle>`, or
     /// `ConstPtr<…>`. To C the same `struct _PangoRectangle *` a handle is.
-    fn struct_pointer(&mut self, local: &str, tag: &str, constant: bool, nullable: bool) -> Mapped {
-        let pointee = Pointee::Opaque(Handle::from(tag));
+    fn struct_pointer(
+        &mut self,
+        local: &str,
+        handle: Handle,
+        constant: bool,
+        nullable: bool,
+    ) -> Mapped {
+        let pointee = Pointee::Opaque(handle);
         let (brand, pointee) = if constant {
             ("ConstPtr", Pointee::Const(Box::new(pointee)))
         } else {
@@ -4690,13 +4710,14 @@ impl<'a> Mapper<'a> {
         // Bounded: a record holding itself by value is C's error, not a
         // reason to recurse.
         let plain = depth < 8
+            && record.kind == RecordKind::Struct
             && record.get_type.is_none()
             && !record.pointer
             && !record.opaque
             && !record.fields.is_empty()
             && !self.embedded.contains(c_type)
             && self.facts.sizes.contains_key(c_type)
-            && self.facts.tags.contains_key(c_type)
+            && self.facts.handle(c_type).is_some()
             && record
                 .fields
                 .iter()
@@ -4806,8 +4827,8 @@ impl<'a> Mapper<'a> {
         Some(fields)
     }
 
-    fn handle(&mut self, local: String, tag: &str, constant: bool, nullable: bool) -> Mapped {
-        let pointee = Pointee::Opaque(Handle::from(tag));
+    fn handle(&mut self, local: String, handle: Handle, constant: bool, nullable: bool) -> Mapped {
+        let pointee = Pointee::Opaque(handle);
         let class = local.clone();
         let (pointee, local) = if constant {
             self.binding.brands.insert("Const");
@@ -5847,6 +5868,117 @@ mod tests {
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
+    /// A type C names only by its typedef is spelled `Typedef<…>`, and C's
+    /// pointer to it by that name: a union (`GMutex`), a struct with no tag
+    /// held as a handle (`GTestLogMsg`), one laid out as a `Struct`
+    /// (`GtkAccessibleTextRange`), and a class (`GtkParamSpecExpression`),
+    /// which keeps its declaration. The controls: a tagged record keeps its
+    /// tag, and the union stays a handle though the headers size it and its
+    /// one member is a value a `Struct` spells -- its members share storage.
+    #[test]
+    fn a_type_c_names_by_its_typedef_is_spelled_typedef() {
+        use super::super::{emit, facts};
+        use super::{Handle, Pointee, Spelling, Type, TypeDecl, bind};
+        let dir = crate::bind_scratch::directory("gir-typedef-test").expect("fixture directory");
+        let field = |name: &str, ty: &str, c_type: &str| {
+            format!(
+                r#"<field name="{name}" writable="1"><type name="{ty}" c:type="{c_type}"/></field>"#
+            )
+        };
+        let takes = |name: &str, c_type: &str| {
+            format!(
+                r#"<function name="{name}" c:identifier="s_{name}"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="it"><type name="X" c:type="{c_type}*"/></parameter></parameters></function>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<class name="Spec" c:type="SSpec" glib:type-name="SSpec" glib:get-type="s_spec_get_type" glib:fundamental="1"></class>"#,
+            r#"<union name="Mutex" c:type="SMutex">"#,
+            &field("p", "gpointer", "gpointer"),
+            r#"<method name="lock" c:identifier="s_mutex_lock"><return-value><type name="none" c:type="void"/></return-value><parameters><instance-parameter name="mutex"><type name="Mutex" c:type="SMutex*"/></instance-parameter></parameters></method></union>"#,
+            r#"<record name="LogMsg" c:type="SLogMsg">"#,
+            &field("n", "gint", "gint"),
+            "</record>",
+            r#"<record name="Range" c:type="SRange">"#,
+            &field("start", "gint", "gint"),
+            &field("length", "gint", "gint"),
+            "</record>",
+            r#"<record name="Tagged" c:type="STagged">"#,
+            &field("n", "gint", "gint"),
+            "</record>",
+            &takes("free", "SLogMsg"),
+            &takes("measure", "SRange"),
+            "</namespace></repository>",
+        ]
+        .concat()
+        .replace(r#"name="X" c:type="SLogMsg*""#, r#"name="LogMsg" c:type="SLogMsg*""#)
+        .replace(r#"name="X" c:type="SRange*""#, r#"name="Range" c:type="SRange*""#);
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let header = facts::Facts {
+            tags: [("STagged".to_owned(), "_STagged".to_owned())].into(),
+            typedefs: ["SMutex", "SLogMsg", "SRange", "SSpec"]
+                .map(str::to_owned)
+                .into(),
+            sizes: [("SMutex", 8), ("SRange", 8)]
+                .map(|(c, size)| (c.to_owned(), size))
+                .into(),
+            ..facts::Facts::default()
+        };
+        let binding = bind(&repository, &repository.namespaces["S"], &header);
+        let declarations = emit::declarations(&binding, "test");
+        for line in [
+            "  export type SMutex = Typedef<Class<\"SMutex\">> & SMutexMethods;",
+            "  export type SLogMsg = Typedef<Class<\"SLogMsg\">> & SLogMsgMethods;",
+            "  export type SRange = Typedef<Struct<{ start: c_int; length: c_int }, \"SRange\">>;",
+            "  export type STagged = Class<\"_STagged\"> & STaggedMethods;",
+            "  export type SSpec = Typedef<Class<\"SSpec\">> & SSpecMethods;",
+        ] {
+            assert!(
+                declarations.contains(line),
+                "missing {line:?}:\n{declarations}"
+            );
+        }
+        assert!(
+            !binding
+                .types
+                .iter()
+                .any(|decl| matches!(decl, TypeDecl::Struct { name, .. } if name == "SMutex")),
+            "a union laid out as a Struct"
+        );
+        let pointee = |symbol: &str| {
+            let function = binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol}: {:?}", binding.refused));
+            match &function.c_parameters[0] {
+                Type::Pointer(Pointee::Opaque(handle)) => handle.clone(),
+                other => panic!("{symbol}: {other:?}"),
+            }
+        };
+        for (symbol, name) in [
+            ("s_mutex_lock", "SMutex"),
+            ("s_free", "SLogMsg"),
+            ("s_measure", "SRange"),
+        ] {
+            assert_eq!(
+                pointee(symbol),
+                Handle {
+                    spelling: Spelling::Typedef,
+                    ..Handle::from(name)
+                },
+                "{symbol}"
+            );
+        }
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     /// A record with no `GType`, whose members the headers lay out, is a
     /// `Struct` -- private members too, a 64-bit one as its brand, a string
     /// as its raw `char *` -- and a pointer to one is the program's storage,
@@ -5888,7 +6020,9 @@ mod tests {
         };
         let binding = bind(&repository, &repository.namespaces["S"], &header);
         let mut structs = binding.types.iter().filter_map(|decl| match decl {
-            TypeDecl::Struct { name, tag, fields } => Some((name, tag, fields)),
+            TypeDecl::Struct {
+                name, tag, fields, ..
+            } => Some((name, tag, fields)),
             TypeDecl::Class { .. } => None,
         });
         let (name, tag, fields) = structs.next().expect("a Struct");

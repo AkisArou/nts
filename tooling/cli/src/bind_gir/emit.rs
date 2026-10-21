@@ -3,6 +3,8 @@
 
 use std::fmt::Write;
 
+use nts_core::hir::native::Spelling;
+
 use super::map::{ArrayLength, Binding, Constructor, Element, Function, Mapped, Shape, TypeDecl};
 use super::model::Transfer;
 
@@ -87,20 +89,27 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
             // A record C lays out for the program: its members, private ones
             // too, which the compiler lays out and asserts against the
             // header's own struct.
-            TypeDecl::Struct { name, tag, fields } => {
+            TypeDecl::Struct {
+                name,
+                tag,
+                spelling,
+                fields,
+            } => {
                 let members: Vec<String> = fields
                     .iter()
                     .map(|(field, ts)| format!("{field}: {ts}"))
                     .collect();
+                let record = format!("Struct<{{ {} }}, \"{tag}\">", members.join("; "));
                 let _ = writeln!(
                     out,
-                    "  export type {name} = Struct<{{ {} }}, \"{tag}\">;",
-                    members.join("; ")
+                    "  export type {name} = {};",
+                    spelled(*spelling, record)
                 );
             }
             TypeDecl::Class {
                 name,
                 tag,
+                spelling,
                 parent,
                 counted,
                 interface,
@@ -162,22 +171,29 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     if *interface && implements.is_empty() {
                         let _ = writeln!(
                             out,
-                            "  export type {name} = GObjectInterface<\"{tag}\", {parent}> & {name}Methods;"
+                            "  export type {name} = {} & {name}Methods;",
+                            spelled(*spelling, format!("GObjectInterface<\"{tag}\", {parent}>"))
                         );
                     } else if *interface {
                         let _ = writeln!(
                             out,
-                            "  export type {name} = GObjectInterface<\"{tag}\", {parent}, {tags}> & {name}Methods;"
+                            "  export type {name} = {} & {name}Methods;",
+                            spelled(
+                                *spelling,
+                                format!("GObjectInterface<\"{tag}\", {parent}, {tags}>")
+                            )
                         );
                     } else if implements.is_empty() {
                         let _ = writeln!(
                             out,
-                            "  export type {name} = {class}<\"{tag}\", {parent}> & {name}Methods;"
+                            "  export type {name} = {} & {name}Methods;",
+                            spelled(*spelling, format!("{class}<\"{tag}\", {parent}>"))
                         );
                     } else {
                         let _ = writeln!(
                             out,
-                            "  export type {name} = {class}<\"{tag}\", {parent}, {tags}> & {name}Methods;"
+                            "  export type {name} = {} & {name}Methods;",
+                            spelled(*spelling, format!("{class}<\"{tag}\", {parent}, {tags}>"))
                         );
                     }
                 } else if !implements.is_empty() {
@@ -187,23 +203,28 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
                     );
                     let _ = writeln!(
                         out,
-                        "  export type {name} = {class}<\"{tag}\", null, {tags}> & {name}Methods;"
+                        "  export type {name} = {} & {name}Methods;",
+                        spelled(*spelling, format!("{class}<\"{tag}\", null, {tags}>"))
                     );
                 } else if let Some((get_type, size)) = boxed {
                     // A boxed record: held in a box of the program's, freed
                     // by its `GType`; `new GtkTextIter()` makes a zeroed one.
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
+                    let boxed = format!("Boxed<\"{tag}\", \"{get_type}\", {size}>");
                     let _ = writeln!(
                         out,
-                        "  export type {name} = Boxed<\"{tag}\", \"{get_type}\", {size}> & {name}Methods;"
+                        "  export type {name} = {} & {name}Methods;",
+                        spelled(*spelling, boxed)
                     );
                     boxed_value(&mut out, binding, name, *size);
                     continue;
                 } else {
                     let _ = writeln!(out, "  export type {name}Methods = {name}OwnMethods;");
+                    let handle = format!("{class}<\"{tag}\">");
                     let _ = writeln!(
                         out,
-                        "  export type {name} = {class}<\"{tag}\"> & {name}Methods;"
+                        "  export type {name} = {} & {name}Methods;",
+                        spelled(*spelling, handle)
                     );
                 }
                 // A GObject class a program may subclass: its `GType`'s
@@ -272,6 +293,16 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
     }
     out.push_str("}\n");
     out
+}
+
+/// `text` as C names its type: wrapped in `Typedef<…>` where the name is a
+/// typedef and not a tag (`Spelling::Typedef`) -- `GTestLogMsg`, whose struct
+/// has none, and the union `GMutex` -- which C writes without `struct`.
+fn spelled(spelling: Spelling, text: String) -> String {
+    match spelling {
+        Spelling::Tag => text,
+        Spelling::Typedef => format!("Typedef<{text}>"),
+    }
 }
 
 /// A property of the class's methods, read and written through the methods

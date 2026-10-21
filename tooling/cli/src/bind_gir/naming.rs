@@ -505,6 +505,7 @@ impl Renamer<'_> {
             TypeDecl::Class {
                 name,
                 tag,
+                spelling,
                 parent,
                 counted,
                 interface,
@@ -513,6 +514,7 @@ impl Renamer<'_> {
             } => TypeDecl::Class {
                 name: self.class(name),
                 tag: tag.clone(),
+                spelling: *spelling,
                 // Qualified where it is another namespace's, so no module is
                 // needed beside it: the namespace is imported whole.
                 parent: parent
@@ -527,9 +529,15 @@ impl Renamer<'_> {
                 boxed: boxed.clone(),
             },
             // Members keep C's names: they are the struct's, as its tag is.
-            TypeDecl::Struct { name, tag, fields } => TypeDecl::Struct {
+            TypeDecl::Struct {
+                name,
+                tag,
+                spelling,
+                fields,
+            } => TypeDecl::Struct {
                 name: self.class(name),
                 tag: tag.clone(),
+                spelling: *spelling,
                 fields: fields
                     .iter()
                     .map(|(field, ts)| (field.clone(), self.text(ts)))

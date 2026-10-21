@@ -9,6 +9,16 @@
 //! incomplete struct -- and clang's AST dump prints the declaration's type
 //! desugared: `'GtkWidget':'struct _GtkWidget'`.
 //!
+//! **The typedef.** Some types have no tag to write: `typedef struct { ... }
+//! GTestLogMsg;` gives its struct none, and `GMutex` is `typedef union _GMutex
+//! GMutex;`, a union. C names each by its typedef alone. The dump shows a
+//! union (`'union _GMutex'`), but prints a tagless struct as `'struct
+//! GTestLogMsg'` -- the name it takes for linkage -- which is what a struct
+//! tagged by its own typedef's name prints too. So the compiler is asked
+//! instead: `__builtin_types_compatible_p(GTestLogMsg, struct GTestLogMsg)` is
+//! 1 only where `struct GTestLogMsg` is that type, and where it is not, that
+//! `struct GTestLogMsg` is a new, incomplete type of the probe's own.
+//!
 //! **The sign.** An enum's compatible integer type is C's choice and GIR's
 //! values do not settle it: `G_PARAM_DEPRECATED` is `(gint)(1u << 31)` in the
 //! header and `2147483648` in GIR, and a `GParamFlags` declared
@@ -26,6 +36,7 @@ use anyhow::{Context, Result};
 
 use crate::bind_header::ctype::{self, CType};
 use crate::bind_header::probe::Probe;
+use nts_core::hir::native::{Handle, Spelling};
 
 const PREFIX: &str = "ntsbindgir_";
 
@@ -37,6 +48,11 @@ static CALLS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::n
 pub(crate) struct Facts {
     /// `c_type -> tag` for every name the headers define as a tagged struct.
     pub(crate) tags: BTreeMap<String, String>,
+    /// Every name the headers define as a struct or union C spells only by
+    /// that typedef: a struct with no tag (`GTestLogMsg`), and a union
+    /// (`GMutex`), which `struct` cannot name. Kept apart from `tags`, each of
+    /// which C writes after `struct`; [`Facts::handle`] reads both.
+    pub(crate) typedefs: BTreeSet<String>,
     /// The enum types C made signed. An enum type absent from here and from
     /// `unsigned` was not answered, and the caller falls back to GIR's values.
     pub(crate) signed: BTreeSet<String>,
@@ -100,6 +116,7 @@ impl Facts {
     /// no two namespaces define one.
     pub(crate) fn merge(&mut self, other: Facts) {
         self.tags.extend(other.tags);
+        self.typedefs.extend(other.typedefs);
         self.signed.extend(other.signed);
         self.unsigned.extend(other.unsigned);
         self.prerequisites.extend(other.prerequisites);
@@ -111,6 +128,19 @@ impl Facts {
         self.volatile.extend(other.volatile);
         self.pointers.extend(other.pointers);
         self.integers.extend(other.integers);
+    }
+
+    /// The handle C names `c_type` by: its struct's tag, or the typedef itself
+    /// where that is its only name (`typedefs`). `None` where the headers
+    /// define no struct or union by that name.
+    pub(crate) fn handle(&self, c_type: &str) -> Option<Handle> {
+        if self.typedefs.contains(c_type) {
+            return Some(Handle {
+                spelling: Spelling::Typedef,
+                ..Handle::from(c_type)
+            });
+        }
+        self.tags.get(c_type).map(|tag| Handle::from(tag.as_str()))
     }
 }
 
@@ -329,6 +359,13 @@ pub(crate) fn resolve(preamble: &[String], asked: &Asked<'_>, cflags: &[String])
     }
     for (at, c_type) in structs.iter().enumerate() {
         let _ = writeln!(probe, "extern {c_type} {PREFIX}tag_{at};");
+        // Whether the struct carries its typedef's name as its tag, or no tag.
+        if nts_codegen_common::symbols::is_native_c_identifier(c_type) {
+            let _ = writeln!(
+                probe,
+                "enum {{ {PREFIX}tagged_{at} = __builtin_types_compatible_p({c_type}, struct {c_type}) }};"
+            );
+        }
     }
     for (at, c_type) in enums.iter().enumerate() {
         let _ = writeln!(probe, "enum {{ {PREFIX}sign_{at} = (({c_type})-1 < 0) }};");
@@ -405,6 +442,7 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
         macros,
     } = *asked;
     let mut facts = Facts::default();
+    let mut untagged = BTreeSet::new();
     let mut lines = dump.lines().peekable();
     while let Some(line) = lines.next() {
         if line.contains("VarDecl") && !line.contains(" invalid ") {
@@ -421,12 +459,14 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
                 continue;
             };
             // `'GtkWidget':'struct _GtkWidget'`, or `'struct _X'` alone when
-            // the name already was the struct.
+            // the name already was the struct; `'GMutex':'union _GMutex'`.
             let quoted: Vec<&str> = types.split('\'').skip(1).step_by(2).collect();
             if let Some(tag) = quoted.last().and_then(|t| t.strip_prefix("struct ")) {
                 facts
                     .tags
                     .insert((*c_type).to_owned(), tag.trim().to_owned());
+            } else if quoted.last().is_some_and(|t| t.starts_with("union ")) {
+                facts.typedefs.insert((*c_type).to_owned());
             }
         } else if line.contains("EnumConstantDecl") && !line.contains(" invalid ") {
             let index = |kind: &str| {
@@ -454,6 +494,12 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
                 }
                 continue;
             }
+            if let Some(c_type) = index("tagged").and_then(|n| structs.get(n)) {
+                if enumerator_value(&mut lines) == Some("0") {
+                    untagged.insert(*c_type);
+                }
+                continue;
+            }
             if let Some(c_type) = index("size").and_then(|n| sized.get(n)) {
                 if let Some(size) = enumerator_value(&mut lines).and_then(|v| v.parse().ok()) {
                     facts.sizes.insert((*c_type).to_owned(), size);
@@ -468,6 +514,14 @@ fn parse(dump: &str, asked: &Asked<'_>) -> Facts {
                 Some("0") => facts.unsigned.insert((*c_type).to_owned()),
                 _ => false,
             };
+        }
+    }
+    // A struct the dump names by its typedef's own name, which `struct` does
+    // not name: no tag, only the typedef.
+    for c_type in untagged {
+        if facts.tags.get(c_type).is_some_and(|tag| tag == c_type) {
+            facts.tags.remove(c_type);
+            facts.typedefs.insert(c_type.to_owned());
         }
     }
     facts
@@ -559,6 +613,58 @@ EnumConstantDecl 0x13 <t.c:13:8, col:50> col:8 ntsbindgir_declared_1 'int'
         assert!(!facts.tags.contains_key("NoSuchType"));
         assert!(facts.signed.contains("GParamFlags"));
         assert!(facts.unsigned.contains("GtkAlign"));
+    }
+
+    /// The three a typedef's name prints alike or near, in clang's own dump:
+    /// a struct with no tag, a union, and a struct tagged by its typedef's
+    /// own name. The dump tells the union apart, and the compiler's answer
+    /// the struct with no tag from the tagged one: only the first two are
+    /// named by their typedef, and the last keeps its tag.
+    #[test]
+    fn a_type_named_by_its_typedef_alone_is_a_typedef() {
+        let dump = "\
+VarDecl 0x1 <t.c:6:1, col:16> col:16 ntsbindgir_tag_0 'Tagless':'struct Tagless' extern external-linkage
+EnumConstantDecl 0x2 <t.c:7:8, col:82> col:8 ntsbindgir_tagged_0 'int'
+`-ConstantExpr 0x3 <col:30, col:82> 'int'
+  |-value: Int 0
+  `-TypeTraitExpr 0x4 <col:30, col:82> 'int' __builtin_types_compatible_p
+VarDecl 0x5 <t.c:8:1, col:15> col:15 ntsbindgir_tag_1 'Joined':'union _Joined' extern external-linkage
+EnumConstantDecl 0x6 <t.c:9:8, col:80> col:8 ntsbindgir_tagged_1 'int'
+`-ConstantExpr 0x7 <col:30, col:80> 'int'
+  |-value: Int 0
+VarDecl 0x8 <t.c:10:1, col:13> col:13 ntsbindgir_tag_2 'Same':'struct Same' extern external-linkage
+EnumConstantDecl 0x9 <t.c:11:8, col:76> col:8 ntsbindgir_tagged_2 'int'
+`-ConstantExpr 0xa <col:30, col:76> 'int'
+  |-value: Int 1
+";
+        let facts = super::parse(
+            dump,
+            &super::Asked {
+                structs: &["Tagless", "Joined", "Same"],
+                enums: &[],
+                slots: &[],
+                sized: &[],
+                functions: &[],
+                macros: &[],
+            },
+        );
+        assert_eq!(
+            (facts.tags.get("Same"), facts.tags.get("Tagless")),
+            (Some(&"Same".to_owned()), None)
+        );
+        assert_eq!(
+            facts.typedefs.iter().collect::<Vec<_>>(),
+            ["Joined", "Tagless"]
+        );
+        let spelled = |c_type: &str| facts.handle(c_type).map(|h| (h.tag, h.spelling));
+        assert_eq!(
+            spelled("Tagless"),
+            Some(("Tagless".to_owned(), super::Spelling::Typedef))
+        );
+        assert_eq!(
+            spelled("Same"),
+            Some(("Same".to_owned(), super::Spelling::Tag))
+        );
     }
 
     /// A macro's value, where the headers define it as a constant

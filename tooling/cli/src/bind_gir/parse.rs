@@ -6,8 +6,8 @@ use roxmltree::Node;
 
 use super::model::{
     Alias, ArrayRef, Callable, CallableKind, Callback, Class, Constant, Direction, Enum, Field,
-    Member, Namespace, Param, Property, Record, Repository, Scope, Signal, Signature, Transfer,
-    TypeRef,
+    Member, Namespace, Param, Property, Record, RecordKind, Repository, Scope, Signal, Signature,
+    Transfer, TypeRef,
 };
 
 const CORE: &str = "http://www.gtk.org/introspection/core/1.0";
@@ -209,8 +209,13 @@ fn namespace_of_text(text: &str, path: &str) -> Result<Namespace> {
                 type_struct: node.attribute((GLIB, "type-struct")).map(str::to_owned),
                 vfuncs: vfuncs(node),
             }),
-            "record" => namespace.records.push(Record {
+            kind @ ("record" | "union") => namespace.records.push(Record {
                 name: attribute(node, "name").unwrap_or_default().to_owned(),
+                kind: if kind == "union" {
+                    RecordKind::Union
+                } else {
+                    RecordKind::Struct
+                },
                 c_type: c_attribute(node, "type").map(str::to_owned),
                 class_struct: node.attribute((GLIB, "is-gtype-struct-for")).is_some(),
                 callables: callables(node),
