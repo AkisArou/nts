@@ -92,6 +92,9 @@
 //   domain gtk-builder-error-quark 1281455214  functions GIR declares on an
 //                 enum, and not on the namespace: an error domain's quark, and
 //                 `g_unicode_script_to_iso15924`'s code for Latin, "Latn"
+//   byte-array 3 7,9  GLib's byte array, which GIR spells as an array, held
+//                 by its handle: grown by two appends, then sealed into a
+//                 `GBytes` whose bytes the program reads
 //   error-set 0   a missing key wrote a `GError` into that slot, which is freed
 //   thrown        and the same call as a method, with no slot passed, threw an
 //                 `Error` carrying the `GError`'s message instead
@@ -236,6 +239,10 @@ import {
   g_quark_to_string,
   g_unicode_script_to_iso15924,
   g_variant_parse,
+  g_byte_array_append,
+  g_byte_array_free_to_bytes,
+  g_byte_array_new,
+  g_bytes_get_data,
   g_cond_wait,
   g_mutex_lock,
   g_mutex_trylock,
@@ -549,6 +556,12 @@ function outParameters(): void {
     "domain " + g_quark_to_string(gtk_builder_error_quark()) + " " +
       String(g_unicode_script_to_iso15924(UnicodeScript.LATIN)),
   );
+  // GLib's byte array, held by its handle: grown, then sealed into a `GBytes`.
+  const grown = g_byte_array_new();
+  g_byte_array_append(grown, new Uint8Array([7, 8]));
+  g_byte_array_append(grown, new Uint8Array([9]));
+  const sealed = g_bytes_get_data(g_byte_array_free_to_bytes(grown));
+  console.log("byte-array " + String(sealed.length) + " " + String(sealed[0]) + "," + String(sealed[2]));
   const missing = g_key_file_get_integer(keys, "a", "absent", error);
   const failure = error[0];
   if (failure !== null) {
