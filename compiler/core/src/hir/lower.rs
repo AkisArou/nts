@@ -22776,6 +22776,21 @@ impl<'a> FuncBuilder<'a> {
     /// a written annotation already makes it, and a contextual type narrower than
     /// the body returns is an assignment the checker would have rejected.
     fn contextual_return(&self, id: NodeId) -> Option<HirType> {
+        self.represent(self.contextual_return_type(id)?)
+    }
+
+    /// The type [`Self::contextual_return`] represents, as the checker's type:
+    /// the one walk, for the reader that needs the type itself.
+    /// [`Self::generator_declared`] takes it as the abstract generator a
+    /// generator closure's frame extends.
+    ///
+    /// **And an element of a typed array**, the second position this admits:
+    /// `const makers: Make[] = [function* () { ... }]` gives each element
+    /// `Make`, as the declaration gives its initializer. Read from the
+    /// declaration's type, `F[]`, rather than the literal's own, which the
+    /// checker infers from the elements and so says what the function already
+    /// does. A tuple's position, like an argument's, is a later change.
+    fn contextual_return_type(&self, id: NodeId) -> Option<TypeId> {
         if !matches!(
             self.kind_of(id),
             Some(syntax::ARROW_FUNCTION | syntax::FUNCTION_EXPRESSION)
@@ -22814,6 +22829,11 @@ impl<'a> FuncBuilder<'a> {
             child = parent;
             parent = self.syntactic_parent(parent)?;
         }
+        let in_array = self.kind_of(parent) == Some(syntax::ARRAY_LITERAL_EXPRESSION);
+        if in_array {
+            child = parent;
+            parent = self.syntactic_parent(parent)?;
+        }
         if self.kind_of(parent) != Some(syntax::VARIABLE_DECLARATION) {
             return None;
         }
@@ -22822,13 +22842,25 @@ impl<'a> FuncBuilder<'a> {
         if self.children(parent).last().copied() != Some(child) {
             return None;
         }
-        let ty = self.snapshot.node_types.get(&parent).copied()?;
+        let mut ty = self.snapshot.node_types.get(&parent).copied()?;
+        if in_array {
+            let nts_semantic_schema::TypeKind::Array(element) =
+                self.snapshot.types.get(ty.0 as usize)?.kind
+            else {
+                return None;
+            };
+            ty = element;
+        }
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let nts_semantic_schema::TypeKind::Function(signature) = record.kind else {
             return None;
         };
-        let signature = self.snapshot.signatures.get(signature.0 as usize)?;
-        self.represent(signature.return_type)
+        Some(
+            self.snapshot
+                .signatures
+                .get(signature.0 as usize)?
+                .return_type,
+        )
     }
 
     fn declared_return(&self, id: NodeId) -> Option<HirType> {
@@ -31277,7 +31309,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(signature) = self.snapshot.signatures.get(signature.0 as usize) else {
             return Err(self.unsupported(id, "a generator with no call signature"));
         };
-        let declared = signature.return_type;
+        let declared = self.generator_in_context(id, signature.return_type);
         let Some(argument) = self
             .snapshot
             .type_arguments
@@ -42696,7 +42728,8 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// The abstract generator a frame extends: the `Generator<T, …>` the
-    /// declaration wrote, or that the checker gave an unannotated `function*`.
+    /// declaration wrote, or that the checker gave an unannotated `function*`
+    /// -- or its context's ([`Self::generator_in_context`]).
     ///
     /// The same walk [`Self::generator_element`] needs one step earlier, so it
     /// is one function rather than two that must keep agreeing about which
@@ -42716,12 +42749,40 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Function(signature) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
             return None;
         };
-        Some(
-            self.snapshot
-                .signatures
-                .get(signature.0 as usize)?
-                .return_type,
-        )
+        let own = self
+            .snapshot
+            .signatures
+            .get(signature.0 as usize)?
+            .return_type;
+        Some(self.generator_in_context(node, own))
+    }
+
+    /// The abstract generator the generator `node` extends, given the one its
+    /// own signature returns: its context's, where that is one of the same
+    /// kind.
+    ///
+    /// **The context first.** `type Make = () => Generator<number>` is
+    /// `Generator<number, any, any>`, and a closure stored as one is typed from
+    /// its body as `Generator<number, void, any>`: two abstract generators, two
+    /// layouts. A frame extending its own would be returned through `Make`
+    /// typed as the other, whose resumption no frame overrides. So where the
+    /// context names an abstract generator of the closure's kind
+    /// ([`Self::contextual_return_type`]), the frame extends that one, and the
+    /// shell, the frame and every call agree. It is the wider type, which the
+    /// checker accepted the closure as: each `yield` is coerced to its element
+    /// and the completion and `next`'s argument are the context's. A
+    /// `function*` declaration has no context, and keeps its own.
+    ///
+    /// One answer for the frame being built (`begin_generator`) and every
+    /// reader of a built one ([`Self::generator_declared`]): the two disagreeing
+    /// is a frame extending one generator while its readers name another.
+    fn generator_in_context(&self, node: NodeId, own: TypeId) -> TypeId {
+        let kind = abstract_generator_kind(self.snapshot, own);
+        self.contextual_return_type(node)
+            .filter(|context| {
+                kind.is_some() && abstract_generator_kind(self.snapshot, *context) == kind
+            })
+            .unwrap_or(own)
     }
 
     /// `[Symbol.iterator]()` on a user type, and what stepping it looks like.
