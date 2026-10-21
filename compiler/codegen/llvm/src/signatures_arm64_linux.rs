@@ -1341,6 +1341,24 @@ pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_map_entry",
+        returns: "i64",
+        params: &["ptr", "[2 x i64]"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_get",
+        returns: "[2 x i64]",
+        params: &["ptr", "i64", "[2 x i64]"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_set",
+        returns: "ptr",
+        params: &["ptr", "i64", "[2 x i64]", "[2 x i64]"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_map_extend",
         returns: "ptr",
         params: &["ptr", "ptr"],

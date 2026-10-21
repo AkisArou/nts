@@ -3083,6 +3083,8 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     // now reads the runtime for any helper like it.
     "nts_map_extend",
     "nts_map_set",
+    // `set` through an entry (`hir::entries`), which answers what `set` does.
+    "nts_map_entry_set",
     "nts_set_add",
 ];
 

@@ -7500,6 +7500,7 @@ static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
   map->slots = 0;
   map->kind = kind;
   map->holds_values = holds_values;
+  map->generation = 0;
   map->index = 0;
   map->keys = 0;
   /* The three arrays are allocated on the first insertion rather than here, so
@@ -8957,6 +8958,8 @@ static void nts_map_rehash(NtsMap *map) {
     }
     index[slot] = (int32_t)at;
   }
+  /* Every slot moved, so every entry taken before is stale. */
+  map->generation++;
 }
 
 /* `map.get(k)`, and `undefined` when there is no such key.
@@ -9032,26 +9035,21 @@ static NtsValue nts_map_normalize(NtsValue key) {
  * the end of it a `set` in a loop can be free at. */
 static NtsMap *nts_map_same(NtsMap *map) { return map; }
 
-__attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
-                                                   NtsValue value) {
-  key = nts_map_normalize(key);
-  uint32_t hash = nts_hash_key(key, map->kind);
-  uint32_t slot = 0;
-  int32_t at = nts_map_find(map, key, hash, &slot);
-  if (at >= 0) {
-    /* Present: the key stays as it was -- `set` replaces the value and not the
-     * key, which is observable for `-0` against `+0`. */
-    if (map->values) {
-      nts_value_retain(value);
-      nts_value_release(map->values[at]);
-      map->values[at] = value;
-    }
-    return nts_map_same(map);
+/* A present key's new value. The key stays as it was -- `set` replaces the
+ * value and not the key, which is observable for `-0` against `+0`. */
+static inline __attribute__((always_inline)) void
+nts_map_overwrite(NtsMap *map, int32_t at, NtsValue value) {
+  if (map->values) {
+    nts_value_retain(value);
+    nts_value_release(map->values[at]);
+    map->values[at] = value;
   }
-  if (map->used == map->capacity) {
-    nts_map_rehash(map);
-    nts_map_find(map, key, hash, &slot);
-  }
+}
+
+/* A fresh key at `slot`, the one `nts_map_find` said it would take, in a table
+ * with room for one more entry. */
+static inline __attribute__((always_inline)) void
+nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot) {
   nts_value_retain(key);
   if (map->values) {
     nts_value_retain(value);
@@ -9061,6 +9059,84 @@ __attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
   map->index[slot] = (int32_t)map->used;
   map->used++;
   map->header.length++;
+  map->generation++;
+}
+
+__attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
+                                                   NtsValue value) {
+  key = nts_map_normalize(key);
+  uint32_t hash = nts_hash_key(key, map->kind);
+  uint32_t slot = 0;
+  int32_t at = nts_map_find(map, key, hash, &slot);
+  if (at >= 0) {
+    nts_map_overwrite(map, at, value);
+    return nts_map_same(map);
+  }
+  if (map->used == map->capacity) {
+    nts_map_rehash(map);
+    nts_map_find(map, key, hash, &slot);
+  }
+  nts_map_insert_at(map, key, value, slot);
+  return nts_map_same(map);
+}
+
+/* The entry `nts_map_entry` answers: the generation it was taken at, and a
+ * slot. An entry lives between two operations the compiler proved write
+ * nothing, so a generation wrapping 2^32 structural writes under one is not a
+ * case that arises. */
+static inline uint64_t nts_map_entry_of(const NtsMap *map, uint32_t slot) {
+  return ((uint64_t)map->generation << 32) | slot;
+}
+
+/* Whether `entry` still names a slot of `map`: taken at this generation, and
+ * the index allocated -- an empty table's entry names no slot. */
+static inline bool nts_map_entry_current(const NtsMap *map, uint64_t entry) {
+  return (uint32_t)(entry >> 32) == map->generation &&
+         (uint32_t)entry < map->slots;
+}
+
+__attribute__((always_inline)) uint64_t nts_map_entry(const NtsMap *map,
+                                                      NtsValue key) {
+  uint32_t slot = 0;
+  nts_map_find(map, key, nts_hash_key(key, map->kind), &slot);
+  return nts_map_entry_of(map, slot);
+}
+
+/* `nts_map_get` through an entry, retaining what it hands back as that does. A
+ * current entry's slot holds the key's entry or says it has none: only a
+ * structural write changes the index, and every one moves the generation. */
+__attribute__((always_inline)) NtsValue nts_map_entry_get(const NtsMap *map,
+                                                          uint64_t entry,
+                                                          NtsValue key) {
+  if (!nts_map_entry_current(map, entry)) {
+    return nts_map_get(map, key);
+  }
+  int32_t at = map->index[(uint32_t)entry];
+  if (at < 0 || !map->values) {
+    return nts_value_of_undefined();
+  }
+  nts_value_retain(map->values[at]);
+  return map->values[at];
+}
+
+/* `nts_map_set` through an entry: the value overwritten in place, or a fresh
+ * key stored at the slot the lookup found, with no second hash or probe. A
+ * stale entry, or a table that must grow first, takes `nts_map_set` itself. */
+__attribute__((always_inline)) NtsMap *
+nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value) {
+  if (!nts_map_entry_current(map, entry)) {
+    return nts_map_set(map, key, value);
+  }
+  uint32_t slot = (uint32_t)entry;
+  int32_t at = map->index[slot];
+  if (at >= 0) {
+    nts_map_overwrite(map, at, value);
+    return nts_map_same(map);
+  }
+  if (map->used == map->capacity) {
+    return nts_map_set(map, key, value);
+  }
+  nts_map_insert_at(map, nts_map_normalize(key), value, slot);
   return nts_map_same(map);
 }
 
@@ -9082,6 +9158,7 @@ bool nts_map_delete(NtsMap *map, NtsValue key) {
    * past this slot and would become unreachable if the chain ended here. */
   map->index[slot] = NTS_MAP_DELETED;
   map->header.length--;
+  map->generation++;
   return true;
 }
 
@@ -9117,6 +9194,7 @@ void nts_map_clear(NtsMap *map) {
    * is worth naming: reclaiming the dead prefix needs a logical base the
    * cursors are relative to, which is a design rather than a line. */
   map->header.length = 0;
+  map->generation++;
 }
 
 __attribute__((always_inline)) NtsMap *nts_set_add(NtsMap *map, NtsValue key) {

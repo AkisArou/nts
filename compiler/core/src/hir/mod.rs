@@ -29,6 +29,7 @@ mod boxing;
 pub mod builtin;
 pub mod dce;
 pub mod elements;
+pub mod entries;
 mod erased_uses;
 pub mod escape;
 mod exposure;
@@ -7770,6 +7771,12 @@ fn prepare_lowered(
     // calls visible to escape analysis and reference counting. Erase itself
     // remains a free repackaging operation.
     boxing::materialize(&mut program);
+
+    // A table key read and then written looks the key up once, where the
+    // tables are the C runtime's (`entries::share`). After simplification,
+    // which leaves the reads and writes the program keeps; before escape and
+    // counting, which have to see the calls that replace them.
+    entries::share(&mut program, options.provider);
 
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code

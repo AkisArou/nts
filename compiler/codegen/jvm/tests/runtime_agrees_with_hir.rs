@@ -414,4 +414,11 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// through `NtsValue.held` as `arrayElement` does.
 /// 125 for `nts_hresult_clear`, which discards undefined native output bytes
 /// after a failed HRESULT: the JVM never executes the native call or slot.
-const REFUSED_FLOOR: usize = 125;
+///
+/// 128 for `nts_map_entry`, `nts_map_entry_get` and `nts_map_entry_set`, a
+/// table key read and then written looked up once (`hir::entries`), which
+/// preparation makes only where the tables are the C runtime's: a host-GC
+/// program keeps the plain `get` and `set`, and this lane's string-key doors
+/// with them. The day this lane's tables answer an entry, it opts in there and
+/// maps these three.
+const REFUSED_FLOOR: usize = 128;

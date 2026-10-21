@@ -396,6 +396,65 @@ int main(void) {
     nts_release(shared);
   }
 
+  /* --- an entry is a hint, never a promise ------------------------------
+   * `hir::entries` reads and writes one key through one lookup. An entry the
+   * table has moved past -- grown by other keys, a key deleted -- must still
+   * answer exactly as `get` and `set` do.
+   * node: m.set("k", 1); for (i < 40) m.set("x" + i, i); m.set("k", 2);
+   *       m.set("fresh", 3)  =>  m.get("k") 2, m.get("fresh") 3, size 42   */
+  {
+    NtsMap *m = nts_map_new(NTS_KEY_STRING);
+    put(m, str("k"), num(1));
+    uint64_t hit = nts_map_entry(m, str("k"));
+    check("a current entry reads what `get` reads",
+          nts_value_number(nts_map_entry_get(m, hit, str("k"))) == 1.0);
+    uint64_t miss = nts_map_entry(m, str("fresh"));
+    for (int i = 0; i < 40; i++) {
+      char name[8];
+      snprintf(name, sizeof name, "x%d", i);
+      put(m, str(name), num(i));
+    }
+    nts_map_entry_set(m, hit, str("k"), num(2));
+    check("an entry taken before the table grew still sets its own key",
+          nts_value_number(nts_map_get(m, str("k"))) == 2.0 &&
+              m->header.length == 41);
+    nts_map_entry_set(m, miss, str("fresh"), num(3));
+    check("a stale entry for an absent key inserts as `set` does",
+          nts_value_number(nts_map_get(m, str("fresh"))) == 3.0 &&
+              m->header.length == 42);
+    check("a stale entry reads as `get` does",
+          nts_value_number(nts_map_entry_get(m, hit, str("k"))) == 2.0);
+
+    uint64_t absent = nts_map_entry(m, str("new"));
+    check("a current entry for an absent key reads undefined",
+          nts_value_tag(nts_map_entry_get(m, absent, str("new"))) ==
+              NTS_TAG_UNDEFINED);
+    nts_map_entry_set(m, absent, str("new"), num(4));
+    check("and its set stores the key at the slot the lookup found",
+          nts_value_number(nts_map_get(m, str("new"))) == 4.0 &&
+              m->header.length == 43);
+
+    uint64_t gone = nts_map_entry(m, str("k"));
+    nts_map_delete(m, str("k"));
+    nts_map_entry_set(m, gone, str("k"), num(6));
+    check("a delete between moves the generation, and the set reinserts",
+          nts_value_number(nts_map_get(m, str("k"))) == 6.0 &&
+              m->header.length == 43);
+
+    /* node: const e = new Map(); e.set("a", 5)  =>  e.get("a") 5 */
+    NtsMap *empty = nts_map_new(NTS_KEY_STRING);
+    uint64_t none = nts_map_entry(empty, str("a"));
+    check("an empty table's entry names no slot and reads undefined",
+          nts_value_tag(nts_map_entry_get(empty, none, str("a"))) ==
+              NTS_TAG_UNDEFINED);
+    nts_map_entry_set(empty, none, str("a"), num(5));
+    check("and its set grows the table as `set` does",
+          nts_value_number(nts_map_get(empty, str("a"))) == 5.0 &&
+              empty->header.length == 1);
+    nts_release(&empty->header);
+    nts_release(&m->header);
+  }
+
   /* Every allocation above is gone, including the three side arrays each
    * table owns -- which is the leak `storage.c` covers for arrays, asked of
    * the type that has three of them. */

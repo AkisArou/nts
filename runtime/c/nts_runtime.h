@@ -946,6 +946,12 @@ typedef struct NtsMap {
   uint32_t kind;
   /* A Map does; a Set does not, and pays nothing for the values it has. */
   bool holds_values;
+  /* Moved by every structural write -- a key inserted, a delete, a clear,
+   * growth -- and by nothing else: what an entry (`nts_map_entry`) is checked
+   * against before the slot it names is trusted. It sits in what was padding
+   * after `holds_values`, so no field after it moved; a field added here
+   * changes the layout now, and `index` with it. */
+  uint32_t generation;
   int32_t *index;
   NtsValue *keys;
   NtsValue *values;
@@ -1745,6 +1751,24 @@ NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key);
 /* Returns the collection, which is what `set` and `add` evaluate to. */
 NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value);
 NtsMap *nts_set_add(NtsMap *map, NtsValue key);
+/* A key read and then written, looked up once (`hir::entries`).
+ *
+ * `nts_map_entry` hashes the key and probes, and answers an entry: the table's
+ * generation in the high half and, in the low, the slot the key holds or would
+ * take. `entry_get` and `entry_set` are `get` and `set` through it, and each
+ * takes the key as well: an entry whose generation has moved since it was
+ * taken is not used, and the helper does exactly what `nts_map_get` or
+ * `nts_map_set` would. So an entry is a hint and never a promise, and a backend
+ * without these reads them as the two plain calls.
+ *
+ * What no generation can check is that the entry came from this table, for
+ * this key: the compiler pairs the three only on one table value and one key
+ * value, with nothing between them that writes. Not read-only: the entry is a
+ * reading of the table's shape, which the next insertion changes. */
+uint64_t nts_map_entry(const NtsMap *map, NtsValue key);
+NtsValue nts_map_entry_get(const NtsMap *map, uint64_t entry, NtsValue key);
+NtsMap *nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key,
+                          NtsValue value);
 bool nts_map_delete(NtsMap *map, NtsValue key);
 void nts_map_clear(NtsMap *map);
 

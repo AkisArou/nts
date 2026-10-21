@@ -1372,6 +1372,24 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_map_entry",
+        returns: "i64",
+        params: &["ptr", "i32", "i64"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_get",
+        returns: "{ i32, i64 }",
+        params: &["ptr", "i64", "i32", "i64"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_set",
+        returns: "ptr",
+        params: &["ptr", "i64", "i32", "i64", "i32", "i64"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_map_extend",
         returns: "ptr",
         params: &["ptr", "ptr"],

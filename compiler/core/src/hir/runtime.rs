@@ -708,6 +708,39 @@ static SIGNATURES: &[Declared] = &[
         }),
     ),
     ("nts_map_delete", &[None, None], Some(HirType::Bool)),
+    (
+        "nts_map_entry",
+        &[None, None],
+        Some(HirType::Int {
+            bits: 64,
+            signed: false,
+        }),
+    ),
+    (
+        "nts_map_entry_get",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            None,
+        ],
+        None,
+    ),
+    (
+        "nts_map_entry_set",
+        &[
+            None,
+            Some(HirType::Int {
+                bits: 64,
+                signed: false,
+            }),
+            None,
+            None,
+        ],
+        None,
+    ),
     ("nts_map_has", &[None, None], Some(HirType::Bool)),
     (
         "nts_map_key_at",

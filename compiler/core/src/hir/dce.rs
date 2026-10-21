@@ -113,7 +113,7 @@ const PURE_RUNTIME_CALLS: &[&str] = &[
 // they would be a list rather than a set of decisions, and the next operation
 // to arrive would join the list instead of being thought about.
 #[allow(clippy::match_same_arms)]
-fn has_effects(op: &Op) -> bool {
+pub(super) fn has_effects(op: &Op) -> bool {
     match &op.kind {
         // A checked read may stop the program out of range, which is the whole
         // of what stands for that path once a consumer has been folded away

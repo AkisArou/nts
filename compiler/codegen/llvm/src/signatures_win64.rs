@@ -1549,6 +1549,34 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_map_entry",
+        returns: "i64",
+        params: &["ptr", "ptr align 8 dead_on_return"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_get",
+        returns: "void",
+        params: &[
+            "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
+            "ptr",
+            "i64",
+            "ptr align 8 dead_on_return",
+        ],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_map_entry_set",
+        returns: "ptr",
+        params: &[
+            "ptr",
+            "i64",
+            "ptr align 8 dead_on_return",
+            "ptr align 8 dead_on_return",
+        ],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_map_extend",
         returns: "ptr",
         params: &["ptr", "ptr"],
