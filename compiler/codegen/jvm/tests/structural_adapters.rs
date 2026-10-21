@@ -4,6 +4,8 @@
 use camino::Utf8Path;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
+mod common;
+
 #[test]
 fn conflicting_absence_adapters_decline_the_class_by_name() {
     let Some(tsgo) = nts_frontend_ts::tsgo::locate() else {
@@ -18,7 +20,7 @@ fn conflicting_absence_adapters_decline_the_class_by_name() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let prepared = nts_core::hir::prepare(&snapshot).expect("valid prepared HIR");
+    let prepared = common::prepare(&snapshot).expect("valid prepared HIR");
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(emitted.diagnostics.iter().any(|diagnostic| {
         diagnostic.code == "NTS4001"
@@ -52,7 +54,7 @@ fn a_new_slot_cannot_replace_an_inherited_slots_absence_conversion() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let prepared = nts_core::hir::prepare(&snapshot).expect("valid prepared HIR");
+    let prepared = common::prepare(&snapshot).expect("valid prepared HIR");
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(emitted.diagnostics.iter().any(|diagnostic| {
         diagnostic.code == "NTS4001"
@@ -83,7 +85,7 @@ fn a_covariant_bridge_shares_a_slot_only_with_a_proven_identity() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors());
-    let mut prepared = nts_core::hir::prepare(&snapshot).expect("valid prepared HIR");
+    let mut prepared = common::prepare(&snapshot).expect("valid prepared HIR");
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     for class in ["ChildMaker", "GrandchildMaker", "ChildReader"] {

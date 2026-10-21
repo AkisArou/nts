@@ -14,6 +14,8 @@ use camino::Utf8Path;
 use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
+mod common;
+
 fn program() -> hir::Program {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../core/tests/programs/interface-field-view/tsconfig.json")
@@ -22,7 +24,7 @@ fn program() -> hir::Program {
     let snapshot = TsgoApi::for_compilation(nts_frontend_ts::tsgo::locate().unwrap())
         .snapshot(&config)
         .unwrap();
-    hir::prepare(&snapshot).unwrap().program
+    common::prepare(&snapshot).unwrap().program
 }
 
 /// Whether the class `name` names `interface` in its constant pool -- which a

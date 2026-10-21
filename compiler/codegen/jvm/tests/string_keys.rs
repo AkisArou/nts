@@ -42,15 +42,7 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
     // Prepared as the JVM build prepares it, for the host's heap: a native
     // preparation shares a table's lookups (`hir::entries`), which this
     // backend's tables do not answer.
-    let program = nts_core::hir::prepare_with(
-        &snapshot,
-        &nts_core::hir::Options {
-            provider: nts_codegen_common::provider::host_gc("jvm", false).unwrap(),
-            ..nts_core::hir::Options::default()
-        },
-    )
-    .expect("valid HIR")
-    .program;
+    let program = common::prepare(&snapshot).expect("valid HIR").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.diagnostics.is_empty(),

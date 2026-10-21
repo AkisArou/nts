@@ -12,6 +12,8 @@ use nts_core::hir::{Layout, Program};
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use nts_jvm_emitter::Class;
 
+mod common;
+
 fn prepared() -> Program {
     let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -19,9 +21,7 @@ fn prepared() -> Program {
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    nts_core::hir::prepare(&snapshot)
-        .expect("valid HIR")
-        .program
+    common::prepare(&snapshot).expect("valid HIR").program
 }
 
 /// The layouts an interface declaration's instantiations live in.

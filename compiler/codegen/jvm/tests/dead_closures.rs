@@ -65,14 +65,7 @@ fn lowered_from(name: &str, source: &str) -> Option<(hir::Program, std::path::Pa
     let snapshot = TsgoApi::for_compilation(tsgo)
         .snapshot(&tsconfig)
         .expect("snapshot");
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Provider::NoGc,
-            ..hir::Options::default()
-        },
-    )
-    .expect("prepared");
+    let prepared = common::prepare(&snapshot).expect("prepared");
     Some((prepared.program, dir))
 }
 

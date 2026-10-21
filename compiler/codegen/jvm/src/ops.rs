@@ -1848,9 +1848,10 @@ impl Emitter<'_> {
             //
             // So this refuses only under `ReferenceCounting`, where a retain
             // means the middle end expects *this backend* to be counting and it
-            // is not. Under `NoGc` the pair is dropped, both halves together --
-            // `suspend.rs` emits the matching `Release` and ignoring one
-            // without the other is not a thing.
+            // is not. Under `HostGc`, which this lane ships, or `NoGc`, the pair
+            // is dropped, both halves together -- `suspend.rs` emits the
+            // matching `Release` and ignoring one without the other is not a
+            // thing.
             OpKind::Retain(_) | OpKind::Release(_)
                 if self.program.provider != nts_core::hir::Provider::ReferenceCounting =>
             {

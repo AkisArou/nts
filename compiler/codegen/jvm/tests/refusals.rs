@@ -27,9 +27,10 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::path::PathBuf;
+
+mod common;
 
 fn repository() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
@@ -65,14 +66,7 @@ fn declined() -> Vec<(String, String)> {
         "the refusals fixture should typecheck"
     );
 
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Provider::NoGc,
-            ..hir::Options::default()
-        },
-    )
-    .expect("prepared HIR should verify");
+    let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
 
     nts_codegen_jvm::emit(&prepared.program)
         .diagnostics

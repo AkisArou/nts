@@ -24,9 +24,7 @@ fn a_wide_view_subscript_is_bounded_as_a_long() {
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    let program = nts_core::hir::prepare(&snapshot)
-        .expect("valid HIR")
-        .program;
+    let program = common::prepare(&snapshot).expect("valid HIR").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.diagnostics.is_empty(),

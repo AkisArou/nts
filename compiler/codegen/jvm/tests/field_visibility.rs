@@ -38,10 +38,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
+
+mod common;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -90,14 +91,7 @@ fn no_generated_field_is_public() {
             .snapshot(&tsconfig)
             .expect("snapshot");
         assert!(!snapshot.has_errors(), "{example} should typecheck");
-        let prepared = hir::prepare_with(
-            &snapshot,
-            &hir::Options {
-                provider: hir::Provider::NoGc,
-                ..hir::Options::default()
-            },
-        )
-        .expect("prepared HIR should verify");
+        let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
 
         for class in &nts_codegen_jvm::emit(&prepared.program).classes {
             // Reading our own output back through the reader is also a

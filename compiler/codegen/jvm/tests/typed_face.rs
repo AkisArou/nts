@@ -25,7 +25,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::process::Command;
 
@@ -93,7 +92,7 @@ fn a_java_caller_passes_arguments_through_the_typed_face_in_order() {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let program = hir::prepare(&snapshot).expect("prepared").program;
+    let program = common::prepare(&snapshot).expect("prepared").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.is_complete(),

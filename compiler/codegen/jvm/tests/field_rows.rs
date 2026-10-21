@@ -1,14 +1,15 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use camino::Utf8Path;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
+
+mod common;
 
 #[test]
 fn accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it() {
     let tsgo = nts_frontend_ts::tsgo::locate().expect("tsgo is built");
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/field-rows/tsconfig.json");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    let mut program = hir::prepare(&snapshot).expect("valid HIR").program;
+    let mut program = common::prepare(&snapshot).expect("valid HIR").program;
     let child = program
         .layouts
         .iter()

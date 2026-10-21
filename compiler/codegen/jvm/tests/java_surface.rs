@@ -19,6 +19,8 @@ use nts_frontend_ts::{SemanticSource, TsgoApi};
 use nts_jvm_emitter::{class::access, read};
 use std::path::{Path, PathBuf};
 
+mod common;
+
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     from.canonicalize().unwrap_or(from)
@@ -52,14 +54,7 @@ fn prepared() -> Option<hir::Program> {
         .snapshot(&tsconfig)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "ts-from-java should typecheck");
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Provider::NoGc,
-            ..hir::Options::default()
-        },
-    )
-    .expect("prepared HIR should verify");
+    let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
     Some(prepared.program)
 }
 

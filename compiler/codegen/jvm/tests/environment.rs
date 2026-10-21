@@ -3,7 +3,7 @@
 //! # Why the retirement check is a weak reference rather than a counter
 //!
 //! `tooling/memory` proves retirement on the counting lanes by watching retains
-//! and releases balance. There is no such number here: `Provider::NoGc` means
+//! and releases balance. There is no such number here: `Provider::HostGc` means
 //! the platform collector owns lifetimes, a retained callback is invisible to
 //! every counter, and an empty diagnostic set means the instrument is absent
 //! rather than that there is nothing to verify.

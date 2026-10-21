@@ -11,7 +11,6 @@
 use std::process::Command;
 
 use camino::Utf8PathBuf;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 
 mod common;
@@ -68,14 +67,7 @@ fn run_whole_file(name: &str, file: &str, source: &str) -> Option<(i32, String, 
         "{name} should typecheck: {:?}",
         snapshot.diagnostics
     );
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Provider::NoGc,
-            ..hir::Options::default()
-        },
-    )
-    .expect("prepared HIR should verify");
+    let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
     let emitted = nts_codegen_jvm::emit(&prepared.program);
 
     let out = dir.join("out");

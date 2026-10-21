@@ -32,9 +32,7 @@ fn prepared() -> Program {
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    nts_core::hir::prepare(&snapshot)
-        .expect("valid HIR")
-        .program
+    common::prepare(&snapshot).expect("valid HIR").program
 }
 
 /// How many helpers `javap -p -v`'s listing of the program class shows,

@@ -33,9 +33,7 @@ fn prepared(fixture: &str) -> Program {
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    nts_core::hir::prepare(&snapshot)
-        .expect("valid HIR")
-        .program
+    common::prepare(&snapshot).expect("valid HIR").program
 }
 
 /// The types an interface declaration's instantiations are.

@@ -32,7 +32,7 @@ fn run(name: &str, source: &str, drive: &str, expected: &str, unused: bool) {
         .snapshot(&config)
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
-    let program = hir::prepare(&snapshot).expect("prepared").program;
+    let program = common::prepare(&snapshot).expect("prepared").program;
     assert!(
         program
             .layouts

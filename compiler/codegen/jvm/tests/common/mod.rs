@@ -22,6 +22,27 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// `snapshot` prepared as `nts emit-jvm` prepares it.
+///
+/// Managed memory on the JVM belongs to the host's collector
+/// (`provider::host_gc`), the provider every program this lane emits has been
+/// prepared with since 786f23a48. `hir::prepare` alone answers `NoGc`, a
+/// preparation no JVM program receives -- so a test on it could pass on HIR
+/// the product never emits, or fail on HIR it never sees.
+pub fn prepare(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Result<nts_core::hir::Prepared, nts_core::hir::Unprepared> {
+    let provider = nts_codegen_common::provider::host_gc("jvm", false)
+        .expect("the JVM prepares with the host's collector");
+    nts_core::hir::prepare_with(
+        snapshot,
+        &nts_core::hir::Options {
+            provider,
+            ..nts_core::hir::Options::default()
+        },
+    )
+}
+
 pub fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }

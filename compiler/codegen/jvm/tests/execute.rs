@@ -28,10 +28,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8PathBuf;
-use nts_core::hir;
 use nts_frontend_ts::{SemanticSource, TsgoApi};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+mod common;
 
 fn repository() -> PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
@@ -90,17 +91,11 @@ fn run(example: &str, body: &str) -> Option<String> {
         .expect("snapshot");
     assert!(!snapshot.has_errors(), "{example} should typecheck");
 
-    // `NoGc`, which is what this lane ships: the platform collector owns these
-    // objects, so `Retain` and `Release` are refused by name rather than
-    // emitted as nothing.
-    let prepared = hir::prepare_with(
-        &snapshot,
-        &hir::Options {
-            provider: hir::Provider::NoGc,
-            ..hir::Options::default()
-        },
-    )
-    .expect("prepared HIR should verify");
+    // Prepared as this lane ships (`common::prepare`): the host's collector
+    // owns these objects, so preparation counts nothing, and a `Retain` the
+    // middle end emits regardless -- `hir::suspend`'s -- is dropped with its
+    // `Release`.
+    let prepared = common::prepare(&snapshot).expect("prepared HIR should verify");
 
     let emitted = nts_codegen_jvm::emit(&prepared.program);
     assert!(

@@ -39,9 +39,7 @@ fn a_proven_view_access_takes_the_proved_accessor() {
         .canonicalize_utf8()
         .expect("checked-in fixture");
     let snapshot = TsgoApi::for_compilation(tsgo).snapshot(&config).unwrap();
-    let program = nts_core::hir::prepare(&snapshot)
-        .expect("valid HIR")
-        .program;
+    let program = common::prepare(&snapshot).expect("valid HIR").program;
     let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.diagnostics.is_empty(),
