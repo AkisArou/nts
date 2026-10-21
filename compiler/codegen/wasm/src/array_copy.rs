@@ -84,6 +84,15 @@ pub(crate) fn call(
         Failure::Invariant(reason) => Failure::Invariant(reason),
     })
 }
+/// Whether `ty` is stored as `shape` is. Asked of the storage, not of the
+/// name: one tuple written twice -- `[string, number]` in a `Map`'s literal
+/// and again in an array's annotation -- is two HIR types and one Wasm array,
+/// and the plan records only the first name it met.
+fn stored_as(b: &Body<'_, '_>, ty: &HirType, shape: &gc::Array) -> bool {
+    b.types()
+        .array(ty)
+        .is_ok_and(|array| array.wrapper == shape.wrapper)
+}
 fn inner(
     b: &mut Body<'_, '_>,
     result: ValueId,
@@ -115,12 +124,12 @@ fn inner(
         if b.ty(result) != &HirType::Void {
             return Err("extend result must be void".into());
         }
-    } else if b.ty(result) != &shape.ty && b.ty(result) != &HirType::Void {
+    } else if b.ty(result) != &HirType::Void && !stored_as(b, b.ty(result), shape) {
         return Err("copying result changes mutable array storage".into());
     }
     contract::nonnull(b, args[0], "copying from a null array")?;
     if matches!(method.helper, Helper::Concat | Helper::Extend) {
-        if b.ty(args[1]) != &shape.ty {
+        if !stored_as(b, b.ty(args[1]), shape) {
             return Err("copying source changes mutable array storage".into());
         }
         contract::nonnull(b, args[1], "copying from a null array")?;
