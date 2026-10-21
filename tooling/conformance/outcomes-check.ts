@@ -28,7 +28,7 @@
 //   tests/outcomes/<name>/
 //     tsconfig.json   extends ../../../../tsconfig.fixtures.json
 //     src/main.ts     the program; `// run: build` (default) or `// run: check`,
-//                     and with `check`, optionally `// backend: jvm` (or `llvm`)
+//                     and with `check`, optionally `// backend: jvm` (`llvm`, `wasm`)
 //                     `// provider: rc` selects reference counting, and
 //                     `// sanitizer: address` enables Clang ASan with no
 //                     virtual-address cap: in build mode with
@@ -318,9 +318,22 @@ function runNode(dir) {
   return `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`;
 }
 
-/** The backend a `check` fixture names with `// backend: <name>`, or null. */
-const backendOf = (name) =>
-  /^\/\/\s*backend:\s*(jvm|llvm)\s*$/m.exec(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"))?.[1] ?? null;
+/**
+ * The backend a `check` fixture's text names with `// backend: <name>` on a
+ * line of its own, or null. Only the name: the prose a fixture writes about a
+ * backend ("// backend: Wasm stores a bigint as one v128 ...") selects none.
+ */
+const backendIn = (text) => /^\/\/\s*backend:\s*(jvm|llvm|wasm)\s*$/m.exec(text)?.[1] ?? null;
+/** The backend a `check` fixture names, from its `src/main.ts`. */
+const backendOf = (name) => backendIn(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"));
+
+/**
+ * Whether `nts check` said a backend declined, in any backend's words: "the
+ * backend declined", "the LLVM backend declined", "the Wasm backend declined
+ * N shape(s)" -- `tooling/differential/agree.mjs` reads the same three. Only
+ * the first was read, so an LLVM or Wasm decline was not a refusal here.
+ */
+const backendDeclined = (said) => said.some((l) => /\bthe (?:LLVM |Wasm )?backend declined\b/.test(l));
 
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
 function runCheck(dir, backend, options) {
@@ -351,7 +364,7 @@ function runCheck(dir, backend, options) {
   // (2026-10-15). The prefix goes, so the record reads as `emit-c`'s does.
   const lines = said.filter(
     (l) =>
-      /^(checked|agreed|disagree|declined|refused:|not emitted:|nothing to check|invalid HIR)/i.test(l) ||
+      /^(checked|agreed|disagree|declined|refused:|not emitted:|not rendered:|nothing to check|invalid HIR)/i.test(l) ||
       /\bdisagree/i.test(l) ||
       /\binvalid HIR\b/.test(l) ||
       declined.test(l),
@@ -362,9 +375,10 @@ function runCheck(dir, backend, options) {
   // check` lists each function it did not emit and checks nothing. Before the
   // disagreement test, which a decline's own message can trip -- the JVM
   // emitter's "the emitter and its own accounting disagree" was recorded as a
-  // wrong answer -- and which nothing compared can earn.
-  const notEmitted = lines.find((l) => l.startsWith("not emitted:"));
-  if (notEmitted && said.some((l) => /\bthe backend declined\b/.test(l))) {
+  // wrong answer -- and which nothing compared can earn. LLVM lists each
+  // function as "not rendered:", the others as "not emitted:".
+  const notEmitted = lines.find((l) => /^not (?:emitted|rendered):/.test(l));
+  if (notEmitted && backendDeclined(said)) {
     return { category: "refused", nts: notEmitted };
   }
   if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
@@ -429,6 +443,25 @@ function measure(name) {
 // refused construct must come back `refused`, not "completed".
 
 function selfCheck() {
+  // `// backend:` names a backend on a line of its own and selects it; prose
+  // about one selects nothing.
+  for (const [text, want] of [
+    ["// run: check\n// backend: wasm\n", "wasm"],
+    ["// run: check\n// backend: llvm\n", "llvm"],
+    ["// run: check\n// backend: jvm\n", "jvm"],
+    ["// backend: Wasm stores a bigint as one v128 and refuses there.\n", null],
+    ["// run: check\n", null],
+  ]) {
+    if (backendIn(text) !== want) return `\`// backend:\` in ${JSON.stringify(text)} read as ${backendIn(text)}, not ${want}`;
+  }
+  for (const words of [
+    "Error: the backend declined 1 function(s), listed above; nothing can be checked",
+    "Error: the LLVM backend declined 1 function(s)",
+    "Error: the Wasm backend declined 1 shape(s), listed above; nothing can be checked",
+  ]) {
+    if (!backendDeclined([words])) return `a backend's decline not read as one: ${words}`;
+  }
+  if (backendDeclined(["agreed on every case"])) return "an agreement read as a backend's decline";
   const summary = (site, count = 27) => ({
     run: "check", category: "wrong-answer", node: null,
     nts: `checked 29 cases | refused: ${site} NTS1001 missing method | Error: ${count} case(s) disagree`,
