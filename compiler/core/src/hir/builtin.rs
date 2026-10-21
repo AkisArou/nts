@@ -416,34 +416,33 @@ pub(super) fn element_width(element: &HirType) -> Option<u32> {
 /// to fit instead (`docs/scalar-numbers.md`, D1), and a typed array keeps
 /// JavaScript's wrapping (C27).
 pub(super) fn element_coercion(element: &HirType) -> Option<&'static str> {
-    match element {
-        HirType::Int {
-            bits: 8,
-            signed: true,
-        } => Some("nts_to_int8"),
-        HirType::Int {
-            bits: 8,
-            signed: false,
-        } => Some("nts_to_uint8"),
-        HirType::Int {
-            bits: 16,
-            signed: true,
-        } => Some("nts_to_int16"),
-        HirType::Int {
-            bits: 16,
-            signed: false,
-        } => Some("nts_to_uint16"),
-        HirType::Int {
-            bits: 32,
-            signed: true,
-        } => Some("nts_to_int32"),
-        HirType::Int {
-            bits: 32,
-            signed: false,
-        } => Some("nts_to_uint32"),
-        _ => None,
-    }
+    let HirType::Int { bits, signed } = element else {
+        return None;
+    };
+    ELEMENT_COERCIONS
+        .iter()
+        .find(|(width, sign, _)| width == bits && sign == signed)
+        .map(|(.., helper)| *helper)
 }
+
+/// The integer element a coercion helper stores, as `(bits, signed)`: the
+/// inverse of [`element_coercion`], read from the same table.
+pub(super) fn coerced_element(helper: &str) -> Option<(u8, bool)> {
+    ELEMENT_COERCIONS
+        .iter()
+        .find(|(.., name)| *name == helper)
+        .map(|(bits, signed, _)| (*bits, *signed))
+}
+
+/// Each integer element's ECMAScript conversion, by width and sign.
+const ELEMENT_COERCIONS: [(u8, bool, &str); 6] = [
+    (8, true, "nts_to_int8"),
+    (8, false, "nts_to_uint8"),
+    (16, true, "nts_to_int16"),
+    (16, false, "nts_to_uint16"),
+    (32, true, "nts_to_int32"),
+    (32, false, "nts_to_uint32"),
+];
 
 /// The runtime helpers whose result the specification leaves approximate.
 ///

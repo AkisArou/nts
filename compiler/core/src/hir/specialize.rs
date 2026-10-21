@@ -935,6 +935,9 @@ fn runtime_arguments(
         Some(_) => (super::runtime::into_form(target), 1),
         None => (target.to_owned(), 0),
     };
+    if let Some(wrapped) = integer_element(func, rewritten, target, args, frame) {
+        return Some(wrapped);
+    }
     let declared = super::runtime::parameters(&name)?;
     let args = args
         .iter()
@@ -949,6 +952,97 @@ fn runtime_arguments(
         args,
         frame,
     })
+}
+
+/// A typed array's element, from a value specialization proved an integer.
+///
+/// Lowering names ECMAScript's `ToUint8` and its family for a store into an
+/// integer view (`builtin::element_coercion`), because what it stores is a
+/// `number`. Once that number is proven an integer, the helper's `double`
+/// parameter forced a `convert : f64` and a call that undoes it: the ten byte
+/// stores of `utf8Write`'s whole-string path spent 22.9% of the JVM's samples
+/// in `toInt32` that way, an `i2d`, a range test, a `d2l` and a mask per byte.
+/// C answered the same only because clang folded the static inline helper.
+///
+/// An integer's `ToUint8` is its low eight bits, so that is what the store is
+/// written as: `ToInt32` (nothing on an `i32`), then a mask, or a shift pair
+/// for a signed element, then a `Convert` to the element, which fits by
+/// construction. A thirty-two bit element is the `ToInt32` or `ToUint32`
+/// alone. Every backend already lowers each of those as a wrap, so none of
+/// them learns a rule here.
+///
+/// Exact, because an integer this pass produces stands for a `number` and is
+/// exact as one: converting it to a double first and wrapping that gives the
+/// same bits.
+fn integer_element(
+    func: &mut Func,
+    ops: &mut Vec<ValueId>,
+    target: &str,
+    args: &[ValueId],
+    frame: Option<u32>,
+) -> Option<OpKind> {
+    let (bits, signed) = super::builtin::coerced_element(target)?;
+    let [operand] = *args else {
+        return None;
+    };
+    if frame.is_some() || !matches!(func.values[operand.0 as usize].ty, HirType::Int { .. }) {
+        return None;
+    }
+    if bits == 32 {
+        let op = if signed {
+            UnOp::ToInt32
+        } else {
+            UnOp::ToUint32
+        };
+        return Some(OpKind::Unary { op, operand });
+    }
+    let int32 = HirType::Int {
+        bits: 32,
+        signed: true,
+    };
+    let origin = func.values[operand.0 as usize].origin.clone();
+    let mut push = |func: &mut Func, kind: OpKind| push_op(func, ops, kind, &int32, &origin);
+    let whole = if func.values[operand.0 as usize].ty == int32 {
+        operand
+    } else {
+        push(
+            func,
+            OpKind::Unary {
+                op: UnOp::ToInt32,
+                operand,
+            },
+        )
+    };
+    let wrapped = if signed {
+        let shift = push(func, OpKind::ConstInt(i128::from(32 - bits)));
+        let raised = push(
+            func,
+            OpKind::Binary {
+                op: BinOp::Shl,
+                lhs: whole,
+                rhs: shift,
+            },
+        );
+        push(
+            func,
+            OpKind::Binary {
+                op: BinOp::Shr,
+                lhs: raised,
+                rhs: shift,
+            },
+        )
+    } else {
+        let mask = push(func, OpKind::ConstInt((1 << bits) - 1));
+        push(
+            func,
+            OpKind::Binary {
+                op: BinOp::BitAnd,
+                lhs: whole,
+                rhs: mask,
+            },
+        )
+    };
+    Some(OpKind::Convert(wrapped))
 }
 
 /// The one type two operands of an operator meet at.
@@ -1724,14 +1818,25 @@ fn convert(
         _ => OpKind::Convert(operand),
     };
 
+    *count += 1;
+    push_op(func, ops, kind, wanted, &origin)
+}
+
+/// A new operation at the end of the block being rewritten.
+fn push_op(
+    func: &mut Func,
+    ops: &mut Vec<ValueId>,
+    kind: OpKind,
+    ty: &HirType,
+    origin: &nts_semantic_schema::Origin,
+) -> ValueId {
     let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
     func.values.push(Op {
         kind,
-        ty: wanted.clone(),
-        origin,
+        ty: ty.clone(),
+        origin: origin.clone(),
     });
     ops.push(id);
-    *count += 1;
     id
 }
 
