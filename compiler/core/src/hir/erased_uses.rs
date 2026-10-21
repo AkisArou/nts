@@ -14,9 +14,9 @@
 //! every backend, and two copies of it would come to disagree about which
 //! op reads a value, in whichever direction was not tested. Its readers:
 //! Wasm's `collections::typed_gets` (a table `get` answered by its entry)
-//! and `collections::typed_reads` (a cursor's key or value kept as stored).
-//! The JVM's `fuse::fused` makes the same walk of its own and is meant to
-//! move onto this one.
+//! and `collections::typed_reads` (a cursor's key or value kept as stored),
+//! and so does the JVM's `fuse::fused` (an answer every use unerases to a
+//! float, sent to its scalar form).
 //!
 //! A use as a block argument -- a value carried into a join, as `x || "none"`
 //! carries its left side -- counts as needing the erased value, as every

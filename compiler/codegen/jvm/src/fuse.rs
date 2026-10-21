@@ -89,31 +89,24 @@ pub(crate) fn fused(func: &Func) -> FxHashSet<ValueId> {
     }
 
     // Every use, or none: a single use wanting the box needs one that was not
-    // built, and nothing can build it after the call did not.
-    let mut refused = FxHashSet::default();
-    let mut read = FxHashSet::default();
-    for op in &func.values {
-        if let OpKind::Unerase { value } = op.kind
-            && candidates.contains(&value)
-            && matches!(op.ty, HirType::Float { .. })
-        {
-            read.insert(value);
-            continue;
-        }
-        for operand in operands_of(&op.kind) {
-            if candidates.contains(&operand) {
-                refused.insert(operand);
-            }
-        }
-    }
-    for block in &func.blocks {
-        for operand in nts_core::hir::operands_of_terminator(&block.terminator) {
-            if candidates.contains(&operand) {
-                refused.insert(operand);
-            }
-        }
-    }
-    candidates.retain(|value| read.contains(value) && !refused.contains(value));
+    // built, and nothing can build it after the call did not. What the uses
+    // are is `hir::erased_uses`'s answer, the one Wasm's typed reads ask too,
+    // over live ops only: a call is kept if it is read, every read unerases
+    // it to a float, and nothing reads its tag, its truthiness or the box.
+    let asked: std::collections::BTreeSet<ValueId> = candidates.iter().copied().collect();
+    let uses = nts_core::hir::erased_uses(func, &asked);
+    candidates.retain(|value| {
+        uses.get(value).is_some_and(|uses| {
+            !uses.unerased_to.is_empty()
+                && uses
+                    .unerased_to
+                    .iter()
+                    .all(|ty| matches!(ty, HirType::Float { .. }))
+                && !uses.erased
+                && !uses.tag
+                && !uses.truthiness
+        })
+    });
     candidates
 }
 
