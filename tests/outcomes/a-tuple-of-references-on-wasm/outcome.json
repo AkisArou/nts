@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "not emitted: NTS5001 wasm declines `references`: a `Point` where a Managed(String) is wanted: no Wasm cast relates their storage",
+  "node": null,
+  "measured_with": "40c38335ba485000",
+  "source": "measured"
+}
