@@ -366,6 +366,11 @@ pub(crate) enum Element {
     /// Bytes -- `guint8`, or a `gchar` array that is no string -- copied into
     /// a `Uint8Array` (`bytesFrom`).
     Bytes,
+    /// Strings, each copied (`stringFrom`) into a `string[]`.
+    Strings,
+    /// Numbers, each read as the brand it holds (`Uint32`, `c_size_t`) into
+    /// an array of it.
+    Scalar(String),
 }
 
 /// Where an array C hands back says how long it is.
@@ -1382,6 +1387,21 @@ fn vfuncs<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 continue;
             };
             match mapper.function(&named, Some(class)) {
+                // An override handing an array back would have to allocate it
+                // in C's memory, which a values form does not.
+                Ok(function)
+                    if function
+                        .parameters
+                        .iter()
+                        .map(|(_, mapped)| &mapped.shape)
+                        .chain([&function.result.shape])
+                        .any(|shape| matches!(shape, Shape::Array { .. })) =>
+                {
+                    mapper.binding.refused.push((
+                        label,
+                        Reason::Array("an array an override hands back in C's memory"),
+                    ));
+                }
                 Ok(mut function) => {
                     let Some((class, _)) = function.method.clone() else {
                         mapper.binding.refused.push((label, Reason::OutParameter));
@@ -2488,7 +2508,7 @@ impl<'a> Mapper<'a> {
         let mut no_escape = Vec::new();
         let mut omissible = BTreeMap::new();
         let lengths = in_lengths(signature);
-        let byte_lengths = byte_lengths(signature);
+        let byte_lengths = self.array_lengths(signature);
         for (at, param) in signature.parameters.iter().enumerate() {
             if hidden.contains(&at) {
                 continue;
@@ -3191,6 +3211,132 @@ impl<'a> Mapper<'a> {
         })
     }
 
+    /// The out slots holding the length of an array C hands back -- an out
+    /// array's, or the result's -- which the values form reads: bytes'
+    /// (`out_bytes`, `returned_bytes`), and any other it copies
+    /// (`copyable`).
+    fn array_lengths(&self, signature: &super::model::Signature) -> BTreeSet<usize> {
+        let outs = signature
+            .parameters
+            .iter()
+            .filter(|param| param.direction == Direction::Out && !param.caller_allocates)
+            .map(|param| (&param.ty, true));
+        outs.chain([(&signature.result.ty, false)])
+            .filter_map(|(ty, slot)| match ty {
+                TypeRef::Array(array) if is_bytes(array) || self.copyable(array, slot) => {
+                    array.length
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether a values form copies an array C hands back, other than bytes:
+    /// strings, or numbers, and C's own -- one `*` more than its element has,
+    /// or two through an out slot (`slot`); an array the caller allocates is
+    /// spelled with fewer (`hb_face_get_table_tags`' `hb_tag_t *`).
+    fn copyable(&self, array: &ArrayRef, slot: bool) -> bool {
+        let (Some(element), Some(c_type)) = (array.element.as_deref(), array.c_type.as_deref())
+        else {
+            return false;
+        };
+        let strings = matches!(element, "utf8" | "filename");
+        let target = self
+            .alias_target(element)
+            .unwrap_or_else(|| element.to_owned());
+        // Not yet a 64-bit one (`GType`, `gint64`): an array of a bigint brand
+        // lowers as a typed array, which takes no `push`
+        // (tests/outcomes/an-array-of-a-64-bit-brand-built-by-push).
+        let scalar = SCALARS.iter().any(|(gir, brand, _)| {
+            *gir == target && nts_core::hir::native::as_number(brand) == *brand
+        });
+        (strings || scalar)
+            && c_type.matches('*').count() == usize::from(strings) + 1 + usize::from(slot)
+    }
+
+    /// What a values form copies an array into (`copyable`), and the raw
+    /// pointer C hands it back as -- through an out slot (`slot`), the
+    /// pointer the slot holds.
+    fn copied(&mut self, array: &ArrayRef, slot: bool) -> Option<(Element, Mapped)> {
+        if !self.copyable(array, slot) {
+            return None;
+        }
+        let element = array.element.as_deref()?;
+        let mut c_type = array.c_type.as_deref()?;
+        if slot {
+            c_type = c_type[..c_type.rfind('*')?].trim_end();
+        }
+        if matches!(element, "utf8" | "filename") {
+            return Some((Element::Strings, self.raw_pointer("gchar", c_type)?));
+        }
+        let target = self
+            .alias_target(element)
+            .unwrap_or_else(|| element.to_owned());
+        let (_, brand, _) = SCALARS.iter().find(|(gir, ..)| *gir == target)?;
+        let raw = self.raw_pointer(element, c_type)?;
+        let brand = self.spelled_as_alias(element, (*brand).to_owned());
+        Some((Element::Scalar(brand), raw))
+    }
+
+    /// Where an array C hands back says its length: the out slot GIR names,
+    /// which the call fills.
+    fn array_length(array: &ArrayRef, parameters: &[Param]) -> Option<ArrayLength> {
+        let length = parameters
+            .get(array.length?)
+            .filter(|param| param.direction != Direction::In)?;
+        Some(ArrayLength::Slot(identifier(&length.name)))
+    }
+
+    /// An array C returns that a values form copies (`copied`): declared as
+    /// the raw pointer C returns, which the values form reads, and frees as
+    /// the transfer says.
+    fn returned_array(
+        &mut self,
+        result: &Param,
+        array: &ArrayRef,
+        parameters: &[Param],
+    ) -> Option<Mapped> {
+        let length = Self::array_length(array, parameters)?;
+        let (element, raw) = self.copied(array, false)?;
+        Some(Mapped {
+            shape: Shape::Array {
+                element,
+                length,
+                transfer: result.transfer,
+            },
+            ..raw
+        })
+    }
+
+    /// An array C writes into an out slot that a values form copies
+    /// (`copied`): the slot, `Ptr<Ptr<c_char> | null> | null>`, which the
+    /// values form makes, reads and frees as the transfer says.
+    fn out_array(
+        &mut self,
+        param: &Param,
+        array: &ArrayRef,
+        parameters: &[Param],
+    ) -> Option<Mapped> {
+        if param.direction != Direction::Out || param.caller_allocates {
+            return None;
+        }
+        let length = Self::array_length(array, parameters)?;
+        let (element, raw) = self.copied(array, true)?;
+        let Type::Pointer(pointee) = raw.c else {
+            return None;
+        };
+        self.binding.brands.insert("Ptr");
+        Some(Mapped {
+            shape: Shape::Array {
+                element,
+                length,
+                transfer: param.transfer,
+            },
+            ts: format!("Ptr<{}>", raw.ts),
+            c: Type::Pointer(Pointee::Pointer(Box::new(pointee))),
+        })
+    }
+
     /// The result, and what frees it: bytes C hands back (`returned_bytes`),
     /// or any other (`function_result`).
     fn result_or_bytes(
@@ -3199,6 +3345,23 @@ impl<'a> Mapper<'a> {
         owner: Option<&'a Class>,
     ) -> Result<(Mapped, Option<String>), Reason> {
         let signature = &callable.signature;
+        // An array the compiler does not copy itself (`returned_strings`), which
+        // the values form copies instead.
+        if let TypeRef::Array(array) = &signature.result.ty
+            && !is_bytes(array)
+            && Self::returned_strings(&signature.result, array).is_err()
+        {
+            if self.copyable(array, false)
+                && borrows_an_argument(signature.result.transfer, &signature.parameters)
+            {
+                return Err(Reason::Array(BORROWED_FROM_AN_ARGUMENT));
+            }
+            if let Some(mapped) =
+                self.returned_array(&signature.result, array, &signature.parameters)
+            {
+                return Ok((mapped, None));
+            }
+        }
         match &signature.result.ty {
             TypeRef::Array(array) if is_bytes(array) => Ok((
                 self.returned_bytes(&signature.result, array, &signature.parameters)?,
@@ -3231,6 +3394,16 @@ impl<'a> Mapper<'a> {
             return self
                 .out_bytes(param, array, &identifier(&length.name))
                 .map(Some);
+        }
+        if let TypeRef::Array(array) = &param.ty {
+            if self.copyable(array, true)
+                && borrows_an_argument(param.transfer, &signature.parameters)
+            {
+                return Err(Reason::Array(BORROWED_FROM_AN_ARGUMENT));
+            }
+            if let Some(mapped) = self.out_array(param, array, &signature.parameters) {
+                return Ok(Some(mapped));
+            }
         }
         if byte_lengths.contains(&at) {
             let mapped = self.out(param)?;
@@ -4946,29 +5119,36 @@ fn in_lengths(signature: &super::model::Signature) -> BTreeMap<usize, usize> {
         .collect()
 }
 
-/// The out slots holding the length of bytes C hands back -- an out byte
-/// array's, or the result's -- which the values form reads.
-fn byte_lengths(signature: &super::model::Signature) -> BTreeSet<usize> {
-    signature
-        .parameters
-        .iter()
-        .filter(|param| param.direction != Direction::In)
-        .map(|param| &param.ty)
-        .chain([&signature.result.ty])
-        .filter_map(|ty| match ty {
-            TypeRef::Array(array) if is_bytes(array) => array.length,
-            _ => None,
+/// Why a borrowed array a values form would copy is refused
+/// (`borrows_an_argument`).
+const BORROWED_FROM_AN_ARGUMENT: &str =
+    "a borrowed array that may point into an argument lent only for the call";
+
+/// Whether an array C hands back without its ownership may point into an
+/// argument the call lent only for its duration -- a string, an array --
+/// which is gone by the time the values form reads it: `g_utf8_validate`'s
+/// `end`, into the string it was given. GIR does not say whose a borrowed
+/// array is, so one beside such an argument is not copied.
+fn borrows_an_argument(transfer: Transfer, parameters: &[Param]) -> bool {
+    transfer == Transfer::None
+        && parameters.iter().any(|param| {
+            param.direction == Direction::In
+                && match &param.ty {
+                    TypeRef::Named { name, .. } => name == "utf8" || name == "filename",
+                    TypeRef::Array(_) => true,
+                    _ => false,
+                }
         })
-        .collect()
 }
 
-/// An array of bytes: `guint8`, or a `gchar` array that is not a string.
+/// An array of bytes with its length beside it: `guint8`, or a `gchar` array
+/// that is not a string -- terminated too, or not, since the length says
+/// where it ends (`g_variant_dup_bytestring`).
 fn is_bytes(array: &ArrayRef) -> bool {
     matches!(
         array.element.as_deref(),
         Some("guint8" | "gchar" | "guchar")
-    ) && !array.zero_terminated
-        && array.length.is_some()
+    ) && array.length.is_some()
 }
 
 #[cfg(test)]
@@ -6082,6 +6262,108 @@ mod tests {
                 .any(|(name, reason)| name == "s_pid" && matches!(reason, Reason::Unknown(_))),
             "{:?}",
             unanswered.refused
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
+    /// An array C hands back with its length in an out slot is copied by
+    /// the values form, as its element is -- strings, numbers -- and freed
+    /// as its transfer says: the result's and an out slot's (`T **`). The
+    /// controls are each not copied: an out `T *`, which is the caller's
+    /// storage; a 64-bit element, whose array does not lower yet; and a
+    /// borrowed array beside a string the call lent, which it may point into.
+    #[test]
+    fn an_array_with_its_length_in_a_slot_is_copied() {
+        use super::super::emit;
+        use super::{ArrayLength, Element, Shape, bind};
+        let dir = crate::bind_scratch::directory("gir-slot-array-test").expect("fixture directory");
+        let length = |name: &str| {
+            format!(
+                r#"<parameter name="{name}" direction="out" caller-allocates="0" transfer-ownership="full"><type name="gsize" c:type="gsize*"/></parameter>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<function name="names" c:identifier="s_names"><return-value transfer-ownership="full"><array length="0" zero-terminated="0" c:type="gchar**"><type name="utf8"/></array></return-value><parameters>"#,
+            &length("count"),
+            "</parameters></function>",
+            r#"<function name="sizes" c:identifier="s_sizes"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="sizes" direction="out" caller-allocates="0" transfer-ownership="full"><array length="1" zero-terminated="0" c:type="gint**"><type name="gint"/></array></parameter>"#,
+            &length("count"),
+            "</parameters></function>",
+            r#"<function name="fill" c:identifier="s_fill"><return-value><type name="none" c:type="void"/></return-value><parameters><parameter name="tags" direction="out" caller-allocates="0" transfer-ownership="full"><array length="1" zero-terminated="0" c:type="guint32*"><type name="guint32"/></array></parameter>"#,
+            &length("count"),
+            "</parameters></function>",
+            r#"<function name="lent" c:identifier="s_lent"><return-value transfer-ownership="none"><array length="1" zero-terminated="0" c:type="gchar**"><type name="utf8"/></array></return-value><parameters><parameter name="text"><type name="utf8" c:type="const gchar*"/></parameter>"#,
+            &length("count"),
+            "</parameters></function>",
+            r#"<function name="types" c:identifier="s_types"><return-value transfer-ownership="full"><array length="0" zero-terminated="0" c:type="GType*"><type name="GType"/></array></return-value><parameters>"#,
+            &length("count"),
+            "</parameters></function>",
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let binding = bind(
+            &repository,
+            &repository.namespaces["S"],
+            &super::super::facts::Facts::default(),
+        );
+        let function = |symbol: &str| {
+            binding
+                .functions
+                .iter()
+                .find(|f| f.symbol == symbol)
+                .unwrap_or_else(|| panic!("{symbol}: {:?}", binding.refused))
+        };
+        assert_eq!(
+            function("s_names").result.shape,
+            Shape::Array {
+                element: Element::Strings,
+                length: ArrayLength::Slot("count".to_owned()),
+                transfer: super::Transfer::Full,
+            }
+        );
+        assert_eq!(
+            function("s_sizes").parameters[0].1.shape,
+            Shape::Array {
+                element: Element::Scalar("c_int".to_owned()),
+                length: ArrayLength::Slot("count".to_owned()),
+                transfer: super::Transfer::Full,
+            }
+        );
+        let refused = |symbol: &str| binding.refused.iter().any(|(name, _)| name == symbol);
+        assert!(
+            refused("s_fill") && refused("s_types"),
+            "{:?}",
+            binding.refused
+        );
+        assert!(
+            binding.refused.iter().any(|(name, reason)| name == "s_lent"
+                && *reason == super::Reason::Array(super::BORROWED_FROM_AN_ARGUMENT)),
+            "{:?}",
+            binding.refused
+        );
+        let companion = emit::companion(&binding, "test");
+        for line in [
+            "export function s_names_values(): string[] {",
+            "      const text = stringFrom(nts_copy_at[i]);",
+            "      g_free(nts_copy_at[i]);",
+            "export function s_sizes_values(): c_int[] {",
+            "      sizes_copy.push(sizes_copy_at[i]);",
+        ] {
+            assert!(companion.contains(line), "missing {line:?}:\n{companion}");
+        }
+        let declarations = emit::declarations(&binding, "test");
+        assert!(
+            declarations.contains(
+                "   * @ntsCall s_names_values\n   */\n  export function s_names(): string[];"
+            ),
+            "{declarations}"
         );
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }

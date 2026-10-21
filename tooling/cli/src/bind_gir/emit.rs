@@ -241,6 +241,9 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         .iter()
         .filter(|function| !function.method_only)
     {
+        if outs.contains(function.symbol.as_str()) && hands_back_array(function) {
+            values_function(&mut out, function);
+        }
         let defaulted = defaults(function, &function.parameters);
         notes(
             &mut out,
@@ -777,7 +780,7 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
         .functions
         .iter()
         .filter(|function| {
-            function.method.is_some()
+            (function.method.is_some() || hands_back_array(function))
                 && function.vfunc.is_none()
                 && function.parameters.iter().any(|(_, mapped)| {
                     matches!(mapped.shape, Shape::Out { .. } | Shape::Filled { .. } | Shape::Array { .. } | Shape::Length { .. })
@@ -796,6 +799,44 @@ pub(crate) fn values_forms(binding: &Binding) -> Vec<&Function> {
                 && function.throws.as_ref().is_none_or(|slot| function.parameters.last().is_some_and(|(name, _)| name == slot))
         })
         .collect()
+}
+
+/// Whether C hands back an array the values form copies (`Shape::Array`), as
+/// its result or through an out slot: a free function's values form too.
+fn hands_back_array(function: &Function) -> bool {
+    function
+        .parameters
+        .iter()
+        .map(|(_, mapped)| &mapped.shape)
+        .chain([&function.result.shape])
+        .any(|shape| matches!(shape, Shape::Array { .. }))
+}
+
+/// The overload of a function that returns its out values and copies the
+/// arrays C hands back (`@ntsCall`), declared before the function itself:
+/// TypeScript takes the first overload a call matches, so a call leaving
+/// every slot out resolves to it -- and where the two take the same
+/// parameters, a returned array with no slot to leave out, the copy is the
+/// one called, as a method's values form is.
+fn values_function(out: &mut String, function: &Function) {
+    let taken = values_taken(function);
+    let defaulted = defaults(function, &taken);
+    let parameters = taken
+        .iter()
+        .map(|(name, mapped)| parameter(function, &defaulted, name, &mapped.ts))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let _ = writeln!(
+        out,
+        "  /**\n   * @ntsCall {}_values\n   */",
+        function.symbol
+    );
+    let _ = writeln!(
+        out,
+        "  export function {}({parameters}): {};",
+        function.name,
+        values_result(function)
+    );
 }
 
 /// What a values form returns: the function's own result, if it has one,
@@ -1234,6 +1275,24 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             }
         )
     });
+    let strings = shapes().any(|shape| {
+        matches!(
+            shape,
+            Shape::Array {
+                element: Element::Strings,
+                ..
+            }
+        )
+    });
+    let copies = shapes().any(|shape| {
+        matches!(
+            shape,
+            Shape::Array {
+                element: Element::Strings | Element::Scalar(_),
+                ..
+            }
+        )
+    });
     let memory: Vec<&str> = [
         values
             .iter()
@@ -1247,6 +1306,7 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             })
             .then_some("local"),
         bytes.then_some("bytesFrom"),
+        strings.then_some("stringFrom"),
     ]
     .into_iter()
     .flatten()
@@ -1259,6 +1319,13 @@ pub(crate) fn companion(binding: &Binding, command: &str) -> String {
             .entry("c:GLib-2.0".to_owned())
             .or_default()
             .push("g_free".to_owned());
+    }
+    // What a broken promise ends the process with (`copy_array`).
+    if copies {
+        imports
+            .entry("c:stdlib".to_owned())
+            .or_default()
+            .push("exit".to_owned());
     }
     if !memory.is_empty() {
         let _ = writeln!(
@@ -1314,15 +1381,21 @@ fn values_wrapper(out: &mut String, function: &Function) {
         transfer,
     } = &function.result.shape
     {
+        let copy = if *element == Element::Bytes {
+            "nts_bytes"
+        } else {
+            "nts_copy"
+        };
         copy_array(
             &mut after,
+            &function.symbol,
             "nts_result",
-            "nts_bytes",
+            copy,
             element,
             length,
             *transfer,
         );
-        read.push("nts_bytes".to_owned());
+        read.push(copy.to_owned());
     } else if function.result.ts != "void" && !reports_by_throwing(function) {
         read.push("nts_result".to_owned());
     }
@@ -1346,9 +1419,14 @@ fn values_wrapper(out: &mut String, function: &Function) {
                     .and_then(|rest| rest.strip_suffix('>'))
                     .unwrap_or("never");
                 let _ = writeln!(body, "  const {name} = local<{slot}>();");
-                let copy = format!("{name}_bytes");
+                let copy = if *element == Element::Bytes {
+                    format!("{name}_bytes")
+                } else {
+                    format!("{name}_copy")
+                };
                 copy_array(
                     &mut after,
+                    &function.symbol,
                     &format!("{name}[0]"),
                     &copy,
                     element,
@@ -1397,14 +1475,21 @@ fn values_wrapper(out: &mut String, function: &Function) {
 fn copied(element: &Element) -> String {
     match element {
         Element::Bytes => "Uint8Array".to_owned(),
+        Element::Strings => "string[]".to_owned(),
+        Element::Scalar(brand) => format!("{brand}[]"),
     }
 }
 
 /// The lines that copy an array C handed back at `pointer` into `copy` -- as
 /// long as `length` says, as `element` is -- and then free C's as `transfer`
-/// says (`Shape::Array`).
+/// says (`Shape::Array`): nothing of a borrowed array, the array of one whose
+/// container is the caller's, and each string in it too of one wholly the
+/// caller's. `symbol` names the function in what a broken promise prints:
+/// NULL with a length other than 0 ends the process, as `bytesFrom` does, and
+/// so does a NULL element where the array promised strings.
 fn copy_array(
     after: &mut String,
+    symbol: &str,
     pointer: &str,
     copy: &str,
     element: &Element,
@@ -1414,13 +1499,51 @@ fn copy_array(
     let count = match length {
         ArrayLength::Slot(slot) => format!("{slot}[0]"),
     };
-    match element {
+    let at = match element {
         Element::Bytes => {
             let _ = writeln!(after, "  const {copy} = bytesFrom({pointer}, {count});");
+            pointer.to_owned()
         }
+        Element::Strings | Element::Scalar(_) => {
+            let at = format!("{copy}_at");
+            let _ = writeln!(after, "  const {at} = {pointer};");
+            let _ = writeln!(after, "  const {copy}: {} = [];", copied(element));
+            let _ = writeln!(after, "  if ({at} !== null) {{");
+            let _ = writeln!(after, "    for (let i = 0; i < {count}; i++) {{");
+            if *element == Element::Strings {
+                let _ = writeln!(after, "      const text = stringFrom({at}[i]);");
+                let _ = writeln!(after, "      if (text === null) {{");
+                let _ = writeln!(
+                    after,
+                    "        console.error(\"{symbol}: element \" + String(i) + \" of its strings is NULL\");"
+                );
+                let _ = writeln!(after, "        exit(1);");
+                let _ = writeln!(after, "      }} else {{");
+                let _ = writeln!(after, "        {copy}.push(text);");
+                let _ = writeln!(after, "      }}");
+            } else {
+                let _ = writeln!(after, "      {copy}.push({at}[i]);");
+            }
+            let _ = writeln!(after, "    }}");
+            let _ = writeln!(after, "  }} else if ({count} !== 0) {{");
+            let _ = writeln!(
+                after,
+                "    console.error(\"{symbol}: NULL with a length of \" + String({count}));"
+            );
+            let _ = writeln!(after, "    exit(1);");
+            let _ = writeln!(after, "  }}");
+            at
+        }
+    };
+    if transfer == Transfer::Full && *element == Element::Strings {
+        let _ = writeln!(after, "  if ({at} !== null) {{");
+        let _ = writeln!(after, "    for (let i = 0; i < {count}; i++) {{");
+        let _ = writeln!(after, "      g_free({at}[i]);");
+        let _ = writeln!(after, "    }}");
+        let _ = writeln!(after, "  }}");
     }
     if transfer != Transfer::None {
-        let _ = writeln!(after, "  g_free({pointer});");
+        let _ = writeln!(after, "  g_free({at});");
     }
 }
 
