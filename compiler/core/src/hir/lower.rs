@@ -82230,17 +82230,24 @@ impl<'a> FuncBuilder<'a> {
     /// Split out of [`Self::contextual_type`] only for its length; the reason
     /// is in the comment there.
     fn declared_field_type(&self, parent: NodeId, depth: u32) -> Option<HirType> {
-        let name = self
-            .children(parent)
-            .first()
-            .and_then(|at| self.literal_name(*at))?;
         let owner = self.syntactic_parent(parent)?;
         let outer = self
             .contextual_type(owner, depth + 1)
             .or_else(|| self.type_of(owner))?;
-        let HirType::Managed(ManagedType::Object(type_id)) = outer else {
-            return None;
+        let type_id = match outer {
+            // A record's literal: each property is an entry, held as the
+            // record's value, as an assigned entry is, whatever its name.
+            // Asked of an object type only, `{ held: null }` in a
+            // `Record<string, number | null>` had nothing to stand in for and
+            // became a null of the record's own table type.
+            HirType::Managed(ManagedType::Table(_, value)) => return Some(*value),
+            HirType::Managed(ManagedType::Object(type_id)) => type_id,
+            _ => return None,
         };
+        let name = self
+            .children(parent)
+            .first()
+            .and_then(|at| self.literal_name(*at))?;
         let record = self.snapshot.types.get(type_id.0 as usize)?;
         let TypeKind::Object { properties } = &record.kind else {
             return None;
