@@ -160,8 +160,9 @@ fn includes<'a>(repository: &'a Repository, namespace: &'a Namespace) -> BTreeSe
 
 /// Each identifier in `text`, with where it starts: the tokens type text is
 /// renamed by. A string literal's contents are not tokens -- `c_int`
-/// names no type -- and neither is a name after a `.`, which is already a
-/// member of something.
+/// names no type, and a string constant's literal type (`"a\"b"`) is its
+/// text, escapes and all -- and neither is a name after a `.`, which is
+/// already a member of something.
 pub(super) fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
     let bytes = text.as_bytes();
     let mut at = 0;
@@ -172,6 +173,10 @@ pub(super) fn identifiers(text: &str) -> impl Iterator<Item = (usize, &str)> {
             if c == b'"' {
                 quoted = !quoted;
                 at += 1;
+                continue;
+            }
+            if quoted && c == b'\\' {
+                at += 2;
                 continue;
             }
             let starts = c.is_ascii_alphabetic() || c == b'_' || c == b'$';

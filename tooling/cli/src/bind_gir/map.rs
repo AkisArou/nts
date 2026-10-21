@@ -143,7 +143,10 @@ pub(crate) struct ConstantDecl {
     /// by (`naming`).
     pub(crate) gir_name: String,
     pub(crate) ts: String,
-    pub(crate) value: String,
+    /// The value `@ntsConstant` carries, folded where it is read; `None`
+    /// where the type carries it: a string's literal type,
+    /// `"Desktop Entry"`, which lowering reads as it reads a number's.
+    pub(crate) value: Option<String>,
 }
 
 /// How a class is constructed with every property at its default: its own
@@ -2315,14 +2318,22 @@ impl<'a> Mapper<'a> {
     /// is a row in the ledger, as everything left unbound is.
     fn constants(&mut self) {
         for constant in &self.namespace.constants {
+            // A string is its literal type, spelled as `JSON.stringify` spells
+            // it -- escapes TypeScript reads back as the same text.
+            if matches!(constant.ty.as_str(), "utf8" | "filename") {
+                self.binding.constants.push(ConstantDecl {
+                    name: constant.c_name.clone(),
+                    gir_name: constant.name.clone(),
+                    ts: serde_json::Value::String(constant.value.clone()).to_string(),
+                    value: None,
+                });
+                continue;
+            }
             let Some((_, brand, _)) = SCALARS.iter().find(|(gir, _, scalar)| {
                 *gir == constant.ty
                     && !matches!(scalar, Scalar::Float | Scalar::Double | Scalar::Size)
             }) else {
                 let why = match constant.ty.as_str() {
-                    "utf8" | "filename" => {
-                        "a string, which no declaration's value carries".to_owned()
-                    }
                     "gfloat" | "gdouble" => {
                         format!("`{}`, a floating value GIR writes rounded", constant.value)
                     }
@@ -2356,7 +2367,7 @@ impl<'a> Mapper<'a> {
                 name: constant.c_name.clone(),
                 gir_name: constant.name.clone(),
                 ts,
-                value,
+                value: Some(value),
             });
         }
         // The fundamental types, from the headers, each a `GType` as a
@@ -2371,7 +2382,7 @@ impl<'a> Mapper<'a> {
                     name: (*name).to_owned(),
                     gir_name,
                     ts: "c_size_t".to_owned(),
-                    value: value.to_string(),
+                    value: Some(value.to_string()),
                 });
             }
         }
@@ -5839,6 +5850,87 @@ mod tests {
         std::fs::remove_dir_all(dir).expect("remove fixture");
     }
 
+    /// A string constant is its literal type, with no `@ntsConstant`: the
+    /// text as `JSON.stringify` writes it, which TypeScript reads back as the
+    /// same text -- a quote, a backslash and a newline escaped -- on both
+    /// surfaces, where the `gi:` one renames nothing inside it, a quoted
+    /// `SRect` included. The control is an integer constant, which keeps its
+    /// tag.
+    #[test]
+    fn a_string_constant_is_its_literal_type() {
+        use super::super::{emit, naming};
+        use super::bind;
+        let dir =
+            crate::bind_scratch::directory("gir-string-constant-test").expect("fixture directory");
+        let constant = |name: &str, value: &str, ty: &str, c_type: &str| {
+            format!(
+                r#"<constant name="{name}" value="{value}" c:type="S_{name}"><type name="{ty}" c:type="{c_type}"/></constant>"#
+            )
+        };
+        let xml = [
+            r#"<repository version="1.2"
+            xmlns="http://www.gtk.org/introspection/core/1.0"
+            xmlns:c="http://www.gtk.org/introspection/c/1.0"
+            xmlns:glib="http://www.gtk.org/introspection/glib/1.0">
+            <c:include name="s.h"/><namespace name="S" version="1.0">"#,
+            r#"<record name="Rect" c:type="SRect"><field name="x" writable="1"><type name="gint" c:type="gint"/></field></record>"#,
+            &constant("GROUP", "Desktop Entry", "utf8", "gchar*"),
+            &constant("QUOTED", r"say &quot;SRect&quot;\&#10;", "utf8", "gchar*"),
+            &constant("LIMIT", "7", "gint", "gint"),
+            "</namespace></repository>",
+        ]
+        .concat();
+        std::fs::write(dir.join("S-1.0.gir"), xml).expect("GIR");
+        let search = camino::Utf8PathBuf::from_path_buf(dir.clone()).expect("UTF-8 path");
+        let repository = super::super::parse::repository("S-1.0", &[search]).expect("parse GIR");
+        let namespace = &repository.namespaces["S"];
+        let binding = bind(
+            &repository,
+            namespace,
+            &super::super::facts::Facts::default(),
+        );
+        let declared = |binding: &super::Binding| {
+            binding
+                .constants
+                .iter()
+                .map(|c| (c.name.clone(), c.ts.clone(), c.value.clone()))
+                .collect::<Vec<_>>()
+        };
+        let quoted = r#""say \"SRect\"\\\n""#;
+        assert_eq!(
+            declared(&binding),
+            [
+                ("S_GROUP".to_owned(), r#""Desktop Entry""#.to_owned(), None),
+                ("S_QUOTED".to_owned(), quoted.to_owned(), None),
+                (
+                    "S_LIMIT".to_owned(),
+                    "c_int".to_owned(),
+                    Some("7".to_owned())
+                ),
+            ]
+        );
+        let text = emit::declarations(&binding, "test");
+        assert!(!text.contains("@ntsConstant Desktop"), "{text}");
+        assert!(
+            text.contains("  export const S_GROUP: \"Desktop Entry\";\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("  /** @ntsConstant 7 */\n  export const S_LIMIT: c_int;\n"),
+            "{text}"
+        );
+        let gi = naming::gi(&binding, namespace, &naming::Names::of(&repository));
+        assert_eq!(
+            declared(&gi),
+            [
+                ("GROUP".to_owned(), r#""Desktop Entry""#.to_owned(), None),
+                ("QUOTED".to_owned(), quoted.to_owned(), None),
+                ("LIMIT".to_owned(), "c_int".to_owned(), Some("7".to_owned())),
+            ]
+        );
+        std::fs::remove_dir_all(dir).expect("remove fixture");
+    }
+
     /// An out or inout record whose header type is `T *` is storage the
     /// caller gives, whatever GIR says of caller-allocates: a boxed record's
     /// own box (`new SPoint()`), or the object an opaque one's maker made.
@@ -5921,7 +6013,8 @@ mod tests {
     }
 
     /// Every constant the binding cannot state is a row in the ledger, with
-    /// what it is. The control is the one it can: an exact integer, bound.
+    /// what it is. The controls are the ones it can: an exact integer and a
+    /// string, bound.
     #[test]
     fn a_constant_left_unbound_is_a_row_in_the_ledger() {
         use super::super::facts;
@@ -5962,7 +6055,7 @@ mod tests {
                 .iter()
                 .map(|c| c.name.as_str())
                 .collect::<Vec<_>>(),
-            ["K_EXACT"]
+            ["K_EXACT", "K_TEXT"]
         );
         let refused = |name: &str| {
             binding
@@ -5972,7 +6065,6 @@ mod tests {
                 .map(|(_, r)| r.clone())
         };
         for (name, why) in [
-            ("K_TEXT", "a string, which no declaration's value carries"),
             (
                 "K_ROUNDED",
                 "`2.718282`, a floating value GIR writes rounded",

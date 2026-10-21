@@ -742,10 +742,10 @@ export function made(): number {
 
     fn pinned_constants(packages: &[Package], gobject: &Package) {
         // A constant is declared with its type and its value in a tag, where
-        // GIR states the value exactly, a negative one included; absent where
+        // GIR states the value exactly, a negative one included, and a string
+        // as its literal type, which carries the value itself; absent where
         // the fold would carry a different number -- GIR writes a double to
-        // six digits, and a double cannot hold an integer beyond 2^53 -- and
-        // for a string, which the tag does not carry.
+        // six digits, and a double cannot hold an integer beyond 2^53.
         let glib = packages
             .iter()
             .find(|p| p.name == "@nts/gir-glib-2.0")
@@ -753,14 +753,11 @@ export function made(): number {
         for present in [
             "/** @ntsConstant 0 */\n  export const G_PRIORITY_DEFAULT: c_int;",
             "/** @ntsConstant -2147483648 */\n  export const G_MININT32: Int32;",
+            "  export const G_CSET_DIGITS: \"0123456789\";",
         ] {
             assert!(glib.declarations.contains(present), "missing: {present}");
         }
-        for absent in [
-            "export const G_E:",
-            "export const G_MAXINT64:",
-            "export const G_CSET_DIGITS",
-        ] {
+        for absent in ["export const G_E:", "export const G_MAXINT64:"] {
             assert!(
                 !glib.declarations.contains(absent),
                 "a constant the fold cannot hold: {absent}"

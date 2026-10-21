@@ -229,11 +229,10 @@ pub(crate) fn declarations(binding: &Binding, command: &str) -> String {
         }
     }
     for constant in &binding.constants {
-        let _ = writeln!(
-            out,
-            "  /** @ntsConstant {} */\n  export const {}: {};",
-            constant.value, constant.name, constant.ts
-        );
+        if let Some(value) = &constant.value {
+            let _ = writeln!(out, "  /** @ntsConstant {value} */");
+        }
+        let _ = writeln!(out, "  export const {}: {};", constant.name, constant.ts);
     }
     out.push('\n');
     for function in binding
