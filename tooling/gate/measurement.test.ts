@@ -59,10 +59,21 @@ test("sustained kernel load over 10% on average is not admitted", async () => {
   assert.equal(await admitted(Array(200).fill({ program: 0, kernel: 15 }), 180), null);
 });
 
-test("a program at a trace share is not a program, and above it is", () => {
+test("a program's wake-up is not a program running, and a busy second is", () => {
   const before = coreTicks(statAfter([]));
-  assert.equal(programRan(before, coreTicks(statAfter([{ program: 1, kernel: 5 }]))), false);
-  assert.equal(programRan(before, coreTicks(statAfter([{ program: 5, kernel: 0 }]))), true);
+  assert.equal(programRan(before, coreTicks(statAfter([{ program: 5, kernel: 5 }]))), false);
+  assert.equal(programRan(before, coreTicks(statAfter([{ program: 30, kernel: 0 }]))), true);
+});
+
+test("a shell's prompt daemon waking now and then is admitted", async () => {
+  // `gitstatusd` and an idle `zsh`, unpinned, wake on the pair for a few
+  // milliseconds: 5% of one second in ten averages 0.5%, under the 1%.
+  const script = Array.from({ length: 120 }, (_, at) => (at % 10 === 3 ? { program: 5, kernel: 2 } : quiet));
+  assert.equal(await admitted(script), 45);
+});
+
+test("a program waking every second sums past 1% and is not admitted", async () => {
+  assert.equal(await admitted(Array(200).fill({ program: 3, kernel: 1 }), 180), null);
 });
 
 test("a counter that went backwards is not known to be quiet", () => {

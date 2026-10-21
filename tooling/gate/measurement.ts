@@ -25,8 +25,14 @@ export function coreTicks(stat: string): Ticks {
   return result;
 }
 
-/** At most this share of one sample may be a program's before the pair counts as shared. */
-const PROGRAM_SHARE = 0.02;
+/**
+ * More than this share of one second is a program running on the pair, which
+ * restarts the window. A program a timed run competes with runs flat out; a
+ * shell's prompt daemon waking for a few milliseconds does not.
+ */
+const PROGRAM_SHARE = 0.25;
+/** At most this share of the whole window may be a program's, summed over its wake-ups. */
+const PROGRAM_SHARE_ON_AVERAGE = 0.01;
 /** At most this share of the whole window may be busy at all. */
 const BUSY_SHARE = 0.1;
 
@@ -44,14 +50,25 @@ export function programRan(before: Ticks, after: Ticks): boolean {
   });
 }
 
-/** Whether both siblings were at most 10% busy, averaged from one sample to another. */
+/**
+ * Whether both siblings were at most 10% busy, and at most 1% a program's,
+ * averaged from one sample to another.
+ */
 export function coreIsQuiet(before: Ticks, after: Ticks): boolean {
   return MEASUREMENT_CPUS.every((cpu) => {
     const a = before.get(cpu)!;
     const b = after.get(cpu)!;
     const total = b.total - a.total;
     const idle = b.idle - a.idle;
-    return total > 0 && idle >= 0 && idle <= total && 1 - idle / total <= BUSY_SHARE;
+    const program = b.program - a.program;
+    return (
+      total > 0 &&
+      idle >= 0 &&
+      idle <= total &&
+      program >= 0 &&
+      1 - idle / total <= BUSY_SHARE &&
+      program / total <= PROGRAM_SHARE_ON_AVERAGE
+    );
   });
 }
 
@@ -59,9 +76,12 @@ export function coreIsQuiet(before: Ticks, after: Ticks): boolean {
  * Wait until the reserved pair has run no other program, and been at most 10%
  * busy on average, for `quietMs`.
  *
- * **A program is what a timed run must not share the core with**, so one in
- * any sample restarts the window. The kernel's own time is judged over the
- * window instead: with every session pinned off the pair, what is left on it
+ * **A program is what a timed run must not share the core with**, so one
+ * running in any second (over 25% of it) restarts the window, and programs'
+ * wake-ups may sum to at most 1% of it: the user's shells and their prompt's
+ * `gitstatusd`, unpinned, wake on the pair for milliseconds, and a rule of no
+ * program ever refused on those. The kernel's own time is judged over the
+ * window as well: with every session pinned off the pair, what is left on it
  * is reclaim and compaction (`kswapd0`, `kcompactd0`), the journal and an NVMe
  * queue's interrupts, in bursts. A test that asked every second to be 90% idle
  * let one such second restart 45 of them, and while gates kept memory under
