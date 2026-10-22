@@ -2953,6 +2953,7 @@ mod wasm_compiler_stop_guard {
             async_result: None,
             frame: None,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
         };
         let mut control = stopped.clone();
         control.name = "control".to_owned();

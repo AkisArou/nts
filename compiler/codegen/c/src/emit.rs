@@ -4923,6 +4923,7 @@ fn binary_text(
     bin: BinOp,
     lhs: ValueId,
     rhs: ValueId,
+    exact: bool,
 ) -> String {
     // A bitwise operator's operands are always coercion results — the lowering
     // guarantees it — so they hold int32 values whatever their representation
@@ -5093,7 +5094,9 @@ fn binary_text(
         return text;
     }
 
-    if let Some(text) = wrapping_arithmetic(op, name, bin, operator, lhs, rhs) {
+    // Plain signed arithmetic only where core proved the result fits
+    // (`Func::exact`); everything else wraps, as `| 0` defines.
+    if !exact && let Some(text) = wrapping_arithmetic(op, name, bin, operator, lhs, rhs) {
         return text;
     }
 
@@ -5236,7 +5239,8 @@ fn shift_text(
 /// not produce an integer, and the bitwise operators are answered before this.
 ///
 /// The LLVM backend needs no equivalent: its `add` carries no `nsw`, so it
-/// wraps by definition. This is a rule about C.
+/// wraps by definition. Where core proved the result fits its type
+/// (`Func::exact`), this writes the plain operator instead.
 fn wrapping_arithmetic(
     op: &nts_core::hir::Op,
     name: &str,
@@ -5880,7 +5884,15 @@ fn emit_op(
         OpKind::ConstTemplate { site, .. } => {
             format!("{name} = (NtsArray *)(void *)&nts_template_{site};")
         }
-        OpKind::Binary { op: bin, lhs, rhs } => binary_text(func, op, &name, *bin, *lhs, *rhs),
+        OpKind::Binary { op: bin, lhs, rhs } => binary_text(
+            func,
+            op,
+            &name,
+            *bin,
+            *lhs,
+            *rhs,
+            func.exact.contains_key(&value),
+        ),
         OpKind::Call { callee, args, .. } => {
             call_text(func, &name, value, callee, args, context, &op.origin)?
         }
@@ -6543,13 +6555,14 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         };
         let op = value(i32_ty);
         for (bin, operator) in [(BinOp::Add, "+"), (BinOp::Sub, "-"), (BinOp::Mul, "*")] {
-            let text = binary_text(&func, &op, "out", bin, ValueId(0), ValueId(1));
+            let text = binary_text(&func, &op, "out", bin, ValueId(0), ValueId(1), false);
             assert_eq!(
                 text,
                 format!("out = (int32_t)((uint32_t)v0 {operator} (uint32_t)v1);"),
@@ -6598,6 +6611,7 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
@@ -6723,6 +6737,7 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
             written_return_elements: Vec::new(),

@@ -110,6 +110,7 @@ mod tests {
             async_result: None,
             frame: None,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
         };
         Program {
             funcs: vec![func],

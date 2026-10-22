@@ -633,6 +633,7 @@ mod tests {
                     async_result: None,
                     frame: None,
                     obligations: Vec::new(),
+                    exact: rustc_hash::FxHashMap::default(),
                 },
                 ops: Vec::new(),
             };

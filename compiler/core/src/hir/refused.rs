@@ -245,6 +245,7 @@ fn stopped_entry(name: String, contract: &Func, receiver: super::TypeId, message
         async_result: None,
         frame: None,
         obligations: Vec::new(),
+        exact: rustc_hash::FxHashMap::default(),
     };
     let block = stop(&mut func, message, &contract.origin);
     func.blocks.push(block);

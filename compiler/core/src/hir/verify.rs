@@ -21,6 +21,11 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// An operation marked [`super::Func::exact`] is no longer the integer
+    /// `+`, `-` or `*`, at the type, the mark was made for. A pass after
+    /// `exact::mark` rewrote it, and the promise a backend makes on it -- that
+    /// it cannot overflow -- is no longer the one that was proved.
+    ExactNotProved { func: String, value: u32 },
     /// A value that is not one of a signature's own closures enters a
     /// signature whose calls take its typed entry
     /// ([`Program::typed_signatures`]): an unerase into it, an exported
@@ -365,10 +370,37 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     check_subscriptions(program, &mut problems);
     check_native_dispatch(program, &mut problems);
     check_typed_signatures(program, &mut problems);
+    check_exact(program, &mut problems);
     if problems.is_empty() {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// Every operation marked exact is still the arithmetic, at the type, its
+/// proof was made for ([`Invalid::ExactNotProved`]).
+fn check_exact(program: &Program, problems: &mut Vec<Invalid>) {
+    for func in &program.funcs {
+        for (id, ty) in &func.exact {
+            let proved = func.values.get(id.0 as usize).is_some_and(|op| {
+                op.ty == *ty
+                    && matches!(ty, HirType::Int { signed: true, .. })
+                    && matches!(
+                        op.kind,
+                        OpKind::Binary {
+                            op: BinOp::Add | BinOp::Sub | BinOp::Mul,
+                            ..
+                        }
+                    )
+            });
+            if !proved {
+                problems.push(Invalid::ExactNotProved {
+                    func: func.name.clone(),
+                    value: id.0,
+                });
+            }
+        }
     }
 }
 
@@ -2448,6 +2480,7 @@ mod tests {
                 frame: None,
                 abstract_declaration: false,
                 obligations: Vec::new(),
+                exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
@@ -3162,6 +3195,7 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
@@ -3190,6 +3224,7 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),

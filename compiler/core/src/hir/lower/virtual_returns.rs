@@ -307,6 +307,7 @@ fn projected_bridge(name: String, target: &Func, projection: &Projection) -> Fun
         async_result: None,
         frame: None,
         obligations: Vec::new(),
+        exact: rustc_hash::FxHashMap::default(),
         written_return: None,
         result_absent: crate::hir::Absent::Impossible,
         written_return_elements: Vec::new(),

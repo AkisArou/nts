@@ -539,6 +539,7 @@ fn explicit_casts_and_erased_container_pairs_keep_the_scan_answers() {
                     frame: None,
                     abstract_declaration: false,
                     obligations: Vec::new(),
+                    exact: rustc_hash::FxHashMap::default(),
                     written_return: None,
                     result_absent: crate::hir::Absent::Impossible,
                     written_return_elements: Vec::new(),

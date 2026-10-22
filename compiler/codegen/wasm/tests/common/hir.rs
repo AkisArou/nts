@@ -49,6 +49,7 @@ pub(crate) fn function(name: &str, params: &[HirType], result: HirType) -> Func 
         async_result: None,
         frame: None,
         obligations: Vec::new(),
+        exact: nts_core::hir::ExactArithmetic::default(),
     }
 }
 

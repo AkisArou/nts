@@ -66,6 +66,7 @@ mod cycles;
 #[cfg(test)]
 mod cycles_oracle;
 mod dispatch;
+pub mod exact;
 pub mod floating;
 mod initialized;
 pub mod inline;
@@ -533,6 +534,10 @@ pub struct ValueId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BlockId(pub u32);
 
+/// The integer arithmetic of one function proved to fit its type, by the
+/// operation and the type the proof was made at ([`Func::exact`]).
+pub type ExactArithmetic = rustc_hash::FxHashMap<ValueId, HirType>;
+
 /// One function.
 #[derive(Debug, Clone)]
 pub struct Func {
@@ -622,6 +627,13 @@ pub struct Func {
     /// lowering produced: the strict check takes it before any pass renumbers
     /// values, and every later function has it empty.
     pub obligations: Vec<obligations::Obligation>,
+    /// The integer `+`, `-` and `*` whose result provably fits its type, each
+    /// with the type the proof was made at ([`exact`]): the one place a
+    /// backend may promise that an operation cannot overflow, as C does by
+    /// writing plain signed arithmetic for these; everything else wraps, as
+    /// `| 0` defines. Written once, after the last pass that changes an
+    /// operation's type or operands, and checked by [`verify`].
+    pub exact: ExactArithmetic,
 }
 
 /// Which of the two generator protocols a `function*` speaks.
@@ -7860,6 +7872,9 @@ fn prepare_lowered(
         // the specialize loop, after `narrow_widths`, after `reconcile`, after
         // `dce` or after `place_allocations` --- and one did after this.
         conversions += reconcile(&mut program);
+        // Last, once no pass will change an operation's type or operands
+        // again: which integer arithmetic provably fits its type (`exact`).
+        mark_exact(&mut program, options.roots);
     }
     let checks_kept = program
         .funcs
@@ -8016,6 +8031,15 @@ fn narrow_widths(program: &mut Program) -> usize {
 }
 
 /// Dead parameters and values, after specialization has orphaned them.
+/// Mark the integer arithmetic that provably fits its type, from facts
+/// computed for the program as it now is ([`exact`]).
+fn mark_exact(program: &mut Program, roots: reachable::Roots<'_>) {
+    let analyses = interprocedural::analyze_program(program, roots);
+    for (func, analysis) in program.funcs.iter_mut().zip(&analyses) {
+        exact::mark(func, analysis);
+    }
+}
+
 fn collect_orphans(program: &mut Program) {
     for func in &mut program.funcs {
         // Parameters first: dropping one can be what makes the value feeding
@@ -8725,6 +8749,7 @@ mod tests {
                     frame: None,
                     abstract_declaration: false,
                     obligations: Vec::new(),
+                    exact: rustc_hash::FxHashMap::default(),
                     written_return: None,
                     result_absent: crate::hir::Absent::Impossible,
                     written_return_elements: Vec::new(),
@@ -8857,6 +8882,7 @@ mod tests {
                 frame: None,
                 abstract_declaration: false,
                 obligations: Vec::new(),
+                exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),
@@ -9095,6 +9121,7 @@ mod tests {
                 frame: None,
                 abstract_declaration: false,
                 obligations: Vec::new(),
+                exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
                 written_return_elements: Vec::new(),

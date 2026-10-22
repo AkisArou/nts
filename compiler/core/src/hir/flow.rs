@@ -1386,6 +1386,21 @@ fn transfer_op(
     // A checked read's value is an element: out of range it stops the program
     // instead of answering `undefined` (`super::may_stop`), and dead-code
     // removal and folding keep it for that.
+    //
+    // **An integer result wraps.** `(a + b) | 0` narrowed to `i32` is computed
+    // modulo 2^32, and the `| 0` that said so is gone once the operands are
+    // `i32`. So where the arithmetic's range leaves the type, the value is
+    // somewhere in the type and nowhere that range says -- and a reader that
+    // trusted the range would prove things about a value it does not have
+    // (`super::exact` would promise `nsw` on a sum of one).
+    if matches!(
+        op.kind,
+        OpKind::Binary { .. } | OpKind::Unary { op: UnOp::Neg, .. }
+    ) && let Some(width) = held_by(&op.ty)
+        && !(result.lo >= width.lo && result.hi <= width.hi)
+    {
+        return width;
+    }
     result
 }
 
@@ -2209,6 +2224,7 @@ mod tests {
             frame: None,
             abstract_declaration: false,
             obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),

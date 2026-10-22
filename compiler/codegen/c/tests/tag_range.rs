@@ -72,6 +72,7 @@ fn predicate(name: &str, negate: bool) -> hir::Func {
         async_result: None,
         frame: None,
         obligations: Vec::new(),
+        exact: nts_core::hir::ExactArithmetic::default(),
         written_return: None,
         result_absent: nts_core::hir::Absent::Impossible,
         written_return_elements: Vec::new(),

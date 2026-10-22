@@ -3786,6 +3786,7 @@ mod tests {
             async_result: None,
             frame: None,
             obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
         };
         let block = refused::stop(&mut inert, "summary guard".to_owned(), &origin);
         inert.blocks.push(block);

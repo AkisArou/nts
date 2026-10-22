@@ -4007,6 +4007,7 @@ mod frame_tests {
             async_result: None,
             frame: None,
             obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
         };
         let Some(placed) = nts_core::hir::layout::place(&layout.fields) else {
             panic!("the cell's scalar fields should have a layout");
