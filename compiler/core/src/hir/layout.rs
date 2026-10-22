@@ -83,6 +83,12 @@ pub const TEMPLATE_IMMUTABLE: u32 = 1 << 6;
 /// shape is wrong.
 pub const LENGTH_OFFSET: u32 = 2 * POINTER + 4;
 
+/// Where a string's code units start: after the header and the 32-bit hash the
+/// runtime keeps there (`NTS_STRING_HASH`). `NTS_STRING_UNITS` in the runtime,
+/// asserted from the C backend against the macro; the LLVM backend sizes frame
+/// strings from it and lays its literals out to match.
+pub const STRING_UNITS: u32 = HEADER.size + 4;
+
 /// Where `NtsArray::elements` sits.
 ///
 /// The header, then `capacity` as a `uint32_t`, then the block pointer -- which

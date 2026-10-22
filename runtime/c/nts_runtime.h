@@ -1070,8 +1070,21 @@ void nts_value_release(NtsValue value);
 void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
                                 void (*release)(void *), const char *name);
 
+/* A string's cached hash, in the word after its header, and its inline code
+ * units after that.
+ *
+ * Kept on the string because the same strings are looked up again and again:
+ * a word-count loop hashes the same vocabulary on every `get` and `set`, and a
+ * hash recomputed each time was the largest share of `map-entries-top-k`.
+ * Remembered (string design 2026-10-22 §4), `str-map-keys` measured 13.2 ->
+ * 5.9 us and the word-count rows a third faster. Valid while `NTS_HASHED` is
+ * set; see there for who sets and clears it. */
+#define NTS_STRING_HASH(s)                                                     \
+  (*(uint32_t *)((unsigned char *)(s) + sizeof(NtsHeader)))
+/* Where a string's code units start: after the header and the hash. */
+#define NTS_STRING_UNITS (sizeof(NtsHeader) + sizeof(uint32_t))
 /* The inline elements of a string. */
-#define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + sizeof(NtsHeader)))
+#define NTS_ELEMENTS(a, T) ((T *)((unsigned char *)(a) + NTS_STRING_UNITS))
 /* The elements of an array, wherever they are. */
 #define NTS_ITEMS(a, T) ((T *)((a)->elements))
 
@@ -1101,6 +1114,27 @@ void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
  * exact-sized as before. Only a string something appended to pays, and what it
  * pays is the slack every growable buffer pays. */
 #define NTS_GROWN 2u
+
+/* `NTS_STRING_HASH` holds this string's hash, and the string is settled.
+ *
+ * A string is being built or settled, never both. Built: `NTS_GROWN`, with
+ * room that `nts_str_append` writes into in place. Settled: hashed, and never
+ * written again. The hash makes the move, the first time a string is hashed:
+ * it keeps the hash and clears `NTS_GROWN`, so the string's capacity is its
+ * length from then on and an append to it makes a new string, as it does for
+ * any exact-sized one. The append path never asks about a hash at all -- a
+ * test of this flag there cost the append rows 2-5% -- and a word built with
+ * `+=` and then used as a key keeps its hash, which is `str-map-keys` (13.2 ->
+ * 5.9 us). What it costs is a grown string's slack once it is hashed.
+ *
+ * Not on an immortal string, which may be a literal in read-only storage and
+ * is hashed every time, as every string was before. Every constructor sets
+ * `flags` whole, so a new string starts without it.
+ *
+ * A string's own bit, in the range objects use for presence
+ * (`NTS_PRESENCE_SHIFT`): a string has no optional properties, as an array has
+ * none for `NTS_ARRAY_IMMUTABLE`. */
+#define NTS_HASHED 0x80u
 
 /* An array whose source-site storage is immutable. The object and its elements
  * are static; checked when erasure is narrowed to writable array storage. */
@@ -2014,6 +2048,7 @@ NtsString *nts_str_append(NtsString *a, const NtsString *b);
 #define NTS_FRAME_STRING(units)                                                \
   struct {                                                                     \
     NtsHeader header;                                                          \
+    uint32_t hash;                                                             \
     uint16_t data[(units) + 1];                                                \
   }
 

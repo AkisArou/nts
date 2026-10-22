@@ -704,9 +704,9 @@ fn literals(program: &Program) -> String {
         data.push(format!("{element} 0"));
         let _ = writeln!(
             out,
-            "@nts_str_{index} = internal constant {{ %NtsHeader, [{count} x {element}] }} \
+            "@nts_str_{index} = internal constant {{ %NtsHeader, i32, [{count} x {element}] }} \
              {{ %NtsHeader {{ ptr {descriptor}, i64 {immortal}, i32 {flags}, i32 {length} }}, \
-             [{count} x {element}] [{}] }}",
+             i32 0, [{count} x {element}] [{}] }}",
             data.join(", "),
             count = data.len(),
             immortal = nts_core::hir::layout::IMMORTAL,
@@ -2733,7 +2733,7 @@ fn frame_units(func: &Func, value: ValueId) -> Option<u32> {
 /// one slot per allocation *site* rather than one per execution of it, which is
 /// correct precisely because nothing outlives the iteration that made it.
 ///
-/// `NTS_FRAME_STRING(units)`: a header and `units + 1` code units, which is a
+/// `NTS_FRAME_STRING(units)`: a header, the hash and `units + 1` code units, which is a
 /// *bound* rather than a length -- what the compiler knows is that a slice
 /// cannot exceed the string it came from, and how long it actually is only
 /// running finds out.
@@ -2793,7 +2793,7 @@ fn object_placement(program: &Program, ty: &HirType) -> Option<nts_core::hir::la
 }
 
 fn one_frame(out: &str, units: u32) -> String {
-    let bytes = u64::from(nts_core::hir::layout::HEADER.size) + 2 * (u64::from(units) + 1);
+    let bytes = u64::from(nts_core::hir::layout::STRING_UNITS) + 2 * (u64::from(units) + 1);
     format!(
         "{out}.frame = alloca i8, i64 {bytes}, align {}",
         nts_core::hir::layout::POINTER

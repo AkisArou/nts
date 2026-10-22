@@ -171,6 +171,39 @@ int main(void) {
     nts_release(&m->header);
   }
 
+  /* --- a string keeps its hash only once its text is settled ------------
+   * node: t.set("ab", 1); t.set("abc", 2); let k = "a"; k += "b";
+   *       t.get(k) => 1; k += "c"; t.get(k) => 2                          */
+  {
+    NtsMap *m = nts_map_new(NTS_KEY_STRING);
+    NtsValue settled = str("ab");
+    put(m, settled, num(1));
+    put(m, str("abc"), num(2));
+    check("a string that cannot change keeps the hash it was stored by",
+          (((const NtsString *)nts_value_reference(settled))->flags &
+           NTS_HASHED) != 0);
+    /* Grown by the first append, so the second has room to write in place,
+     * and held only here, so it may. */
+    NtsString *k =
+        nts_str_append(nts_string_from_utf8("a", 1),
+                       (const NtsString *)nts_value_reference(str("b")));
+    check("a grown string finds the key it equals",
+          nts_value_number(nts_map_get(
+              m, nts_value_of_reference((NtsHeader *)k, NTS_TAG_STRING))) ==
+              1.0);
+    check("and is settled by being hashed: its hash kept, its room given up",
+          (k->flags & NTS_HASHED) != 0 && (k->flags & NTS_GROWN) == 0);
+    NtsString *grown =
+        nts_str_append(k, (const NtsString *)nts_value_reference(str("c")));
+    /* `k` is held only here, so the append consumes it: this asks whether
+     * settling, and not sharing, is what keeps it from being written. */
+    check("so appending to it makes a new string, not a write into it",
+          grown != k);
+    check("which finds the key its new text equals",
+          nts_value_number(nts_map_get(m, keep(grown))) == 2.0);
+    nts_release(&m->header);
+  }
+
   /* --- undefined is an ordinary key -------------------------------------
    * node: u.set(undefined, undefined) => has(undefined) true, size 1
    *       get is undefined for both absent and present-undefined         */

@@ -3391,6 +3391,8 @@ __attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
       bytes[total] = 0;
     }
     a->length = total;
+    /* No hash to give up: a string with room for this append is `NTS_GROWN`,
+     * and hashing a string clears that (`NTS_HASHED`). */
     return a;
   }
 
@@ -3476,7 +3478,7 @@ NtsString *nts_str_raw(uint32_t length, int wide) {
   }
   size_t width = wide ? 2u : 1u;
   NtsString *out =
-      (NtsString *)nts_alloc(sizeof(NtsHeader) + ((size_t)length + 1) * width);
+      (NtsString *)nts_alloc(NTS_STRING_UNITS + ((size_t)length + 1) * width);
   out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
   out->reserved = 1;
   nts_note_allocation();
@@ -3527,11 +3529,14 @@ NtsString *nts_str_alloc(const uint16_t *units, uint32_t length) {
  * row, its `"tags":["a","b"]`. */
 typedef struct {
   NtsHeader header;
+  uint32_t hash;
   unsigned char units[2];
 } NtsUnitString;
+_Static_assert(offsetof(NtsUnitString, units) == NTS_STRING_UNITS,
+               "a shared string's units are not where every string's are");
 
 #define NTS_UNIT_STRING(unit)                                                  \
-  {{&nts_desc_string1, NTS_IMMORTAL, 0u, 1u}, {(unsigned char)(unit), 0u}}
+  {{&nts_desc_string1, NTS_IMMORTAL, 0u, 1u}, 0u, {(unsigned char)(unit), 0u}}
 #define NTS_UNIT_STRINGS_4(unit)                                               \
   NTS_UNIT_STRING(unit), NTS_UNIT_STRING((unit) + 1),                          \
       NTS_UNIT_STRING((unit) + 2), NTS_UNIT_STRING((unit) + 3)
@@ -3546,7 +3551,7 @@ static const NtsUnitString nts_unit_strings[256] = {
     NTS_UNIT_STRINGS_64(0), NTS_UNIT_STRINGS_64(64), NTS_UNIT_STRINGS_64(128),
     NTS_UNIT_STRINGS_64(192)};
 static const NtsUnitString nts_empty_string = {
-    {&nts_desc_string1, NTS_IMMORTAL, 0u, 0u}, {0u, 0u}};
+    {&nts_desc_string1, NTS_IMMORTAL, 0u, 0u}, 0u, {0u, 0u}};
 
 /* Copy a range of code units out of a string, into the caller's storage where
  * it supplied one, and as a shared string where it is one of those above. */
@@ -7349,8 +7354,8 @@ bool nts_string_eq(const NtsString *a, const NtsString *b) {
   int b_wide = (b->flags & NTS_TWO_BYTE) != 0;
   if (a_wide == b_wide) {
     size_t width = a_wide ? 2u : 1u;
-    return memcmp((const unsigned char *)a + sizeof(NtsHeader),
-                  (const unsigned char *)b + sizeof(NtsHeader),
+    return memcmp(NTS_ELEMENTS(a, const unsigned char),
+                  NTS_ELEMENTS(b, const unsigned char),
                   (size_t)a->length * width) == 0;
   }
   /* One of each: compare code unit by code unit rather than widening, so
@@ -7469,7 +7474,7 @@ static uint32_t nts_hash_mix(uint64_t x) {
  * A narrow and a wide string holding the same text are `===` -- that is what
  * `nts_string_eq` says -- so they have to hash alike, and their bytes do not
  * match. Widening as it goes costs a branch per unit and allocates nothing. */
-static uint32_t nts_hash_string(const NtsString *s) {
+static uint32_t nts_hash_units(const NtsString *s) {
   uint64_t h = 0xcbf29ce484222325ULL;
   uint32_t units = s->length;
   if (s->flags & NTS_TWO_BYTE) {
@@ -7484,6 +7489,35 @@ static uint32_t nts_hash_string(const NtsString *s) {
     }
   }
   return nts_hash_mix(h);
+}
+
+/* A string's hash, computed once and kept on the string, which it settles
+ * (`NTS_HASHED`): a grown one gives up its room, so no append writes into it.
+ *
+ * Not kept on an immortal string, which may be a literal in read-only storage;
+ * those are hashed each time, as every string was before.
+ *
+ * Under `NTS_POISON` (`NTS_POISON=1` asks the differential for that build) a
+ * kept hash is checked against the text every time it is read. A write that
+ * changed a string and left its hash would otherwise show only as a key that
+ * is not found -- an answer, not a crash. */
+static uint32_t nts_hash_string(const NtsString *s) {
+  if ((s->flags & NTS_HASHED) != 0) {
+#if defined(NTS_POISON) && NTS_POISON
+    if (NTS_STRING_HASH(s) != nts_hash_units(s)) {
+      fprintf(stderr, NTS_REFUSED "a string's kept hash is not its text's\n");
+      abort();
+    }
+#endif
+    return NTS_STRING_HASH(s);
+  }
+  uint32_t hash = nts_hash_units(s);
+  if (s->reserved != NTS_IMMORTAL) {
+    NtsString *kept = (NtsString *)s;
+    NTS_STRING_HASH(kept) = hash;
+    kept->flags = (kept->flags & ~NTS_GROWN) | NTS_HASHED;
+  }
+  return hash;
 }
 
 /* SameValueZero's two exceptions, both of them here rather than in the

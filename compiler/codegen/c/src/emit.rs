@@ -3023,8 +3023,8 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
         writer.line(
             origin,
             format!(
-                "static const struct {{ NtsHeader header; {element} data[{}]; }} {name} = \
-                 {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, {{ {} }} }};",
+                "static const struct {{ NtsHeader header; uint32_t hash; {element} data[{}]; }} \
+                 {name} = {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, 0, {{ {} }} }};",
                 data.len(),
                 units.len(),
                 data.join(", ")
@@ -3181,6 +3181,15 @@ fn emit_object_types(
         format!(
             "_Static_assert(NTS_ARRAY_IMMUTABLE == {}u, \"template immutability flag differs\");",
             nts_core::hir::layout::TEMPLATE_IMMUTABLE
+        ),
+    );
+    // Where a string's units start, which the literals below lay out by hand:
+    // a header, the hash the runtime keeps, then the units.
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_STRING_UNITS == {}u, \"a string's units are not where nts puts them\");",
+            nts_core::hir::layout::STRING_UNITS
         ),
     );
     for layout in &program.layouts {
