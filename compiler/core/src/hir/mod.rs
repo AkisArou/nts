@@ -4482,6 +4482,13 @@ const KEEPS_FIELD_BORROWS: &[&str] = &[
     // Reorders the element storage of the array it is given, comparing strings
     // and nothing else: no element is released and no other code runs.
     "nts_array_sort_str",
+    // Describes a key for a TypeError's message without running program code
+    // -- V8's NoSideEffectsToMaybeString -- and releases only the strings it
+    // made. Every `x!.f` and `x?.f` on a null `x` calls it on the way to the
+    // throw, and a borrow out of `this.freeRows!` ended there:
+    // `awfy-queens` retained and released each of its three arrays on every
+    // `getRowColumn` and `setRowColumn` under reference counting.
+    "nts_access_key_description",
 ];
 
 /// Whether any array in this program can change length.

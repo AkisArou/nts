@@ -1,5 +1,6 @@
-//! Where reference counting hands a reference on instead of copying it, read
-//! off two `tests/memory` cases as the counting operations each function keeps.
+//! Where reference counting hands a reference on, or borrows one, instead of
+//! copying it, read off `tests/memory` cases as the counting operations each
+//! function keeps.
 //!
 //! The memory step measures the same programs at run time, but it is a wide
 //! step and runs only in the full run, so a regression there surfaces days
@@ -81,6 +82,47 @@ fn an_erasure_of_a_dying_reference_is_a_move() {
     // What is left is the store over `pair`, giving back the tuple it held,
     // and `n` erased into the new one while `link`'s caller still holds it.
     assert_eq!(counting_in(&prepared, "link"), 2);
+}
+
+/// The retains of a field loaded from the function's own receiver, `this`:
+/// what a borrow out of a parameter's field saves.
+fn retained_receiver_fields(prepared: &hir::Prepared, name: &str) -> usize {
+    prepared
+        .program
+        .funcs
+        .iter()
+        .filter(|func| func.name == name)
+        .map(|func| {
+            func.blocks
+                .iter()
+                .flat_map(|block| block.ops.iter())
+                .filter(|value| {
+                    let OpKind::Retain(retained) = func.values[value.0 as usize].kind else {
+                        return false;
+                    };
+                    let OpKind::FieldGet { object, .. } = func.values[retained.0 as usize].kind
+                    else {
+                        return false;
+                    };
+                    matches!(func.values[object.0 as usize].kind, OpKind::Param(0))
+                })
+                .count()
+        })
+        .sum()
+}
+
+/// A field read behind a non-null assertion borrows, as `awfy-queens` reads
+/// its boards. The null side's message helper runs no program code and writes
+/// no field, and operations no block holds never run, so neither ends the
+/// borrow: each read paid a retain and a release before (266 counting
+/// operations at run time in `tests/memory/a-field-behind-an-assertion`, 2 now).
+#[test]
+fn a_field_behind_an_assertion_is_borrowed() {
+    let Some(prepared) = counted("a-field-behind-an-assertion") else {
+        return;
+    };
+    assert_eq!(retained_receiver_fields(&prepared, "Board#free"), 0);
+    assert_eq!(retained_receiver_fields(&prepared, "Board#check"), 0);
 }
 
 /// `new Array(3).fill(null)` is one object under two names: `fill` hands back

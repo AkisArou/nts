@@ -1184,10 +1184,15 @@ fn slot_survives(
         if unobserved.contains(&each) {
             return false;
         }
+        // An operation no block holds any more never runs: the arena keeps
+        // what earlier passes replaced or cut. Read as a call, one of them
+        // ended every borrow in the function.
+        let Some(theirs) = standing.defined_in.get(index).copied().flatten() else {
+            return false;
+        };
         // Its own block counts: a loop reaches itself, and on the next time
         // round what came before the load comes after the one before it.
-        let theirs = standing.defined_in.get(index).copied().flatten();
-        if let (Some(reachable), Some(theirs)) = (after, theirs) {
+        if let Some(reachable) = after {
             let mine = standing.defined_in[from.0 as usize].unwrap_or(theirs);
             if theirs != mine && !reachable.contains(&theirs) {
                 return false;
@@ -1205,6 +1210,15 @@ fn slot_survives(
                 callee: super::Callee::Direct(name),
                 ..
             } => !settled && mutates.contains(name) && !standing.harmless.contains(name),
+            // A runtime helper that runs no program code and writes no field
+            // (`keeps_field_borrows`) cannot end a field borrow, the rule
+            // `borrows_safely` applies block by block; the container's life is
+            // `anchored`'s question, already answered. An element borrow it
+            // can end -- such a helper may release the elements it replaces.
+            OpKind::Call {
+                callee: super::Callee::External(name),
+                ..
+            } => !settled && (from_field.is_none() || !super::keeps_field_borrows(name)),
             OpKind::Call { .. } => !settled,
             OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
                 // An element borrow is never a field, and a field slot is named.

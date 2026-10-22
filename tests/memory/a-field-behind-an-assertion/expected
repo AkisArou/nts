@@ -1,0 +1,17 @@
+ideal 2
+allocated 2
+because two operations: the two arrays given back when the board goes, which
+because are the case's two allocations. Every read in the loop borrows.
+because
+because `this.cells![i]` is a load, a null test, and on the null side a TypeError
+because whose message `nts_access_key_description` writes. The board is the
+because caller's for the length of each call and nothing on the path taken can
+because overwrite `cells` or `rows`, so neither load needs a count. Until
+because 2026-10-22 each paid a retain and a release -- 266 operations, two per
+because read -- because the borrow analysis read the message helper as a call
+because that might store anything, and read operations earlier passes had cut
+because out of every block, still in the value arena, as calls too.
+because
+because And `new Array(size).fill(true)` is one object under two names: `fill`
+because hands back its receiver, so the filled array takes the new one's
+because reference rather than a retain of its own beside a release.
