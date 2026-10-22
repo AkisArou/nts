@@ -24,12 +24,13 @@
 //!   one [`ValueId`]. Binding identity is what makes that possible, which is why
 //!   symbol resolution had to land before this.
 
-pub mod bounds;
 mod appended_results;
+pub mod bounds;
 mod boxing;
 pub mod builtin;
 mod class_sets;
 pub mod dce;
+mod destinations;
 pub mod elements;
 pub mod entries;
 mod erased_uses;
@@ -7859,6 +7860,11 @@ fn prepare_lowered(
     // counting, which have to see the calls that replace them.
     entries::share(&mut program, options.table_entries());
 
+    // A string a call builds only for its caller to append is built in the
+    // caller's string instead, under counting (`destinations`). Before escape
+    // and counting, which have to see the variants and the calls sent to them.
+    destinations::pass(&mut program, options.provider, options.roots);
+
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code
     // elimination, because an allocation nothing reads is not evidence of
@@ -8062,6 +8068,26 @@ fn reshape_calls(program: &mut Program, roots: reachable::Roots<'_>) -> (usize, 
 /// converted, which cost a separate bug the same night.
 fn narrow_widths(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(narrow::narrow_truncated).sum()
+}
+
+/// A function name `taken` does not hold: `base`, or `base#2`, `base#3`...
+///
+/// For a function a pass makes from another (`drive#Closure0`, `member#into`).
+/// `#` cannot appear in a TypeScript identifier, so only the compiler's own
+/// names can collide -- a method `into` on a class `member` is `member#into`
+/// too -- and a duplicate definition is a link error. Bounded by the number of
+/// names taken, since that is how many there are to step past.
+pub(crate) fn unclaimed_name<S>(taken: &rustc_hash::FxHashSet<S>, base: String) -> String
+where
+    S: std::borrow::Borrow<str> + std::hash::Hash + Eq,
+{
+    if !taken.contains(base.as_str()) {
+        return base;
+    }
+    (2..=taken.len() + 1)
+        .map(|n| format!("{base}#{n}"))
+        .find(|candidate| !taken.contains(candidate.as_str()))
+        .unwrap_or(base)
 }
 
 /// Mark the integer arithmetic that provably fits its type, from facts

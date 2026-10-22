@@ -429,15 +429,6 @@ fn clone_name(program: &Program, request: &Request) -> String {
         program.funcs[request.callee].name,
         super::lower::closure_class(request.concrete)
     );
-    // A program with two functions of one name is not one this can produce, but
-    // a suffix costs nothing and a duplicate definition is a link error. Bounded
-    // by the number of functions, since that is how many names can be taken.
     let taken: FxHashSet<&str> = program.funcs.iter().map(|f| f.name.as_str()).collect();
-    if !taken.contains(base.as_str()) {
-        return base;
-    }
-    (2..=program.funcs.len() + 1)
-        .map(|n| format!("{base}#{n}"))
-        .find(|candidate| !taken.contains(candidate.as_str()))
-        .unwrap_or(base)
+    super::unclaimed_name(&taken, base)
 }
