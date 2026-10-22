@@ -122,9 +122,30 @@ fn erasure_round_trips(ty: &HirType) -> bool {
 ///
 /// And an erased 32-bit integer read back as a `double` is that integer
 /// widened: the erasure converted it to the double it reads back as.
+///
+/// And the absence read back as a reference is the null reference, which is
+/// what every backend makes of it -- C reads a zero payload, Wasm answers a
+/// nullish value with `ref.null`, and an optional chain is lowered as that
+/// read compared with null. Scalarize leaves exactly this behind: an optional
+/// field the constructor never writes is its zero, `undefined`, and
+/// `s.nested?.ref` then unerased a constant to a class nothing builds
+/// (`tests/programs/optional-unassigned`, the integrity step's
+/// `unerase-is-built`). Folded, the comparison with null is decided and the
+/// read behind it goes.
 fn erased_tags(func: &mut Func) -> usize {
     let mut folded = 0;
     for index in 0..func.values.len() {
+        if let OpKind::Unerase { value } = func.values[index].kind
+            && matches!(
+                func.values[value.0 as usize].kind,
+                OpKind::ConstNull | OpKind::ConstUndefined
+            )
+            && matches!(func.values[index].ty, HirType::Managed(_))
+        {
+            func.values[index].kind = OpKind::ConstNull;
+            folded += 1;
+            continue;
+        }
         if let OpKind::Unerase { value } = func.values[index].kind
             && let OpKind::Erase { value: source, .. } = func.values[value.0 as usize].kind
             && matches!(func.values[source.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32)

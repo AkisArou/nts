@@ -12,6 +12,15 @@
 //
 // So this example is not really about node. It is about the backends agreeing
 // with each other on a shape only one of them gets for nothing.
+//
+// Every `Slot` here is a local nothing else sees, so scalarize takes it apart
+// and an unwritten optional field is its zero, `undefined`. A chain through it
+// is then decided where it is compiled: nothing reads `nested` back as a
+// `Slot`, which no program here builds (the integrity step's
+// `unerase-is-built`).
+//
+// expect-ir: all: no unerase in unassignedNested
+// expect-ir: all: no field.get in unassignedNested
 
 class Inner {
   v: number;

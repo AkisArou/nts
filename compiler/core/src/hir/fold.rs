@@ -275,6 +275,17 @@ fn same_constant(func: &Func, lhs: ValueId, rhs: ValueId) -> Option<bool> {
         {
             Some(a == b)
         }
+        // Two null references are one pointer. A pointer type holds only one
+        // of `null` and `undefined` -- a union with both is erased -- so the
+        // other constant cannot be beside it here. The absence an optional
+        // chain reads back from a field scalarize made a constant
+        // (`simplify::erased_tags`) meets the null it is compared with.
+        (OpKind::ConstNull, OpKind::ConstNull)
+            if matches!(func.values[lhs.0 as usize].ty, super::HirType::Managed(_))
+                && func.values[lhs.0 as usize].ty == func.values[rhs.0 as usize].ty =>
+        {
+            Some(true)
+        }
         _ => None,
     }
 }
