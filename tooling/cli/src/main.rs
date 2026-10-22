@@ -4892,15 +4892,15 @@ fn compile_program(
         // the code generation flags, and nothing that would warn unused.
         if source == PROGRAM_IR_NAME {
             let from = out.join(source);
-            let mut arguments: Vec<String> = [
-                "-O2",
-                "-ffunction-sections",
-                "-fdata-sections",
-                "-Wno-override-module",
-            ]
-            .iter()
-            .map(|flag| (*flag).to_owned())
-            .collect();
+            let mut arguments: Vec<String> = nts_codegen_common::compile_flags::OPTIMIZE
+                .iter()
+                .chain(&[
+                    "-ffunction-sections",
+                    "-fdata-sections",
+                    "-Wno-override-module",
+                ])
+                .map(|flag| (*flag).to_owned())
+                .collect();
             if pic {
                 arguments.push("-fPIC".to_owned());
             }
@@ -4929,11 +4929,12 @@ fn compile_program(
         // 81 KB to 16 KB, because most of the runtime is unreachable from any
         // one program. It needs the two `-f` flags at compile time to have
         // sections to drop.
-        let mut arguments: Vec<String> =
-            ["-std=c11", "-O2", "-ffunction-sections", "-fdata-sections"]
-                .iter()
-                .map(|flag| (*flag).to_owned())
-                .collect();
+        let mut arguments: Vec<String> = ["-std=c11"]
+            .iter()
+            .chain(nts_codegen_common::compile_flags::OPTIMIZE)
+            .chain(&["-ffunction-sections", "-fdata-sections"])
+            .map(|flag| (*flag).to_owned())
+            .collect();
         if pic {
             arguments.push("-fPIC".to_owned());
         }

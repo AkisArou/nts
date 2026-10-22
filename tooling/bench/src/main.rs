@@ -3186,7 +3186,15 @@ fn compile(
     binary: &Utf8Path,
     defines: &[&str],
 ) -> Result<()> {
-    const SHARED: &[&str] = &["-O2", "-flto", "-Wall", "-Wextra", "-Werror"];
+    // What a shipped program is optimized with (`compile_flags::OPTIMIZE`),
+    // for nts's code and the C++ reference alike: the same compiler and the
+    // same flags on both sides of the ratio. `-flto` is still the benchmark's
+    // own, until `nts build` links with it too.
+    let shared: Vec<&str> = nts_codegen_common::compile_flags::OPTIMIZE
+        .iter()
+        .copied()
+        .chain(["-flto", "-Wall", "-Wextra", "-Werror"])
+        .collect();
     let mut includes = vec![
         "-I".to_owned(),
         root.join("benchmarks/common").to_string(),
@@ -3221,7 +3229,7 @@ fn compile(
                 source.file_name().unwrap_or("unit").replace('.', "_")
             ));
             let output = std::process::Command::new(driver)
-                .args(SHARED)
+                .args(&shared)
                 .args(&extra)
                 .args(defines)
                 .args(&includes)
@@ -3239,7 +3247,7 @@ fn compile(
     }
 
     let link = std::process::Command::new("clang++")
-        .args(SHARED)
+        .args(&shared)
         .args(&objects)
         .arg("-o")
         .arg(binary)

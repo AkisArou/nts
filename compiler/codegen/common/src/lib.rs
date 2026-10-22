@@ -27,6 +27,7 @@ pub use writer::CodeWriter;
 
 pub mod abi;
 pub mod com;
+pub mod compile_flags;
 pub mod counting;
 pub mod gobject;
 pub mod native;
