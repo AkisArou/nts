@@ -394,7 +394,7 @@ esac
 # it. That is the same failure the comment above records for `node_all.c`: a
 # hand-maintained list of generated files, updated by hand.
 #
-# `-maxdepth 1` on purpose. `quickjs/libunicode.c` and `quickjs/dtoa.c` are
+# `-maxdepth 1` on purpose. `quickjs/libunicode.c` and `zmij/zmij.c` are
 # `#include`d by the generated sources rather than compiled beside them, so
 # picking them up here would define every symbol twice.
 generated_c=()

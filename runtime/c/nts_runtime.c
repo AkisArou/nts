@@ -8,10 +8,9 @@
  * collides with C's.
  */
 
-/* Before any system header, which is what a feature-test macro requires.
- * quickjs-ng's `cutils.h`, which `dtoa.c` below includes, reaches for
- * `clock_gettime`, `readlink` and `pthread_condattr_setclock` -- none of which
- * strict ISO C declares, and the differential compiles with `-std=c11`. */
+/* Before any system header, which is what a feature-test macro requires: the
+ * stack-overflow handler's `sigaction` and `getrlimit` are POSIX, which strict
+ * ISO C does not declare, and the differential compiles with `-std=c11`. */
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -19,14 +18,6 @@
  * are not in the POSIX base. */
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 700
-#endif
-/* Darwin reads `_POSIX_C_SOURCE` as "hide everything POSIX does not name",
- * and `malloc/malloc.h` -- which `cutils.h` includes on Apple for
- * `malloc_size` -- then uses `malloc_zone_t` before the typedef it just hid.
- * `_DARWIN_C_SOURCE` restores the full surface. It is not a missing SDK: zig's
- * bundled Darwin headers and a real SDK fail the same way without it. */
-#if defined(__APPLE__) && !defined(_DARWIN_C_SOURCE)
-#define _DARWIN_C_SOURCE
 #endif
 
 #include "nts_runtime.h"
@@ -47,32 +38,10 @@ void nts_hresult_clear(int32_t status, void *slot, size_t size) {
   }
 }
 
-/* Double to decimal, which is a specification rather than a `printf`.
- *
- * Included rather than compiled beside, and that is deliberate: several places
- * build a program and each names its `.c` files explicitly -- one of them is
- * `tooling/conformance/build.sh`, which this session does not own. A second
- * translation unit would need all of them to agree; a header-style include
- * needs none of them to change, and the file is emitted into a `quickjs/`
- * subdirectory of the output so this path resolves the same whether the runtime
- * is compiled from `runtime/c` or from an emitted directory.
- *
- * What it replaces: `nts_shortest_digits` found the shortest round-tripping
- * representation by calling `snprintf("%.*e")` and `strtod` at every precision
- * from 1 to 17 until one read back. That is correct -- it verifies -- and it
- * cost 867ns to render `1234567`, which is seven of those round trips.
- * `js_dtoa` computes it, produces byte-identical output on every value tested,
- * and does the same number in 7.4ns.
- *
- * clang-tidy flags including a `.c`, and it is right to: it usually means
- * somebody meant the header. Here it is the point -- the file must not become
- * a translation unit of its own -- so the check is suppressed at the line with
- * the reason above it rather than turned off. */
 /* Vendored code is held to upstream's warning standard, not ours, and the
  * pragmas are pushed and popped around it so that everything below is still
  * compiled with all of them on. `runtime_checkpoint` builds with `-Werror
- * -Wunused-parameter` and `cutils.h` has four `static` helpers that ignore an
- * argument, which is how this was found. */
+ * -Wunused-parameter`, which upstream code need not pass. */
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -87,7 +56,6 @@ void nts_hresult_clear(int32_t status, void *slot, size_t size) {
 #pragma GCC diagnostic ignored "-Wunused-macros"
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 #endif
-/* NOLINTNEXTLINE(bugprone-suspicious-include) */
 /* **A program built for a CPU it is not running on says so, first.**
  *
  * Native x86-64 code is built for x86-64-v3 by default -- AVX2, BMI2 and FMA:
@@ -115,15 +83,23 @@ nts_require_the_cpu_it_was_built_for(void) {
 }
 #endif
 
-#include "quickjs/dtoa.c"
 /* The shortest round-trip digits of a double (`nts_number_digits`): zmij,
- * vendored unedited (`zmij/README.md`). Two names are mapped for its include
- * rather than that tree edited: GNU's `asm`, which `-std=c11` does not have,
- * and its `bswap64`, which `quickjs/cutils.h` above already defines. */
+ * vendored unedited (`zmij/README.md`). GNU's `asm`, which `-std=c11` does not
+ * have, is mapped for its include rather than that tree edited.
+ *
+ * Included rather than compiled beside, and that is deliberate: several places
+ * build a program and each names its `.c` files explicitly. A second
+ * translation unit would need all of them to agree; a header-style include
+ * needs none of them to change, and the file is emitted into a `zmij/`
+ * subdirectory of the output so this path resolves the same whether the
+ * runtime is compiled from `runtime/c` or from an emitted directory.
+ *
+ * clang-tidy flags including a `.c`, and it is right to: it usually means
+ * somebody meant the header. Here it is the point, so the check is suppressed
+ * at the line with the reason above it rather than turned off. */
 #define asm __asm__
-#define bswap64 nts_zmij_bswap64
+/* NOLINTNEXTLINE(bugprone-suspicious-include) */
 #include "zmij/zmij.c"
-#undef bswap64
 #undef asm
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
@@ -5069,21 +5045,6 @@ double nts_math_imul(double a, double b) {
                                         : (double)product - 4294967296.0;
 }
 
-/* `String(x)`, which is ECMAScript's Number::toString and not `printf`.
- *
- * `js_dtoa` with `FORMAT_FREE` is exactly that algorithm: the shortest decimal
- * that reads back as the same double, placed by the specification's own rules
- * for where the point goes and when to use an exponent. It answers `NaN`,
- * `Infinity` and `-Infinity` itself.
- *
- * `-0` is the one place the specification and the library disagree on purpose.
- * `String(-0)` is `"0"` -- the sign is not part of the answer -- and `js_dtoa`
- * writes it only when asked with `JS_DTOA_MINUS_ZERO`, which this does not ask.
- *
- * What was here: a loop calling `snprintf("%.*e")` and `strtod` at every
- * precision from 1 to 17 until one round-tripped. Correct, because it verifies,
- * and 867ns for `1234567` against 7.4ns for this.
- */
 /* An integer's decimal digits, two at a time.
  *
  * quickjs-ng's `u32toa` is a divide-by-ten loop into a scratch buffer followed
@@ -5096,9 +5057,7 @@ double nts_math_imul(double a, double b) {
  * first digit so the digits go straight into the caller's buffer, and no
  * second buffer to copy out of.
  *
- * Ours rather than a patch to `runtime/c/quickjs`: that directory is upstream
- * unmodified so updating it stays a file copy. `js_dtoa` is still theirs and
- * still does everything a non-integer needs. */
+ * A non-integer's digits come from zmij instead (`nts_number_digits`). */
 static const char nts_digit_pairs[201] =
     "00010203040506070809101112131415161718192021222324252627282930313233343536"
     "37383940414243444546474849505152535455565758596061626364656667686970717273"

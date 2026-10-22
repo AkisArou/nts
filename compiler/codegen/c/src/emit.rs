@@ -37,9 +37,10 @@ pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime
 /// The shortest-decimal algorithm, zmij, vendored unedited as a `zmij/`
 /// subdirectory and included by `nts_runtime.c`.
 ///
-/// Included rather than a translation unit for the same reason `quickjs/dtoa.c`
-/// is: the several places that build a program name their `.c` files, and one
-/// of them is not this session's to change.
+/// Included rather than a translation unit: the several places that build a
+/// program name their `.c` files, and a second one would need all of them to
+/// agree. The subdirectory mirrors the repository, so `#include "zmij/zmij.c"`
+/// resolves the same from `runtime/c` and from a directory this emitted.
 pub const ZMIJ_HEADER_NAME: &str = "zmij/zmij-c.h";
 pub const ZMIJ_HEADER: &str = include_str!("../../../../runtime/c/zmij/zmij-c.h");
 pub const ZMIJ_SOURCE_NAME: &str = "zmij/zmij.c";
@@ -206,31 +207,19 @@ impl LoopHost {
     }
 }
 
-/// The vendored half of the runtime, shipped as a `quickjs/` subdirectory.
-///
-/// Mirroring the repository layout rather than flattening it, so that
-/// `#include "quickjs/dtoa.c"` in `nts_runtime.c` resolves the same whether the
-/// runtime is compiled from `runtime/c` or from a directory this emitted. A
-/// flat layout would need two different spellings of the same include.
-///
-/// None of these is a translation unit. They are `#include`d, which is what
-/// keeps the several places that build a program from having to agree about a
-/// new `.c` file -- one of them is `tooling/conformance/build.sh`, and adding a
-/// source to its explicit list is not always this session's to do.
+/// quickjs-ng's `cutils.h`, which `quickjs/libunicode.c` includes, shipped in
+/// a `quickjs/` subdirectory so that include resolves the same from
+/// `runtime/c` and from a directory this emitted. Only beside the case tables:
+/// the runtime itself no longer includes anything from `quickjs/`.
 pub const CUTILS_HEADER_NAME: &str = "quickjs/cutils.h";
 pub const CUTILS_HEADER: &str = include_str!("../../../../runtime/c/quickjs/cutils.h");
-pub const DTOA_HEADER_NAME: &str = "quickjs/dtoa.h";
-pub const DTOA_HEADER: &str = include_str!("../../../../runtime/c/quickjs/dtoa.h");
-pub const DTOA_SOURCE_NAME: &str = "quickjs/dtoa.c";
-pub const DTOA_SOURCE: &str = include_str!("../../../../runtime/c/quickjs/dtoa.c");
 
 /// Unicode case conversion, which is a table rather than an algorithm.
 ///
 /// # Why it is not part of the runtime
 ///
-/// `dtoa` is: `String(x)` is in nearly every program and it is 12 KB with no
-/// tables. These are 63 KB of tables that most programs never read, and linking
-/// them takes `tests/programs/hello` from 81 KB to 162 KB -- so they are emitted only
+/// These are 63 KB of tables that most programs never read, and linking them
+/// takes `tests/programs/hello` from 81 KB to 162 KB -- so they are emitted only
 /// for a program that calls one of the methods, the same way the libuv host is
 /// written only when a loop is asked for. `needs_unicode` says which.
 pub const UNICODE_HEADER_NAME: &str = "nts_unicode.h";
@@ -259,8 +248,8 @@ pub struct Support<'a> {
 }
 
 impl Support<'_> {
-    /// Write this file under `out`, making the `quickjs/` subdirectory if the
-    /// name asks for one.
+    /// Write this file under `out`, making its subdirectory (`zmij/`,
+    /// `quickjs/`) if the name asks for one.
     ///
     /// A shared helper because a name with a directory in it is easy to write
     /// with `fs::write` and have fail at run time, in each of the several
@@ -316,11 +305,8 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
     };
     let mut files = vec![
         one(RUNTIME_HEADER_NAME, RUNTIME_HEADER, false),
-        // `nts_runtime.c` includes `quickjs/dtoa.c`, so these travel with it
+        // `nts_runtime.c` includes `zmij/zmij.c`, so these travel with it
         // always -- `String(x)` is in nearly every program.
-        one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
-        one(DTOA_HEADER_NAME, DTOA_HEADER, false),
-        one(DTOA_SOURCE_NAME, DTOA_SOURCE, false),
         one(ZMIJ_HEADER_NAME, ZMIJ_HEADER, false),
         one(ZMIJ_SOURCE_NAME, ZMIJ_SOURCE, false),
         // `nts_runtime.h` includes it, so it travels with every program.
@@ -330,6 +316,7 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
     if needs_unicode {
         files.extend([
             one(UNICODE_HEADER_NAME, UNICODE_HEADER, false),
+            one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
             one(LIBUNICODE_HEADER_NAME, LIBUNICODE_HEADER, false),
             one(LIBUNICODE_TABLE_NAME, LIBUNICODE_TABLE, false),
             one(LIBUNICODE_SOURCE_NAME, LIBUNICODE_SOURCE, false),

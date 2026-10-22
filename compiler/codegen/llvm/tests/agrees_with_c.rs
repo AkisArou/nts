@@ -86,7 +86,7 @@ fn both_backends_with(
     assert!(c.diagnostics.is_empty(), "the C backend declined");
     std::fs::write(dir.join("program.c"), c.writer.text()).expect("write the C");
     // Through `support_files` rather than by naming the header and the source:
-    // `nts_runtime.c` includes `quickjs/dtoa.c`, which has to land in a
+    // `nts_runtime.c` includes `zmij/zmij.c`, which has to land in a
     // subdirectory beside it, and a program that converts case needs a second
     // translation unit as well. Every place that builds a program shares this
     // list precisely so none of them falls behind one that changes.

@@ -604,11 +604,10 @@ fn failed_hresult_clears_the_slot_and_success_preserves_it() {
     }
 }
 
-/// `String(n)`'s digits, from zmij, against three things that are not zmij:
-/// `js_dtoa`'s exact text (or a shorter one where it is not shortest, as on
-/// some powers of two), `strtod`, and the shortest-digits rule -- over a
-/// boundary set and three million random doubles -- and the edge cases as node
-/// writes them.
+/// `String(n)`'s digits, from zmij, against three things that are not zmij: the
+/// text the specification gives from the C library's correctly rounded digits,
+/// `strtod`, and the shortest-digits rule -- over a boundary set and three
+/// million random doubles -- and the edge cases as node writes them.
 #[test]
 fn a_number_is_written_with_the_shortest_digits_that_read_back() {
     let report = run_suite("number_format", &["-DNTS_PROVIDER_RC"]);

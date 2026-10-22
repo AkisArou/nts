@@ -348,7 +348,7 @@ fn build_and_run_transformed(
     // generated file and compiled with it rather than pasted into it.
     //
     // Through `support_files` rather than by naming the two: `nts_runtime.c`
-    // includes `quickjs/dtoa.c`, which has to be written into a subdirectory
+    // includes `zmij/zmij.c`, which has to be written into a subdirectory
     // beside it, and this wrote the pair by hand until that stopped being the
     // whole list. Every place that builds a program shares this list precisely
     // so it cannot fall behind one that changes.

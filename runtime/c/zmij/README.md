@@ -13,8 +13,8 @@ commit. Updating it is a file copy of those two files and a new `REVISION`.
 
 ## How it is built
 
-`nts_runtime.c` includes `zmij/zmij.c`, as it includes `quickjs/dtoa.c`, so it
-travels in the runtime's one translation unit to every build. zmij spells
+`nts_runtime.c` includes `zmij/zmij.c`, so it travels in the runtime's one
+translation unit to every build. zmij spells
 GNU's `asm` under `__GNUC__`, which `-std=c11` does not have, so the include
 is wrapped in `#define asm __asm__` / `#undef asm` there rather than editing
 this tree.

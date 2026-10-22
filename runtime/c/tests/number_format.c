@@ -4,16 +4,20 @@
  * The digits come from zmij (`zmij/README.md`). Three things are checked over
  * every sample, each against something other than the code under test:
  *
- *   - the text is byte for byte what `js_dtoa` writes in its free format,
- *     QuickJS's exact bignum algorithm, which `String(n)` fell back to before
- *     zmij -- or shorter, where `js_dtoa` is not shortest. On some powers of
- *     two, whose lower neighbour is half as far away as the upper, it writes
- *     seventeen digits where sixteen read back: `2^-1007` is
- *     `7.2911220195563975e-304` to it and `7.291122019556398e-304` to node
- *     and zmij, and ECMAScript asks for the shortest;
+ *   - the text is byte for byte what the specification gives for that many
+ *     digits: the C library's correctly rounded `%.*e` of the double at the
+ *     digit count written -- the closest decimal of that length, which is the
+ *     one Number::toString picks -- placed by the specification's thresholds,
+ *     written out below a second time rather than shared with the runtime;
  *   - it reads back as the same double (`strtod`);
  *   - it is the shortest that does: one significant digit fewer, correctly
  *     rounded, reads back as some other double.
+ *
+ * Together they are the whole of the rule: the closest digits, as few as read
+ * back, laid out as the specification says. Until QuickJS's `dtoa.c` was
+ * removed the first check compared with `js_dtoa`'s free format, which is not
+ * shortest on some powers of two: `2^-1007` is `7.2911220195563975e-304` to it
+ * and `7.291122019556398e-304` to node, zmij and the specification.
  *
  * The samples are a boundary set -- where the layout switches between fixed
  * and exponent (1e21, 1e-7), the integers around 2^53 where the shortcut
@@ -28,7 +32,6 @@
 #include <string.h>
 
 #include "nts_runtime.h"
-#include "quickjs/dtoa.h"
 
 static int failures;
 
@@ -71,32 +74,116 @@ static int significant(const char *text) {
   return digits - trailing;
 }
 
-static long disagree_with_dtoa;
-/* Where `js_dtoa` wrote more digits than the shortest that reads back. */
-static long dtoa_longer;
+/* `s`, `length` digits, moved by one in its last place (`by` is 1 or -1).
+ * False where that needs another digit or loses its first. */
+static bool step(char *s, int length, int by) {
+  for (int at = length - 1; at >= 0; at--) {
+    const int digit = s[at] - '0' + by;
+    if (digit >= 0 && digit <= 9) {
+      s[at] = (char)('0' + digit);
+      return s[0] != '0';
+    }
+    s[at] = by > 0 ? '0' : '9';
+  }
+  return false;
+}
+
+/* Whether the digits `s` with the point at `n` read back as `magnitude`. */
+static bool reads_back(const char *s, int length, int n, double magnitude) {
+  char text[64];
+  snprintf(text, sizeof text, "%c.%.*se%d", s[0], length - 1, s + 1, n - 1);
+  return strtod(text, NULL) == magnitude;
+}
+
+/* Number::toString(x) for a finite, nonzero `x` written with `k` significant
+ * digits, from the specification (its steps 5 to 10).
+ *
+ * The digits `s` and the point `n`: of the `k`-digit decimals that read back
+ * as `x`, the closest to it. That is the C library's correctly rounded `%.*e`
+ * wherever it reads back -- and one step from it where it does not, which
+ * happens at a power of two: the double below is half as far away as the one
+ * above, so the closest decimal can fall outside the narrower side and the
+ * closest one that reads back is its neighbour on the wider side. `2^-1007`
+ * is `7.291122019556398e-304` (node, and this), not the correctly rounded
+ * `...397`, which reads back as another double.
+ *
+ * Then the four layouts and their thresholds -- every digit and zeros up to
+ * 21 places, the point inside the digits, `0.` and up to six zeros, or an
+ * exponent. */
+static void specified(double x, int k, char *out) {
+  const double magnitude = fabs(x);
+  char scientific[64];
+  snprintf(scientific, sizeof scientific, "%.*e", k - 1, magnitude);
+  char s[32];
+  int length = 0;
+  const char *at = scientific;
+  for (; *at != 'e'; at++) {
+    if (*at != '.') {
+      s[length++] = *at;
+    }
+  }
+  const int n = (int)strtol(at + 1, NULL, 10) + 1;
+  if (!reads_back(s, length, n, magnitude)) {
+    for (int by = 1; by >= -1; by -= 2) {
+      char moved[32];
+      memcpy(moved, s, (size_t)length);
+      if (step(moved, length, by) && reads_back(moved, length, n, magnitude)) {
+        memcpy(s, moved, (size_t)length);
+        break;
+      }
+    }
+  }
+  char *q = out;
+  if (x < 0) {
+    *q++ = '-';
+  }
+  if (length <= n && n <= 21) {
+    memcpy(q, s, (size_t)length);
+    q += length;
+    memset(q, '0', (size_t)(n - length));
+    q += n - length;
+  } else if (0 < n && n <= 21) {
+    memcpy(q, s, (size_t)n);
+    q += n;
+    *q++ = '.';
+    memcpy(q, s + n, (size_t)(length - n));
+    q += length - n;
+  } else if (-6 < n && n <= 0) {
+    *q++ = '0';
+    *q++ = '.';
+    memset(q, '0', (size_t)-n);
+    q += -n;
+    memcpy(q, s, (size_t)length);
+    q += length;
+  } else {
+    *q++ = s[0];
+    if (length > 1) {
+      *q++ = '.';
+      memcpy(q, s + 1, (size_t)(length - 1));
+      q += length - 1;
+    }
+    q += sprintf(q, "e%c%d", n - 1 < 0 ? '-' : '+', abs(n - 1));
+  }
+  *q = '\0';
+}
+
+static long disagree_with_specification;
 static long no_round_trip;
 static long not_shortest;
 
 static void sample(double x) {
   char text[64];
   formatted(x, text);
-  /* `-0` is `"0"` in ECMAScript; `js_dtoa` is not asked about it. */
-  if (x != 0) {
-    char exact[JS_DTOA_MAX_DIGITS + 32];
-    JSDTOATempMem scratch;
-    const int length = js_dtoa(
-        exact, x, 10, 0, JS_DTOA_FORMAT_FREE | JS_DTOA_EXP_AUTO, &scratch);
-    exact[length] = '\0';
-    if (strcmp(text, exact) != 0) {
-      if (significant(text) < significant(exact) && strtod(text, NULL) == x) {
-        dtoa_longer++;
-      } else if (disagree_with_dtoa++ < 5) {
-        printf("  %a: zmij %s, js_dtoa %s\n", x, text, exact);
-      }
-    }
-  }
   if (!isfinite(x)) {
     return;
+  }
+  /* `-0` is `"0"` in ECMAScript, and the layout above would sign it. */
+  if (x != 0) {
+    char expected[64];
+    specified(x, significant(text), expected);
+    if (strcmp(text, expected) != 0 && disagree_with_specification++ < 5) {
+      printf("  %a: zmij %s, the specification %s\n", x, text, expected);
+    }
   }
   if (strtod(text, NULL) != x) {
     if (no_round_trip++ < 5) {
@@ -163,12 +250,11 @@ int main(void) {
     snprintf(literal, sizeof literal, "1e%d", power);
     around(strtod(literal, NULL));
   }
-  const long boundary_disagree = disagree_with_dtoa;
+  const long boundary_disagree = disagree_with_specification;
   const long boundary_round_trip = no_round_trip;
   const long boundary_shortest = not_shortest;
-  check("the boundary set is written as js_dtoa writes it, or shorter",
+  check("the boundary set is written as the specification lays it out",
         boundary_disagree == 0);
-  printf("     (%ld where js_dtoa is not shortest)\n", dtoa_longer);
   check("the boundary set reads back", boundary_round_trip == 0);
   check("the boundary set is the shortest that reads back",
         boundary_shortest == 0);
@@ -180,10 +266,9 @@ int main(void) {
     memcpy(&x, &bits, sizeof x);
     sample(x);
   }
-  check("three million random doubles are written as js_dtoa writes them, "
-        "or shorter",
-        disagree_with_dtoa == boundary_disagree);
-  printf("     (%ld in all where js_dtoa is not shortest)\n", dtoa_longer);
+  check("three million random doubles are written as the specification lays "
+        "them out",
+        disagree_with_specification == boundary_disagree);
   check("three million random doubles read back",
         no_round_trip == boundary_round_trip);
   check("three million random doubles are the shortest that read back",
