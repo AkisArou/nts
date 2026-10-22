@@ -108,6 +108,10 @@ pub struct Summaries {
     /// [`initializing_stores`] -- because it is the one function that runs
     /// before anything has had a chance to write one.
     starts_zero: rustc_hash::FxHashSet<u32>,
+    /// Globals no write can take a value away from, by index: declared `const`
+    /// and written at most once in the whole program, after every pass that can
+    /// add a write. See [`settled_globals`].
+    settled_globals: rustc_hash::FxHashSet<u32>,
 }
 
 impl Summaries {
@@ -190,6 +194,51 @@ fn returning_from_the_stack(
         .collect()
 }
 
+/// The globals a load of which is a borrow for a whole function: declared
+/// `const`, and written once, by module evaluation, at most once a run.
+///
+/// A borrow can dangle only if a write releases the value it borrows. Such a
+/// global's one write -- the module initializer's store -- replaces the null it
+/// held before anything ran, and releasing a null frees nothing. A load before
+/// that store, in the initializer or a function it calls, reads the null, which
+/// is what the language's temporal dead zone forbids anyway. So no load of it
+/// outlives what it loaded: the global analogue of a settled field
+/// ([`field_is_settled`]).
+///
+/// What that needs is a write that *runs* once, not one that is spelled once,
+/// so a write counts twice where it could run twice: outside module
+/// evaluation (`lower::evaluates_module_scope`, which runs once, a lazy
+/// module's included), or inside a loop there. Counted over the program as it
+/// is when ownership runs, after every pass that can add a write, so a second
+/// writer anywhere -- the program's own or one a pass made -- leaves it out.
+fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
+    let mut writes: rustc_hash::FxHashMap<u32, usize> = rustc_hash::FxHashMap::default();
+    for func in &program.funcs {
+        let evaluates = super::lower::evaluates_module_scope(&func.name);
+        for (at, block) in func.blocks.iter().enumerate() {
+            let mut repeats = None;
+            for op in &block.ops {
+                if let OpKind::GlobalSet { global, .. } = func.values[op.0 as usize].kind {
+                    let once = evaluates
+                        && !*repeats.get_or_insert_with(|| {
+                            let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+                            super::loops::in_a_cycle(func, here)
+                        });
+                    *writes.entry(global).or_default() += if once { 1 } else { 2 };
+                }
+            }
+        }
+    }
+    program
+        .globals
+        .iter()
+        .enumerate()
+        .filter(|(_, global)| global.constant)
+        .filter_map(|(at, _)| u32::try_from(at).ok())
+        .filter(|at| writes.get(at).copied().unwrap_or(0) <= 1)
+        .collect()
+}
+
 /// Read every function once, before any of them is counted.
 #[must_use]
 pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
@@ -227,6 +276,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
     // them in sequence would settle the first against a stale second.
     let (mutates, mutating_slots) = mutating(program);
     Summaries {
+        settled_globals: settled_globals(program),
         starts_zero: program
             .globals
             .iter()
@@ -1905,11 +1955,16 @@ fn crossing_borrows(
             let (container, field) = match kind {
                 OpKind::FieldGet { object, field, .. } => (*object, Some(*field)),
                 OpKind::ArrayGet { array, .. } => (*array, None),
-                // A global is a slot with nothing to anchor to -- no container
-                // whose life it shares -- so it is never borrowed for a whole
-                // function. Block by block it still is, where `borrows_safely`
-                // can see that nothing in between writes it, and that is how
-                // `global-array` reaches zero.
+                // A settled global is: nothing can write it while a load of it
+                // is held (`settled_globals`), so the load needs no anchor.
+                OpKind::GlobalGet(global) if summaries.settled_globals.contains(global) => {
+                    continue;
+                }
+                // Any other global is a slot with nothing to anchor to -- no
+                // container whose life it shares -- so it is never borrowed for
+                // a whole function. Block by block it still is, where
+                // `borrows_safely` can see that nothing in between writes it,
+                // and that is how `global-array` reaches zero.
                 _ => {
                     doomed.push(value);
                     continue;
@@ -3869,6 +3924,117 @@ mod tests {
             }],
             ..super::Program::default()
         }
+    }
+
+    /// A program of one `const` string global and the functions given, each a
+    /// name and its blocks over two values: the string, and its store.
+    fn writing_program(funcs: &[(&str, Vec<crate::hir::Block>)]) -> super::Program {
+        use crate::hir::{Absent, Global, Op};
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::Origin;
+
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let string = super::HirType::Managed(super::ManagedType::String);
+        let func = |name: &str, blocks: Vec<crate::hir::Block>| super::Func {
+            name: name.to_owned(),
+            params: Vec::new(),
+            return_type: super::HirType::Void,
+            written_return: None,
+            written_return_elements: Vec::new(),
+            result_absent: Absent::Impossible,
+            values: vec![
+                Op {
+                    kind: super::OpKind::ConstString("held".to_owned()),
+                    ty: string.clone(),
+                    origin: origin.clone(),
+                },
+                Op {
+                    kind: super::OpKind::GlobalSet {
+                        global: 0,
+                        value: super::ValueId(0),
+                    },
+                    ty: super::HirType::Void,
+                    origin: origin.clone(),
+                },
+            ],
+            blocks,
+            origin: origin.clone(),
+            exported: false,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+            obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
+        };
+        super::Program {
+            funcs: funcs
+                .iter()
+                .map(|(name, blocks)| func(name, blocks.clone()))
+                .collect(),
+            globals: vec![Global {
+                name: "WORDS".to_owned(),
+                ty: string.clone(),
+                written: None,
+                constant: true,
+                initial: 0.0,
+                exported: false,
+                deferred: true,
+                origin: origin.clone(),
+            }],
+            ..super::Program::default()
+        }
+    }
+
+    /// A `const` global is settled only where its one write runs once: in
+    /// module evaluation, and not inside a loop there. Lowering binds a
+    /// block's `const` locally, so no program has the loop yet; this holds
+    /// the line for one that does.
+    #[test]
+    fn a_const_global_is_settled_only_where_its_write_runs_once() {
+        use crate::hir::{Block, Terminator};
+        let stores = || Block {
+            params: Vec::new(),
+            ops: vec![super::ValueId(0), super::ValueId(1)],
+            terminator: Terminator::Return(None),
+        };
+        let init = crate::hir::lower::MODULE_INIT;
+        let once = writing_program(&[(init, vec![stores()])]);
+        assert!(
+            super::settled_globals(&once).contains(&0),
+            "one write, run once"
+        );
+
+        let looping = writing_program(&[(
+            init,
+            vec![Block {
+                terminator: Terminator::Jump {
+                    target: super::BlockId(0),
+                    args: Vec::new(),
+                },
+                ..stores()
+            }],
+        )]);
+        assert!(
+            !super::settled_globals(&looping).contains(&0),
+            "a write inside a loop releases what the last run stored"
+        );
+
+        let elsewhere = writing_program(&[(init, Vec::new()), ("elsewhere", vec![stores()])]);
+        assert!(
+            !super::settled_globals(&elsewhere).contains(&0),
+            "a write outside module evaluation can run any number of times"
+        );
+
+        let mut constant = once.clone();
+        constant.globals[0].constant = false;
+        assert!(
+            !super::settled_globals(&constant).contains(&0),
+            "a `let` is not"
+        );
     }
 
     #[test]
