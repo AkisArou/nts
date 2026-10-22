@@ -17,9 +17,13 @@ use std::process::Command;
 /// variable, called where the merge is visible and through a parameter.
 const SOURCE: &str = r"
 export function merged(seed: number): number {
+  // Three closures at one signature: past the two a call is tested for
+  // (`class_sets`), so the calls stay calls through the signature.
   let mix: (x: number) => number;
-  if ((seed & 1) === 0) {
+  if ((seed & 3) === 0) {
     mix = (x: number): number => (x * 3 + seed) | 0;
+  } else if ((seed & 3) === 1) {
+    mix = (x: number): number => (x * 7 + seed) | 0;
   } else {
     mix = (x: number): number => (x * 5 - seed) | 0;
   }

@@ -32,7 +32,13 @@ export function sharedControl(n: number): number {
 }
 
 // expect-ir: all: count erase in knownSubject == 1
-// expect-ir: all: count erase in sharedSubject == 1
+// `sharedSubject`'s callback is one of two closure classes, so the call is a
+// test per class and a direct call to that class's erased entry
+// (`class_sets`), which keeps the implementation's default. Each copy -- the
+// function and its whole-number copy -- erases the argument once, for that
+// entry, and the closure once, for its class test.
+// expect-ir: all: count erase in sharedSubject == 4
+// expect-ir: all: no call.closure in sharedSubject
 // expect-ir: all: no erase in knownControl
 // expect-ir: all: no tagof in knownControl
 // expect-ir: all: no call.extern(nts_refused) in knownControl

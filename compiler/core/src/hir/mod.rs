@@ -27,6 +27,7 @@
 pub mod bounds;
 mod boxing;
 pub mod builtin;
+mod class_sets;
 pub mod dce;
 pub mod elements;
 pub mod entries;
@@ -7722,6 +7723,13 @@ fn prepare_lowered(
     let devirtualized = devirtualize_closures(&mut program);
 
     let (cloned, copied, dropped) = reshape_calls(&mut program, options.roots);
+    // A call through a receiver the whole program gives only a few classes, as
+    // a test per class; then the arms' closure calls, which now have a class,
+    // made direct. See `class_sets`.
+    if class_sets::guard_calls(&mut program, options.roots) > 0 {
+        let held = fields::closures(&program);
+        fields::devirtualize(&mut program, &held);
+    }
     let (forwarded, orphaned) = forward_identities(&mut program, options.roots);
     let pruned = pruned + dropped + orphaned;
     let unions_split = split_unions(&mut program);

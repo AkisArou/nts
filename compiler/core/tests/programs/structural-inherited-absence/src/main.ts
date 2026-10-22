@@ -11,8 +11,12 @@ class Good implements UndefinedInput {
 }
 class Child extends Parent implements UndefinedInput {}
 export function inheritedAbsence(n: number): string {
-  const nullable: NullInput[] = [new Parent(), new Child()];
-  const optional: UndefinedInput[] = [new Good(), new Child()];
+  return feedEach([new Parent(), new Child()], [new Good(), new Child()], n);
+}
+// Exported, so nothing bounds the classes its arrays hold and the calls keep
+// their faces' dispatch (`class_sets` makes calls through two known classes
+// direct, and the JVM would no longer need the slot this declines).
+export function feedEach(nullable: NullInput[], optional: UndefinedInput[], n: number): string {
   let answer = "";
   for (const receiver of nullable) answer += receiver.feed(null) === null ? "n" : "wrong";
   for (const receiver of optional) answer += receiver.feed(undefined) === undefined ? "u" : "wrong";

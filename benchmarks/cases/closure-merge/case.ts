@@ -63,11 +63,14 @@ export function work(seed: number): number {
  */
 export const seed = 5;
 
-// The representation this row measures (`nts expect-ir`): the merged
-// closures are called through their signature's typed entry, so nothing on
-// the path is erased, and both bodies answer an integer.
-// expect-ir: all: no erase in work
-// expect-ir: all: no unerase in drive
-// expect-ir: all: count call.closure in drive == 1
+// The representation this row measures (`nts expect-ir`): `mix` is one of two
+// closure classes wherever it is called, in `work` and through `drive`'s
+// parameter, so each call is a test per class and a direct call to that
+// class's typed body (`class_sets`). The one erasure is the closure's own,
+// for its class test; no number is erased, and both bodies answer an integer.
+// expect-ir: all: no call.closure in work
+// expect-ir: all: no call.closure in drive
+// expect-ir: all: count instanceof in drive == 2
+// expect-ir: all: count erase in drive == 1
 // expect-ir: all: Closure0#call returns i32
 // expect-ir: all: Closure1#call returns i32

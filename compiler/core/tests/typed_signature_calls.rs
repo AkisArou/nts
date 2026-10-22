@@ -7,7 +7,8 @@
 //! benchmark's shape and must call no erased entry; `callWide` (a closure
 //! taking its parameter at another representation) and `callFewer` (one
 //! declaring fewer parameters than the call passes) are 519195e49's cases and
-//! must keep it.
+//! must never take the signature's typed entry: they keep the erased one, or,
+//! once `class_sets` knows the classes, call each closure's own body.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
@@ -45,10 +46,24 @@ fn a_signature_call_is_typed_only_where_every_arriving_closure_agrees() {
             "{typed}: every closure that can arrive agrees, so no erased entry"
         );
     }
+    // Where a closure that can arrive disagrees, the call must never take the
+    // signature's typed entry: that is the misread. It keeps the erased
+    // entry, or -- its classes known (`class_sets`) -- calls each closure's own
+    // body at that closure's own representation, which is exact too.
+    let through_typed = |name: &str| {
+        let body = program
+            .funcs
+            .iter()
+            .find(|func| func.name == name)
+            .unwrap_or_else(|| panic!("{name} is compiled"));
+        body.values.iter().any(|op| {
+            matches!(op.kind, OpKind::Call { callee: Callee::Closure { slot }, .. } if slot != erased)
+        })
+    };
     for kept in ["callWide", "callFewer"] {
         assert!(
-            through_erased(kept),
-            "{kept}: a closure that can arrive disagrees, so the erased entry stays"
+            !through_typed(kept),
+            "{kept}: a closure that can arrive disagrees, so the typed entry is never taken"
         );
     }
     // Exactly the one signature `merged` and `drive` share is published: the

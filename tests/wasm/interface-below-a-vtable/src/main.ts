@@ -21,7 +21,10 @@ class Derived extends Base {
 function sum(p: Point): number {
   return p.x * 10 + p.y;
 }
-function describe(b: Base): number {
+// Exported, so nothing bounds the classes `b` can hold and the call keeps its
+// table: two known classes would make it direct (`class_sets`), and the vtable
+// this fixture needs would not be emitted.
+export function describe(b: Base): number {
   return b.describe();
 }
 export function both(n: number): number {

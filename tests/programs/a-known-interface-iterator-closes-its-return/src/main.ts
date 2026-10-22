@@ -46,4 +46,7 @@ export function subject(n: number): number { return walk(choose(n), true); }
 export function control(n: number): number { return walk(choose(n), false); }
 // A future unlisted representation must stop by name on the unmatched close
 // edge; the object-literal outcome reaches that edge. It is outside stepping.
-// expect-ir: all: count call.extern(nts_refused) in walk == 1
+// The second refusal is `class_sets`': `source` is one of two classes, so its
+// calls are a test per class, and a receiver that is neither -- which the
+// whole program says is none -- stops by name too.
+// expect-ir: all: count call.extern(nts_refused) in walk == 2

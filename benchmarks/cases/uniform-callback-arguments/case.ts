@@ -18,6 +18,9 @@ export function work(seed: number): number {
 }
 export const seed = 5;
 
-// expect-ir: all: count call.closure in work#whole == 1
+// The call through `listeners[i & 1]` is a test per closure class and a
+// direct call (`class_sets`): two classes, and no dispatch left in the loop.
+// expect-ir: all: no call.closure in work#whole
+// expect-ir: all: count instanceof in work#whole == 2
 // expect-ir: all: count tagof in Closure0#erased_call == 3
 // expect-ir: all: count tagof in Closure1#erased_call == 3

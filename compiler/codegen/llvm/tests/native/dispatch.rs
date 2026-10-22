@@ -28,6 +28,11 @@ class Derived extends Base {
 }
 export function read(other: boolean): number {
     const value: Base = other ? new Derived() : new Base();
+    return readThrough(value);
+}
+// Exported, so nothing bounds the classes its parameter can hold, and the call
+// stays a table read (`class_sets` makes one through two known classes direct).
+export function readThrough(value: Base): number {
     return value.read();
 }
 ";

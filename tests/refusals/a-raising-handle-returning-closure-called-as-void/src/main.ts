@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> lacks-c nts_refused(
+// expect: emit-c --rc -> lacks-c whose raising copy would have to return
 //
 // **FIXED 2026-10-07, and kept as a guard**: the predicate that refused a
 // raising copy returning a native pointer (or a `bigint`) predated
@@ -16,6 +16,10 @@
 // a value of a type that has none to return". It compiles with no
 // diagnostic and aborts the renderer when it runs. Found 2026-10-07 on a2, in
 // the Chromium DOM witness (tests/dom-witness.ts, step 4).
+//
+// The guard names the stub's own message rather than any `nts_refused(`:
+// `run` is one closure class, so `class_sets` tests for it and keeps a
+// refusal for a receiver that is none -- a refusal, but not this one.
 //
 // Control, one difference -- a block body, so the closure answers nothing:
 //
