@@ -1,6 +1,6 @@
 //! Decode only authored native storage. An unsupported layout remains refused;
 //! it must not fall back to managed-object layout or guessed member offsets.
-use super::{Field, Pointee, Record, RecordKind, scalar};
+use super::{Field, Pointee, Record, RecordKind, TypePath, scalar};
 use nts_semantic_schema::{
     LiteralValue, MemberKind, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SymbolId, TypeId,
     TypeKind, syntax,
@@ -12,13 +12,24 @@ pub(crate) fn property<'a>(
     ty: TypeId,
     name: &str,
 ) -> Option<&'a PropertyRecord> {
-    match &snapshot.types.get(ty.0 as usize)?.kind {
-        TypeKind::Object { properties } => properties.iter().find(|p| p.name == name),
-        TypeKind::Intersection(parts) => parts
-            .iter()
-            .find_map(|part| property(snapshot, *part, name)),
-        _ => None,
-    }
+    property_within(snapshot, ty, name, &mut TypePath::default())
+}
+
+fn property_within<'a>(
+    snapshot: &'a SemanticSnapshot,
+    ty: TypeId,
+    name: &str,
+    visiting: &mut TypePath,
+) -> Option<&'a PropertyRecord> {
+    visiting.within(ty, |visiting| {
+        match &snapshot.types.get(ty.0 as usize)?.kind {
+            TypeKind::Object { properties } => properties.iter().find(|p| p.name == name),
+            TypeKind::Intersection(parts) => parts
+                .iter()
+                .find_map(|part| property_within(snapshot, *part, name, visiting)),
+            _ => None,
+        }
+    })
 }
 
 /// Every property of `ty`, its intersection's parts' in order.
@@ -74,7 +85,7 @@ fn text(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<&str> {
 /// separately named incomplete type and are not expanded speculatively here.
 #[must_use]
 pub fn pointer(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
-    pointer_within(snapshot, stored(snapshot, ty), &mut Vec::new())
+    pointer_within(snapshot, stored(snapshot, ty), &mut TypePath::default())
 }
 
 /// `ByValue<T> | Fields<T>` as the `ByValue<T>` it is to C and to every
@@ -266,7 +277,7 @@ pub(crate) fn copied(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<std::syn
             .find(|part| is_layout(snapshot, *part))?,
         _ => marker.ty,
     };
-    structure(snapshot, record, &mut Vec::new(), false, true).map(std::sync::Arc::new)
+    structure(snapshot, record, &mut TypePath::default(), false, true).map(std::sync::Arc::new)
 }
 
 /// The struct `ty` is, read as `Copied<T>` reads it: a `CopiedArray<T>`'s
@@ -275,7 +286,7 @@ pub(crate) fn copied_struct(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
 ) -> Option<std::sync::Arc<Record>> {
-    structure(snapshot, ty, &mut Vec::new(), false, true).map(std::sync::Arc::new)
+    structure(snapshot, ty, &mut TypePath::default(), false, true).map(std::sync::Arc::new)
 }
 
 /// The C name of the struct `ty` is storage of (`Ptr<T>`, `ByValue<T>`),
@@ -283,10 +294,10 @@ pub(crate) fn copied_struct(
 /// since no storage could own the string. What a refusal of one says.
 pub(crate) fn string_struct_as_storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<String> {
     let element = marker(snapshot, stored(snapshot, ty), "__c_pointer")?;
-    if structure(snapshot, element, &mut Vec::new(), false, false).is_some() {
+    if structure(snapshot, element, &mut TypePath::default(), false, false).is_some() {
         return None;
     }
-    structure(snapshot, element, &mut Vec::new(), false, true).map(|record| record.name)
+    structure(snapshot, element, &mut TypePath::default(), false, true).map(|record| record.name)
 }
 
 /// The Objective-C class a class type's instances are: a class a binding
@@ -666,22 +677,16 @@ pub fn is_layout(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 fn pointer_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
-    visiting: &mut Vec<TypeId>,
+    visiting: &mut TypePath,
 ) -> Option<Pointee> {
-    if visiting.contains(&ty) {
-        return None;
-    }
-    visiting.push(ty);
-    let answer = pointer_body(snapshot, ty, visiting);
-    visiting.pop();
-    answer
+    visiting.within(ty, |visiting| pointer_body(snapshot, ty, visiting))
 }
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn pointer_body(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
-    visiting: &mut Vec<TypeId>,
+    visiting: &mut TypePath,
 ) -> Option<Pointee> {
     if let TypeKind::Union(parts) = &snapshot.types.get(ty.0 as usize)?.kind {
         let [a, b] = parts.as_slice() else {
@@ -884,7 +889,7 @@ fn pointer_body(
 fn structure(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
-    visiting: &mut Vec<TypeId>,
+    visiting: &mut TypePath,
     within_header: bool,
     copied: bool,
 ) -> Option<Record> {
@@ -981,20 +986,15 @@ fn structure(
             // pointer path below would have made it an address, which is the
             // one thing a bit-field does not have.
             inline
-        } else if !visiting.contains(&property.ty)
-            && let Some(inner) = {
-                visiting.push(property.ty);
-                let inner = structure(
-                    snapshot,
-                    property.ty,
-                    visiting,
-                    members_are_the_header_s,
-                    copied,
-                );
-                visiting.pop();
-                inner
-            }
-        {
+        } else if let Some(inner) = visiting.within(property.ty, |visiting| {
+            structure(
+                snapshot,
+                property.ty,
+                visiting,
+                members_are_the_header_s,
+                copied,
+            )
+        }) {
             Pointee::Record(inner.into())
         } else if copied && super::is_hstring(snapshot, property.ty) {
             // A Windows Runtime string, `HSTRING` -- `struct HSTRING__ *`, as
@@ -1094,7 +1094,7 @@ pub fn storage(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     if let Some(scalar) = scalar(snapshot, ty) {
         return Some(Pointee::Scalar(scalar));
     }
-    if let Some(layout) = structure(snapshot, ty, &mut Vec::new(), false, false) {
+    if let Some(layout) = structure(snapshot, ty, &mut TypePath::default(), false, false) {
         return Some(Pointee::Record(layout.into()));
     }
     pointer(snapshot, ty).map(|p| Pointee::Pointer(Box::new(p)))

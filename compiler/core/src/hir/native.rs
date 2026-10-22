@@ -7,6 +7,31 @@ use nts_semantic_schema::{
 
 use super::{HirType, ManagedType};
 
+/// Types currently being expanded, shared by the native type walkers.
+/// A repeated sibling is legal; only meeting a type still on this path is a cycle.
+#[derive(Default)]
+pub(super) struct TypePath {
+    visiting: Vec<TypeId>,
+    recursive: bool,
+}
+
+impl TypePath {
+    pub(super) fn within<T>(
+        &mut self,
+        ty: TypeId,
+        visit: impl FnOnce(&mut Self) -> Option<T>,
+    ) -> Option<T> {
+        if self.visiting.contains(&ty) {
+            self.recursive = true;
+            return None;
+        }
+        self.visiting.push(ty);
+        let answer = visit(self);
+        self.visiting.pop();
+        answer
+    }
+}
+
 /// The authored ABI, retained on the call so another declaration cannot
 /// change it and every backend receives the same signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -801,6 +826,15 @@ fn no_abi_type(
     function: &str,
     parameter: Option<&str>,
 ) -> String {
+    let mut path = TypePath::default();
+    let _ = abi_type_within(snapshot, ty, &mut path);
+    if path.recursive {
+        let what =
+            parameter.map_or_else(|| "return".to_owned(), |name| format!("parameter `{name}`"));
+        return format!(
+            "foreign function `{function}`'s {what}, a type that refers to itself and has no C ABI"
+        );
+    }
     // Named for the rule it breaks rather than for what else it could be.
     if let Some(record) = schema::string_struct_as_storage(snapshot, ty) {
         let what =
@@ -2231,6 +2265,18 @@ impl Type {
 /// pointer for exactly the reason a function-typed parameter is, and two
 /// answers to that would be two places to keep in agreement.
 pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> {
+    abi_type_within(snapshot, ty, &mut TypePath::default())
+}
+
+fn abi_type_within(
+    snapshot: &SemanticSnapshot,
+    ty: TypeId,
+    visiting: &mut TypePath,
+) -> Option<Type> {
+    visiting.within(ty, |visiting| abi_type_body(snapshot, ty, visiting))
+}
+
+fn abi_type_body(snapshot: &SemanticSnapshot, ty: TypeId, visiting: &mut TypePath) -> Option<Type> {
     if let Some(scalar) = int_bool(snapshot, ty) {
         return Some(Type::Scalar(scalar));
     }
@@ -2252,7 +2298,7 @@ pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> 
         TypeKind::TypeParameter {
             constraint: Some(constraint),
             ..
-        } => abi_type(snapshot, *constraint),
+        } => abi_type_within(snapshot, *constraint, visiting),
         // `F | null`: the same function pointer, which C passes as NULL
         // when the program passes `null`. A null pointer and a valid one
         // share a representation, as they do for `Ptr<T> | null`.
@@ -2279,7 +2325,7 @@ pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> 
             } else {
                 return None;
             };
-            match abi_type(snapshot, *payload)? {
+            match abi_type_within(snapshot, *payload, visiting)? {
                 function @ Type::FnPointer(_) => Some(function),
                 _ => None,
             }
@@ -2297,8 +2343,8 @@ pub(crate) fn abi_type(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Type> 
         // point where it would have been emitted.
         TypeKind::Function(id) => {
             let signature = snapshot.signatures.get(id.0 as usize)?;
-            let (parameters, _) = callback_slots(snapshot, signature)?;
-            let result = abi_type(snapshot, signature.return_type)?;
+            let (parameters, _) = callback_slots_within(snapshot, signature, visiting)?;
+            let result = abi_type_within(snapshot, signature.return_type, visiting)?;
             // A callback taking or returning a record by value would need
             // its bridge to do what a call does here; nothing does yet.
             if parameters
@@ -2413,9 +2459,17 @@ fn callback_slots(
     snapshot: &SemanticSnapshot,
     signature: &nts_semantic_schema::SignatureRecord,
 ) -> Option<(Vec<Type>, super::Bridging)> {
+    callback_slots_within(snapshot, signature, &mut TypePath::default())
+}
+
+fn callback_slots_within(
+    snapshot: &SemanticSnapshot,
+    signature: &nts_semantic_schema::SignatureRecord,
+    visiting: &mut TypePath,
+) -> Option<(Vec<Type>, super::Bridging)> {
     let mut parameters = Vec::with_capacity(signature.parameters.len());
     let mut bridging = super::Bridging::default();
-    let one =
+    let mut one =
         |parameters: &mut Vec<Type>, bridging: &mut super::Bridging, ty: TypeId| -> Option<()> {
             let at = u32::try_from(parameters.len()).ok()?;
             if is_c_string(snapshot, ty) {
@@ -2448,7 +2502,7 @@ fn callback_slots(
                         get_type: record.get_type,
                     });
                 }
-                parameters.push(abi_type(snapshot, ty)?);
+                parameters.push(abi_type_within(snapshot, ty, visiting)?);
             }
             Some(())
         };
@@ -6276,5 +6330,95 @@ mod data_model {
         assert_eq!(Targets::of(&[]), Targets::ALL);
         assert_eq!(Targets::ALL.rows().count(), NativeAbi::ALL.len());
         assert_eq!(Scalar::Char.range_on(Targets::ALL), Some((0, 127)));
+    }
+}
+
+#[cfg(test)]
+mod recursive_abi_tests {
+    use super::*;
+    use nts_semantic_schema::{ParameterRecord, SignatureId, SignatureRecord, TypeRecord};
+
+    fn callback() -> SemanticSnapshot {
+        SemanticSnapshot {
+            types: vec![
+                TypeRecord {
+                    kind: TypeKind::Void,
+                    symbol: None,
+                },
+                TypeRecord {
+                    kind: TypeKind::Boolean,
+                    symbol: None,
+                },
+                TypeRecord {
+                    kind: TypeKind::Function(SignatureId(0)),
+                    symbol: None,
+                },
+            ],
+            signatures: vec![SignatureRecord {
+                parameters: Vec::new(),
+                return_type: TypeId(0),
+                type_parameters: Vec::new(),
+                is_construct: false,
+                type_predicate: None,
+                this_type: None,
+            }],
+            ..SemanticSnapshot::default()
+        }
+    }
+
+    #[test]
+    fn a_callback_returning_or_accepting_itself_has_no_c_abi() {
+        let mut snapshot = callback();
+        assert!(matches!(
+            abi_type(&snapshot, TypeId(2)),
+            Some(Type::FnPointer(_))
+        ));
+        snapshot.signatures[0].return_type = TypeId(2);
+        assert!(abi_type(&snapshot, TypeId(2)).is_none());
+        assert!(no_abi_type(&snapshot, TypeId(2), "foo", None).contains(
+            "foreign function `foo`'s return, a type that refers to itself and has no C ABI"
+        ));
+        snapshot.signatures[0].return_type = TypeId(0);
+        snapshot.signatures[0].parameters.push(ParameterRecord {
+            name: "callback".to_owned(),
+            ty: TypeId(2),
+            optional: false,
+            rest: false,
+        });
+        assert!(abi_type(&snapshot, TypeId(2)).is_none());
+        assert!(
+            no_abi_type(&snapshot, TypeId(2), "foo", Some("callback"))
+                .contains("parameter `callback`, a type that refers to itself and has no C ABI")
+        );
+    }
+
+    #[test]
+    fn two_parameters_of_one_type_are_siblings_not_a_cycle() {
+        let mut snapshot = callback();
+        snapshot.signatures[0].parameters = ["left", "right"]
+            .map(|name| ParameterRecord {
+                name: name.to_owned(),
+                ty: TypeId(1),
+                optional: false,
+                rest: false,
+            })
+            .into();
+        assert!(matches!(
+            abi_type(&snapshot, TypeId(2)),
+            Some(Type::FnPointer(_))
+        ));
+    }
+
+    #[test]
+    fn recursive_intersection_properties_and_bound_pointers_stop() {
+        let mut snapshot = callback();
+        snapshot.types[0].kind = TypeKind::Intersection(vec![TypeId(0)]);
+        assert!(schema::property(&snapshot, TypeId(0), "__c_opaque").is_none());
+        snapshot.types[0].kind = TypeKind::Object {
+            properties: Vec::new(),
+        };
+        snapshot.bound_types.insert(TypeId(0), TypeId(1));
+        snapshot.bound_types.insert(TypeId(1), TypeId(0));
+        assert!(schema::pointer(&snapshot, TypeId(0)).is_none());
     }
 }
