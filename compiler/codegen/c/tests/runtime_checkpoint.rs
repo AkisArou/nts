@@ -613,3 +613,14 @@ fn a_number_is_written_with_the_shortest_digits_that_read_back() {
     let report = run_suite("number_format", &["-DNTS_PROVIDER_RC"]);
     assert_eq!(checks(&report), 30, "{report}");
 }
+
+/// `Number(s)` and `parseFloat(s)`, through ffc: bit for bit what glibc's
+/// correctly rounded `strtod` reads over every span the grammar admits --
+/// random doubles written every way, random digits, the halfway and subnormal
+/// cases, eight hundred digits, narrow and wide -- and the grammar as node
+/// answers it.
+#[test]
+fn decimal_text_is_read_as_the_nearest_double() {
+    let report = run_suite("number_parse", &["-DNTS_PROVIDER_RC"]);
+    assert_eq!(checks(&report), 45, "{report}");
+}

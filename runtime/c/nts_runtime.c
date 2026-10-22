@@ -101,6 +101,14 @@ nts_require_the_cpu_it_was_built_for(void) {
 /* NOLINTNEXTLINE(bugprone-suspicious-include) */
 #include "zmij/zmij.c"
 #undef asm
+/* Decimal text to the nearest double (`nts_decimal_value`): ffc.h, a C99 port
+ * of fast_float, vendored unedited (`ffc/README.md`). Exact -- Eisel-Lemire,
+ * with fast_float's own slow path for what that cannot decide -- and blind to
+ * the C library's locale, which `strtod` was not. The runtime never changes
+ * the rounding mode, so `FFC_ROUNDS_TO_NEAREST` drops the check for it. */
+#define FFC_IMPL
+#define FFC_ROUNDS_TO_NEAREST
+#include "ffc/ffc.h"
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
@@ -6360,12 +6368,11 @@ static NtsString *nts_str_trimmed(const NtsString *s, bool start, bool end) {
 
 /* `Number(s)`, which the specification calls StringToNumber.
  *
- * Not `strtod` on the whole string, which is the obvious implementation and the
- * wrong one. C accepts three spellings JavaScript does not -- `inf`, `nan` and
- * a hexadecimal *float* with a `p` exponent -- and JavaScript accepts three C
- * does not, `0b`, `0o` and a bare leading `.` with no digit before it. So the
- * grammar is checked here and `strtod` is asked only about a span this has
- * already decided is a decimal literal, where it is exactly right: correctly
+ * Not a C parser on the whole string, which is the obvious implementation and
+ * the wrong one. C's accepts spellings JavaScript does not -- `inf`, `nan` and
+ * a hexadecimal *float* with a `p` exponent -- and JavaScript accepts some C's
+ * does not, `0b`, `0o`. So the grammar is checked here and the value of a span
+ * it admits as a decimal literal comes from `nts_decimal_value`, correctly
  * rounded, which a hand-rolled accumulate-and-scale is not.
  *
  * Whitespace is `nts_str_is_space`, the same predicate `trim` uses, because
@@ -6373,9 +6380,9 @@ static NtsString *nts_str_trimmed(const NtsString *s, bool start, bool end) {
  * is +0 rather than NaN -- `Number("")` is 0 and `Number(" ")` is 0, which is
  * the case people are surprised by and the one node agrees with.
  *
- * Anything outside ASCII is NaN without further reading: no numeric literal has
- * a code unit above 0x7F, so a single one settles the whole string. That is
- * also what keeps the copy below a byte copy rather than a transcoding.
+ * Anything outside ASCII is NaN: no numeric literal has a code unit above 0x7F.
+ * A narrow string's bytes are read where they are; a wide one's are copied,
+ * and a single unit above 0x7F settles it before the copy finishes.
  */
 static bool nts_number_span_is_decimal(const char *text, size_t length) {
   size_t at = 0;
@@ -6465,6 +6472,51 @@ static bool nts_number_radix(const char *text, size_t length, double *out) {
   }
   *out = value;
   return true;
+}
+
+/* The double nearest a decimal literal the grammar here has already admitted --
+ * `[+-]digits[.digits][e[+-]digits]`, a digit on one side of the point at
+ * least, every byte ASCII -- through ffc (fast_float): correctly rounded, and
+ * the C library's locale has no say. Out of range is still an answer, ±Infinity
+ * or ±0 as the specification asks, which ffc writes before it says so. A span
+ * it does not read to the end is not one this admitted, and is NaN. */
+static double nts_decimal_value(const char *text, size_t length) {
+  ffc_parse_options options = ffc_parse_options_default();
+  options.format = FFC_PRESET_GENERAL | FFC_FORMAT_FLAG_NO_INFNAN |
+                   FFC_FORMAT_FLAG_ALLOW_LEADING_PLUS;
+  double value = (double)NAN;
+  const ffc_result read =
+      ffc_from_chars_double_options(text, text + length, &value, options);
+  if (read.ptr != text + length || read.outcome == FFC_OUTCOME_INVALID_INPUT) {
+    return (double)NAN;
+  }
+  return value;
+}
+
+/* StringToNumber on a trimmed, non-empty span of ASCII-or-not bytes:
+ * `Infinity` with an optional sign, a radix literal (unsigned by grammar), a
+ * decimal literal, or NaN. */
+static double nts_number_literal(const char *text, size_t length) {
+  const char *body = text;
+  size_t remaining = length;
+  bool negative = false;
+  if (body[0] == '+' || body[0] == '-') {
+    negative = body[0] == '-';
+    body++;
+    remaining--;
+  }
+  /* `Infinity` with an optional sign, and nothing else spelled with letters. */
+  if (remaining == 8 && memcmp(body, "Infinity", 8) == 0) {
+    return negative ? -(double)INFINITY : (double)INFINITY;
+  }
+  double answer;
+  if (nts_number_radix(text, length, &answer)) {
+    return answer;
+  }
+  if (nts_number_span_is_decimal(text, length)) {
+    return nts_decimal_value(text, length);
+  }
+  return (double)NAN;
 }
 
 /* `Number(v)` on an erased value: ECMAScript ToNumber over the tags a value can
@@ -6871,8 +6923,11 @@ double nts_parse_float(const NtsString *s) {
 
   /* The admitted prefix as bytes. Every unit in it is ASCII by construction --
    * a digit, a sign, a dot or an `e` -- so one byte each is exact and no
-   * encoding step is needed. */
+   * encoding step is needed: a narrow string's are read where they are. */
   uint32_t length = at - start;
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    return nts_decimal_value(NTS_ELEMENTS(s, const char) + start, length);
+  }
   char stack[64];
   char *text = stack;
   if (length + 1u > sizeof stack) {
@@ -6885,7 +6940,7 @@ double nts_parse_float(const NtsString *s) {
     text[i] = (char)nts_unit(s, start + i);
   }
   text[length] = '\0';
-  double value = strtod(text, NULL);
+  double value = nts_decimal_value(text, length);
   if (text != stack) {
     free(text);
   }
@@ -6971,18 +7026,22 @@ double nts_str_to_number(const NtsString *s) {
   }
 
   size_t length = (size_t)(to - from);
-  /* Long enough for every literal a program writes and short enough to sit in
-   * a frame. Past it the value is decided by the leading significant digits and
-   * the exponent, and neither survives truncation -- so it is a heap copy
-   * rather than a silently wrong answer. `malloc` directly rather than
-   * `nts_alloc`, because this is scratch that never becomes an object and does
-   * not want a header, a descriptor or a place in the collector's accounting.
-   */
+  /* A narrow string's units are its bytes, read where they are. A unit above
+   * 0x7F is no part of any literal, and the grammar below refuses it as any
+   * other stray character. */
+  if ((s->flags & NTS_TWO_BYTE) == 0) {
+    return nts_number_literal(NTS_ELEMENTS(s, const char) + from, length);
+  }
+  /* A wide one is copied to bytes. Long enough for every literal a program
+   * writes and short enough to sit in a frame; past it a heap copy, since the
+   * value is decided by the leading digits and the exponent and neither
+   * survives truncation. `malloc` directly rather than `nts_alloc`: this is
+   * scratch that never becomes an object. Anything above 0x7F settles it. */
   char inline_buffer[256];
   char *text = inline_buffer;
   char *owned = NULL;
-  if (length + 1u > sizeof inline_buffer) {
-    owned = (char *)malloc(length + 1u);
+  if (length > sizeof inline_buffer) {
+    owned = (char *)malloc(length);
     if (owned == NULL) {
       return (double)NAN;
     }
@@ -6996,28 +7055,7 @@ double nts_str_to_number(const NtsString *s) {
     }
     text[at] = (char)unit;
   }
-  text[length] = '\0';
-
-  double answer;
-  const char *body = text;
-  size_t remaining = length;
-  bool negative = false;
-  if (remaining > 0 && (body[0] == '+' || body[0] == '-')) {
-    negative = body[0] == '-';
-    body++;
-    remaining--;
-  }
-  /* `Infinity` with an optional sign, and nothing else spelled with letters. */
-  if (remaining == 8 && memcmp(body, "Infinity", 8) == 0) {
-    answer = negative ? -INFINITY : INFINITY;
-  } else if (nts_number_radix(text, length, &answer)) {
-    /* Whole string, sign included: a radix literal cannot carry one. */
-  } else if (nts_number_span_is_decimal(text, length)) {
-    answer = strtod(text, NULL);
-  } else {
-    answer = (double)NAN;
-  }
-
+  double answer = nts_number_literal(text, length);
   free(owned);
   return answer;
 }

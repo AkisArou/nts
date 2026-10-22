@@ -45,6 +45,11 @@ pub const ZMIJ_HEADER_NAME: &str = "zmij/zmij-c.h";
 pub const ZMIJ_HEADER: &str = include_str!("../../../../runtime/c/zmij/zmij-c.h");
 pub const ZMIJ_SOURCE_NAME: &str = "zmij/zmij.c";
 pub const ZMIJ_SOURCE: &str = include_str!("../../../../runtime/c/zmij/zmij.c");
+/// Decimal text to the nearest double, `ffc.h` (a C99 port of `fast_float`),
+/// vendored unedited as an `ffc/` subdirectory and included by
+/// `nts_runtime.c`, for the reason zmij is.
+pub const FFC_HEADER_NAME: &str = "ffc/ffc.h";
+pub const FFC_HEADER: &str = include_str!("../../../../runtime/c/ffc/ffc.h");
 /// `StringView`'s C half, included by the runtime header and shipped beside it
 /// so a foreign C or C++ file can read a lent string without that header.
 pub const STRING_VIEW_HEADER_NAME: &str = "nts_string_view.h";
@@ -305,10 +310,12 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
     };
     let mut files = vec![
         one(RUNTIME_HEADER_NAME, RUNTIME_HEADER, false),
-        // `nts_runtime.c` includes `zmij/zmij.c`, so these travel with it
-        // always -- `String(x)` is in nearly every program.
+        // `nts_runtime.c` includes `zmij/zmij.c` and `ffc/ffc.h`, so these
+        // travel with it always -- `String(x)` and `Number(s)` are in nearly
+        // every program.
         one(ZMIJ_HEADER_NAME, ZMIJ_HEADER, false),
         one(ZMIJ_SOURCE_NAME, ZMIJ_SOURCE, false),
+        one(FFC_HEADER_NAME, FFC_HEADER, false),
         // `nts_runtime.h` includes it, so it travels with every program.
         one(STRING_VIEW_HEADER_NAME, STRING_VIEW_HEADER, false),
         one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
@@ -1582,6 +1589,7 @@ fn runtime_declares(name: &str) -> bool {
         RUNTIME_HEADER,
         UNICODE_HEADER,
         ZMIJ_HEADER,
+        FFC_HEADER,
         STRING_VIEW_HEADER,
     ]
     .iter()
