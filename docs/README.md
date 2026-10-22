@@ -6,6 +6,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 ## How we work
 
 - [`../AGENTS.md`](../AGENTS.md): the rules every contributor follows: landing, the gate, fixtures, the shared tree.
+- [`architecture.md`](architecture.md): how nts works: the pipeline, how memory is chosen, the repository layout.
 - [`agents/lessons/`](agents/lessons): what working on nts has taught, one rule and its reason per line, by topic.
 - [`records/`](records): one file per decision, with the evidence. Claim a number with `tooling/gate/claim-record.sh`.
 - [`workflow.md`](workflow.md): how lanes work side by side, landing with `land`, and `lane status`.
@@ -14,6 +15,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 
 - [`../tests/`](../tests): what nts must pass, one kind per directory: programs compared with node, refusals, outcomes, memory cases, interop projects, GJS ports, the workspace. Its README says which gate steps run each kind and how to add one.
 - [`../benchmarks/`](../benchmarks): what is measured: the cases nts-bench times against C++, Java and node, and the Wasm and GTK benchmarks.
+- [`../results/`](../results): what the tools measured, each file written by a tool: benchmark tables, test262 and conformance records, the corpus run.
 - Before 2026-10-14 these were `examples` and `benches` at the root and four directories under `tooling`; [`../tooling/migrate/table.ts`](../tooling/migrate/table.ts) maps each old place to its new one. Records keep the paths they were written with.
 
 ## Status ledgers (where the numbers are)

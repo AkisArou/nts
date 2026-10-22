@@ -6,8 +6,8 @@ these is in [`docs/agents/lessons/`](docs/agents/lessons): read the topic before
 working in it.
 
 nts compiles TypeScript ahead of time to native code, the JVM, WebAssembly and
-Node addons. The README says how; [`docs/README.md`](docs/README.md) indexes the
-rest.
+Node addons. The README says what it is for; [`docs/architecture.md`](docs/architecture.md)
+says how it works, and [`docs/README.md`](docs/README.md) indexes the rest.
 
 ## Lanes
 

@@ -255,7 +255,8 @@ fn other_compilers() -> Vec<u32> {
     found
 }
 
-/// Whether this run may rewrite the README, and why not when it may not.
+/// Whether this run may rewrite the full table (`results/benchmarks/full.md`),
+/// and why not when it may not.
 ///
 /// Split out from `main` so the three reasons to decline sit together: a
 /// filtered run, a run that lost a case, and a run that was not alone on the
@@ -274,12 +275,12 @@ fn publish(
     // as readily as over a few, and it wrote those into the table until this.
     if let Some(lanes) = lanes {
         println!(
-            "\nREADME not updated: NTS_BENCH_LANES measured only {}.",
+            "\nfull table not updated: NTS_BENCH_LANES measured only {}.",
             lanes.join(", ")
         );
         return Ok(());
     }
-    // Only a full run may rewrite the README. A filtered one would leave the
+    // Only a full run may rewrite the full table. A filtered one would leave the
     // table describing a mixture of two machines and two revisions, which is
     // worse than a stale table because it does not look stale.
     //
@@ -297,7 +298,7 @@ fn publish(
     // which is what this is.
     if !spoiled.is_empty() && requested.is_empty() {
         println!(
-            "\nREADME not updated: {} of {} cases were measured while something \
+            "\nfull table not updated: {} of {} cases were measured while something \
              else ran -- {}",
             spoiled.len(),
             cases.len(),
@@ -309,14 +310,14 @@ fn publish(
         && rows.len() == cases.len()
         && let Some(drift) = refusal_drift(rows, REFUSES_TODAY)
     {
-        println!("\nREADME not updated: {drift}");
+        println!("\nfull table not updated: {drift}");
         return Ok(());
     }
     if requested.is_empty() && rows.len() == cases.len() {
-        write_readme(root, rows)?;
-        println!("\nREADME updated.");
+        let written = write_full_table(root, rows)?;
+        println!("\nwrote {written}");
     } else if !requested.is_empty() {
-        println!("\nREADME not updated: a filtered run measures only part of the table.");
+        println!("\nfull table not updated: a filtered run measures only part of the table.");
     } else {
         println!("\n{}", lost_case_decline(rows, cases));
     }
@@ -359,7 +360,7 @@ fn lost_case_decline(rows: &[Row], cases: &[Utf8PathBuf]) -> String {
         .filter(|name| !measured.contains(name))
         .collect();
     format!(
-        "README not updated: {} of {} cases produced no row -- {}. A table \
+        "full table not updated: {} of {} cases produced no row -- {}. A table \
          missing a row it used to carry is not a smaller table, it is one that \
          answers a different question, so this declines rather than publishing \
          the rest.",
@@ -459,7 +460,7 @@ fn age_of(pid: u32) -> Option<String> {
 /// `--root` when given, and otherwise the tree this binary was *compiled* in,
 /// because `env!("CARGO_MANIFEST_DIR")` is baked in at build time. That default
 /// is load-bearing and quietly so: it means a binary built in the main checkout
-/// rewrites the main checkout's `README.md` even when run from a worktree
+/// rewrites the main checkout's `results/benchmarks/` even when run from a worktree
 /// pinned for the measurement, and the only reason a publish lands in the
 /// pinned tree is that whoever ran it also built it there.
 ///
@@ -605,9 +606,9 @@ fn main() -> Result<()> {
     finish(&root, &run, &rows, &cases)
 }
 
-/// Save a run, record what it measured, and rewrite the README if it may.
+/// Save a run, record what it measured, and rewrite the full table if it may.
 ///
-/// Every run records its cells, whether or not it may rewrite the README;
+/// Every run records its cells, whether or not it may rewrite the full table;
 /// `--render` re-reads an old run and records nothing, since its cells were
 /// measured at another time and commit.
 fn finish(root: &Utf8Path, run: &Run, rows: &[Row], cases: &[Utf8PathBuf]) -> Result<()> {
@@ -635,11 +636,13 @@ fn finish(root: &Utf8Path, run: &Run, rows: &[Row], cases: &[Utf8PathBuf]) -> Re
     )
 }
 
-/// Rewrite the README's generated benchmark table.
+/// The full benchmark table, every case and every column, written whole as
+/// `results/benchmarks/full.md`.
 ///
-/// Between markers rather than appended, so the surrounding prose is written by
-/// hand and the numbers never are. A table typed out by a person is a table that
-/// drifts from the machine that produced it.
+/// Written by a program and never by hand: a table typed out by a person is a
+/// table that drifts from the machine that produced it. It was a section of the
+/// README between markers until 2026-10-23, when the README became a short
+/// description of the project and every measured number moved under `results/`.
 /// How to read a ratio that moved, which the shape of the table hides.
 ///
 /// Split from [`legend`] for the length limit, and it is a real seam: the rest
@@ -817,7 +820,7 @@ fn legend(root: &Utf8Path) -> String {
     // provenance. The question a reader actually arrives with is different, and
     // it is the one `repository_root` warns about: this destination comes from
     // `CARGO_MANIFEST_DIR`, baked in at *compile* time, so a binary built in the
-    // main checkout rewrites the main checkout's README however it is invoked --
+    // main checkout rewrites the main checkout's `results/benchmarks/` however it is invoked --
     // from a sealed worktree included.
     //
     // On 2026-09-15 two sessions spent an exchange working out whose uncommitted
@@ -941,13 +944,7 @@ fn asymmetric(rows: &[Row]) -> String {
     said
 }
 
-fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
-    // Split out for the length limit, and because the two are different kinds
-    // of thing: one is the numbers, the other is what a reader has to know
-    // before the numbers mean anything.
-    const START: &str = "<!-- benchmarks:start -->";
-    const END: &str = "<!-- benchmarks:end -->";
-
+fn write_full_table(root: &Utf8Path, rows: &[Row]) -> Result<Utf8PathBuf> {
     let mut table = String::new();
     let with_bun = rows.iter().any(|row| row.bun.is_some());
     // `nts f64` is measured on every run and printed by the tool; it is not
@@ -1025,11 +1022,6 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         .iter()
         .any(|label| row.unstable(label))
     });
-    let path = root.join("README.md");
-    let text = std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?;
-    let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
-        bail!("README.md has no benchmark markers");
-    };
     // The mark travels with the number. `spreads` below says *what* moved and
     // by how much; this says which ratios one may not quote, in the cell a
     // reader copies.
@@ -1039,16 +1031,20 @@ fn write_readme(root: &Utf8Path, rows: &[Row]) -> Result<()> {
         ""
     };
     let marks = asymmetric(rows);
-    let updated = format!(
-        "{}{START}\n{table}{mark}{marks}{wasm_absences}{legend}{spreads}{}",
-        &text[..from],
-        &text[to..]
+    let dir = root.join("results/benchmarks");
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
+    let path = dir.join("full.md");
+    let written = format!(
+        "# Every case, every column\n\nWritten by `nts-bench` from a clean full run \
+         only: every case, every lane, nothing else running. The per-target tables \
+         beside it (`c.md`, `llvm.md`, `jvm.md`, `wasm.md`) record every run.\n\n\
+         {table}{mark}{marks}{wasm_absences}{legend}{spreads}"
     );
-    std::fs::write(&path, updated).with_context(|| format!("writing {path}"))?;
-    Ok(())
+    std::fs::write(&path, written).with_context(|| format!("writing {path}"))?;
+    Ok(path)
 }
 
-/// One case's timings, kept so the README can be written from the same numbers
+/// One case's timings, kept so the full table can be written from the same numbers
 /// the terminal showed.
 struct Row {
     case: String,
@@ -1061,7 +1057,7 @@ struct Row {
     ///
     /// Non-optional until 2026-09-15, which meant "this compiler cannot compile
     /// this case" had no representation and necessarily became a *lost row* --
-    /// and a lost row stops the whole README from being published, because a
+    /// and a lost row stops the whole full table from being published, because a
     /// table missing a row it used to carry answers a different question.
     ///
     /// So one correct refusal took the entire table down. `json-stringify-doc`
@@ -1673,7 +1669,7 @@ fn work_agrees(row: &Row) -> Result<()> {
 /// `NTS_BENCH_LANES=jvm` runs the JVM backend, the Java reference and node.
 /// Anything filtered out renders `--`, the same as a lane that refused, so a
 /// filtered run is never mistaken for a published one -- and `publish`
-/// refuses to write the README from a filtered run for the same reason a
+/// refuses to write the full table from a filtered run for the same reason a
 /// filtered *case* list does.
 fn wanted_lanes() -> Option<Vec<String>> {
     let raw = std::env::var("NTS_BENCH_LANES").ok()?;
@@ -1784,7 +1780,7 @@ struct Measurements {
 }
 
 /// A run, as `target/bench/run.json` keeps it: what was asked, what was
-/// measured, and what spoiled it. Rendering it again decides about the README
+/// measured, and what spoiled it. Rendering it again decides about the full table
 /// exactly as the run did, from the same facts.
 #[derive(Serialize, Deserialize)]
 struct Run {
@@ -1800,7 +1796,7 @@ fn run_file(root: &Utf8Path) -> Utf8PathBuf {
     root.join("target/bench/run.json")
 }
 
-/// Render the README from a saved run (`--render [path]`): the rows are
+/// Render the full table from a saved run (`--render [path]`): the rows are
 /// assembled again by today's code from the measurements as they were taken,
 /// so a change to how a row is judged reaches the table without re-timing it.
 fn render(root: &Utf8Path, path: &Utf8Path) -> Result<()> {
@@ -3953,23 +3949,23 @@ mod tests {
         assert_eq!(again.wasm_absence.as_deref(), Some("not run"));
     }
 
-    /// A run of some lanes never reaches the README, over every case as over
-    /// a few.
+    /// A run of some lanes never reaches the full table, over every case as
+    /// over a few.
     #[test]
-    fn a_lane_filtered_run_leaves_the_readme_alone() {
+    fn a_lane_filtered_run_leaves_the_full_table_alone() {
         let root = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
             .expect("a UTF-8 temporary directory")
             .join(format!("nts-bench-lanes-{}", std::process::id()));
-        std::fs::create_dir_all(&root).expect("a root");
-        let readme = "before\n<!-- benchmarks:start -->\nold\n<!-- benchmarks:end -->\n";
-        std::fs::write(root.join("README.md"), readme).expect("a README");
+        let table = root.join("results/benchmarks/full.md");
+        std::fs::create_dir_all(table.parent().expect("a directory")).expect("a root");
+        std::fs::write(&table, "old\n").expect("a table");
         let rows = vec![row("fib")];
         let cases = vec![root.join("benchmarks/cases/fib")];
         super::publish(&root, &rows, &cases, &[], &[], Some(&["c".to_owned()]))
             .expect("declines quietly");
-        let after = std::fs::read_to_string(root.join("README.md")).expect("still there");
+        let after = std::fs::read_to_string(&table).expect("still there");
         std::fs::remove_dir_all(&root).expect("cleaned up");
-        assert_eq!(after, readme);
+        assert_eq!(after, "old\n");
     }
 
     /// The set that matches is the only quiet answer.

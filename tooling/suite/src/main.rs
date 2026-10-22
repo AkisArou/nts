@@ -109,13 +109,13 @@ struct Totals {
 /// `--root` when given, and otherwise the tree this binary was *compiled* in.
 ///
 /// The default is baked in by `env!("CARGO_MANIFEST_DIR")`, so a binary built
-/// in the main checkout edits the main checkout's `README.md` however it is
-/// invoked -- from a pinned worktree included. `tooling/gate/pinned.sh` seals
+/// in the main checkout writes the main checkout's `results/suite/` however it
+/// is invoked -- from a pinned worktree included. `tooling/gate/pinned.sh` seals
 /// the sources a gate reads and cannot seal this, because the destination was
 /// decided when the binary was compiled rather than when it ran. `all.sh`
 /// compounds it by invoking `./target/release/nts-suite` relatively, so *which
-/// binary answers* depends on the working directory while *which README it
-/// edits* does not, and the two can disagree without saying so.
+/// binary answers* depends on the working directory while *which tables it
+/// writes* does not, and the two can disagree without saying so.
 ///
 /// Not hypothetical. A `corpus` step run from a tree its operator believed was
 /// sealed moved `lowered completely` from 52 to 53 in the live checkout, and
@@ -166,8 +166,8 @@ fn main() -> Result<()> {
 
     let totals = run(&root, &files, limit)?;
     report(&totals);
-    write_readme(&root, &totals)?;
-    println!("\nREADME updated.");
+    let written = write_corpus_result(&root, &totals)?;
+    println!("\nwrote {written}");
     Ok(())
 }
 
@@ -188,15 +188,12 @@ fn numeric(root: &Utf8Path) -> Result<()> {
         println!("    nts  {native}");
         println!("    node {engine}");
     }
-    write_test262_readme(root, &findings)?;
-    println!("\nREADME updated.");
+    let written = write_test262_result(root, &findings)?;
+    println!("\nwrote {written}");
     Ok(())
 }
 
-fn write_test262_readme(root: &Utf8Path, findings: &test262::Findings) -> Result<()> {
-    const START: &str = "<!-- test262:start -->";
-    const END: &str = "<!-- test262:end -->";
-
+fn write_test262_result(root: &Utf8Path, findings: &test262::Findings) -> Result<Utf8PathBuf> {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -232,16 +229,26 @@ fn write_test262_readme(root: &Utf8Path, findings: &test262::Findings) -> Result
          in the folder and the runtime both.\n",
     );
 
-    let path = root.join("README.md");
-    let text = std::fs::read_to_string(&path)?;
-    let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
-        bail!("README.md has no test262 markers");
-    };
-    std::fs::write(
-        &path,
-        format!("{}{START}\n{out}{}", &text[..from], &text[to..]),
-    )?;
-    Ok(())
+    write_result(
+        root,
+        "test262-expressions",
+        "test262 expressions against node",
+        &out,
+    )
+}
+
+/// One of this tool's tables, written whole as `results/suite/<name>.md`.
+///
+/// They were sections of the README between markers until 2026-10-23, when the
+/// README became a short description of the project and every number a tool
+/// measures moved under `results/` (`results/README.md` lists who writes what).
+fn write_result(root: &Utf8Path, name: &str, title: &str, body: &str) -> Result<Utf8PathBuf> {
+    let dir = root.join("results/suite");
+    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
+    let path = dir.join(format!("{name}.md"));
+    std::fs::write(&path, format!("# {title}\n\n{body}"))
+        .with_context(|| format!("writing {path}"))?;
+    Ok(path)
 }
 
 /// Every `.ts` and `.tsx` beneath a directory.
@@ -651,10 +658,7 @@ fn report(totals: &Totals) {
     }
 }
 
-fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
-    const START: &str = "<!-- corpus:start -->";
-    const END: &str = "<!-- corpus:end -->";
-
+fn write_corpus_result(root: &Utf8Path, totals: &Totals) -> Result<Utf8PathBuf> {
     let attempted =
         totals.lowered + totals.refused + totals.rejected + totals.failed + totals.invalid;
     let considered = totals.lowered + totals.refused;
@@ -673,10 +677,10 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
     // who changed it", and this is the first line such a reader sees.
     let _ = writeln!(
         out,
-        "<sub>Written by `nts-suite`, compiled in `{}`. It edits that tree's \
-         README wherever it is run from, including a sealed worktree — the \
-         destination is chosen when the binary is built, not when it runs. \
-         Regenerate with `cargo run --release -p nts-suite`.</sub>\n",
+        "<sub>Written by `nts-suite`, compiled in `{}`. It writes that tree's \
+         `results/suite/corpus.md` wherever it is run from, including a sealed \
+         worktree — the destination is chosen when the binary is built, not when \
+         it runs. Regenerate with `cargo run --release -p nts-suite`.</sub>\n",
         env!("CARGO_MANIFEST_DIR")
             .rsplit_once("/tooling/")
             .map_or("?", |(root, _)| root)
@@ -724,9 +728,9 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
 
     let mut reasons: Vec<(&String, &usize)> = totals.reasons.iter().collect();
     reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-    // The caveat belongs *in the generator*, not in the README: this section is
-    // rewritten on every corpus run, and a note added by hand between the
-    // markers survives until the next one. It was, and it did not.
+    // The caveat belongs *in the generator*, not in the file: it is rewritten on
+    // every corpus run, and a note added by hand survives until the next one.
+    // It was, and it did not.
     out.push_str(
         "What is stopping the rest, in order — and **read this table as breadth \
          rather than as a work queue.** A refusal count and the lowered count are \
@@ -749,14 +753,10 @@ fn write_readme(root: &Utf8Path, totals: &Totals) -> Result<()> {
          is most of why it exists.\n",
     );
 
-    let path = root.join("README.md");
-    let text = std::fs::read_to_string(&path)?;
-    let (Some(from), Some(to)) = (text.find(START), text.find(END)) else {
-        bail!("README.md has no corpus markers");
-    };
-    std::fs::write(
-        &path,
-        format!("{}{START}\n{out}{}", &text[..from], &text[to..]),
-    )?;
-    Ok(())
+    write_result(
+        root,
+        "corpus",
+        "TypeScript's own tests, compiled as programs",
+        &out,
+    )
 }
