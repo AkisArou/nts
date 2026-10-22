@@ -30,14 +30,10 @@ twelve when it was first measured, and most of that has since been given back by
 eliding reference counting the compiler can prove unnecessary — see
 [`benchmarks/README.md`](benchmarks/README.md) for what each row is made of.
 
-**This paragraph said "every row is marked `(rc)`" and that was not true of the
-table beneath it.** A case declares its own provider, most declare none, and a
-default run publishes each at whatever it declared — so 44 of these 64 rows
-are the diagnostic the sentence above calls not a headline, presented as the
-headline. `NTS_BENCH_RC=1` runs every case under reclamation and produces a
-table the old sentence would have described correctly; the numbers here are not
-from such a run, and saying which they are from is cheaper than implying they
-are something else.
+**Every row counts references** since 2026-10-22, as a shipped program does
+(NoGC never frees, and is for testing only). Numbers in this file measured
+before then are from rows that mostly ran under NoGC; `results/benchmarks/`
+holds the current ones.
 
 <!-- benchmarks:start -->
 | case | C++ | nts (C) | nts (LLVM) | nts (JVM) | Java | nts (Wasm) | C++ (wasm) | AssemblyScript | V8 | Bun | nts/C++ | nts/V8 | nts/Bun | nts (JVM)/Java | nts (Wasm)/V8 | nts (Wasm)/C++ (wasm) | nts (Wasm)/AssemblyScript |

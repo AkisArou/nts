@@ -15,10 +15,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::{
-    case_tsconfig, entry_points, node_harness, provider_for, timed_cpus, wanted_lanes, wasm_prepare,
-};
-use nts_core::hir;
+use super::{case_tsconfig, entry_points, node_harness, timed_cpus, wanted_lanes, wasm_prepare};
 
 /// Hold new cells below this, in KiB available.
 const HOLD_BELOW_KIB: u64 = 12 * 1024 * 1024;
@@ -591,10 +588,7 @@ pub(crate) fn prepare(root: &Utf8Path, argv: &[String]) -> Result<()> {
                     )
                 }
             };
-        let shown = match provider_for(&case) {
-            hir::Provider::ReferenceCounting => format!("{name} (rc)"),
-            hir::Provider::NoGc | hir::Provider::HostGc => name.clone(),
-        };
+        let shown = name.clone();
         let manifest = Manifest {
             case: name.clone(),
             shown,

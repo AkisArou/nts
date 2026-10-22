@@ -1268,26 +1268,17 @@ enum JvmAbsence {
     NotRun,
 }
 
-/// Which memory provider a case runs under.
+/// Which memory provider a case runs under: reference counting, always.
 ///
-/// A case that allocates per iteration declares `rc` in a file beside its
-/// `tsconfig.json`; the default is `NoGC`, which never frees, so a run calibrated
-/// to a hundred milliseconds of work would measure page faults rather than the
-/// code.
-///
-/// `NTS_BENCH_RC=1` overrides that and runs every case under reference counting
-/// whatever it declares. `NoGC` is not a scenario any real program has, so what
-/// reclamation costs each row is a question this table should be able to answer
-/// rather than one it avoids by default -- and the answer was 12x on the row
-/// that builds a linked list.
-fn provider_for(case: &Utf8Path) -> hir::Provider {
-    if std::env::var_os("NTS_BENCH_RC").is_some() {
-        return hir::Provider::ReferenceCounting;
-    }
-    match std::fs::read_to_string(case.join("provider")) {
-        Ok(text) if text.trim() == "rc" => hir::Provider::ReferenceCounting,
-        _ => hir::Provider::NoGc,
-    }
+/// It is what a shipped program uses -- `NoGC` never frees, and is for testing
+/// only (the user, 2026-10-22: "I do not think anyone should ship like this")
+/// -- and the table is a claim about what ships. Cases used to choose: a
+/// `provider` file saying `rc` beside an allocating one, `NoGC` otherwise, with
+/// `NTS_BENCH_RC=1` to count everywhere. The rows without it measured a
+/// program nobody would run, and the answer for the one that builds a linked
+/// list was 12x.
+fn provider_for(_case: &Utf8Path) -> hir::Provider {
+    hir::Provider::ReferenceCounting
 }
 
 /// The runtime translation units every variant of a case links.
@@ -1325,11 +1316,9 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
         hir::Provider::NoGc => &[],
         hir::Provider::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
     };
-    let shown = match provider {
-        hir::Provider::ReferenceCounting => format!("{name} (rc)"),
-        hir::Provider::NoGc => name.to_owned(),
-        hir::Provider::HostGc => bail!("NTS2001: native C/LLVM benchmarks decline HostGc"),
-    };
+    // Every case counts references now, so the row says its name and not
+    // `name (rc)`: a suffix every row carried would distinguish nothing.
+    let shown = name.to_owned();
 
     let specialized = out.join(format!("{name}.specialized.c"));
     let plain = out.join(format!("{name}.plain.c"));

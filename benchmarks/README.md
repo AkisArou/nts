@@ -85,18 +85,14 @@ drift out of step.
 
 ## Providers
 
-A case that allocates per iteration says so in a `provider` file next to its
-`tsconfig.json`, containing `rc`. The default is NoGC, which never frees — so a
-run calibrated to a hundred milliseconds of work would touch hundreds of
-megabytes of fresh memory and measure page faults rather than the code. The
-provider is a property of the workload, not of the compiler, and the case name
-is printed with the provider it used.
+**Every case runs under reference counting** -- what a shipped program uses.
+NoGC never frees and is for testing only (the user, 2026-10-22: "I do not
+think anyone should ship like this"), and `nts build` counts by default, so
+the table measures the same thing. Until then a case chose: a `provider` file
+saying `rc` beside an allocating one, NoGC otherwise, and `NTS_BENCH_RC=1` to
+count everywhere -- so most rows measured a program nobody would run.
 
-### NoGC is not a scenario, and the default hid a great deal
-
-`NTS_BENCH_RC=1` runs **every** case under reference counting whatever it
-declares. That is worth doing regularly, because the default answers a question
-no real program asks — and when it was first asked, the table changed shape.
+### What NoGC hid, when it was first asked
 
 The middle column is what NoGC was hiding. The right one is what elision
 recovered, in one night, from a pass that had none:

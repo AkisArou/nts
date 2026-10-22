@@ -2601,11 +2601,8 @@ fn provider_for(backend: nts_codegen_common::Backend) -> Result<hir::Provider> {
     Ok(match backend {
         nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => selected_provider(),
         nts_codegen_common::Backend::Jvm | nts_codegen_common::Backend::Wasm => {
-            nts_codegen_common::provider::host_gc(
-                backend.name(),
-                selected_provider() == hir::Provider::ReferenceCounting,
-            )
-            .map_err(anyhow::Error::msg)?
+            nts_codegen_common::provider::host_gc(backend.name(), rc_requested())
+                .map_err(anyhow::Error::msg)?
         }
     })
 }
@@ -8823,9 +8820,26 @@ fn foreign_tables(
 /// balances every count and still grows the heap -- so a version of this where
 /// the two reads drifted would print the wrong advice about the quiet failure it
 /// was written to prevent.
+/// Whether the command line asked for reference counting by name.
+///
+/// What a host-GC backend refuses (`provider::host_gc`): the JVM and Wasm
+/// manage memory through their host, and a `--rc` asked of them is a mistake
+/// worth a sentence. `nts build` counting on native by default is not a
+/// request, and a JVM or Android product built by it is no such mistake.
+fn rc_requested() -> bool {
+    std::env::args().any(|arg| arg == "--rc")
+}
+
 fn selected_provider() -> hir::Provider {
-    // NoGC stays the default; reference counting is selected only by `--rc`.
-    if std::env::args().any(|arg| arg == "--rc") {
+    // **What ships counts references.** NoGC never frees: a testing provider,
+    // never a shipped one (the user, 2026-10-22). So `nts build`, which makes
+    // what ships, counts unless told `--nogc`; the testing and inspection
+    // commands (`check`, `emit-c`, `hir`, ...) keep NoGC unless told `--rc`.
+    let args: Vec<String> = std::env::args().collect();
+    let shipping = args.get(1).is_some_and(|command| command == "build");
+    let counted = args.iter().any(|arg| arg == "--rc")
+        || (shipping && !args.iter().any(|arg| arg == "--nogc"));
+    if counted {
         hir::Provider::ReferenceCounting
     } else {
         hir::Provider::NoGc
@@ -8881,11 +8895,7 @@ fn emit_jvm(
     text: bool,
     emission: Emission,
 ) -> Result<bool> {
-    nts_codegen_common::provider::host_gc(
-        "jvm",
-        selected_provider() == hir::Provider::ReferenceCounting,
-    )
-    .map_err(anyhow::Error::msg)?;
+    nts_codegen_common::provider::host_gc("jvm", rc_requested()).map_err(anyhow::Error::msg)?;
     let mut report = EmissionReport::live();
     let input = EmissionInput::open(tsconfig, emission, &mut report)?;
     let (prepared, metadata) =
