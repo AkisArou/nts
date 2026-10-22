@@ -80,8 +80,15 @@ export function returningIterable(n: number): number {
 
 // A generator annotated with the library type, walked with `for...of`. This is
 // the shape the annotation exists for and the one a program actually writes.
+//
+// At most this many rounds, whatever the pool passes: a loop bound of two
+// billion finishes or times out by how busy the machine is, and a case that
+// does either by chance makes the fixture unstable -- as this one was on the
+// JVM, where a generator round is slowest (agree: "disagrees with itself").
+const ROUNDS = 4096;
+
 function* upTo(limit: number): IterableIterator<number> {
-  for (let i = 0; i < limit; i++) {
+  for (let i = 0; i < limit && i < ROUNDS; i++) {
     yield i;
   }
 }
