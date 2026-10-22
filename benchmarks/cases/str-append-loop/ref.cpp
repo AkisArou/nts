@@ -1,0 +1,48 @@
+// What a C++ programmer writes: `std::string::operator+=` in the loop, with no
+// `reserve`, because the final size is not known up front. Amortised growth,
+// one copy of each piece.
+//
+// The same generator and order as `case.ts`; ASCII, so one `char` is one UTF-16
+// code unit.
+#include <cstdint>
+#include <string>
+#include <vector>
+#include "harness.h"
+
+static std::uint32_t next(std::uint32_t x) { return x * 1664525u + 1013904223u; }
+
+static std::vector<std::string> words(int count, std::uint32_t shortest,
+                                      std::uint32_t longest, std::uint32_t x) {
+    std::vector<std::string> out;
+    for (int i = 0; i < count; i++) {
+        x = next(x);
+        const std::uint32_t length = shortest + (x >> 24) % (longest - shortest + 1);
+        std::string word;
+        for (std::uint32_t k = 0; k < length; k++) {
+            x = next(x);
+            word += static_cast<char>('a' + (x >> 24) % 26);
+        }
+        out.push_back(std::move(word));
+    }
+    return out;
+}
+
+static const std::vector<std::string> pieces = words(64, 1, 24, 13);
+
+static std::int32_t work(std::int32_t seed) {
+    const std::uint32_t s = static_cast<std::uint32_t>(seed) & 63;
+    std::string out;
+    for (std::uint32_t i = 0; i < 4096; i++) {
+        out += pieces[(i * 13 + s) & 63];
+    }
+    std::uint32_t h = 0;
+    for (std::size_t k = 0; k < out.size(); k += 64) {
+        h = h * 31 + static_cast<unsigned char>(out[k]);
+    }
+    return static_cast<std::int32_t>(h * 31 + static_cast<std::uint32_t>(out.size()));
+}
+
+double bench_run(void) {
+    volatile std::int32_t seed = 3;
+    return static_cast<double>(work(seed));
+}
