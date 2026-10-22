@@ -54,6 +54,19 @@ if ! command -v valgrind > /dev/null 2>&1; then
   echo "no valgrind on PATH: the leak arm did not run"
   exit 0
 fi
+# **Valgrind needs the dynamic loader's symbols**, which Arch serves through
+# debuginfod: a login shell sets DEBUGINFOD_URLS (/etc/profile.d), a systemd
+# unit -- every landing and full run -- does not, and without them valgrind
+# stops at startup. This arm read that as "no leak summary" in every gate run
+# started as a unit (2026-10-22), so say what it is instead.
+probe=$(valgrind -q --leak-check=no "$out/caller" many 1 2>&1 || true)
+case $probe in
+  *"Fatal error at startup"*)
+    echo "FAILED native-string: valgrind cannot start here -- it needs the dynamic loader's debug symbols; on Arch they come through debuginfod, so pass DEBUGINFOD_URLS to the unit that runs this (a systemd unit does not inherit it from the login shell). Valgrind said:" >&2
+    printf '%s\n' "$probe" | grep '^valgrind:' >&2
+    exit 1
+    ;;
+esac
 lost() {
   valgrind --leak-check=full "$out/caller" many "$1" 2>&1 |
     awk '/definitely lost:/ { gsub(",", "", $7); print $7 }'
