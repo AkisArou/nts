@@ -447,7 +447,7 @@ function gate(root: string, base: string, landing: string, members: string[]): G
       NTS_GATE_TARGET: GATE_TARGET,
       NTS_GATE_ACCEPT_SKIP: ACCEPT_SKIP.join(","),
       NTS_GATE_RUN_DIR: run,
-      NTS_TSGO: join(root, "target/tsgo"),
+      NTS_TSGO: join(GATE_TREE, "target/tsgo"),
       CARGO_INCREMENTAL: "0",
     });
     const launch = gateCommand("sh", [join(root, "tooling/gate/pinned.sh"), landing]);

@@ -10,83 +10,24 @@
 # without node_modules builds nothing a config file names. Run it again after
 # any checkout; every link is re-made, never trusted.
 #
-# **The two submodules differ by mode.** A symlink where git expects a
-# submodule makes `git status` fail in that tree ("expected submodule path
-# ... not to be a symbolic link"). The gate tree is never edited, so it keeps
-# the link. A lane's tree is where a lane commits, rebases and asks what is
-# dirty, so there:
-# - `typescript-go` (337 MB) is a linked worktree of the shared checkout's
-#   submodule repository, at the commit this tree's index records: a real
-#   checkout git reads as a submodule, sharing every object, fetching
-#   nothing;
-# - `chromium/src` is far too large for that and stays empty. The Chromium
-#   lane's tools find the one checkout through git's common directory.
+# Both modes get a real, patched source worktree and the binary for this
+# tree's gitlink plus ordered patches. The shared checkout may be at another
+# frontend pin. Never follow its mutable target/tsgo or source checkout.
 set -eu
 
 mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate) linked="third_party/typescript-go third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
-  lane) linked="third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
+  gate|lane) linked="third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
   *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
 esac
-
-# The carried patches (third_party/patches/), on or off a lane tree's
-# `typescript-go`. `bootstrap.sh` applies them in the shared checkout, and the
-# tsgo binary every tree runs is built there, so a lane tree's own checkout
-# was the pin as upstream wrote it: the frontend's tests that read the pin
-# (`the_pin_reports_object_flags_for_every_type`, and the plain-JS one) failed
-# in every lane tree and passed in the gate. Idempotent both ways: a patch
-# already in the state asked for is left alone, and one that applies neither
-# way stops the setup, because the pin has moved under it.
-carried() {
-  for patch in "$tree"/third_party/patches/*.patch; do
-    [ -e "$patch" ] || continue
-    if [ "$1" = on ]; then
-      git -C "$tree/$submodule" apply --reverse --check "$patch" 2>/dev/null && continue
-      git -C "$tree/$submodule" apply "$patch" || {
-        echo "inputs.sh: ${patch##*/} applies neither way: the pin has moved under it (third_party/patches/README.md)" >&2
-        exit 1
-      }
-    else
-      git -C "$tree/$submodule" apply --check --reverse "$patch" 2>/dev/null || continue
-      git -C "$tree/$submodule" apply --reverse "$patch"
-    fi
-  done
-}
-
-if [ "$mode" = lane ]; then
-  submodule=third_party/typescript-go
-  wanted=$(git -C "$tree" ls-files -s -- "$submodule" | awk '{ print $2 }')
-  if [ -n "$wanted" ] && [ ! -e "$tree/$submodule/.git" ]; then
-    # The empty directory a worktree leaves for a submodule, or a stale link.
-    if [ -L "$tree/$submodule" ]; then rm "$tree/$submodule"; else rmdir "$tree/$submodule" 2>/dev/null || true; fi
-    git -C "$root/$submodule" worktree add -q --detach "$tree/$submodule" "$wanted"
-  elif [ -n "$wanted" ] && [ "$(git -C "$tree/$submodule" rev-parse HEAD)" != "$wanted" ]; then
-    # Off first: they are uncommitted changes, which a checkout that touches
-    # the same files refuses.
-    carried off
-    git -C "$tree/$submodule" checkout -q --detach "$wanted"
-  fi
-  [ -n "$wanted" ] && carried on
-fi
-
-# The tsgo binary the frontend runs, built once in the shared checkout. A
-# tree's own `target/` holds its own build of everything else.
-if [ -x "$root/target/tsgo" ] && [ "$tree" != "$root" ]; then
-  mkdir -p "$tree/target"
-  ln -sfn "$root/target/tsgo" "$tree/target/tsgo"
-fi
+node "$(dirname -- "$0")/tsgo.ts" prepare "$root" "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,
 # Are We Fast Yet, node's `lib/`, and the tsgo binary. They are not in any
 # commit, so a fresh worktree has none of them; symlinked rather than copied
 # because they are read-only here and total about two gigabytes.
-# `typescript-go` is a *submodule*, so a fresh worktree has an empty directory
-# where it should be -- and the corpus step then reports `invalid HIR must be
-# zero` when the truth is that there are no cases to read. Symlinked with the
-# rest, and listed first because it is the one whose absence lies.
 for shared in $linked; do
   if [ -d "$root/$shared" ]; then
     # A submodule leaves an empty directory behind in the worktree; an empty

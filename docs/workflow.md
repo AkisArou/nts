@@ -15,9 +15,30 @@ the rules every session follows every time are in `AGENTS.md`.
 | The gate's tree | one, shared, used only through `land` |
 | Archived branches and worktree heads | `refs/archive/…` (`git for-each-ref refs/archive`) |
 
-The shared checkout supplies what no commit carries: `third_party/*` (test262,
-node, typescript-go, …) and `target/tsgo`. A lane's tree links them; it does
-not copy them.
+The shared checkout supplies what no commit carries: the corpora in
+`third_party/*` and immutable frontend builds in `target/tsgo.d/`. A tree's
+`target/tsgo` links its own gitlink and ordered carried patch contents. Its
+`third_party/typescript-go` is a real, patched worktree at that gitlink, in
+both lane and gate trees; neither follows main's current frontend pin.
+
+Build a missing frontend without cargo or corpora:
+
+```sh
+sh tooling/bootstrap/bootstrap.sh --tsgo-only ~/Projects/nts
+```
+
+Run this from the tree that needs the build. The shared cache key is the full
+gitlink plus a SHA-256 of the ordered patch names and contents. Builds publish
+atomically under a per-key lock, and existing keys are verified and reused.
+`inputs.sh` refuses a missing or modified build by name. Conformance pins
+record the immutable binary path and its hash, so preparing another pin never
+changes an earlier pin's frontend. Old provenance is rebuilt once on reuse.
+
+Old keys are never pruned automatically: a long-lived lane or recorded pin may
+still use any of them. Remove a key manually only after checking every tree's
+`target/tsgo` and the provenance of saved pins, and confirming no running job
+uses it. A failed build removes its own staging directory; it cannot replace
+an existing key.
 
 ## A lane's tree
 

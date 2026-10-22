@@ -11,9 +11,10 @@ So the patch *file* is the tracked artefact and the applied state is derived.
 
     sh tooling/bootstrap/bootstrap.sh
 
-applies every patch here and rebuilds `target/tsgo` if any of them is newer than
-it. That is the only thing to run, and it is idempotent: a patch already applied
-is detected and skipped.
+applies every patch here and links `target/tsgo` to an immutable build keyed by
+the gitlink and ordered patch names and contents. An existing key is reused;
+timestamps do not decide freshness. `--tsgo-only [shared checkout]` builds just
+the frontend, without cargo or corpora. See `docs/workflow.md` for retention.
 
 Run it after pulling a change to this directory. **A stale `target/tsgo` is the
 one failure mode that is not loud** -- the compiler asks the frontend a question,
@@ -44,7 +45,7 @@ each patch owes the two guards below rather than a line in a document.
    sibling it borrows its discipline from: *not skipped when absent, because a
    check that passes by not running is the failure it exists to prevent.*
 5. Any other place that builds the dependency applies the patch too. Today that
-   is `tooling/bootstrap/bootstrap.sh` and `.github/workflows/ci.yml`, and
+   is `tooling/lanes/tsgo.ts` (used by bootstrap) and `.github/workflows/ci.yml`, and
    `grep -rn 'go build' tooling .github` is how to find out whether it is still
    two.
 

@@ -3,6 +3,7 @@
 #
 #   tooling/bootstrap/bootstrap.sh             # everything
 #   tooling/bootstrap/bootstrap.sh --minimal   # only what the gate needs
+#   tooling/bootstrap/bootstrap.sh --tsgo-only [shared checkout]
 #
 # Each step says why it exists and each is skipped when already done, so this
 # is safe to re-run and is the fastest way to find out what is missing.
@@ -17,6 +18,13 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$root"
+
+# Build only this tree's frontend, without checking machine packages, running
+# cargo or fetching corpora. A lane shares the main checkout's immutable cache.
+shared=${2:-$(dirname -- "$(git rev-parse --path-format=absolute --git-common-dir)")}
+if [ "${1:-}" = --tsgo-only ]; then
+  exec node "$root/tooling/lanes/tsgo.ts" build "$shared" "$root"
+fi
 
 # `--all` stays accepted and means what it always did, which is now the
 # default: it is in muscle memory and in the message this script prints.
@@ -103,55 +111,10 @@ else
   git submodule update --init third_party/typescript-go
 fi
 
-# Changes we carry on top of the pin, because a submodule's content cannot be
-# committed from here -- see third_party/patches/README.md. Applied to the
-# working tree every time, and each is skipped when already applied.
-#
-# `--reverse --check` is the "already applied?" test rather than a marker file:
-# it asks the tree instead of asking a record of what was done to the tree, so a
-# submodule someone re-checked out by hand cannot answer stale.
-say "carried patches"
-patched=false
-for patch in third_party/patches/*.patch; do
-  have "$patch" || continue                 # an empty glob is the literal string
-  name=${patch##*/}
-  if git -C third_party/typescript-go apply --reverse --check "../patches/$name" 2>/dev/null; then
-    echo "  $name -- already applied"
-  elif git -C third_party/typescript-go apply "../patches/$name" 2>/dev/null; then
-    echo "  $name -- applied"
-    patched=true
-  else
-    echo "  $name -- DID NOT APPLY." >&2
-    echo "  The pin has moved under it. third_party/patches/README.md says what to" >&2
-    echo "  restore, and the patch's own header says what it is for." >&2
-    exit 1
-  fi
-done
-
-# The binary every other step depends on: `nts` shells out to it for the
-# semantic snapshot, and finds it at target/tsgo unless NTS_TSGO says otherwise.
-#
-# Rebuilt when a *patch* is newer than it, not only when `go.mod` is. A carried
-# patch changes what the frontend answers and touches no Go module file, so the
-# `go.mod` test alone would keep a binary that gives pre-patch answers -- and a
-# stale tsgo is wrong silently, where every other staleness here is loud.
-say "target/tsgo"
-fresh=false
-if have target/tsgo && [ target/tsgo -nt third_party/typescript-go/go.mod ]; then
-  fresh=true
-  $patched && fresh=false
-  for patch in third_party/patches/*.patch; do
-    have "$patch" || continue
-    [ target/tsgo -nt "$patch" ] || fresh=false
-  done
-fi
-if $fresh; then
-  echo "  already built"
-else
-  command -v go >/dev/null || { echo "  need a Go toolchain"; exit 1; }
-  (cd third_party/typescript-go && go build -o ../../target/tsgo ./cmd/tsgo)
-  echo "  built"
-fi
+# The frontend follows this tree's gitlink and carried patch contents.
+# Publishing a new key never replaces a build another lane or pin uses.
+say "target/tsgo (immutable per-pin build)"
+node "$root/tooling/lanes/tsgo.ts" build "$shared" "$root"
 
 # ------------------------------------------------------------------- packages
 #

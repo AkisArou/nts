@@ -45,10 +45,11 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { frontendPin } from "../lanes/tsgo.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -275,10 +276,13 @@ export function pin(rev, opts = {}) {
     : null;
   const dir = join(PINS, keyOf(sha, applied));
   const binary = join(dir, "nts");
-  if (existsSync(binary) && provenanceOf(binary)?.sha === sha) return binary;
+  // Older records named the shared mutable target/tsgo. Rebuild their
+  // provenance once so a cached pin also gains an immutable frontend path.
+  const cached = () => existsSync(binary) && provenanceOf(binary)?.sha === sha && provenanceOf(binary)?.tsgo?.key;
+  if (cached()) return binary;
   mkdirSync(PINS, { recursive: true });
   // Re-checked inside: a waiter's key may have been built by the holder.
-  return withBuildLock(() => (existsSync(binary) && provenanceOf(binary)?.sha === sha ? binary : build(sha, diff, applied, dir)));
+  return withBuildLock(() => (cached() ? binary : build(sha, diff, applied, dir)));
 }
 
 /** The build itself, run only under the lock. */
@@ -288,16 +292,14 @@ function build(sha, diff, applied, dir) {
   else git(["worktree", "add", "--detach", "-q", TREE, sha]);
   // A previous pin's patch or build output must not survive into this one.
   git(["clean", "-fdq", "-e", "third_party"], TREE);
-  // The frontend's sources are a submodule, which a fresh worktree has as an
-  // empty directory; linked to the main tree's, as `pinned.sh` does.
-  const frontend = join(TREE, "third_party/typescript-go");
-  if (!lstatSync(frontend, { throwIfNoEntry: false })?.isSymbolicLink()) {
-    if (existsSync(frontend) && readdirSync(frontend).length === 0) rmSync(frontend, { recursive: true });
-    if (!existsSync(frontend)) symlinkSync(join(ROOT, "third_party/typescript-go"), frontend);
-  }
   const clean = git(["status", "--porcelain", "--untracked-files=no", "--ignore-submodules=all"], TREE).trim() === "";
   if (!clean) throw new Error(`the pin tree at ${TREE} is not clean after checkout`);
   if (diff) git(["apply", "--whitespace=nowarn", "-"], TREE, diff.text);
+  const shared = dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim());
+  execFileSync("sh", [join(HERE, "../lanes/inputs.sh"), "gate", shared, TREE], { stdio: "inherit" });
+  // Record the immutable path, not the tree's link: the next pin re-points it.
+  const tsgo = realpathSync(join(TREE, "target/tsgo"));
+  const tsgoPin = frontendPin(TREE);
   // **What the tree holds, before and after the build.** The lock keeps other
   // pins out; this catches anything else that moves the tree while cargo
   // reads it. A binary is recorded only if the source it was built from is
@@ -308,7 +310,7 @@ function build(sha, diff, applied, dir) {
   const cargo = spawnSync("cargo", ["build", "--release", "-q", "-p", "nts-cli"], {
     cwd: TREE,
     stdio: ["ignore", "inherit", "inherit"],
-    env: { ...process.env, CARGO_TARGET_DIR: TARGET },
+    env: { ...process.env, CARGO_TARGET_DIR: TARGET, NTS_TSGO: tsgo },
   });
   if (cargo.status !== 0) throw new Error(`cargo build failed for ${keyOf(sha, applied)}`);
   const after = state();
@@ -316,13 +318,12 @@ function build(sha, diff, applied, dir) {
   // Undo the applied diff so the next pin starts from a commit.
   if (diff) git(["checkout", "--force", "-q", sha], TREE);
 
-  const tsgo = process.env.NTS_TSGO ?? join(ROOT, "target/tsgo");
   const record = {
     sha,
     subject: git(["log", "-1", "--format=%s", sha]).trim(),
     clean,
     applied,
-    tsgo: existsSync(tsgo) ? { path: tsgo, sha256: sha256(readFileSync(tsgo)) } : null,
+    tsgo: { key: tsgoPin.key, path: tsgo, sha256: sha256(readFileSync(tsgo)) },
     built_at: new Date().toISOString(),
     binary_sha256: sha256(readFileSync(join(TARGET, "release/nts"))),
   };
