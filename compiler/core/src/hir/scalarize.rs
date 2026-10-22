@@ -78,7 +78,7 @@ pub fn scalarize(program: &mut Program) -> usize {
     let takeable = scalar_types(program, &layouts);
     let mut replaced = 0;
     for index in 0..program.funcs.len() {
-        forward_new_objects(&mut program.funcs[index], &takeable);
+        forward_taken_objects(program, index, &takeable, &layouts, &constructors);
         let found = candidates(&program.funcs[index], program, &layouts, &constructors);
         for (object, layout) in found {
             let fields: Vec<HirType> = program.layouts[layout]
@@ -112,7 +112,46 @@ fn scalar_types(program: &Program, layouts: &LayoutIndex) -> FxHashSet<HirType> 
         .collect()
 }
 
-/// Forward a block parameter that only ever receives one new object.
+/// Forward the block parameters of function `index` that [`candidates`] then
+/// takes apart, and no others.
+///
+/// **A forwarding pays only where its object is replaced.** One that is not
+/// leaves the object as it was, but used across the join its parameter used to
+/// carry it over, and reference counting places a retain before the join and a
+/// release after it -- every iteration, where the join is a loop's. `Link` in
+/// a list built by `tail.next = made` escapes through `next`: when forwarding
+/// widened with the fields it can take (2026-10-22), `tests/memory/borrowed-call`
+/// and `traversal` went from 33 counting operations to 97, and `local-anchor`,
+/// `loop-break` and `shared-tail` rose 32 each. So the forwarding is tried on a
+/// copy, and kept for exactly the objects the copy's candidates include.
+fn forward_taken_objects(
+    program: &mut Program,
+    index: usize,
+    takeable: &FxHashSet<HirType>,
+    layouts: &LayoutIndex,
+    constructors: &FxHashMap<String, Vec<(u32, Stored)>>,
+) {
+    let mut trial = program.funcs[index].clone();
+    let forwarded = forward_new_objects(&mut trial, takeable, |_| true);
+    if forwarded.is_empty() {
+        return;
+    }
+    let taken: FxHashSet<ValueId> = candidates(&trial, program, layouts, constructors)
+        .into_iter()
+        .map(|(object, _)| object)
+        .filter(|object| forwarded.contains(object))
+        .collect();
+    if taken.len() == forwarded.len() {
+        program.funcs[index] = trial;
+    } else if !taken.is_empty() {
+        forward_new_objects(&mut program.funcs[index], takeable, |object| {
+            taken.contains(&object)
+        });
+    }
+}
+
+/// Forward a block parameter that only ever receives one new object, where
+/// `wanted` says yes to that object, and say which objects it forwarded.
 ///
 /// An inlined body hands back what it made through the block its `return`s
 /// join at -- `jump b5(%20)`, every time and from one place -- so the object
@@ -120,7 +159,12 @@ fn scalar_types(program: &Program, layouts: &LayoutIndex) -> FxHashSet<HirType> 
 /// object leaving. A parameter whose every incoming argument is the same value
 /// is that value under another name. Only for a new object of a type this can
 /// take apart: renaming nothing else.
-fn forward_new_objects(func: &mut Func, takeable: &FxHashSet<HirType>) {
+fn forward_new_objects(
+    func: &mut Func,
+    takeable: &FxHashSet<HirType>,
+    wanted: impl Fn(ValueId) -> bool,
+) -> FxHashSet<ValueId> {
+    let mut forwarded = FxHashSet::default();
     loop {
         let mut found: Option<(BlockId, usize, ValueId, ValueId)> = None;
         'search: for (at, block) in func.blocks.iter().enumerate() {
@@ -137,6 +181,7 @@ fn forward_new_objects(func: &mut Func, takeable: &FxHashSet<HirType>) {
                     && incoming.iter().all(|value| *value == first)
                     && matches!(func.values[first.0 as usize].kind, OpKind::ObjectNew { .. })
                     && func.values[first.0 as usize].ty == func.values[param.0 as usize].ty
+                    && wanted(first)
                 {
                     found = Some((target, index, *param, first));
                     break 'search;
@@ -144,8 +189,9 @@ fn forward_new_objects(func: &mut Func, takeable: &FxHashSet<HirType>) {
             }
         }
         let Some((block, index, param, value)) = found else {
-            return;
+            return forwarded;
         };
+        forwarded.insert(value);
         remove_param(func, block, index);
         let mut map = FxHashMap::default();
         map.insert(param, value);
