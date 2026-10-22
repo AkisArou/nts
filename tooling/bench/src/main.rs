@@ -3540,7 +3540,17 @@ impl Basis {
 /// (2026-09-27) on lowers `work` under `--rc`, so the fix is in
 /// `c9f3d3a09..f35a873b4`; no pin in that range survives to narrow it, and the
 /// README row that still showed it refused was carried over, not re-measured.
-const REFUSES_TODAY: &[(&str, &str)] = &[];
+///
+/// `utf8-encode` (2026-10-22) arrived refused, and that is the finding it was
+/// written to make: `new TextEncoder()` in compiled user code is "a `new` of
+/// unrepresentable type", because the global is not wired to
+/// `runtime/web-platform`'s `TextEncoder` -- the same gap as `JSON.stringify`.
+/// The case calls the global, as a program does, and comes off this list in
+/// the commit that wires it.
+const REFUSES_TODAY: &[(&str, &str)] = &[(
+    "utf8-encode",
+    "`new TextEncoder()`: the global is not wired to runtime/web-platform's class",
+)];
 
 /// Whether the cases that refused are the cases expected to refuse.
 ///
@@ -3962,7 +3972,12 @@ mod tests {
     fn the_expected_refusals_are_not_drift() {
         let rows: Vec<Row> = KNOWN.iter().map(|(case, _)| refused_row(case)).collect();
         assert_eq!(refusal_drift(&rows, KNOWN), None);
-        assert_eq!(refusal_drift(&[row("fib")], REFUSES_TODAY), None);
+        let mut today: Vec<Row> = REFUSES_TODAY
+            .iter()
+            .map(|(case, _)| refused_row(case))
+            .collect();
+        today.push(row("fib"));
+        assert_eq!(refusal_drift(&today, REFUSES_TODAY), None);
     }
 
     /// A case that starts refusing is a regression, and is named.
