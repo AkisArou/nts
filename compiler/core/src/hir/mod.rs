@@ -4238,6 +4238,14 @@ fn use_keeps_the_array_here(array: ValueId, kind: &OpKind) -> bool {
             value,
             ..
         } => *receiver == array && *index != array && *value != array,
+        // Comparing the reference. `this.rows!` tests it against null before
+        // every read, and an identity test hands the array to nobody. Counted
+        // as a handover, every field read behind a `!` cost its field its
+        // recorded length, so `awfy-queens` kept all seven bounds checks.
+        OpKind::Binary {
+            op: BinOp::Eq | BinOp::Ne,
+            ..
+        } => true,
         // Everything else hands it over: a call argument, a field store into an
         // object (which is how a closure captures), an `Erase` into a table.
         _ => false,

@@ -238,6 +238,8 @@ fn settle(
     let mut changes = Changes::default();
     // Where each function's parameters can settle: see `comparison_thresholds`.
     let thresholds: Vec<Vec<f64>> = program.funcs.iter().map(comparison_thresholds).collect();
+    // Which functions' parameters can climb on their own: see `on_a_call_cycle`.
+    let cyclic = on_a_call_cycle(program, &by_name, in_slot);
 
     for _ in 0..ROUND_CAP {
         let analyses = analyze_all(program, &crossing, written, caps);
@@ -247,6 +249,7 @@ fn settle(
             &crossing.params,
             arguments(program, &analyses, &by_name, in_slot, outward),
             &thresholds,
+            Some(&cyclic),
         );
         let returns = widened(
             &mut changes.returns,
@@ -281,6 +284,7 @@ fn settle(
                 &crossing.param_lengths,
                 super::fields::parameter_lengths(program, &analyses, outward),
                 &[],
+                None,
             )
         };
         let whole = flow::Whole {
@@ -421,13 +425,21 @@ fn widened<K: Clone + Eq + std::hash::Hash>(
 }
 
 /// [`widen_one`] over facts by function and parameter slot.
+///
+/// `only`, where given, names the functions whose slots widen at all; every
+/// other slot takes this round's join as it is. See [`on_a_call_cycle`] for
+/// why that is sound for parameters.
 fn widened_slots(
     changes: &mut FxHashMap<(usize, usize), u32>,
     previous: &[Vec<Facts>],
     mut next: Vec<Vec<Facts>>,
     thresholds: &[Vec<f64>],
+    only: Option<&[bool]>,
 ) -> Vec<Vec<Facts>> {
     for (func, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
+        if only.is_some_and(|widens| !widens.get(func).copied().unwrap_or(true)) {
+            continue;
+        }
         let toward = thresholds.get(func).map_or(&[][..], Vec::as_slice);
         for (slot, (next, previous)) in next.iter_mut().zip(previous).enumerate() {
             let count = changes.entry((func, slot)).or_default();
@@ -436,6 +448,60 @@ fn widened_slots(
         }
     }
     next
+}
+
+/// Which functions can reach themselves through calls: the only ones whose
+/// parameters need widening.
+///
+/// A parameter's facts are the join of what its callers pass, so a chain of
+/// parameters can feed itself only around a cycle of calls. Every other cycle
+/// in this fixpoint runs through a return, a field, an element or a global,
+/// and each of those widens on its own. So a parameter of a function on no
+/// call cycle follows its callers exactly and settles when they do.
+///
+/// Widening it anyway is what lost `awfy-queens`. `placeQueen(c)` recurses
+/// and settles at `c` in `[0, 7]` once it widens toward 7 -- but it climbs one
+/// step a round to get there, and `getRowColumn(r, c)` and `setRowColumn`,
+/// called with that `c` and comparing against nothing themselves, changed on
+/// the same rounds, widened first, jumped to the `i32` limit and never came
+/// back. Their `c + r` then took an `i64`, and every index made from it kept
+/// its bounds check.
+///
+/// The edges are [`targets_of`]'s from every call in a block, the edges
+/// [`arguments`] carries facts along; the components are
+/// [`super::strongly_connected`]'s.
+fn on_a_call_cycle(
+    program: &Program,
+    by_name: &FxHashMap<&str, usize>,
+    in_slot: &FxHashMap<u32, Vec<usize>>,
+) -> Vec<bool> {
+    let edges: Vec<Vec<usize>> = program
+        .funcs
+        .iter()
+        .map(|func| {
+            let mut out: Vec<usize> = func
+                .blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .filter_map(|value| match &func.values[value.0 as usize].kind {
+                    OpKind::Call { callee, .. } => Some(targets_of(callee, by_name, in_slot)),
+                    _ => None,
+                })
+                .flatten()
+                .collect();
+            out.sort_unstable();
+            out.dedup();
+            out
+        })
+        .collect();
+    let component = super::strongly_connected(&edges);
+    let mut size: FxHashMap<usize, usize> = FxHashMap::default();
+    for id in &component {
+        *size.entry(*id).or_default() += 1;
+    }
+    (0..edges.len())
+        .map(|func| size[&component[func]] > 1 || edges[func].contains(&func))
+        .collect()
 }
 
 /// What every caller hands each parameter this round: the join over every call
