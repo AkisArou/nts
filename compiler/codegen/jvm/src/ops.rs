@@ -4040,6 +4040,21 @@ impl Emitter<'_> {
             );
             return Ok(Placed::OnStack);
         }
+        // An erased value a bare reference can carry: the reference is the
+        // value, and a box would only be unwrapped again. See `unbox`, and
+        // record 0108 for what the wrapper costs.
+        //
+        // **Before the tag is chosen**, because `unbox` already decided no use
+        // reads one -- a `TagOf` disqualifies a value there -- and every use
+        // treats the value as the bare reference. Asked after the tagged
+        // branch below, a closure's erasure was boxed by `ofTagged` all the
+        // same, and the class test `class_sets` puts in front of a call asked
+        // `instanceof Closure0` of the box: false every time, so every guarded
+        // call fell through to its refusal.
+        if result.is_some_and(|it| self.unboxed.contains(&it)) {
+            self.load(code, pool, value)?;
+            return Ok(Placed::OnStack);
+        }
         // A closure erases to `function`, not `object`, and so does a value of
         // a function *signature* type, held as its callable face, which is no
         // closure's own type. `tags::of_prepared` is the one answer for both,
@@ -4095,13 +4110,6 @@ impl Emitter<'_> {
                 );
                 return Ok(Placed::OnStack);
             }
-        }
-        // An erased value a bare reference can carry: the reference is the
-        // value, and `ofObject` would only wrap it to be unwrapped again. See
-        // `unbox`, and record 0108 for what the wrapper costs.
-        if result.is_some_and(|it| self.unboxed.contains(&it)) {
-            self.load(code, pool, value)?;
-            return Ok(Placed::OnStack);
         }
         self.load(code, pool, value)?;
         let (name, signature) = match &from {
