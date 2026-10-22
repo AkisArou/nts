@@ -99,12 +99,12 @@ if [ "${1-}" = --case ]; then
       # header would make that key wrong, so then nothing is reused.
       sources="$where/program.c"
       if [ -n "${NTS_MEMORY_OBJECTS:-}" ] && ! grep -qs '#include "program.h"' "$where"/nts_*; then
-        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
+        inputs=$( { clang --version; echo "-O2 -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS"; (cd "$where" && find . -type f ! -name program.c ! -name program.h ! -name run | LC_ALL=C sort | xargs sha256sum); } | sha256sum | cut -c1-32)
         for c in "$where"/*.c; do
           [ "$c" = "$where/program.c" ] && continue
           obj="$NTS_MEMORY_OBJECTS/$inputs-$(basename "$c" .c).o"
           if [ ! -f "$obj" ]; then
-            clang -O2 -I"$where" -DNTS_PROVIDER_RC -c "$c" -o "$obj.$$" 2>/dev/null && mv -f "$obj.$$" "$obj"
+            clang -O2 -I"$where" -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS -c "$c" -o "$obj.$$" 2>/dev/null && mv -f "$obj.$$" "$obj"
           fi
           sources="$sources $obj"
         done
@@ -113,7 +113,7 @@ if [ "${1-}" = --case ]; then
       fi
       # $sources is a list of paths without spaces, split on purpose.
       clang -O2 -I"$where" -o "$where/run" $sources \
-            tooling/memory/harness.c -DNTS_PROVIDER_RC -lm 2>/dev/null || {
+            tooling/memory/harness.c -DNTS_PROVIDER_RC -DNTS_COUNT_OPERATIONS -lm 2>/dev/null || {
         echo "  $name: did not compile" >&2
         return 1
       }

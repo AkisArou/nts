@@ -991,9 +991,22 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
  * Not atomic. A runtime owns its heap and a managed reference does
  * not cross between runtimes, so the count is only ever touched by one thread.
  * Making it atomic would cost every retain a locked instruction to defend
- * against sharing the design does not permit. */
+ * against sharing the design does not permit.
+ *
+ * **Small enough to inline, and the operation counters only where they are
+ * read.** A program links the runtime with LTO (`compile_flags::LTO`), which
+ * inlines a function this size into every call site, C and LLVM alike, and
+ * not one carrying the whole release. So `nts_retain` and `nts_release` decide
+ * the common case themselves and hand the rest to `nts_release_counted`. The
+ * counts of retains and releases are what `tooling/memory` measures, and
+ * nothing else reads them: they build under `NTS_COUNT_OPERATIONS`, which that
+ * harness sets, and a shipped program does not pay a store per operation for
+ * them. The memory study measured the two together at -27% on
+ * `map-entries-top-k`, -10% on `awfy-bounce` and -8% on `json-parse`. */
 void nts_retain(NtsHeader *object) {
+#ifdef NTS_COUNT_OPERATIONS
   nts_env->retains++;
+#endif
   if (!object || object->reserved == NTS_IMMORTAL ||
       (object->flags & NTS_DYING) != 0) {
     return;
@@ -1453,6 +1466,16 @@ void nts_value_retain(NtsValue value) {
 #endif
 }
 
+#ifdef NTS_PROVIDER_RC
+/* A handle's release, out of line for the reason `nts_release_counted` is: kept
+ * inline it made `nts_value_release` too large for LTO to inline into the
+ * program, so every release of an erased value -- nearly always a managed
+ * reference -- paid a call for the rare foreign one. */
+static NTS_NOINLINE void nts_value_release_handle(uint32_t tag, void *native) {
+  nts_call_foreign_release(nts_handle_counting(tag)->release, native);
+}
+#endif
+
 void nts_value_release(NtsValue value) {
   uint32_t tag = nts_value_tag(value);
   if (NTS_TAG_IS_MANAGED(tag) && nts_value_reference(value)) {
@@ -1462,8 +1485,7 @@ void nts_value_release(NtsValue value) {
   /* Only where references are counted: without it nothing counted a handle
    * in, so nothing may count one out. */
   else if (NTS_TAG_IS_HANDLE(tag) && value.as.native) {
-    nts_call_foreign_release(nts_handle_counting(tag)->release,
-                             value.as.native);
+    nts_value_release_handle(tag, value.as.native);
   }
 #endif
 }
@@ -1648,11 +1670,39 @@ static void nts_possible_root(NtsHeader *object) {
   nts_env->candidates++;
 }
 
+/* The whole release of a counted object -- not null, not immortal -- out of
+ * line. `nts_release` calls it for everything it does not decide inline: a
+ * count reaching zero, an object already dying, and any release of a type that
+ * can lead back to itself, which may make the object a cycle candidate and
+ * start a collection. A rare release inside a function that is itself inlined
+ * everywhere calls it directly, so the fast path is not copied there for
+ * nothing (`nts_str_append`'s growth). */
+static NTS_NOINLINE void nts_release_counted(NtsHeader *object);
+
 void nts_release(NtsHeader *object) {
+#ifdef NTS_COUNT_OPERATIONS
   nts_env->releases++;
-  if (!object || object->reserved == NTS_IMMORTAL) {
+#endif
+  if (!object) {
     return;
   }
+  const uintptr_t count = object->reserved;
+  if (count == NTS_IMMORTAL) {
+    return;
+  }
+  /* The common release: a reference given back while others remain, of a type
+   * no cycle can pass through, so there is no candidate to buffer and no
+   * collection to start. A dying object is the rest's -- its count word is the
+   * dying list's link. */
+  if (count > 1 && (object->flags & NTS_DYING) == 0 &&
+      !object->descriptor->cyclic) {
+    object->reserved = count - 1;
+    return;
+  }
+  nts_release_counted(object);
+}
+
+static NTS_NOINLINE void nts_release_counted(NtsHeader *object) {
   /* Already dying, so its count word is the dying list's next pointer and
    * decrementing it would corrupt the list -- which is what freed
    * `Promise.all`'s values array out from under a live reader.
@@ -3384,7 +3434,11 @@ __attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
   if (a->reserved == 1u) {
     nts_free_string((NtsHeader *)a);
   } else if (a->reserved != NTS_IMMORTAL) {
-    nts_release((NtsHeader *)a);
+    /* Out of line: this function is inlined into every append, and a string
+     * both shared and outgrown is the rare case. `nts_release` inlines its fast
+     * path, and copied into an append loop it took a register the loop kept
+     * its index in (`str-append-loop`, +23%). */
+    nts_release_counted((NtsHeader *)a);
   }
   /* An immortal left alone. A literal or frame storage has no count to give
    * back -- retain and release both return on their first line -- so releasing

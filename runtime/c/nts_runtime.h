@@ -1364,7 +1364,11 @@ size_t nts_permanent_count(void);
 /* Calls to `nts_retain` and `nts_release`, counted on arrival rather than by
  * effect -- a retain of a null returns immediately and is still a call the
  * compiler emitted. This is what an elision pass is trying to make smaller, so
- * it is what `tooling/memory` measures. `nts_counting_reset` zeroes both. */
+ * it is what `tooling/memory` measures. `nts_counting_reset` zeroes both.
+ *
+ * Counted only in a runtime built with `NTS_COUNT_OPERATIONS`, as that harness
+ * builds it; elsewhere both answer zero, and a shipped program pays nothing for
+ * them. */
 size_t nts_counted_retains(void);
 size_t nts_counted_releases(void);
 /* Heap allocations of every kind -- objects, arrays, strings, maps -- since the
