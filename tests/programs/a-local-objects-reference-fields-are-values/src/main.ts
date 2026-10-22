@@ -18,6 +18,11 @@
 // expect-ir: all: count object.new in compared >= 1
 // expect-ir: all: count object.new in published >= 1
 
+// At most this many rounds, whatever the pool passes: a loop bound of two
+// billion finishes or times out by how busy the machine is, and a case that
+// does either by chance makes the fixture unstable.
+const ROUNDS = 4096;
+
 interface Held {
   fn?: (x: number) => number;
 }
@@ -28,7 +33,7 @@ function plusOne(x: number): number {
 
 export function held(rounds: number): number {
   let total = 0;
-  for (let i = 0; i < rounds; i = i + 1) {
+  for (let i = 0; i < rounds && i < ROUNDS; i = i + 1) {
     const h: Held = {};
     if ((total & 1) === 0) {
       h.fn = plusOne;

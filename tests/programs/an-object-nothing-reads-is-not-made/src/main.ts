@@ -17,9 +17,14 @@
 // expect-ir: all: no object.new in linked
 // expect-ir: all: count object.new in stored >= 1
 
+// At most this many rounds, whatever the pool passes: a loop bound of two
+// billion finishes or times out by how busy the machine is, and a case that
+// does either by chance makes the fixture unstable.
+const ROUNDS = 4096;
+
 export function dropped(rounds: number): number {
   let total = 0;
-  for (let i = 0; i < rounds; i = i + 1) {
+  for (let i = 0; i < rounds && i < ROUNDS; i = i + 1) {
     try {
       if ((i & 7) === 0) {
         throw new Error("boom");
@@ -34,7 +39,7 @@ export function dropped(rounds: number): number {
 
 export function kept(rounds: number): number {
   let total = 0;
-  for (let i = 0; i < rounds; i = i + 1) {
+  for (let i = 0; i < rounds && i < ROUNDS; i = i + 1) {
     try {
       if ((i & 7) === 0) {
         throw new Error("boom");
@@ -51,7 +56,7 @@ type Link = { next: Link | null; value: number };
 
 export function linked(n: number): number {
   let total = 0;
-  for (let i = 0; i < n; i = i + 1) {
+  for (let i = 0; i < n && i < ROUNDS; i = i + 1) {
     const a: Link = { next: null, value: i };
     const b: Link = { next: null, value: i + 1 };
     a.next = b;
