@@ -346,7 +346,7 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             // left out needlessly costs a count; one wrongly kept frees what
             // its store still points at. `Derived#keep(b, h) { h.box = b }`
             // through a `Base` did: the `Box` was freed and reused.
-            program
+            let stored = program
                 .funcs
                 .iter()
                 .filter(|func| !lent.contains(func.name.as_str()))
@@ -354,7 +354,8 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
                     let slots = consuming(func, layouts);
                     (!slots.is_empty()).then(|| (func.name.clone(), slots))
                 })
-                .collect()
+                .collect();
+            appended_parameters(program, layouts, &lent, stored)
         },
     }
 }
@@ -3096,6 +3097,184 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
         }
     }
     consumed
+}
+
+/// [`consuming`]'s answer widened to the strings a function appends onto: a
+/// least fixpoint over the program's direct calls, starting from the stores.
+///
+/// `function add(out: string, piece: string) { return out + piece }` borrowed
+/// `out`, so `out + piece` could not hand `out` to `nts_str_append`, and a
+/// caller writing `s = add(s, piece)` round a loop copied the whole of `s`
+/// every time: quadratic where `s += piece` is linear. A string parameter
+/// whose one use is the left side of a concatenation is one the function is
+/// about to give away, and taking it over lets the concatenation append in
+/// place, the count deciding whether it may.
+///
+/// The rule, per parameter ([`appended_on_every_path`]): a counted string read
+/// only as the left operand of a concatenation, or as an argument in a slot
+/// its direct callee takes over, exactly once on every path to a return and
+/// never round a loop. The second form is what chains a builder that hands its
+/// accumulation on, and it is why this is a fixpoint: a slot is taken over
+/// only once a callee's has been, so a cycle of functions handing a string
+/// round with nothing appending it takes none, and the iteration ends because
+/// each round only adds slots. `lent` functions keep borrowing, as they do for
+/// stores: a caller that cannot see which body it calls cannot hand over.
+fn appended_parameters(
+    program: &Program,
+    layouts: &[Layout],
+    lent: &rustc_hash::FxHashSet<&str>,
+    mut consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>> {
+    loop {
+        let mut added = Vec::new();
+        for func in program
+            .funcs
+            .iter()
+            .filter(|func| !lent.contains(func.name.as_str()))
+        {
+            for slot in appended_on_every_path(func, layouts, &consumes) {
+                added.push((func.name.clone(), slot));
+            }
+        }
+        let mut changed = false;
+        for (name, slot) in added {
+            changed |= consumes.entry(name).or_default().insert(slot);
+        }
+        if !changed {
+            return consumes;
+        }
+    }
+}
+
+/// The string parameters of `func` it gives away on every path, given what
+/// its callees already take over (`consumes`). See [`appended_parameters`].
+fn appended_on_every_path(
+    func: &Func,
+    layouts: &[Layout],
+    consumes: &rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+) -> Vec<u32> {
+    let taken = consumes.get(&func.name);
+    let reachable = super::verify::reachable_blocks(func);
+    let mut slots = Vec::new();
+    for (slot, parameter) in func
+        .parameter_values()
+        .unwrap_or_default()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(slot, parameter)| Some((u32::try_from(slot).ok()?, parameter?)))
+    {
+        if taken.is_some_and(|taken| taken.contains(&slot))
+            || func.values[parameter.0 as usize].ty != super::HirType::Managed(ManagedType::String)
+            || !counted(func, layouts, parameter)
+        {
+            continue;
+        }
+        // Where it is read, each read one that gives it away.
+        let mut reads: Vec<BlockId> = Vec::new();
+        let mut gives_away = true;
+        for (at, block) in func.blocks.iter().enumerate() {
+            let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+            if !reachable.contains(&here) {
+                continue;
+            }
+            for value in &block.ops {
+                let kind = &func.values[value.0 as usize].kind;
+                let uses = super::operands_of(kind)
+                    .iter()
+                    .filter(|operand| **operand == parameter)
+                    .count();
+                if uses == 0 {
+                    continue;
+                }
+                let handed = match kind {
+                    OpKind::Binary {
+                        op: super::BinOp::Concat,
+                        lhs,
+                        rhs,
+                    } => *lhs == parameter && *rhs != parameter,
+                    OpKind::Call {
+                        callee: super::Callee::Direct(callee),
+                        args,
+                        ..
+                    } => {
+                        uses == 1
+                            && args
+                                .iter()
+                                .position(|arg| *arg == parameter)
+                                .is_some_and(|at| {
+                                    u32::try_from(at).is_ok_and(|at| {
+                                        consumes
+                                            .get(callee)
+                                            .is_some_and(|slots| slots.contains(&at))
+                                    })
+                                })
+                    }
+                    _ => false,
+                };
+                gives_away &= handed;
+                reads.push(here);
+            }
+            gives_away &= !super::operands_of_terminator(&block.terminator).contains(&parameter);
+        }
+        if gives_away && once_on_every_path(func, &reachable, &reads) {
+            slots.push(slot);
+        }
+    }
+    slots
+}
+
+/// Whether the blocks `reads` lists -- one entry per read -- are passed
+/// exactly once on every path to a return: no two reads in one block or on one
+/// path, none round a loop, and every reachable return behind one of them.
+fn once_on_every_path(
+    func: &Func,
+    reachable: &rustc_hash::FxHashSet<BlockId>,
+    reads: &[BlockId],
+) -> bool {
+    let distinct: rustc_hash::FxHashSet<BlockId> = reads.iter().copied().collect();
+    if reads.is_empty() || distinct.len() != reads.len() {
+        return false;
+    }
+    if reads.iter().any(|read| reaches_itself(func, *read)) {
+        return false;
+    }
+    // Exclusive: no read reaches another.
+    let reaches = |from: BlockId, to: BlockId| {
+        let mut seen = rustc_hash::FxHashSet::default();
+        let mut front = func.blocks[from.0 as usize].terminator.successors();
+        while let Some(at) = front.pop() {
+            if at == to {
+                return true;
+            }
+            if seen.insert(at) {
+                front.extend(func.blocks[at.0 as usize].terminator.successors());
+            }
+        }
+        false
+    };
+    if reads
+        .iter()
+        .any(|from| reads.iter().any(|to| from != to && reaches(*from, *to)))
+    {
+        return false;
+    }
+    let idom = super::verify::dominators(func, reachable);
+    let dominated = |under: BlockId| {
+        let mut at = Some(under);
+        while let Some(block) = at {
+            if distinct.contains(&block) {
+                return true;
+            }
+            at = idom[block.0 as usize];
+        }
+        false
+    };
+    func.blocks.iter().enumerate().all(|(at, block)| {
+        let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        !matches!(block.terminator, super::Terminator::Return(_))
+            || !reachable.contains(&here)
+            || dominated(here)
+    })
 }
 
 /// Callees that hand back one of their own parameters.

@@ -1,0 +1,24 @@
+ideal 59
+allocated 27
+because Twelve iterations, three of them raising (x = -1 at i = 3, 7, 11).
+because
+because `f`, 22 operations: each of the nine that return releases the `s` it
+because replaces (9), each raise costs its Error four -- the message stored into
+because it, the raising call's empty result, the error taken from the raise slot,
+because and its message given back with it (12) -- and `s` goes at the end (1).
+because `f@raises` borrows `out`: its raise path returns before the append, so
+because nothing is taken over that a throw could abandon.
+because
+because `h`, 37 operations: `h@raises` takes `out` over, its append dominating
+because both returns, and the caller still reads `t` after a throw, so before
+because each call it takes a reference of its own beside the one it hands over
+because (12). Each return releases the `t` it replaces (9); each raise gives
+because back the string the append made, which the raise path drops (3), and its
+because Error's four (12); `t` goes at the end (1). That retain is the price of
+because the convention for a caller that keeps its string -- a caller whose
+because string dies at the call moves it in and appends in place -- and borrowing
+because instead was 25.
+because
+because 27 allocations: each call of either function that reaches its append
+because copies, `f`'s nine and all twelve of `h`'s, since `h` appends before it
+because tests, and the count is two whichever way; and six Errors.
