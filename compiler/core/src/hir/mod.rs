@@ -8062,7 +8062,6 @@ fn narrow_widths(program: &mut Program) -> usize {
     program.funcs.iter_mut().map(narrow::narrow_truncated).sum()
 }
 
-/// Dead parameters and values, after specialization has orphaned them.
 /// Mark the integer arithmetic that provably fits its type, from facts
 /// computed for the program as it now is ([`exact`]).
 fn mark_exact(program: &mut Program, roots: reachable::Roots<'_>) {
@@ -8072,6 +8071,7 @@ fn mark_exact(program: &mut Program, roots: reachable::Roots<'_>) {
     }
 }
 
+/// Dead parameters and values, after specialization has orphaned them.
 fn collect_orphans(program: &mut Program) {
     for func in &mut program.funcs {
         // Parameters first: dropping one can be what makes the value feeding
