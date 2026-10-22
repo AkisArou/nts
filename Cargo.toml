@@ -103,6 +103,18 @@ unwrap_used = "warn"
 lto = "thin"
 codegen-units = 1
 
+# The inner loop's profile (`tooling/gate/inner.ts`): optimized as a release
+# is, so the tests that compile and run programs take the time they take in the
+# gate, but built the way a debug build is -- incremental, sixteen code
+# generation units, no link-time optimization -- so a change to one crate
+# rebuilds that crate and its dependents rather than the workspace in one
+# unit. The gate, pins and benchmarks keep `release`.
+[profile.nts-dev]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 # A compiler is unusable in debug builds if its dependencies are too.
 [profile.dev.package."*"]
 opt-level = 2

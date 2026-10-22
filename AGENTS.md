@@ -89,6 +89,12 @@ than once; a test without `NTS_TSGO` skips itself and reports ok; and without
 skips the rest. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
+`node tooling/gate/inner.ts` runs all of these, then agree on four backends
+against main's pinned compiler, building the tests in the incremental
+`nts-dev` profile: the workspace's tests built cold in 6 minutes and ran in 8
+on 2026-10-22, where the release build took about 40 beside a gate. The gate
+still builds release; this is so the gate is not where you find out.
+
 ## Fixtures
 
 The corpora are the specification: `tests/programs/` (compiled and compared with
