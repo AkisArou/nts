@@ -13,7 +13,6 @@
         "compiler/codegen/napi/",
         "compiler/core/",
         "compiler/diagnostics/",
-        "compiler/frontend-ts/",
         "compiler/semantic-schema/",
         "docs/records/",
         "tests/programs/",
@@ -189,6 +188,15 @@
         "tooling/conformance/web-platform/",
         "tooling/conformance/wpt-url-setters.mjs",
         "tooling/conformance/wpt-url.mjs"
+      ]
+    },
+    "tsrs": {
+      "session": "tsrs (Codex)",
+      "branch": "tsrs/",
+      "owns": [
+        "compiler/frontend-ts/",
+        "compiler/frontend-tsrs/",
+        "third_party/tsrs/"
       ]
     }
   }
