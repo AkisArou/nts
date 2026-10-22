@@ -473,11 +473,13 @@ fn a_struct_holding_a_string_is_copied_at_the_call() {
         2,
         "not passed by value:\n{text}"
     );
-    // The literal's fields are stored into the struct, not into an object:
-    // the only objects given a `kind` are the one held and the result.
+    // The literal's fields are stored into the struct, not into an object --
+    // and so are the held record's and the result's: each is only ever read
+    // field by field, so `scalarize` makes its fields values, and no object
+    // is given a `kind` at all.
     assert_eq!(
         text.matches("->kind = ").count(),
-        2,
+        0,
         "the literal was built as an object:\n{text}"
     );
     let copied_out = text
@@ -545,7 +547,10 @@ export function run(set: IJsonValue): string {
         arguments, 4,
         "TryGetVector2 is not called with its receiver, name and two slots:\n{text}"
     );
-    for field in ["->x = ", "->y = ", "->value = ", "->returnValue = "] {
+    // The struct is copied out of its slot into an object. The record around
+    // it, `{ value, returnValue }`, is only read field by field, so its fields
+    // are values (`scalarize`) and nothing stores into it.
+    for field in ["->x = ", "->y = "] {
         assert!(text.contains(field), "no store to `{field}`:\n{text}");
     }
 

@@ -9,16 +9,16 @@
 // conversion left in it, and no object is left at all.
 //
 // `joined` writes a field on both arms of a branch and reads it after the
-// join. The controls keep their objects, each for one reason: `escaped` hands
-// its object to a function, and `named` holds a string, a reference this does
-// not take apart.
+// join. The control keeps its object for one reason: `escaped` hands it to a
+// function. `named` holds a string, and was a control until a reference field
+// became a value too (`a-local-objects-reference-fields-are-values`).
 //
 // expect-ir: all: no object.new in walk
 // expect-ir: all: no field.get in walk
 // expect-ir: all: no convert in walk#whole
 // expect-ir: all: no object.new in joined
 // expect-ir: all: count object.new in escaped >= 1
-// expect-ir: all: count object.new in named >= 1
+// expect-ir: all: no object.new in named
 
 type Step = { value: number; done: boolean };
 

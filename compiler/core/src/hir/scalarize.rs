@@ -20,8 +20,9 @@
 //!
 //! # What is replaced
 //!
-//! An `object.new` whose layout's fields are all scalars -- numbers, integers,
-//! booleans -- and whose every use in its function is
+//! An `object.new` whose layout's fields are numbers, integers, booleans,
+//! references or erased values ([`takeable`]) and whose every use in its
+//! function is
 //!
 //! - `field.get` of it, or `field.set` into it of something that is not it;
 //! - a direct call of a constructor whose whole body stores its arguments and
@@ -30,11 +31,29 @@
 //!
 //! Anything else -- a call that takes it, a store of it, a comparison by
 //! identity, `instanceof`, an `erase`, a block argument, a `return` -- keeps
-//! it an object. A field that holds a reference is left for later: its value
-//! would carry a count the object used to own.
+//! it an object.
 //!
-//! Fields start as the zero of their type, which is what every backend writes
-//! into a new object, and a read before any write answers that.
+//! Fields start as the zero of their type ([`super::zero_of`]: `null` for a
+//! reference, `undefined` for an erased value), which is what every backend
+//! writes into a new object, and a read before any write answers that.
+//!
+//! # A field that holds a reference
+//!
+//! Was left out at first, on the worry that its value would carry a count the
+//! object used to own. It does not: this runs long before `rc::insert`, so no
+//! count exists yet, and what the program is left with is a reference flowing
+//! through block parameters -- which counting places like any other, the way it
+//! does for a string carried round a loop. The object owned nothing at this
+//! point; only the counting pass, later, would have made it.
+//!
+//! `benchmarks/cases/optional-chain` wants it, and wants something more:
+//! `const h: Held = {}`, a function stored into `h.fn` on one arm, and
+//! `h.fn?.(…)` after the join. The field is erased, which kept the object, and
+//! the call hands `h` over as its `this`, which still does -- until a direct
+//! call to a callee that never reads `this` lets it go. Each is half of the
+//! heap allocation per iteration that made that row 12x C's time on Wasm.
+//!
+//! `BigInt` is not taken: `zero_of` has no zero for it.
 //!
 //! # How
 //!
@@ -87,7 +106,7 @@ fn scalar_types(program: &Program, layouts: &LayoutIndex) -> FxHashSet<HirType> 
                 program.layouts[layout]
                     .fields
                     .iter()
-                    .all(|field| scalar(&field.ty))
+                    .all(|field| takeable(&field.ty))
             })
         })
         .collect()
@@ -184,19 +203,18 @@ fn only_stores(func: &Func) -> Option<Vec<(u32, Stored)>> {
     Some(stores)
 }
 
-fn scalar(ty: &HirType) -> bool {
+/// A field type whose value can stand for the field: a scalar, a reference, or
+/// an erased value. Each has a zero ([`super::zero_of`]) equal to what every
+/// backend writes into a new object.
+fn takeable(ty: &HirType) -> bool {
     matches!(
         ty,
-        HirType::Float { .. } | HirType::Int { .. } | HirType::Bool
+        HirType::Float { .. }
+            | HirType::Int { .. }
+            | HirType::Bool
+            | HirType::Managed(_)
+            | HirType::Erased
     )
-}
-
-fn zero(ty: &HirType) -> OpKind {
-    match ty {
-        HirType::Float { .. } => OpKind::ConstFloat(0.0),
-        HirType::Bool => OpKind::ConstBool(false),
-        _ => OpKind::ConstInt(0),
-    }
 }
 
 /// The objects in `func` this replaces, with their layouts.
@@ -233,7 +251,7 @@ fn candidates(
         if !program.layouts[layout]
             .fields
             .iter()
-            .all(|field| scalar(&field.ty))
+            .all(|field| takeable(&field.ty))
         {
             continue;
         }
@@ -250,14 +268,57 @@ fn candidates(
         {
             continue;
         }
-        if live
-            .iter()
-            .all(|op| only_its_fields(object, &func.values[op.0 as usize].kind, constructors))
-        {
+        let fields = &program.layouts[layout].fields;
+        if live.iter().all(|op| {
+            let kind = &func.values[op.0 as usize].kind;
+            only_its_fields(object, kind, constructors)
+                && arguments_fit(func, object, kind, fields, constructors)
+        }) {
             found.push((object, layout));
         }
     }
     found
+}
+
+/// Whether a constructor call's stored arguments can become its fields.
+///
+/// An argument whose type differs from its field's is converted, and only a
+/// number to a number is a `convert`: an `i32` into a `double` field. A
+/// reference arriving as another reference type, or a value as an erased one,
+/// would need an `erase` or an `unerase`, and the object is left alone rather
+/// than given the wrong one.
+fn arguments_fit(
+    func: &Func,
+    object: ValueId,
+    kind: &OpKind,
+    fields: &[super::Field],
+    constructors: &FxHashMap<String, Vec<(u32, Stored)>>,
+) -> bool {
+    let OpKind::Call {
+        callee: Callee::Direct(name),
+        args,
+        ..
+    } = kind
+    else {
+        return true;
+    };
+    if args.first() != Some(&object) {
+        return true;
+    }
+    let Some(stores) = constructors.get(name) else {
+        return true;
+    };
+    let numeric = |ty: &HirType| matches!(ty, HirType::Float { .. } | HirType::Int { .. });
+    stores.iter().all(|(field, stored)| {
+        let Stored::Argument(at) = stored else {
+            return true;
+        };
+        let (Some(arg), Some(field)) = (args.get(*at), fields.get(*field as usize)) else {
+            return false;
+        };
+        let given = &func.values[arg.0 as usize].ty;
+        *given == field.ty || (numeric(given) && numeric(&field.ty))
+    })
 }
 
 /// Whether one operation uses `object` only as the object whose fields it
@@ -415,7 +476,7 @@ impl Taking<'_> {
         self.fields
             .iter()
             .map(|ty| {
-                let id = self.value(func, zero(ty), ty.clone());
+                let id = self.value(func, super::zero_of(ty), ty.clone());
                 kept.push(id);
                 id
             })
