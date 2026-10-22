@@ -107,7 +107,7 @@ const TIMEOUT: &str = "20";
 ///
 /// Two gigabytes is far more than any example needs and far less than a
 /// runaway wants, so it separates the two without tuning.
-const MEMORY: &str = "2147483648";
+const MEMORY_MB: u64 = 2048;
 
 /// How many times the compiled program may end before the run gives up.
 ///
@@ -132,7 +132,7 @@ const REFUSALS: usize = 16;
 fn bounded(program: &str) -> std::process::Command {
     let mut command = std::process::Command::new("prlimit");
     command
-        .arg(format!("--as={MEMORY}"))
+        .arg(format!("--as={}", MEMORY_MB << 20))
         .arg("--core=0")
         .arg("timeout")
         .arg(TIMEOUT)
@@ -160,7 +160,8 @@ fn address_sanitized() -> bool {
 /// The compiled program, bounded as [`bounded`] bounds it, except in address
 /// space under the sanitizer: `AddressSanitizer` reserves terabytes of shadow
 /// memory up front, which a two-gigabyte `--as` refuses before `main` runs.
-/// Time still bounds it, and its own leak report is off -- what a counted
+/// Its resident memory is bounded instead, time still bounds it, and its own
+/// leak report is off -- what a counted
 /// program still holds is this harness's question (`growth`), asked the same
 /// way with or without the sanitizer.
 fn bounded_native(program: &str) -> std::process::Command {
@@ -168,12 +169,24 @@ fn bounded_native(program: &str) -> std::process::Command {
         return bounded(program);
     }
     let mut command = std::process::Command::new("prlimit");
+    // The bound in the dimension the sanitizer leaves usable: its own limit on
+    // resident memory, at the size `--as` gives an unsanitized run. Without it
+    // a runaway was unbounded here alone -- one `check` reached 6.2 GB and the
+    // OOM killer ended the whole run, which printed no verdict (2026-10-22).
+    //
+    // And an allocation it cannot satisfy answers NULL, as `malloc` does: the
+    // runtime turns that into the RangeError a program can catch, where the
+    // sanitizer's own default ends the process. `typed-array-aliasing` asks
+    // for an impossible buffer on purpose, and was a wrong answer here alone.
     command
         .arg("--core=0")
         .arg("timeout")
         .arg(TIMEOUT)
         .arg(program)
-        .env("ASAN_OPTIONS", "detect_leaks=0");
+        .env(
+            "ASAN_OPTIONS",
+            format!("detect_leaks=0:allocator_may_return_null=1:hard_rss_limit_mb={MEMORY_MB}"),
+        );
     command
 }
 
