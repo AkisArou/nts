@@ -3248,6 +3248,7 @@ fn compile(
 
     let link = std::process::Command::new("clang++")
         .args(&shared)
+        .args(nts_codegen_common::compile_flags::LINK_LTO)
         .args(&objects)
         .arg("-o")
         .arg(binary)
