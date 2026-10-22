@@ -244,7 +244,11 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
 
     for (index, block) in blocks.into_iter().enumerate() {
         let at = BlockId(u32::try_from(index).unwrap_or(0));
-        let Counted { mut ops, moved } = count_ops(
+        let Counted {
+            mut ops,
+            moved,
+            repackaged,
+        } = count_ops(
             func,
             declared,
             at,
@@ -267,6 +271,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
                 at,
                 terminator: &block.terminator,
                 moved: &moved,
+                repackaged: &repackaged,
                 arriving: &arriving,
                 frame_names: &frame_names,
                 layouts,
@@ -457,6 +462,9 @@ struct Block<'a> {
     terminator: &'a super::Terminator,
     /// Values a store or a consuming call claimed the death of.
     moved: &'a rustc_hash::FxHashSet<ValueId>,
+    /// Values an erasure took the reference of, with the erased value now
+    /// holding it: what leans on the one leans on the other from there.
+    repackaged: &'a rustc_hash::FxHashMap<ValueId, ValueId>,
     /// What every edge hands each block parameter. See [`arriving`].
     arriving: &'a rustc_hash::FxHashMap<ValueId, Vec<ValueId>>,
     /// The frame objects each value is another name for. See [`frame_names`].
@@ -553,6 +561,9 @@ fn release_at_last_use(
         {
             moved_into.entry(*value).or_default().push(*container);
         }
+    }
+    for (source, erased) in block.repackaged {
+        moved_into.entry(*source).or_default().push(*erased);
     }
     // The inverse edge, wherever a store transfers no count: into a frame
     // container, or of a frame object into any container. Built from the same
@@ -848,6 +859,7 @@ fn count_ops(
     let Settled { map, live } = settled;
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
+    let mut repackaged = rustc_hash::FxHashMap::default();
 
     for (index, value) in original.iter().enumerate() {
         let kind = func.values[value.0 as usize].kind.clone();
@@ -869,21 +881,15 @@ fn count_ops(
         // load against a word already in cache.
         //
         // The guards are the ones the hand-over arm below uses, for the same
-        // reasons: `dies_in` says the last read is in this block rather than
-        // here, so the reads after this operation are checked too.
+        // reasons ([`dies_here`]).
+        let later = &original[index + 1..];
         if let OpKind::Binary {
             op: super::BinOp::Concat,
             lhs,
             rhs,
         } = &kind
             && own::counted(func, layouts, *lhs)
-            && (own::owned(func, layouts, *lhs) || map.owns(*lhs))
-            && !map.borrowed(*lhs)
-            && live.dies_in(at, *lhs)
-            && !original[index + 1..].iter().any(|later| {
-                super::verify::operands(&func.values[later.0 as usize].kind).contains(lhs)
-            })
-            && !super::operands_of_terminator(terminator).contains(lhs)
+            && dies_here(func, layouts, settled, at, later, terminator, *lhs)
             && moved.insert(*lhs)
         {
             let (lhs, rhs) = (*lhs, *rhs);
@@ -912,21 +918,8 @@ fn count_ops(
                 // because it claims the death and nothing after it reads what
                 // was stored. A call cannot: `new Node(i)` hands `node` to a
                 // constructor that keeps it, and the very next line reads
-                // `node.next`.
-                //
-                // Handing over a reference that is read again afterwards leaves
-                // the caller using something it no longer holds. In `cycles`
-                // that made every self-cycle uncollectable rather than
-                // dangling: the object's only reference became the one inside
-                // itself, so no count ever fell, no candidate was ever buffered,
-                // and a hundred objects a run leaked in silence.
-                let read_again = original[index + 1..].iter().any(|later| {
-                    super::verify::operands(&func.values[later.0 as usize].kind).contains(&given)
-                }) || super::operands_of_terminator(terminator).contains(&given);
-                if !read_again
-                    && (own::owned(func, layouts, given) || map.owns(given))
-                    && !map.borrowed(given)
-                    && live.dies_in(at, given)
+                // `node.next` ([`dies_here`]).
+                if dies_here(func, layouts, settled, at, later, terminator, given)
                     && moved.insert(given)
                 {
                     report.moves += 1;
@@ -1032,6 +1025,36 @@ fn count_ops(
         }
         ops.push(*value);
 
+        // An erasure is a hand-off too. `erase %5` of a reference makes a
+        // second name for the same object that takes a count of its own, so
+        // where `%5` dies at the erasure the count is the one `%5` was holding:
+        // a retain of the erased value and a release of `%5`, both on one
+        // object with nothing between, are a move. Unerasing back to a
+        // reference is the same. The guards are the hand-over arm's, for its
+        // reasons; and a view of `%5` read after the erasure leans on the
+        // erased value from here (`Block::repackaged`).
+        //
+        // A tuple of unlike references is an array of erased values, and each
+        // element stored into one paid the pair: `tests/memory/tuple-cycle`
+        // counted 40 operations for an ideal of 20 (2026-10-22).
+        //
+        // A counted foreign object moves only where every use is an erasure
+        // (`only_erased`), the rule its release keeps: otherwise the platform
+        // may hold it uncounted, and its release waits for the block's end,
+        // which the erased value's own last use would not.
+        if matches!(map.of(*value), Ownership::Copied)
+            && let OpKind::Erase { value: source, .. } | OpKind::Unerase { value: source } = &kind
+            && own::counted(func, layouts, *source)
+            && (func.values[source.0 as usize].ty.counting().is_none()
+                || only_erased(func, *source))
+            && dies_here(func, layouts, settled, at, later, terminator, *source)
+            && moved.insert(*source)
+        {
+            repackaged.insert(*source, *value);
+            report.moves += 1;
+            continue;
+        }
+
         // The whole decision, read rather than made. `own::analyze` has already
         // settled what every value in this function holds, and the four
         // predicates that used to be consulted here -- each at its own site,
@@ -1049,7 +1072,11 @@ fn count_ops(
             Ownership::Produced | Ownership::Unowned => {}
         }
     }
-    Counted { ops, moved }
+    Counted {
+        ops,
+        moved,
+        repackaged,
+    }
 }
 
 /// What one block's counting reads from the rest of the function.
@@ -1071,6 +1098,42 @@ struct Counted {
     /// one store per value may claim a death, and which store gets it depends
     /// on the order the block is walked in.
     moved: rustc_hash::FxHashSet<ValueId>,
+    /// Values an erasure took the reference of, with the erased value that
+    /// holds it now. Each is in `moved` as well.
+    repackaged: rustc_hash::FxHashMap<ValueId, ValueId>,
+}
+
+/// Whether the reference `given` holds can be handed on by the operation that
+/// `later` follows: this function holds it, and nothing after reads it.
+///
+/// `dies_in` says the value's last read is somewhere in this block, not that it
+/// is *here*, so the operations after this one and the terminator are checked
+/// too. Handing over a reference that is read again afterwards leaves the
+/// caller using something it no longer holds. In `cycles` that made every
+/// self-cycle uncollectable rather than dangling: the object's only reference
+/// became the one inside itself, so no count ever fell, no candidate was ever
+/// buffered, and a hundred objects a run leaked in silence.
+///
+/// `owned` or `owns`, because a parameter is borrowed and never in a release
+/// set, so there is no release to cancel against; and not `borrowed`, which
+/// has no reference to give away.
+fn dies_here(
+    func: &Func,
+    layouts: &[Layout],
+    settled: &Settled<'_>,
+    at: BlockId,
+    later: &[ValueId],
+    terminator: &super::Terminator,
+    given: ValueId,
+) -> bool {
+    let Settled { map, live } = settled;
+    (own::owned(func, layouts, given) || map.owns(given))
+        && !map.borrowed(given)
+        && live.dies_in(at, given)
+        && !later
+            .iter()
+            .any(|op| super::verify::operands(&func.values[op.0 as usize].kind).contains(&given))
+        && !super::operands_of_terminator(terminator).contains(&given)
 }
 
 /// What the *program* declares, as opposed to what a function computed.
@@ -2073,10 +2136,14 @@ mod tests {
         insert(&mut program);
         let func = &program.funcs[0];
         let ops = &func.blocks[0].ops;
+        // The object, by either name: an erasure at its last use takes its
+        // reference, and the erased value gives it back.
         let releases = ops
             .iter()
             .enumerate()
-            .filter(|(_, v)| matches!(func.values[v.0 as usize].kind, OpKind::Release(ValueId(1))))
+            .filter(|(_, v)| {
+                matches!(func.values[v.0 as usize].kind, OpKind::Release(released) if released == ValueId(1) || released == erased)
+            })
             .map(|(at, _)| at)
             .collect();
         (releases, ops.iter().position(|v| *v == later))
@@ -2092,7 +2159,8 @@ mod tests {
     fn a_foreign_object_only_erased_is_released_after_its_last_use() {
         let (releases, later) = erased_temporary(0);
         assert!(
-            releases.len() == 1 && later.is_some_and(|later| releases[0] < later),
+            !releases.is_empty()
+                && later.is_some_and(|later| releases.iter().all(|at| *at < later)),
             "{releases:?} against `later` at {later:?}"
         );
     }
@@ -2103,45 +2171,68 @@ mod tests {
     fn a_foreign_object_erased_through_a_view_is_released_after_its_last_use() {
         let (releases, later) = erased_temporary(1);
         assert!(
-            releases.len() == 1 && later.is_some_and(|later| releases[0] < later),
+            !releases.is_empty()
+                && later.is_some_and(|later| releases.iter().all(|at| *at < later)),
             "{releases:?} against `later` at {later:?}"
         );
     }
 
-    /// An erased copy that takes a count of its own frees the original to go
-    /// after the copy: the retain comes first, and each is released after its
-    /// own last use.
-    #[test]
-    fn a_counted_copy_does_not_hold_the_original() {
-        let erased = op(
+    /// What the block holds once counted, retains and releases included.
+    fn counted_kinds(program: &Program) -> Vec<&OpKind> {
+        let func = &program.funcs[0];
+        func.blocks[0]
+            .ops
+            .iter()
+            .map(|v| &func.values[v.0 as usize].kind)
+            .collect()
+    }
+
+    fn erasure_of_the_string() -> Op {
+        op(
             OpKind::Erase {
                 value: ValueId(1),
                 absent: Absent::Impossible,
                 slots: Absent::Impossible,
             },
             HirType::Erased,
-        );
-        let mut program = straight(erased, vec![ValueId(2)]);
-        insert(&mut program);
+        )
+    }
+
+    /// An erasure of a value that dies at it takes that value's reference: no
+    /// retain of the erased value, no release of the original, and the erased
+    /// value given back after its own last use. Counted as a copy, it was a
+    /// retain and a release on one object with nothing between, per element
+    /// of every tuple of unlike references (`tests/memory/tuple-cycle`).
+    #[test]
+    fn an_erasure_of_a_dying_value_is_a_move() {
+        let mut program = straight(erasure_of_the_string(), vec![ValueId(2)]);
+        let report = insert(&mut program);
         assert_eq!(
             released_after(&program),
-            vec![
-                (ValueId(1), Some(ValueId(2))),
-                (ValueId(2), Some(ValueId(3)))
-            ]
+            vec![(ValueId(2), Some(ValueId(3)))]
         );
-        let func = &program.funcs[0];
-        let kinds: Vec<&OpKind> = func.blocks[0]
-            .ops
-            .iter()
-            .map(|v| &func.values[v.0 as usize].kind)
-            .collect();
+        let kinds = counted_kinds(&program);
+        assert!(
+            !kinds.iter().any(|k| matches!(k, OpKind::Retain(_))),
+            "{kinds:?}"
+        );
+        assert_eq!(report.moves, 1);
+    }
+
+    /// The original read after its erasure keeps its own reference, and the
+    /// erased copy takes one of its own: the retain comes first, and each is
+    /// released after its own last use.
+    #[test]
+    fn a_counted_copy_does_not_hold_the_original() {
+        let mut program = straight(erasure_of_the_string(), vec![ValueId(2), ValueId(1)]);
+        insert(&mut program);
+        let kinds = counted_kinds(&program);
         let retained = kinds
             .iter()
             .position(|k| matches!(k, OpKind::Retain(ValueId(2))));
         let released = kinds
             .iter()
             .position(|k| matches!(k, OpKind::Release(ValueId(1))));
-        assert!(retained < released, "{kinds:?}");
+        assert!(retained.is_some() && retained < released, "{kinds:?}");
     }
 }

@@ -67,3 +67,18 @@ fn a_forwarding_that_takes_nothing_apart_is_not_made() {
     };
     assert_eq!(counting_in(&prepared, "chain"), 0);
 }
+
+/// An erasure of a reference that dies at it takes the reference: each
+/// element stored into a tuple of unlike references, an array of erased
+/// values, paid a retain of the erased value and a release of the original,
+/// 40 operations at run time for an ideal of 20.
+#[test]
+fn an_erasure_of_a_dying_reference_is_a_move() {
+    let Some(prepared) = counted("tuple-cycle") else {
+        return;
+    };
+    assert_eq!(counting_in(&prepared, "Node#constructor"), 0);
+    // What is left is the store over `pair`, giving back the tuple it held,
+    // and `n` erased into the new one while `link`'s caller still holds it.
+    assert_eq!(counting_in(&prepared, "link"), 2);
+}
