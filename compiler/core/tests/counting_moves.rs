@@ -82,3 +82,15 @@ fn an_erasure_of_a_dying_reference_is_a_move() {
     // and `n` erased into the new one while `link`'s caller still holds it.
     assert_eq!(counting_in(&prepared, "link"), 2);
 }
+
+/// `new Array(3).fill(null)` is one object under two names: `fill` hands back
+/// its receiver, so the filled array takes the new one's reference instead of
+/// a retain of its own beside a release (2 counting operations in
+/// `Piles#constructor` on main).
+#[test]
+fn a_handed_back_receiver_is_a_move() {
+    let Some(prepared) = counted("pile-shuffle") else {
+        return;
+    };
+    assert_eq!(counting_in(&prepared, "Piles#constructor"), 0);
+}

@@ -1038,19 +1038,25 @@ fn count_ops(
         // element stored into one paid the pair: `tests/memory/tuple-cycle`
         // counted 40 operations for an ideal of 20 (2026-10-22).
         //
+        // A runtime helper that hands back its first argument
+        // (`own::runtime_hands_back`: `fill`, `reverse`, `Map#set`, ...) makes
+        // a second name the same way, and pays the same pair where the
+        // argument dies at the call: `new Array(3).fill(null)` retained the
+        // filled array and released the new one, the same object
+        // (`tests/memory/pile-shuffle`'s constructor, 19 operations to 17).
+        //
         // A counted foreign object moves only where every use is an erasure
         // (`only_erased`), the rule its release keeps: otherwise the platform
         // may hold it uncounted, and its release waits for the block's end,
         // which the erased value's own last use would not.
         if matches!(map.of(*value), Ownership::Copied)
-            && let OpKind::Erase { value: source, .. } | OpKind::Unerase { value: source } = &kind
-            && own::counted(func, layouts, *source)
-            && (func.values[source.0 as usize].ty.counting().is_none()
-                || only_erased(func, *source))
-            && dies_here(func, layouts, settled, at, later, terminator, *source)
-            && moved.insert(*source)
+            && let Some(source) = another_name_for(&kind)
+            && own::counted(func, layouts, source)
+            && (func.values[source.0 as usize].ty.counting().is_none() || only_erased(func, source))
+            && dies_here(func, layouts, settled, at, later, terminator, source)
+            && moved.insert(source)
         {
-            repackaged.insert(*source, *value);
+            repackaged.insert(source, *value);
             report.moves += 1;
             continue;
         }
@@ -1101,6 +1107,21 @@ struct Counted {
     /// Values an erasure took the reference of, with the erased value that
     /// holds it now. Each is in `moved` as well.
     repackaged: rustc_hash::FxHashMap<ValueId, ValueId>,
+}
+
+/// The value an operation answers another name for: what an erasure or an
+/// unerasure wraps, and the first argument of a runtime helper that hands it
+/// back.
+fn another_name_for(kind: &OpKind) -> Option<ValueId> {
+    match kind {
+        OpKind::Erase { value, .. } | OpKind::Unerase { value } => Some(*value),
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            args,
+            ..
+        } if own::runtime_hands_back(name) => args.first().copied(),
+        _ => None,
+    }
 }
 
 /// Whether the reference `given` holds can be handed on by the operation that

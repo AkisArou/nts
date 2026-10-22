@@ -1,6 +1,6 @@
-ideal 19
+ideal 17
 allocated 11
-because nineteen operations to give back eleven objects: four retains and five
+because seventeen operations to give back eleven objects: three retains and four
 because releases of the program's own, and ten that are the pile coming back when
 because the array goes -- its one occupied slot gives the top disk back, and each
 because of the nine disks below is given back by the one above it.
@@ -11,7 +11,7 @@ because 2026-10-14 a candidate at zero waited whole for the collector, so those
 because ten releases ran in the collection after the harness read its counters,
 because and this said nine. A candidate at zero now gives back what it holds at
 because once and leaves only its own memory for the collector (`nts_release`),
-because so the ten run inside the call and are on its bill: 9 + 10 = 19. It is
+because so the ten run inside the call and are on its bill: 7 + 10 = 17. It is
 because the same work at another time. A trace of every release is the same
 because twenty four on both runtimes, in the same order. `naive` rises by the
 because same ten (665 to 675 releases), and retains, allocations, the answer and
@@ -22,6 +22,10 @@ because the second time this column charged the program for what the collector
 because did. It was the collector's only because the release waited. The nine
 because also said each disk became a candidate; in this program only the array
 because does, since the moves below are takes.
+because
+because Nineteen until 2026-10-22: the constructor's `new Array(3).fill(null)`
+because retained the filled array and released the new one, which are the same
+because object -- `fill` hands back its receiver -- and that is a move now.
 because
 because The `Piles` object does not escape and lives in the frame; the array
 because does not, because an array's elements are a block of its own and no

@@ -3088,6 +3088,12 @@ const RUNTIME_HANDS_BACK: &[&str] = &[
     "nts_set_add",
 ];
 
+/// Whether a runtime helper answers its first argument itself, the contract of
+/// [`RUNTIME_HANDS_BACK`]: the same object, with no count of its own.
+pub(super) fn runtime_hands_back(name: &str) -> bool {
+    RUNTIME_HANDS_BACK.contains(&name)
+}
+
 /// Runtime helpers whose result is a reference read **out of a slot of** one of
 /// their arguments.
 ///
