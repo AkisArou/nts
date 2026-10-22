@@ -1,14 +1,11 @@
 // The rest of a tuple read past its end, bound at module scope: test262's
 // `dstr/ary-ptrn-rest-id-exhausted`, in its `var`, `let` and `const` forms.
 //
-// `let [, , ...x] = [1, 2]` gives `x` the type `[]`. An empty tuple has no
-// element to share, so it is laid out as an object with no fields, and a
-// module variable is one slot at that layout. The rest element was built by
-// slicing the source, which answers the source's array, and the store reached
-// the verifier as `StoreType { func: "module#init", what: "a global",
-// expected: Managed(Object(..)), found: Managed(Array(Float { bits: 64 })) }`:
-// invalid HIR, and no program at all. The rest is the empty tuple now, built
-// at its own layout, because the type says the slice is empty.
+// `let [, , ...x] = [1, 2]` gives `x` the type `[]`. Empty tuples formerly had
+// an object layout, so slicing the source produced an array that could not be
+// stored in the module variable: invalid HIR. They now share the uninhabited
+// array representation. An exhausted rest is still built at the target's
+// width, because slicing a source of strings would keep its string width.
 //
 // Control, one difference: `[, ...kept] = [1, 2]` leaves one element, so the
 // rest is `[number]`, an array of one representation, and it always compiled.

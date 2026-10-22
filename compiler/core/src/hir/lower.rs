@@ -9878,13 +9878,20 @@ fn growth_can_fill(ty: &HirType) -> bool {
 fn settled(ty: &HirType) -> HirType {
     match ty {
         HirType::Managed(ManagedType::Array(element)) if **element == HirType::Never => {
-            HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)))
+            uninhabited_array()
         }
         HirType::Managed(ManagedType::Array(element)) => {
             HirType::Managed(ManagedType::Array(Box::new(settled(element))))
         }
         other => other.clone(),
     }
+}
+
+/// Storage for an array with no element to read. Empty tuples and uninhabited
+/// array literals share this choice; a literal's contextual element type still
+/// takes precedence when one is known.
+fn uninhabited_array() -> HirType {
+    HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)))
 }
 
 fn is_an_unsettled_array(ty: &HirType) -> bool {
@@ -19946,7 +19953,7 @@ fn tuple_representation(
         return Some(HirType::Managed(ManagedType::Object(ty)));
     }
     if shared.is_none() {
-        return Some(HirType::Managed(ManagedType::Object(ty)));
+        return Some(uninhabited_array());
     }
     Some(HirType::Managed(ManagedType::Array(Box::new(shared?))))
 }
@@ -28316,8 +28323,7 @@ impl<'a> FuncBuilder<'a> {
     /// It went unrefused and arrived unchanged, and the verifier stopped the
     /// whole program at the store -- `g = [1, 2, 3]` into a module variable
     /// declared `{ length: number }`, whose one slot cannot be specialized as
-    /// a parameter's call can, or an exhausted rest into a global laid out as
-    /// the empty tuple.
+    /// a parameter's call can, or a tuple whose positions have mixed storage.
     fn crossing_storage(&self, have: &HirType, want: &HirType) -> Option<String> {
         let keyed = |ty: &HirType| {
             matches!(
@@ -52309,9 +52315,7 @@ impl<'a> FuncBuilder<'a> {
             && self.kind_of(id) == Some(syntax::ARRAY_LITERAL_EXPRESSION)
             && self.children(id).is_empty()
         {
-            return Some(HirType::Managed(ManagedType::Array(Box::new(
-                HirType::NUMBER,
-            ))));
+            return Some(uninhabited_array());
         }
         let mut ty = *self.snapshot.node_types.get(&id)?;
         let mut depth = 0usize;
@@ -52325,11 +52329,14 @@ impl<'a> FuncBuilder<'a> {
                     ty = *element;
                 }
                 Some(TypeKind::Never) => {
-                    let mut built = HirType::NUMBER;
-                    for _ in 0..depth {
+                    if depth == 0 {
+                        return None;
+                    }
+                    let mut built = uninhabited_array();
+                    for _ in 1..depth {
                         built = HirType::Managed(ManagedType::Array(Box::new(built)));
                     }
-                    return (depth > 0).then_some(built);
+                    return Some(built);
                 }
                 _ => return None,
             }
@@ -54414,9 +54421,10 @@ impl<'a> FuncBuilder<'a> {
         // **It is here because the struct half had no answer at all**, and that
         // was invisible while a mixed-width *rest* was bound to an array by
         // mistake: `(function(a, b, c, d, e, ...args) { return args.length })
-        // (1,2,3,4,5)` gathers an **empty** tuple, `shared.is_none()` sends it to
-        // `Object(ty)`, and the array representation had been supplying `length`
-        // by accident. Fixing the representation published the gap --
+        // (1,2,3,4,5)` gathers an **empty** tuple, which used to reach this path
+        // through `Object(ty)` before empty tuples shared array storage. The
+        // array representation had been supplying `length` by accident, and
+        // fixing the representation published the gap --
         // `test/language/rest-parameters/rest-index.js` -- and a written
         // `const pair: [string, number]` refused on `pair.length` all along,
         // measured on the binary before that fix. So this is a hole the other
@@ -65109,29 +65117,23 @@ impl<'a> FuncBuilder<'a> {
             return self.collect_a_walk(element, element, value, walk, &built);
         }
         let origin = self.origin(element);
-        // **The rest of a tuple read past its end is the empty tuple, built at
-        // its own layout.** `let [, , ...x] = [1, 2]` gives `x` the type `[]`,
-        // which has no element to share and is laid out as an object with no
-        // fields (`tuple_representation`), while the slice below answers the
-        // source's array. A local took the array and nothing disagreed; a
-        // module variable is one slot at `[]`'s layout, and the store reached
-        // the verifier as `StoreType { expected: Managed(Object(..)), found:
-        // Managed(Array(..)) }` -- the `var`, `let` and `const` forms of
-        // test262's `dstr/ary-ptrn-rest-id-exhausted`.
-        //
-        // Built rather than sliced, because the type says the slice is empty:
-        // a tuple's length is part of its type, which is the assumption its
-        // field layout already makes. Nothing is read from the source, and the
-        // source is an array, whose slice has no effect to skip.
+        // An exhausted tuple rest has type `[]`: build its empty array at the
+        // target's representation. A slice keeps the source's element width,
+        // which can differ -- an exhausted string tuple still binds `[]`,
+        // whose uninhabited width is numeric. The source was evaluated already
+        // and slicing an empty tail has no further effects.
+        // This path was exposed by test262's `dstr/ary-ptrn-rest-id-exhausted`
+        // (`var`, `let` and `const`): the verifier saw a module variable at `[]`'s
+        // representation meet a slice at the source's array representation.
         if let Some(target) = self.rest_target(element)
-            && let Some(empty @ HirType::Managed(ManagedType::Object(tuple))) = self.type_of(target)
+            && let Some(tuple) = self.snapshot.node_types.get(&target)
             && matches!(
                 self.snapshot.types.get(tuple.0 as usize).map(|record| &record.kind),
                 Some(TypeKind::Tuple(elements)) if elements.is_empty()
             )
+            && let Some(empty @ HirType::Managed(ManagedType::Array(_))) = self.type_of(target)
         {
-            self.layout_of(element, tuple)?;
-            return Ok(self.push(OpKind::ObjectNew { frame: false }, empty, origin));
+            return self.lower_empty_array(element, empty);
         }
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
