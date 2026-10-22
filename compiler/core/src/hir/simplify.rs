@@ -30,7 +30,7 @@
 
 use rustc_hash::FxHashMap;
 
-use super::{BinOp, Func, HirType, OpKind, ValueId};
+use super::{BinOp, Callee, Func, HirType, Op, OpKind, ValueId};
 
 /// Replace operations that return an operand unchanged, and report how many.
 pub fn simplify(func: &mut Func) -> usize {
@@ -46,7 +46,10 @@ pub fn simplify(func: &mut Func) -> usize {
             replacement.insert(id, target);
         }
     }
-    let folded = fold_conversions(func) + forward_stores(func) + erased_tags(func);
+    let folded = fold_conversions(func)
+        + forward_stores(func)
+        + erased_tags(func)
+        + one_unit_comparisons(func);
     if replacement.is_empty() {
         return folded;
     }
@@ -64,6 +67,165 @@ pub fn simplify(func: &mut Func) -> usize {
     // The replaced operations are now unread. Dead-code elimination is what
     // removes them, which is where removing things belongs.
     replacement.len() + folded
+}
+
+/// A one-unit string compared is a unit read compared.
+///
+/// `s[i] === "x"` made a one-character string of `s[i]` to compare it with
+/// `"x"`: an allocation, a string comparison and a release per character, in
+/// the loop `benchmarks/cases/str-index-read` is. `s.charCodeAt(i) === 120`
+/// answers the same, and is one load. So `==`/`!=` with a one-unit literal on
+/// one side and `s[i]` or `s.charAt(i)` on the other becomes the checked unit
+/// read compared with that unit's code.
+///
+/// Exact, because of which index each takes:
+///
+/// - `charAt` takes its index the way `charCodeAt` does (`1.5` reads 1, `NaN`
+///   reads 0), and out of range answers `""` where `charCodeAt` answers `NaN`;
+///   neither equals the unit. So any index.
+/// - `s[i]` is a property access, and only an integer finds a unit: `s[1.5]`
+///   and `s[NaN]` are `undefined` where `charCodeAt` would read 1 and 0. So
+///   only an index that reached `nts_str_at` from an integer. Out of range,
+///   `s[i]` stops the program in nts and is `undefined` in JavaScript; the unit
+///   read answers `NaN`, unequal, which is JavaScript's answer.
+///
+/// After specialization, which is what made the index an integer, and before
+/// ownership, so the string the call would have made is never counted. The
+/// call goes too where the comparison was its only reader: dead-code
+/// elimination would keep it, for the stop it makes out of range.
+fn one_unit_comparisons(func: &mut Func) -> usize {
+    let mut rewritten = 0;
+    for block in 0..func.blocks.len() {
+        let mut at = 0;
+        while at < func.blocks[block].ops.len() {
+            let id = func.blocks[block].ops[at];
+            let Some((string, index, code)) = one_unit_comparison(func, id) else {
+                at += 1;
+                continue;
+            };
+            let origin = func.values[id.0 as usize].origin.clone();
+            let unit = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+            func.values.push(Op {
+                kind: OpKind::StringUnitAt {
+                    string,
+                    index,
+                    checked: true,
+                },
+                ty: HirType::NUMBER,
+                origin: origin.clone(),
+            });
+            let constant = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+            func.values.push(Op {
+                kind: OpKind::ConstFloat(f64::from(code)),
+                ty: HirType::NUMBER,
+                origin,
+            });
+            func.blocks[block].ops.splice(at..at, [unit, constant]);
+            let read = match &func.values[id.0 as usize].kind {
+                OpKind::Binary { lhs, rhs, .. } => {
+                    if matches!(func.values[lhs.0 as usize].kind, OpKind::Call { .. }) {
+                        *lhs
+                    } else {
+                        *rhs
+                    }
+                }
+                _ => unreachable!("`one_unit_comparison` answers only for a binary operation"),
+            };
+            if let OpKind::Binary { lhs, rhs, .. } = &mut func.values[id.0 as usize].kind {
+                *lhs = unit;
+                *rhs = constant;
+            }
+            // The call stops the program on an index out of range, so dead-code
+            // elimination keeps it even unread. Where the comparison was its
+            // only reader, that stop is exactly what the unit read answers
+            // `false` for instead, as JavaScript does, so it goes here.
+            if !read_anywhere(func, read) {
+                for (index, ops) in func.blocks.iter_mut().map(|b| &mut b.ops).enumerate() {
+                    if let Some(position) = ops.iter().position(|op| *op == read) {
+                        ops.remove(position);
+                        if index == block && position < at {
+                            at -= 1;
+                        }
+                        break;
+                    }
+                }
+            }
+            rewritten += 1;
+            at += 3;
+        }
+    }
+    rewritten
+}
+
+/// Whether any operation in a block, or any terminator, reads `value`.
+fn read_anywhere(func: &Func, value: ValueId) -> bool {
+    func.blocks.iter().any(|block| {
+        block
+            .ops
+            .iter()
+            .any(|op| super::operands_of(&func.values[op.0 as usize].kind).contains(&value))
+            || super::operands_of_terminator(&block.terminator).contains(&value)
+    })
+}
+
+/// The string, index and unit of a `==`/`!=` [`one_unit_comparisons`] reads
+/// as a unit read.
+fn one_unit_comparison(func: &Func, id: ValueId) -> Option<(ValueId, ValueId, u16)> {
+    let OpKind::Binary {
+        op: BinOp::Eq | BinOp::Ne,
+        lhs,
+        rhs,
+    } = func.values[id.0 as usize].kind
+    else {
+        return None;
+    };
+    let unit = |value: ValueId| match &func.values[value.0 as usize].kind {
+        OpKind::ConstString(text) => {
+            let mut units = text.encode_utf16();
+            match (units.next(), units.next()) {
+                (Some(unit), None) => Some(unit),
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    let (read, code) = match (unit(lhs), unit(rhs)) {
+        (None, Some(code)) => (lhs, code),
+        (Some(code), None) => (rhs, code),
+        _ => return None,
+    };
+    let OpKind::Call {
+        callee: Callee::External(helper),
+        args,
+        ..
+    } = &func.values[read.0 as usize].kind
+    else {
+        return None;
+    };
+    let [string, index] = args.as_slice() else {
+        return None;
+    };
+    let index = match helper.as_str() {
+        "nts_str_char_at" => integer_behind(func, *index).unwrap_or(*index),
+        "nts_str_at" => integer_behind(func, *index)?,
+        _ => return None,
+    };
+    Some((*string, index, code))
+}
+
+/// The integer a `double` index was converted from, or the index itself where
+/// it is one already.
+fn integer_behind(func: &Func, index: ValueId) -> Option<ValueId> {
+    let op = &func.values[index.0 as usize];
+    if matches!(op.ty, HirType::Int { .. }) {
+        return Some(index);
+    }
+    match op.kind {
+        OpKind::Convert(from) if matches!(func.values[from.0 as usize].ty, HirType::Int { .. }) => {
+            Some(from)
+        }
+        _ => None,
+    }
 }
 
 /// Collapse a conversion of a conversion, where the detour was exact.

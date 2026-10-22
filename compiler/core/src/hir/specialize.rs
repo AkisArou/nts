@@ -650,6 +650,15 @@ fn width_of(
     Some(widest)
 }
 
+/// One side an integer and the other a double: the one `==` [`usual_conversion`]
+/// meets at the double, so that the integer is widened and the double kept.
+fn an_integer_and_a_double(left: &HirType, right: &HirType) -> bool {
+    matches!(
+        (left, right),
+        (HirType::Int { .. }, HirType::Float { .. }) | (HirType::Float { .. }, HirType::Int { .. })
+    )
+}
+
 /// Add the conversions the new types require, and count them.
 /// Make every store agree with the slot it writes into.
 ///
@@ -700,8 +709,23 @@ pub fn reconcile_stores<S: std::hash::BuildHasher>(
                 // instruction, so it grew a copy of those rules -- C's
                 // semantics living in a backend that should not know them.
                 // Deciding it here means both backends read the same answer.
+                // `==` and `!=` too between an integer and a double, by
+                // widening the integer: the double may be `1.5` or `2^31`,
+                // which no integer type holds, and an integer equals it only
+                // where its double does. Nothing else -- they also compare
+                // strings and references, which have no conversion, and two
+                // integers of different signs would meet at C's unsigned
+                // type, where `-1` equals `4294967295`. The bounds pass
+                // narrows a code unit to `i32` after specialization typed what
+                // it is compared with, so `s[i] === "x"` read as a unit
+                // (`simplify`) reached the verifier as `i32 == f64`.
                 OpKind::Binary { op: bin, lhs, rhs }
-                    if !matches!(bin, BinOp::Eq | BinOp::Ne | BinOp::Concat)
+                    if (!matches!(bin, BinOp::Eq | BinOp::Ne | BinOp::Concat)
+                        || (matches!(bin, BinOp::Eq | BinOp::Ne)
+                            && an_integer_and_a_double(
+                                &func.values[lhs.0 as usize].ty,
+                                &func.values[rhs.0 as usize].ty,
+                            )))
                         && func.values[lhs.0 as usize].ty != HirType::Erased
                         && func.values[rhs.0 as usize].ty != HirType::Erased =>
                 {
@@ -2003,6 +2027,95 @@ mod tests {
         };
         let second = &func.values[args[1].0 as usize];
         (second.kind.clone(), second.ty.clone())
+    }
+
+    /// An `i32` compared with `1.5` and with `2^31`, each way round, and with
+    /// a `u32`: what `reconcile_stores` leaves each comparison comparing.
+    fn equalities_after_reconcile() -> Vec<(OpKind, OpKind)> {
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let i32_ = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let u32_ = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let param = |name: &str, ty: HirType| Param {
+            name: name.to_owned(),
+            ty,
+            origin: origin.clone(),
+            known: crate::hir::facts::Facts::TOP,
+            written: None,
+            shape: crate::hir::ParamShape::Ordinary,
+        };
+        let (x, unsigned) = (ValueId(0), ValueId(1));
+        let (half, past) = (ValueId(2), ValueId(3));
+        let compare = |op: crate::hir::BinOp, lhs: ValueId, rhs: ValueId| {
+            self::op(OpKind::Binary { op, lhs, rhs }, HirType::Bool)
+        };
+        let mut func = Func {
+            name: "f".to_owned(),
+            params: vec![param("x", i32_.clone()), param("unsigned", u32_.clone())],
+            return_type: HirType::Void,
+            values: vec![
+                op(OpKind::Param(0), i32_),
+                op(OpKind::Param(1), u32_),
+                op(OpKind::ConstFloat(1.5), HirType::NUMBER),
+                op(OpKind::ConstFloat(2_147_483_648.0), HirType::NUMBER),
+                compare(crate::hir::BinOp::Eq, x, half),
+                compare(crate::hir::BinOp::Ne, past, x),
+                compare(crate::hir::BinOp::Eq, x, unsigned),
+            ],
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: (0..7).map(ValueId).collect(),
+                terminator: Terminator::Return(None),
+            }],
+            origin,
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+            obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
+            written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
+            written_return_elements: Vec::new(),
+        };
+        super::reconcile_stores(&mut func, &[], &[], &rustc_hash::FxHashMap::default());
+        func.blocks[0]
+            .ops
+            .iter()
+            .filter_map(|value| match func.values[value.0 as usize].kind {
+                OpKind::Binary { lhs, rhs, .. } => Some((
+                    func.values[lhs.0 as usize].kind.clone(),
+                    func.values[rhs.0 as usize].kind.clone(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `==` between an integer and a double widens the integer and keeps the
+    /// double: narrowing `1.5` to `1` would make `x === 1.5` true for 1, and
+    /// `2^31` to an `i32` would wrap it to `-2^31`. Two integers of different
+    /// signs are left alone.
+    #[test]
+    fn an_integer_compared_with_a_double_is_widened() {
+        let widened = OpKind::Convert(ValueId(0));
+        assert_eq!(
+            equalities_after_reconcile(),
+            vec![
+                (widened.clone(), OpKind::ConstFloat(1.5)),
+                (OpKind::ConstFloat(2_147_483_648.0), widened),
+                (OpKind::Param(0), OpKind::Param(1)),
+            ]
+        );
     }
 
     /// `rem f64` over two values, each widened from a parameter of the given
