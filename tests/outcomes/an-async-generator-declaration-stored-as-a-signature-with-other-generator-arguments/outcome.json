@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "refused",
+  "nts": "NTS1001 a generator stepped as `AsyncGenerator<…>`, which no generator in this program extends -- a `function*` declaration stored as a function type whose `AsyncGenerator<…>` is not its own keeps its own",
+  "node": null,
+  "measured_with": "88cf28a2d89cd1bf",
+  "source": "measured"
+}
