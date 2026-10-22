@@ -34,13 +34,16 @@ mod header;
 /// helpers this program reaches" apparatus be deleted.
 pub const RUNTIME_HEADER_NAME: &str = "nts_runtime.h";
 pub const RUNTIME_HEADER: &str = include_str!("../../../../runtime/c/nts_runtime.h");
-/// The shortest-decimal algorithm, which `nts_runtime.c` includes.
+/// The shortest-decimal algorithm, zmij, vendored unedited as a `zmij/`
+/// subdirectory and included by `nts_runtime.c`.
 ///
-/// A header rather than a translation unit for the same reason `quickjs/dtoa.c`
+/// Included rather than a translation unit for the same reason `quickjs/dtoa.c`
 /// is: the several places that build a program name their `.c` files, and one
 /// of them is not this session's to change.
-pub const GRISU_HEADER_NAME: &str = "nts_grisu.h";
-pub const GRISU_HEADER: &str = include_str!("../../../../runtime/c/nts_grisu.h");
+pub const ZMIJ_HEADER_NAME: &str = "zmij/zmij-c.h";
+pub const ZMIJ_HEADER: &str = include_str!("../../../../runtime/c/zmij/zmij-c.h");
+pub const ZMIJ_SOURCE_NAME: &str = "zmij/zmij.c";
+pub const ZMIJ_SOURCE: &str = include_str!("../../../../runtime/c/zmij/zmij.c");
 /// `StringView`'s C half, included by the runtime header and shipped beside it
 /// so a foreign C or C++ file can read a lent string without that header.
 pub const STRING_VIEW_HEADER_NAME: &str = "nts_string_view.h";
@@ -318,7 +321,8 @@ pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
         one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
         one(DTOA_HEADER_NAME, DTOA_HEADER, false),
         one(DTOA_SOURCE_NAME, DTOA_SOURCE, false),
-        one(GRISU_HEADER_NAME, GRISU_HEADER, false),
+        one(ZMIJ_HEADER_NAME, ZMIJ_HEADER, false),
+        one(ZMIJ_SOURCE_NAME, ZMIJ_SOURCE, false),
         // `nts_runtime.h` includes it, so it travels with every program.
         one(STRING_VIEW_HEADER_NAME, STRING_VIEW_HEADER, false),
         one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
@@ -1590,7 +1594,7 @@ fn runtime_declares(name: &str) -> bool {
     [
         RUNTIME_HEADER,
         UNICODE_HEADER,
-        GRISU_HEADER,
+        ZMIJ_HEADER,
         STRING_VIEW_HEADER,
     ]
     .iter()

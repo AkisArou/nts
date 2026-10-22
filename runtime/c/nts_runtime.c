@@ -116,12 +116,18 @@ nts_require_the_cpu_it_was_built_for(void) {
 #endif
 
 #include "quickjs/dtoa.c"
+/* The shortest round-trip digits of a double (`nts_number_digits`): zmij,
+ * vendored unedited (`zmij/README.md`). Two names are mapped for its include
+ * rather than that tree edited: GNU's `asm`, which `-std=c11` does not have,
+ * and its `bswap64`, which `quickjs/cutils.h` above already defines. */
+#define asm __asm__
+#define bswap64 nts_zmij_bswap64
+#include "zmij/zmij.c"
+#undef bswap64
+#undef asm
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-
-/* And ours, which replaces `js_dtoa` for everything it can prove. */
-#include "nts_grisu.h"
 
 /* One environment: everything a runtime owns that a second runtime must not
  * see.
@@ -4189,46 +4195,17 @@ static void nts_copy_units(NtsString *out, uint32_t offset,
  * belongs beside `nts_number_to_string`. Moving either to satisfy C's ordering
  * would put one of them in the wrong chapter. */
 static int nts_u32toa(char *buf, uint32_t n);
+static uint32_t nts_number_format(char *out, double x);
 
 /* One element of a numeric `join`, formatted into `out` and its length
  * returned.
  *
- * `out` needs 32 bytes. The general path's widest answer is
- * `-1.7976931348623157e+308` at 24 characters and the integer path's is eleven,
- * so 32 is the bound with room rather than a guess -- and
- * `nts_number_to_string` is asked for the general case, which cannot exceed
- * what it produced.
- *
- * A whole value in the `i32` range takes the integer path and allocates
- * nothing. That is every element of a `Uint8Array`, every index, and most of an
- * ordinary `number[]`; the fraction allocates one string and frees it, which is
- * the price of not duplicating Grisu's twenty lines of ECMAScript formatting
- * rules here. `nts_number_to_string_into` is `always_inline` for a reason
- * `benches/cases/number-format` measured, and splitting it to share a buffer
- * would spend that to save an allocation on the rarer path. */
+ * `out` needs 32 bytes: the widest answer `nts_number_format` writes is 25
+ * characters (`-0.000001` and seventeen digits). It is the formatter every
+ * number sink shares, so a fraction is written in place here too, with no
+ * string made and freed for it. */
 static uint32_t nts_join_one(char *out, double x) {
-  const int32_t whole =
-      x >= -2147483648.0 && x <= 2147483647.0 ? (int32_t)x : 0;
-  if ((double)whole == x) {
-    const uint32_t magnitude =
-        whole < 0 ? (uint32_t)(-(int64_t)whole) : (uint32_t)whole;
-    const uint32_t sign = whole < 0 ? 1u : 0u;
-    if (sign != 0u) {
-      out[0] = '-';
-    }
-    return sign + (uint32_t)nts_u32toa(out + sign, magnitude);
-  }
-  NtsString *formatted = nts_number_to_string(x);
-  uint32_t length = formatted->length;
-  if (length > 31u) {
-    /* Unreachable for a `double`, and a silent overrun if it ever is not. */
-    fprintf(stderr, NTS_REFUSED "a number formatted to %u characters\n",
-            length);
-    abort();
-  }
-  memcpy(out, NTS_ELEMENTS(formatted, unsigned char), length);
-  nts_release(formatted);
-  return length;
+  return nts_number_format(out, x);
 }
 
 /* Write `length` ASCII characters at `offset`, into either storage. */
@@ -5122,6 +5099,138 @@ static int nts_u32toa(char *buf, uint32_t n) {
   return (int)length;
 }
 
+/* `n`'s decimal digits, for a whole number below 2^53: at most sixteen, as a
+ * high part and eight zero-padded low digits once it passes 32 bits. */
+static int nts_u53toa(char *buf, uint64_t n) {
+  if (n <= UINT32_MAX) {
+    return nts_u32toa(buf, (uint32_t)n);
+  }
+  const int length = nts_u32toa(buf, (uint32_t)(n / 100000000u));
+  uint32_t low = (uint32_t)(n % 100000000u);
+  char *at = buf + length + 8;
+  for (int pairs = 0; pairs < 4; pairs++) {
+    const uint32_t pair = (low % 100u) * 2u;
+    low /= 100u;
+    *--at = nts_digit_pairs[pair + 1u];
+    *--at = nts_digit_pairs[pair];
+  }
+  return length + 8;
+}
+
+/* The shortest digits that round-trip to `magnitude`, a finite positive
+ * double, and where the decimal point goes among them: `0.00123` is `"123"`
+ * with the point at -2, `1.5e300` is `"15"` at 301.
+ *
+ * zmij computes them (`zmij/README.md`): shortest, correctly rounded, and
+ * verified. Its C entry points hand back text in Python's layout -- `0.001`,
+ * `123.45`, `1.2345678901234568e+20`, `1e-07` -- and keep the decimal
+ * significand and exponent internal, so they are read back from that text
+ * here, at most 24 characters, before ECMAScript's layout places them. */
+static int nts_number_digits(double magnitude, char *digits, int *point) {
+  char text[zmij_double_buffer_size];
+  const char *end = zmij_write(text, sizeof text, magnitude);
+  const char *at = text;
+  int length = 0;
+  int before = 0;
+  int zeros = 0;
+  bool after = false;
+  for (; at < end && *at != 'e'; at++) {
+    if (*at == '.') {
+      after = true;
+    } else if (length == 0 && *at == '0') {
+      /* A leading `0.` and the zeros after it place the point; they are not
+       * digits of the answer. */
+      zeros += after ? 1 : 0;
+    } else {
+      digits[length++] = *at;
+      before += after ? 0 : 1;
+    }
+  }
+  int exponent = 0;
+  if (at < end) {
+    const bool negative = at[1] == '-';
+    for (at += 2; at < end; at++) {
+      exponent = exponent * 10 + (*at - '0');
+    }
+    exponent = negative ? -exponent : exponent;
+  }
+  while (length > 1 && digits[length - 1] == '0') {
+    length--;
+  }
+  *point = (before > 0 ? before : -zeros) + exponent;
+  return length;
+}
+
+/* ECMAScript's Number::toString(x) in radix 10, written into `out`, its length
+ * returned: the one formatter behind every sink -- `String(n)`, templates and
+ * `+`, JSON's numbers, `join`.
+ *
+ * At most 25 characters (`-0.000001` and seventeen digits), which every
+ * caller's storage holds. */
+static uint32_t nts_number_format(char *out, double x) {
+  if (x != x) {
+    memcpy(out, "NaN", 3);
+    return 3;
+  }
+  if (isinf(x)) {
+    if (x < 0) {
+      memcpy(out, "-Infinity", 9);
+      return 9;
+    }
+    memcpy(out, "Infinity", 8);
+    return 8;
+  }
+  char *q = out;
+  /* `-0` is not below zero, and `String(-0)` is `"0"`. */
+  if (x < 0) {
+    *q++ = '-';
+    x = -x;
+  }
+  /* A whole number below 2^53 is its own shortest form, and everything below
+   * 1e21 is written without an exponent: its digits, exactly. */
+  if (x < 9007199254740992.0 && (double)(uint64_t)x == x) {
+    return (uint32_t)(q - out) + (uint32_t)nts_u53toa(q, (uint64_t)x);
+  }
+  char digits[24];
+  int point;
+  const int length = nts_number_digits(x, digits, &point);
+  /* ECMAScript's Number::toString, step by step: every digit and the zeros
+   * that place them, the point inside the digits, a leading `0.` and some
+   * zeros, or an exponent. The thresholds -- 21 above and -6 below -- are the
+   * specification's, not a formatting preference. */
+  if (point >= length && point <= 21) {
+    memcpy(q, digits, (size_t)length);
+    q += length;
+    memset(q, '0', (size_t)(point - length));
+    q += point - length;
+  } else if (point > 0 && point <= 21) {
+    memcpy(q, digits, (size_t)point);
+    q += point;
+    *q++ = '.';
+    memcpy(q, digits + point, (size_t)(length - point));
+    q += length - point;
+  } else if (point > -6 && point <= 0) {
+    *q++ = '0';
+    *q++ = '.';
+    memset(q, '0', (size_t)(-point));
+    q += -point;
+    memcpy(q, digits, (size_t)length);
+    q += length;
+  } else {
+    *q++ = digits[0];
+    if (length != 1) {
+      *q++ = '.';
+      memcpy(q, digits + 1, (size_t)(length - 1));
+      q += length - 1;
+    }
+    *q++ = 'e';
+    const int exponent = point - 1;
+    *q++ = exponent < 0 ? '-' : '+';
+    q += nts_u32toa(q, (uint32_t)(exponent < 0 ? -exponent : exponent));
+  }
+  return (uint32_t)(q - out);
+}
+
 NtsString *nts_number_to_string(double x) {
   return nts_number_to_string_into(NULL, x);
 }
@@ -5317,8 +5426,9 @@ NtsString *nts_number_to_string_radix(double x, double radix) {
 /* Inlined, which is a quarter of `benches/cases/number-format`: 961ns to 729ns,
  * past both the `snprintf` it is measured against and bun.
  *
- * It is not a small function -- an integer fast path and a Grisu fallback --
- * and inlining it wholesale is the kind of thing that usually loses. What makes
+ * Only the `i32` fast path is inlined; everything else is one call to
+ * `nts_number_format`, and inlining the formatter wholesale is the kind of
+ * thing that usually loses. What makes
  * it win is the fast path's *shape*: the caller almost always knows the value
  * is a whole number, so with the body in front of it the compiler folds the
  * range tests away and what is left is the digit loop. Out of line, every call
@@ -5332,7 +5442,7 @@ nts_number_to_string_into(NtsHeader *into, double x) {
    * `-0` needs no guard: it converts to `0`, `(double)0 == -0.0` is true, and
    * `String(-0)` is `"0"` -- the sign is not part of the answer, so this gives
    * exactly the right characters. NaN and the infinities fail the round-trip
-   * test and fall through to `js_dtoa`, which spells them itself. */
+   * test and fall through to `nts_number_format`, which spells them. */
   /* The range test comes *before* the conversion. It used to come after, and
    * the comment above says NaN and the infinities are expected to arrive here
    * and fall through -- converting either to `int32_t` is undefined before the
@@ -5360,72 +5470,12 @@ nts_number_to_string_into(NtsHeader *into, double x) {
     return out;
   }
 
-  /* Grisu3 for anything finite, `js_dtoa` for what it declines and for the
-   * values it is not asked about -- NaN and the infinities, which it spells
-   * itself. The two produce the same characters; see `nts_grisu.h` for the
-   * measurement that says so. */
-  char digits[32];
-  int length;
-  int point;
-  if (isfinite(x) && nts_grisu(x < 0 ? -x : x, digits, &length, &point)) {
-    char buf[JS_DTOA_MAX_DIGITS + 32];
-    char *q = buf;
-    if (x < 0) {
-      *q++ = '-';
-    }
-    /* ECMAScript's Number::toString, step by step: every digit and the zeros
-     * that place them, the point inside the digits, a leading `0.` and some
-     * zeros, or an exponent. The thresholds -- 21 above and -6 below -- are the
-     * specification's, not a formatting preference. */
-    if (point >= length && point <= 21) {
-      memcpy(q, digits, (size_t)length);
-      q += length;
-      memset(q, '0', (size_t)(point - length));
-      q += point - length;
-    } else if (point > 0 && point <= 21) {
-      memcpy(q, digits, (size_t)point);
-      q += point;
-      *q++ = '.';
-      memcpy(q, digits + point, (size_t)(length - point));
-      q += length - point;
-    } else if (point > -6 && point <= 0) {
-      *q++ = '0';
-      *q++ = '.';
-      memset(q, '0', (size_t)(-point));
-      q += -point;
-      memcpy(q, digits, (size_t)length);
-      q += length;
-    } else {
-      *q++ = digits[0];
-      if (length != 1) {
-        *q++ = '.';
-        memcpy(q, digits + 1, (size_t)(length - 1));
-        q += length - 1;
-      }
-      *q++ = 'e';
-      const int exponent = point - 1;
-      *q++ = exponent < 0 ? '-' : '+';
-      q += nts_u32toa(q, (uint32_t)(exponent < 0 ? -exponent : exponent));
-    }
-    const uint32_t total = (uint32_t)(q - buf);
-    NtsString *out =
-        nts_str_build(total <= NTS_NUMBER_STRING_MAX ? into : NULL, total, 0);
-    memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)total);
-    return out;
-  }
-
-  char buf[JS_DTOA_MAX_DIGITS + 32];
-  JSDTOATempMem tmp;
-  const int exact =
-      js_dtoa(buf, x, 10, 0, JS_DTOA_FORMAT_FREE | JS_DTOA_EXP_AUTO, &tmp);
-  /* The caller's storage is sized by `NTS_NUMBER_STRING_MAX`, which is an
-   * argument about the longest thing this can write and not a measurement of
-   * it. If that argument is ever wrong, this takes the heap rather than writing
-   * past a frame slot: a lost optimisation instead of a smashed stack. */
-  NtsHeader *where = (exact <= NTS_NUMBER_STRING_MAX) ? into : NULL;
+  /* Everything else, out of line: one formatter behind every sink. */
+  char text[NTS_NUMBER_STRING_MAX];
+  const uint32_t total = nts_number_format(text, x);
   /* Always one byte: every character written in radix 10 is ASCII. */
-  NtsString *out = nts_str_build(where, (uint32_t)exact, 0);
-  memcpy(NTS_ELEMENTS(out, unsigned char), buf, (size_t)exact);
+  NtsString *out = nts_str_build(into, total, 0);
+  memcpy(NTS_ELEMENTS(out, unsigned char), text, (size_t)total);
   return out;
 }
 
