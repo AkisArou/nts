@@ -623,6 +623,10 @@ typedef struct NtsArray {
 _Static_assert(sizeof(NtsArray) % 16u == 0u,
                "inline array elements start at sizeof(NtsArray)");
 
+/* Where every array's elements start, inline or grown: a 32-byte boundary, one
+ * AVX2 register (`nts_array_inline_elements` in nts_runtime.c says why). */
+#define NTS_ELEMENT_ALIGN 32u
+
 /* A value carrying its own type: what a slot the checker typed `unknown` holds.
  *
  * A tag beside a payload, sixteen bytes. The alternative is NaN-boxing into

@@ -373,6 +373,7 @@ mod tests {
             minimum_version: None,
             surface: Vec::new(),
             native: Vec::new(),
+            cpu: None,
         };
         let platform = super::platforms(&[target]).remove(0);
         if !super::available(&platform) {

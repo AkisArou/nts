@@ -281,6 +281,35 @@ int main(void) {
   nts_release(&slots->header);
   check("and everything comes back", nts_live_bytes() == base);
 
+  /* Every array's elements start on an `NTS_ELEMENT_ALIGN` boundary, inline
+   * and grown alike, so an AVX2 loop over them never splits a load across a
+   * cache line. Sizes from empty to past the first growth, and widths from a
+   * byte to a value, because the inline start depends on where `nts_alloc`
+   * happened to put the header and the grown one on `aligned_alloc`. */
+  bool aligned = true;
+  const NtsDescriptor *widths[] = {&desc_bool, &desc_i32, &desc_double,
+                                   &desc_value};
+  for (int w = 0; w < 4; w++) {
+    for (int count = 0; count < 9; count++) {
+      NtsArray *a = nts_array_new(widths[w], count);
+      aligned = aligned && (uintptr_t)a->elements % NTS_ELEMENT_ALIGN == 0;
+      nts_release(&a->header);
+    }
+  }
+  check("an array's inline elements start on a 32-byte boundary", aligned);
+  NtsArray *grown = nts_array_new(&desc_double, 0);
+  bool grown_aligned = true;
+  for (int i = 0; i < 100; i++) {
+    nts_array_push(grown, (double)i);
+    grown_aligned =
+        grown_aligned && (uintptr_t)grown->elements % NTS_ELEMENT_ALIGN == 0;
+  }
+  check("and so do they after every growth", grown_aligned);
+  check("and the grown array still holds what was pushed",
+        grown->header.length == 100 && NTS_ITEMS(grown, double)[99] == 99.0);
+  nts_release(&grown->header);
+  check("and that comes back too", nts_live_bytes() == base);
+
   printf("%s\n", failures ? "FAILURES" : "all element checks passed");
   return failures ? 1 : 0;
 }

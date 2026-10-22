@@ -63,6 +63,10 @@ pub struct Target {
     /// the native half of `surface`.
     #[serde(default)]
     pub native: Vec<Utf8PathBuf>,
+    /// `"baseline"` to build an x86-64 artifact for every x86-64 CPU rather
+    /// than for x86-64-v3, the default (`compile_flags::X86_64_V3`).
+    #[serde(default)]
+    pub cpu: Option<String>,
 }
 
 /// One artifact a build emits.

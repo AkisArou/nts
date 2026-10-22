@@ -115,6 +115,14 @@ export interface Target {
    * sources, as absolute paths: the native half of `surface`.
    */
   readonly native?: readonly string[];
+  /**
+   * The CPU an x86-64 artifact is built for. Absent, it is x86-64-v3 -- AVX2,
+   * BMI2 and FMA: Intel from Haswell (2013), AMD from Zen (2017) -- and the
+   * program says so, by name, on an older CPU instead of crashing. `"baseline"`
+   * builds for every x86-64 CPU, at the speed the vector instructions bought.
+   * Other architectures take their own baseline either way.
+   */
+  readonly cpu?: "baseline";
 }
 
 /** `"17.0"` and `"17"` name one SDK. The id takes the major. */
@@ -209,11 +217,14 @@ export const target = {
     minimumVersion: o.minimumVersion,
   }),
 
-  linux: (o: { readonly arch?: Arch; readonly backend?: NativeBackend } = {}): Target => ({
+  linux: (
+    o: { readonly arch?: Arch; readonly backend?: NativeBackend; readonly cpu?: "baseline" } = {},
+  ): Target => ({
     id: "linux-gnu",
     os: "linux",
     arch: o.arch ?? "x86_64",
     backend: o.backend ?? NATIVE_DEFAULT,
+    ...(o.cpu === undefined ? {} : { cpu: o.cpu }),
   }),
 
   /**

@@ -4915,6 +4915,7 @@ fn compile_program(
             if with.tools.lto {
                 arguments.extend(lto_flags());
             }
+            arguments.extend(with.tools.cpu.iter().cloned());
             arguments.extend([
                 "-c".to_owned(),
                 from.to_string(),
@@ -4952,6 +4953,7 @@ fn compile_program(
         if with.tools.lto {
             arguments.extend(lto_flags());
         }
+        arguments.extend(with.tools.cpu.iter().cloned());
         // **The runtime's provider has to be the lowering's.** `--rc` made
         // lowering insert every retain and release, and the runtime was then
         // compiled without the define. Its `nts_free_block` is a no-op there,
@@ -6511,6 +6513,12 @@ struct Toolchain {
     ///
     /// [`compile_flags::LTO`]: nts_codegen_common::compile_flags::LTO
     lto: bool,
+    /// The CPU flags its compiles take: [`compile_flags::X86_64_V3`] for an
+    /// x86-64 host target that does not say `cpu: "baseline"`. Empty for the
+    /// cross toolchains until each is checked, as [`Toolchain::lto`] is.
+    ///
+    /// [`compile_flags::X86_64_V3`]: nts_codegen_common::compile_flags::X86_64_V3
+    cpu: Vec<String>,
 }
 
 impl Toolchain {
@@ -6574,6 +6582,29 @@ fn lto_link_flags() -> impl Iterator<Item = String> {
     )
 }
 
+/// The CPU flags for `target`: x86-64-v3 on x86-64 unless it says
+/// `cpu: "baseline"` ([`compile_flags::X86_64_V3`]), and nothing elsewhere.
+///
+/// [`compile_flags::X86_64_V3`]: nts_codegen_common::compile_flags::X86_64_V3
+fn cpu_flags(target: &nts_build::config::Target) -> Result<Vec<String>> {
+    let x86_64 = target
+        .arch
+        .as_deref()
+        .map_or(std::env::consts::ARCH == "x86_64", |arch| arch == "x86_64");
+    match target.cpu.as_deref() {
+        None if x86_64 => Ok(nts_codegen_common::compile_flags::X86_64_V3
+            .iter()
+            .map(|flag| (*flag).to_owned())
+            .collect()),
+        None | Some("baseline") => Ok(Vec::new()),
+        Some(other) => bail!(
+            "target `{}` names cpu `{other}`; the one value is \"baseline\", which builds for every \
+             x86-64 CPU instead of x86-64-v3",
+            target.id
+        ),
+    }
+}
+
 fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
     if is_host(target) || std::env::var_os("CC").is_some() {
         // `CC` split on whitespace, for the reason `bind.rs` states: it is a
@@ -6591,6 +6622,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
             link: Vec::new(),
             linker: None,
             lto,
+            cpu: cpu_flags(target)?,
         });
     }
     if target.os == "macos" {
@@ -6629,6 +6661,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         link: Vec::new(),
         linker: None,
         lto: false,
+        cpu: Vec::new(),
     })
 }
 
@@ -6695,6 +6728,7 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         link,
         linker: None,
         lto: false,
+        cpu: Vec::new(),
     })
 }
 
@@ -6742,6 +6776,7 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         link,
         linker: None,
         lto: false,
+        cpu: Vec::new(),
     })
 }
 
@@ -6808,6 +6843,7 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
         link,
         linker: Some(linker),
         lto: false,
+        cpu: Vec::new(),
     })
 }
 

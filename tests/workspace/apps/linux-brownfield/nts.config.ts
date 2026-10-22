@@ -17,7 +17,12 @@ export default defineConfig({
   tsconfig: "./tsconfig.json",
   products: {
     sdk: library.native({
-      targets: [target.linux()],
+      // Baseline CPU: this library is loaded into someone else's application,
+      // and should run wherever that application already does. Built for
+      // x86-64-v3, the default, it would stop at load on an older CPU with a
+      // sentence saying why -- and, loaded into a host, it would stop the
+      // host.
+      targets: [target.linux({ cpu: "baseline" })],
       entry: "./nts/sdk.ts",
       soname: "libacme.so.0",
       header: "acme.h",

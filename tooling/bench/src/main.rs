@@ -3189,9 +3189,16 @@ fn compile(
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
     // `LTO`), for nts's code and the C++ reference alike: the same compiler and
     // the same flags on both sides of the ratio, and the same as `nts build`.
+    // And the CPU a host build is for (`X86_64_V3`, as `nts build` takes it).
+    let cpu: &[&str] = if std::env::consts::ARCH == "x86_64" {
+        nts_codegen_common::compile_flags::X86_64_V3
+    } else {
+        &[]
+    };
     let shared: Vec<&str> = nts_codegen_common::compile_flags::OPTIMIZE
         .iter()
         .chain(nts_codegen_common::compile_flags::LTO)
+        .chain(cpu)
         .copied()
         .chain(["-Wall", "-Wextra", "-Werror"])
         .collect();

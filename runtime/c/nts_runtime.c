@@ -88,6 +88,33 @@ void nts_hresult_clear(int32_t status, void *slot, size_t size) {
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 #endif
 /* NOLINTNEXTLINE(bugprone-suspicious-include) */
+/* **A program built for a CPU it is not running on says so, first.**
+ *
+ * Native x86-64 code is built for x86-64-v3 by default -- AVX2, BMI2 and FMA:
+ * Intel from Haswell (2013), AMD from Zen (2017) -- the user's decision of
+ * 2026-10-22, worth 1.15-3x on six benchmark rows. On an older CPU the first
+ * AVX2 instruction would be a SIGILL somewhere arbitrary. This runs before
+ * anything else the program does (the earliest constructor priority), is
+ * itself compiled for the baseline (`target("arch=x86-64")`), and turns that
+ * crash into a sentence naming the fix. A target built with
+ * `cpu: "baseline"` defines no `__AVX2__`, and carries none of this. */
+#if defined(__x86_64__) && defined(__AVX2__)
+__attribute__((constructor(101), target("arch=x86-64"))) static void
+nts_require_the_cpu_it_was_built_for(void) {
+  __builtin_cpu_init();
+  if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("bmi2") &&
+      __builtin_cpu_supports("fma")) {
+    return;
+  }
+  fputs("nts: this program was built for x86-64-v3 (AVX2, BMI2 and FMA: Intel "
+        "Haswell and AMD Zen onwards), and this CPU lacks it.\n"
+        "nts: rebuild it with `cpu: \"baseline\"` on its target in "
+        "nts.config.ts to run here.\n",
+        stderr);
+  _Exit(1);
+}
+#endif
+
 #include "quickjs/dtoa.c"
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic pop
@@ -689,13 +716,47 @@ static void nts_free_string(NtsHeader *string) {
   nts_free_block(string);
 }
 
+/* Where an array's elements start while they sit in its own block: the first
+ * `NTS_ELEMENT_ALIGN` boundary after the header.
+ *
+ * 32 bytes, an AVX2 register. Native code is built for x86-64-v3 by default
+ * (the user's decision, 2026-10-22), and a vector loop over elements that
+ * start 16 bytes off a 32-byte boundary splits half its loads and stores
+ * across cache lines: `elementwise` under AVX2 ran 157 us with 16-byte
+ * elements against 74 with 32-byte ones, and C++ 75 -- 792M split loads where
+ * C++ took 120 (the numbers study's perf counts). Sixteen bytes of slack per
+ * array, once, for every vector load its elements will take. */
+static unsigned char *nts_array_inline_elements(const NtsArray *array) {
+  uintptr_t after = (uintptr_t)array + sizeof(NtsArray);
+  return (unsigned char *)((after + (NTS_ELEMENT_ALIGN - 1u)) &
+                           ~(uintptr_t)(NTS_ELEMENT_ALIGN - 1u));
+}
+
+/* An element block on an `NTS_ELEMENT_ALIGN` boundary, and its release, which
+ * must be the matching one. C11's `aligned_alloc` where the C library has it;
+ * the Windows CRT has none and spells the pair `_aligned_malloc` and
+ * `_aligned_free`. `bytes` is a multiple of the alignment, as `aligned_alloc`
+ * requires. */
+#if defined(_WIN32)
+#include <malloc.h>
+static void *nts_elements_alloc(size_t bytes) {
+  return _aligned_malloc(bytes, NTS_ELEMENT_ALIGN);
+}
+static void nts_elements_free(void *block) { _aligned_free(block); }
+#else
+static void *nts_elements_alloc(size_t bytes) {
+  return aligned_alloc(NTS_ELEMENT_ALIGN, bytes);
+}
+static void nts_elements_free(void *block) { free(block); }
+#endif
+
 /* Whether an array's elements still sit in the block the array itself lives in.
  *
  * The one growth that moves them out is the only thing that makes this false,
  * and two places need to know: the grow path, which must not free the inline
  * block, and reclamation, which must free every other one. */
 static bool nts_array_is_inline(const NtsArray *array) {
-  return array->elements == (const unsigned char *)array + sizeof(NtsArray);
+  return array->elements == nts_array_inline_elements(array);
 }
 
 /* Storage an object owns that does not live in its own block.
@@ -770,7 +831,7 @@ static void nts_free_storage(NtsHeader *object) {
     /* The element block this array grew into, given back. Counted where it was
      * taken -- see `nts_array_reserve`. */
     nts_env->reclaimed++;
-    free(array->elements);
+    nts_elements_free(array->elements);
     array->elements = 0;
   }
 }
@@ -2372,7 +2433,10 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
     abort();
   }
   uint32_t count = (uint32_t)length;
-  size_t bytes = sizeof(NtsArray) + (size_t)count * descriptor->size;
+  /* `nts_alloc` aligns to 16, so 16 more bytes always hold the step up to the
+   * next `NTS_ELEMENT_ALIGN` boundary. */
+  size_t bytes = sizeof(NtsArray) + (NTS_ELEMENT_ALIGN - 16u) +
+                 (size_t)count * descriptor->size;
   NtsArray *array = (NtsArray *)nts_alloc(bytes);
   array->header.descriptor = descriptor;
   array->header.reserved = 1;
@@ -2381,8 +2445,9 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
   array->header.length = count;
   array->capacity = count;
   /* Just past the struct, so an array nothing grows keeps its elements next to
-   * its header and reads them with the locality inline storage had. */
-  array->elements = (unsigned char *)array + sizeof(NtsArray);
+   * its header and reads them with the locality inline storage had -- at the
+   * first `NTS_ELEMENT_ALIGN` boundary there. */
+  array->elements = nts_array_inline_elements(array);
   return array;
 }
 
@@ -2652,7 +2717,11 @@ static NTS_NOINLINE void nts_array_grow(NtsArray *a) {
      * elements are not inline. */
     uint32_t wanted = a->capacity ? a->capacity * 2u : 4u;
     size_t bytes = (size_t)wanted * a->header.descriptor->size;
-    void *moved = malloc(bytes);
+    /* Aligned as inline elements are (`nts_array_inline_elements`): `malloc`
+     * promises 16. */
+    size_t block =
+        (bytes + (NTS_ELEMENT_ALIGN - 1u)) & ~(size_t)(NTS_ELEMENT_ALIGN - 1u);
+    void *moved = nts_elements_alloc(block);
     if (!moved) {
       fprintf(stderr, "nts: out of memory growing an array\n");
       abort();
@@ -2686,7 +2755,7 @@ static NTS_NOINLINE void nts_array_grow(NtsArray *a) {
       /* Paired with the note above, or `nts_live_count` -- which is
        * `allocated - reclaimed` -- reads every grown array as a leak. */
       nts_env->reclaimed++;
-      free(a->elements);
+      nts_elements_free(a->elements);
     }
     a->elements = moved;
     a->capacity = wanted;

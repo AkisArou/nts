@@ -76,3 +76,19 @@ pub const LINK_LTO: &[&str] = &["-Wl,-plugin-opt=-align-loops=32"];
 /// link's memory and time, and an incremental cache the object cache can sit
 /// beside.
 pub const LTO: &[&str] = &["-flto=thin"];
+
+/// The CPU an x86-64 program is built for, unless its target says
+/// `cpu: "baseline"`: x86-64-v3 -- AVX2, BMI2 and FMA, Intel from Haswell
+/// (2013) and AMD from Zen (2017). The user's decision of 2026-10-22, to take
+/// the vector instructions V8 already uses at run time on any CPU that has
+/// them.
+///
+/// Measured against `-O2 -flto` by the numbers study, nts-bench on CPU 4:
+/// `exceptions` 0.31x, LLVM `dispatch` 0.35x, `logical-assignment` 0.67x, LLVM
+/// `user-iterable` 0.72x, C `accumulate` 0.77x -- and `elementwise` *slower*
+/// until array elements started on a 32-byte boundary
+/// (`NTS_ELEMENT_ALIGN` in the runtime). FMA comes with it, and
+/// [`OPTIMIZE`]'s `-ffp-contract=off` is what keeps it out of JavaScript's
+/// arithmetic. On an older CPU the program stops with a sentence saying so
+/// (`nts_require_the_cpu_it_was_built_for` in the runtime).
+pub const X86_64_V3: &[&str] = &["-march=x86-64-v3"];

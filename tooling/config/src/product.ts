@@ -249,17 +249,17 @@ export const app = Object.assign(appBase, {
     const { minimumVersion, sdk, ...rest } = o;
     return { kind: "application", targets: [t.macos({ minimumVersion, sdk })], ...rest };
   },
-  linux: (o: AppOpts & { readonly backend?: NativeBackend }): AppProduct => {
-    const { backend, ...rest } = o;
-    return { kind: "application", targets: [t.linux({ backend })], ...rest };
+  linux: (o: AppOpts & { readonly backend?: NativeBackend; readonly cpu?: "baseline" }): AppProduct => {
+    const { backend, cpu, ...rest } = o;
+    return { kind: "application", targets: [t.linux({ backend, cpu })], ...rest };
   },
   windows: (o: AppOpts): AppProduct => ({ kind: "application", targets: [t.windows()], ...o }),
   /** No UI host: a CLI. The narrowest artifact here. */
-  cli: (o: AppOpts & { readonly backend?: NativeBackend }): AppProduct => {
-    const { backend, ...rest } = o;
-    // `backend` passes through: `target.linux` owns the default, and this
-    // having its own was two answers to one question that disagreed.
-    return { kind: "executable", targets: [t.linux({ backend })], ...rest };
+  cli: (o: AppOpts & { readonly backend?: NativeBackend; readonly cpu?: "baseline" }): AppProduct => {
+    const { backend, cpu, ...rest } = o;
+    // `backend` and `cpu` pass through: `target.linux` owns the defaults, and
+    // this having its own was two answers to one question that disagreed.
+    return { kind: "executable", targets: [t.linux({ backend, cpu })], ...rest };
   },
 });
 
