@@ -25,8 +25,9 @@
 ///   `sqrt` may set it clang cannot inline it. Measured as noise on 20 rows.
 /// - `-falign-loops=32`: every loop starts on a 32-byte boundary, for a build
 ///   that is not linked with LTO, where code is generated at compile time. The
-///   reason, and the one loss, are [`LINK_LTO`]'s; under LTO this flag does
-///   nothing, and it goes when `nts build` links with `ThinLTO`.
+///   reason, and the one loss, are [`LINK_LTO`]'s. Under LTO this flag does
+///   nothing; it stays for the toolchains that do not link with [`LTO`] (the
+///   cross builds, today).
 pub const OPTIMIZE: &[&str] = &[
     "-O2",
     "-ffp-contract=off",
@@ -62,3 +63,16 @@ pub const OPTIMIZE: &[&str] = &[
 ///   `dispatch` gains 19%, and every lane now runs at the speed the code earns
 ///   rather than the speed its address happens to give it.
 pub const LINK_LTO: &[&str] = &["-Wl,-plugin-opt=-align-loops=32"];
+
+/// Link-time optimization, at compile and at link, wherever the toolchain is
+/// clang: thin LTO, the user's decision of 2026-10-22 ("the benchmarks build
+/// exactly as `nts build` does, with `ThinLTO` by default").
+///
+/// It is what makes a runtime helper inline into the program that calls it --
+/// a per-element typed-array read, `nts_check`, the small string helpers --
+/// across the boundary between the program's object and the runtime's. Without
+/// it `nts build` shipped LLVM's `awfy-permute` at 2.99x the benchmark's time.
+/// Thin rather than full: the same inlining across units at a fraction of the
+/// link's memory and time, and an incremental cache the object cache can sit
+/// beside.
+pub const LTO: &[&str] = &["-flto=thin"];

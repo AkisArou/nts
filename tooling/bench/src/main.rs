@@ -3186,14 +3186,14 @@ fn compile(
     binary: &Utf8Path,
     defines: &[&str],
 ) -> Result<()> {
-    // What a shipped program is optimized with (`compile_flags::OPTIMIZE`),
-    // for nts's code and the C++ reference alike: the same compiler and the
-    // same flags on both sides of the ratio. `-flto` is still the benchmark's
-    // own, until `nts build` links with it too.
+    // What a shipped program is built with (`compile_flags::OPTIMIZE` and
+    // `LTO`), for nts's code and the C++ reference alike: the same compiler and
+    // the same flags on both sides of the ratio, and the same as `nts build`.
     let shared: Vec<&str> = nts_codegen_common::compile_flags::OPTIMIZE
         .iter()
+        .chain(nts_codegen_common::compile_flags::LTO)
         .copied()
-        .chain(["-flto", "-Wall", "-Wextra", "-Werror"])
+        .chain(["-Wall", "-Wextra", "-Werror"])
         .collect();
     let mut includes = vec![
         "-I".to_owned(),

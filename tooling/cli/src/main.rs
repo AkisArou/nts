@@ -3748,8 +3748,16 @@ fn write_standalone(
             // whichever host runs it.
             nts_codegen_c::LoopHost::Win32 => " -luser32",
         };
+        // **This line is an interface**: `tooling/census/attempt262.ts` reads
+        // it back and runs it, `cc` and all, split into one compile per source.
+        // So it stays `cc` -- any C compiler -- and carries `compile_flags`'
+        // `OPTIMIZE`, which every C compiler takes, and not LTO, which only
+        // clang's linker reads. Spelled `clang` once, it lost the harness its
+        // `-std=c11`, and 38 test262 cases met glibc's `y1` in a program
+        // compiled as GNU C.
+        let optimize = nts_codegen_common::compile_flags::OPTIMIZE.join(" ");
         report.out(format_args!(
-            "  cc -std=c11 -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c {program_unit} {} {}{glib_source} -luv -lm{glib_flags} -o program",
+            "  cc -std=c11 {optimize} -ffunction-sections -fdata-sections -Wl,--gc-sections \\\n     -I. main.c {program_unit} {} {}{glib_source} -luv -lm{glib_flags} -o program",
             sources.join(" "),
             nts_codegen_c::UV_HOST_SOURCE_NAME
         ));
@@ -4904,6 +4912,9 @@ fn compile_program(
             if pic {
                 arguments.push("-fPIC".to_owned());
             }
+            if with.tools.lto {
+                arguments.extend(lto_flags());
+            }
             arguments.extend([
                 "-c".to_owned(),
                 from.to_string(),
@@ -4937,6 +4948,9 @@ fn compile_program(
             .collect();
         if pic {
             arguments.push("-fPIC".to_owned());
+        }
+        if with.tools.lto {
+            arguments.extend(lto_flags());
         }
         // **The runtime's provider has to be the lowering's.** `--rc` made
         // lowering insert every retain and release, and the runtime was then
@@ -6491,6 +6505,12 @@ struct Toolchain {
     /// headers faithfully, and links with `zig cc`, which alone carries mingw's
     /// CRT and import libraries (`windows_toolchain`).
     linker: Option<Vec<String>>,
+    /// Whether compiles and the link take [`compile_flags::LTO`]: the host's
+    /// clang. A `CC` that is not clang (gcc spells it differently) and the
+    /// cross toolchains, until each is shown to link bitcode, do not.
+    ///
+    /// [`compile_flags::LTO`]: nts_codegen_common::compile_flags::LTO
+    lto: bool,
 }
 
 impl Toolchain {
@@ -6533,6 +6553,27 @@ impl Toolchain {
     }
 }
 
+/// [`compile_flags::LTO`] as owned arguments, for a toolchain that takes them.
+///
+/// [`compile_flags::LTO`]: nts_codegen_common::compile_flags::LTO
+fn lto_flags() -> impl Iterator<Item = String> {
+    nts_codegen_common::compile_flags::LTO
+        .iter()
+        .map(|flag| (*flag).to_owned())
+}
+
+/// What an LTO link adds besides [`lto_flags`]: [`compile_flags::LINK_LTO`],
+/// the code-generation flags that act at the link, where code is generated.
+///
+/// [`compile_flags::LINK_LTO`]: nts_codegen_common::compile_flags::LINK_LTO
+fn lto_link_flags() -> impl Iterator<Item = String> {
+    lto_flags().chain(
+        nts_codegen_common::compile_flags::LINK_LTO
+            .iter()
+            .map(|flag| (*flag).to_owned()),
+    )
+}
+
 fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolchain> {
     if is_host(target) || std::env::var_os("CC").is_some() {
         // `CC` split on whitespace, for the reason `bind.rs` states: it is a
@@ -6540,11 +6581,16 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         // `xcrun clang` are all unusable when it is read as a file to execute.
         let spec = std::env::var("CC").unwrap_or_else(|_| "clang".to_owned());
         let mut words = spec.split_whitespace();
+        let program = words.next().unwrap_or("clang").to_owned();
+        let lto = Utf8Path::new(&program)
+            .file_name()
+            .is_some_and(|name| name.starts_with("clang"));
         return Ok(Toolchain {
-            program: words.next().unwrap_or("clang").to_owned(),
+            program,
             leading: words.map(str::to_owned).collect(),
             link: Vec::new(),
             linker: None,
+            lto,
         });
     }
     if target.os == "macos" {
@@ -6582,6 +6628,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         leading: vec!["cc".to_owned(), "-target".to_owned(), triple],
         link: Vec::new(),
         linker: None,
+        lto: false,
     })
 }
 
@@ -6647,6 +6694,7 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         leading,
         link,
         linker: None,
+        lto: false,
     })
 }
 
@@ -6693,6 +6741,7 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         leading,
         link,
         linker: None,
+        lto: false,
     })
 }
 
@@ -6758,6 +6807,7 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
         leading,
         link,
         linker: Some(linker),
+        lto: false,
     })
 }
 
@@ -6920,7 +6970,14 @@ fn link_c(
     // **Before the witness, because the witness is compiled too.** A native
     // root is checked against the headers of the platform it will run on, and
     // doing that with the host compiler asks the wrong question.
-    let tools = toolchain_for(name, target)?;
+    let mut tools = toolchain_for(name, target)?;
+    // **A static archive is linked by its consumer**, with whatever linker
+    // that is, and LTO objects are bitcode: `ld` without clang's plugin reads
+    // `libviaC.a` as "file format not recognized". So an archive's objects are
+    // native code, and LTO is for what nts links itself.
+    if product.kind == "static-library" {
+        tools.lto = false;
+    }
     check_witness(name, out, native, &tools, &needs.cflags)?;
     let addon = product.kind == "node-addon";
     let shared = product.kind == "shared-library" || addon;
@@ -7050,6 +7107,9 @@ fn link_c(
     } else {
         {
             let mut command = tools.link_command();
+            if tools.lto {
+                command.args(lto_link_flags());
+            }
             if shared {
                 command.arg(if format == ObjectFormat::MachO {
                     "-dynamiclib"
