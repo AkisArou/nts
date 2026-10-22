@@ -109,6 +109,17 @@ const TIMEOUT: &str = "20";
 /// runaway wants, so it separates the two without tuning.
 const MEMORY_MB: u64 = 2048;
 
+/// What a compiled program maps of [`MEMORY_MB`] before it asks for anything:
+/// its image, the C library, its stack and the runtime's first blocks -- 7 to
+/// 24 MB measured (`VmSize`, three bench programs, 2026-10-22), with room.
+///
+/// Under `--as` the largest allocation a program can make is the bound less
+/// these, so `new ArrayBuffer(4, { maxByteLength: 2 ** 31 - 1 })` fails there
+/// and in node alike. The sanitized run cannot bound address space (see
+/// [`bounded_native`]) and bounds each allocation instead, at the size `--as`
+/// leaves one.
+const PROGRAM_MAPS_MB: u64 = 32;
+
 /// How many times the compiled program may end before the run gives up.
 ///
 /// A handful is a program with a few assertions this pool falsifies. Hundreds is
@@ -178,6 +189,11 @@ fn bounded_native(program: &str) -> std::process::Command {
     // runtime turns that into the RangeError a program can catch, where the
     // sanitizer's own default ends the process. `typed-array-aliasing` asks
     // for an impossible buffer on purpose, and was a wrong answer here alone.
+    //
+    // "Cannot satisfy" at the size `--as` would refuse, too. Resident memory
+    // alone let an untouched `calloc(2 ** 31 - 1)` succeed here, which `--as`
+    // refuses unsanitized and node refuses beside it: `trackingFollowsAResize`
+    // answered 302 where node threw (CompilerHelper, 2026-10-22).
     command
         .arg("--core=0")
         .arg("timeout")
@@ -185,7 +201,11 @@ fn bounded_native(program: &str) -> std::process::Command {
         .arg(program)
         .env(
             "ASAN_OPTIONS",
-            format!("detect_leaks=0:allocator_may_return_null=1:hard_rss_limit_mb={MEMORY_MB}"),
+            format!(
+                "detect_leaks=0:allocator_may_return_null=1:hard_rss_limit_mb={MEMORY_MB}:\
+                 max_allocation_size_mb={}",
+                MEMORY_MB - PROGRAM_MAPS_MB
+            ),
         );
     command
 }
