@@ -477,20 +477,23 @@ fn answer_for_frames(program: &mut Program, frames: &[Layout]) {
 /// name instead ([`refuse_uninhabited`]).
 fn declare_resumptions(program: &mut Program) -> Vec<Diagnostic> {
     let mut declare: Vec<Func> = Vec::new();
-    let mut uninhabited: Vec<(String, &'static str)> = Vec::new();
+    let mut uninhabited: Vec<(String, super::GeneratorKind)> = Vec::new();
     for at in 0..program.layouts.len() {
         let layout = &program.layouts[at];
-        // An abstract generator is a layout some frame names as its base. The
-        // frames themselves have a base of their own and are skipped by it.
+        // An abstract generator is a layout lowering recorded as one, with the
+        // protocol it speaks (`Program::abstract_generators`). The frames that
+        // extend it are not one.
         let Some(&declared) = layout.types.first() else {
             continue;
         };
-        let Some(name) = layout
-            .methods
+        let Some(kind) = layout
+            .types
             .iter()
-            .find_map(Clone::clone)
-            .filter(|_| layout.base.is_none())
+            .find_map(|ty| program.abstract_generators.get(ty).copied())
         else {
+            continue;
+        };
+        let Some(name) = layout.methods.iter().find_map(Clone::clone) else {
             continue;
         };
         if program.funcs.iter().any(|func| func.name == name) {
@@ -508,12 +511,7 @@ fn declare_resumptions(program: &mut Program) -> Vec<Diagnostic> {
                 program.funcs.iter().find(|func| func.name == *overrode)
             })
         else {
-            let spelled = if layout.name.starts_with("Async") {
-                "AsyncGenerator<…>"
-            } else {
-                "Generator<…>"
-            };
-            uninhabited.push((name, spelled));
+            uninhabited.push((name, kind));
             continue;
         };
         let mut shell = body.clone();
@@ -545,7 +543,7 @@ fn declare_resumptions(program: &mut Program) -> Vec<Diagnostic> {
 }
 
 /// Refuse every function that steps a generator through an abstract generator
-/// no frame extends, `(resumption, how its kind is spelled)`.
+/// no frame extends, `(resumption, the protocol it speaks)`.
 ///
 /// Each one dispatches to a resumption nothing defines or declares, and the
 /// sentence is about the generator rather than the callee: C and LLVM said "no
@@ -556,7 +554,7 @@ fn declare_resumptions(program: &mut Program) -> Vec<Diagnostic> {
 /// `drop_callers_of_refused`.
 fn refuse_uninhabited(
     program: &mut Program,
-    uninhabited: &[(String, &'static str)],
+    uninhabited: &[(String, super::GeneratorKind)],
 ) -> Vec<Diagnostic> {
     if uninhabited.is_empty() {
         return Vec::new();
@@ -577,15 +575,19 @@ fn refuse_uninhabited(
                 else {
                     return None;
                 };
-                let (_, spelled) = uninhabited.iter().find(|(name, _)| name == declared)?;
-                Some((value, *spelled))
+                let (_, kind) = uninhabited.iter().find(|(name, _)| name == declared)?;
+                Some((value, *kind))
             });
-        let Some((value, spelled)) = step else {
+        let Some((value, kind)) = step else {
             continue;
         };
+        let (spelled, declaration) = match kind {
+            super::GeneratorKind::Sync => ("Generator<…>", "a `function*`"),
+            super::GeneratorKind::Async => ("AsyncGenerator<…>", "an `async function*`"),
+        };
         let why = format!(
-            "a generator stepped as `{spelled}`, which no generator in this program extends -- a \
-             `function*` declaration stored as a function type whose `{spelled}` is not its own \
+            "a generator stepped as `{spelled}`, which no generator in this program extends -- \
+             {declaration} declaration stored as a function type whose `{spelled}` is not its own \
              keeps its own"
         );
         refusals.push(Diagnostic::error(

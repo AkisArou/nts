@@ -16335,6 +16335,17 @@ pub fn lower_with(
     // afterwards. Filled earlier it was the checker's answer to a question the
     // program had not finished answering.
     lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
+    // Which protocol each abstract generator speaks, from the derivation its
+    // layout was built from, so `suspend` need not read it back out of the
+    // layout's name. Here for the same reason as the line above: every id a
+    // layout answers for, after canonicalisation.
+    lowered.program.abstract_generators = lowered
+        .program
+        .layouts
+        .iter()
+        .flat_map(|layout| &layout.types)
+        .filter_map(|ty| Some((*ty, abstract_generator_kind(snapshot, *ty)?)))
+        .collect();
     // A pure read made once per dominating read -- an erased value read as its
     // representation, a string's code unit or length -- so a guard and the use
     // it guards read one value (`hir::cse`).

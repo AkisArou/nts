@@ -3371,6 +3371,15 @@ pub struct Program {
     /// the declaration's.
     pub public_api: Vec<(String, String)>,
     pub generators: Vec<GeneratorResumption>,
+    /// Which protocol each abstract generator speaks, by every id its layout
+    /// answers for ([`GeneratorFrame::declared`]).
+    ///
+    /// A frame carries its own kind ([`GeneratorFrame::kind`]). This is for the
+    /// abstract generator every frame of one element extends, which may have no
+    /// frame at all: [`suspend`] asks it which layouts are abstract generators,
+    /// and how to spell the kind of one no frame extends, where it once read
+    /// the layout's name.
+    pub abstract_generators: std::collections::BTreeMap<TypeId, GeneratorKind>,
     /// Exported object literals whose properties are functions, as
     /// `(exported name, [(property, emitted function)])`.
     ///
