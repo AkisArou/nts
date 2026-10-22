@@ -67,5 +67,9 @@ const shelf: Shelf = { held: null };
 
 export function stored(n: number): number {
   shelf.held = { next: null, value: n };
-  return n + 1;
+  const kept = shelf.held?.value ?? 0;
+  // Given back, so a program run under reference counting holds nothing
+  // at the end that it did not hold after the first case.
+  shelf.held = null;
+  return kept + 1;
 }

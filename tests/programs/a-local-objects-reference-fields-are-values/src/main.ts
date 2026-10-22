@@ -68,5 +68,9 @@ export function compared(size: number): number {
 
 export function published(size: number): number {
   last = new Labelled("z", size);
-  return size + 1;
+  const kept = last.size;
+  // Given back, so a program run under reference counting holds nothing
+  // at the end that it did not hold after the first case.
+  last = null;
+  return kept + 1;
 }

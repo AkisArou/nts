@@ -1,4 +1,4 @@
-ideal 6
+ideal 4
 allocated 2
 candidates 0
 because This case held a cost still, so that whoever made the collector precise
@@ -28,12 +28,19 @@ because outlive its frame through the candidate buffer, and the `Leaf`s it holds
 because stay in the frame again. `HoldsOne` beside it never needed this: a
 because layout always had a cyclic flag of its own.
 because
-because Six operations, all releases: the two values the stores overwrite (the
-because first `Leaf`, `listA`), the two the frame holders give back where the
-because frame ends (the second `Leaf`, `listB`), and the two arrays the locals
-because hold. No retain: the `Leaf`s and both holders are frame objects, and the
-because arrays are taken by the stores rather than copied. Releasing `listA`
-because above zero is the moment that used to buffer it.
+because Four operations, all releases: the two arrays the locals hold, given
+because back where they die (`listA`, `listB`), and the `Leaf` each of them holds,
+because given back as it frees. No retain: the `Leaf`s are frame objects, and the
+because arrays are taken by the stores rather than copied.
+because
+because It was six until 2026-10-22, with two more releases: the values the stores
+because overwrote (the first `Leaf`, `listA`). Those stores no longer write into
+because an object. `HoldsOne` and `HoldsMany` hold only references and never
+because leave `work`, and since then `scalarize` takes such an object apart --
+because its fields are values (tests/programs/a-local-objects-reference-fields-
+because are-values) -- so `one.item = second` and `many.items = listB` assign a
+because local and release nothing. Releasing `listA` above zero, the moment this
+because case was written to watch, no longer happens at all.
 because
 because `candidates 0`, and the naive column agrees now: under NTS_RC_NAIVE the
 because array was the one candidate, and an acyclic descriptor is never offered.
