@@ -1656,11 +1656,11 @@ static void nts_possible_root(NtsHeader *object) {
 
 /* The whole release of a counted object -- not null, not immortal -- out of
  * line. `nts_release` calls it for everything it does not decide inline: a
- * count reaching zero, an object already dying, and any release of a type that
- * can lead back to itself, which may make the object a cycle candidate and
- * start a collection. A rare release inside a function that is itself inlined
- * everywhere calls it directly, so the fast path is not copied there for
- * nothing (`nts_str_append`'s growth). */
+ * count reaching zero, an object already dying, and a release of a type that
+ * can lead back to itself whose object is not yet a cycle candidate, which may
+ * buffer it and start a collection. A rare release inside a function that is
+ * itself inlined everywhere calls it directly, so the fast path is not copied
+ * there for nothing (`nts_str_append`'s growth). */
 static NTS_NOINLINE void nts_release_counted(NtsHeader *object);
 
 void nts_release(NtsHeader *object) {
@@ -1674,14 +1674,28 @@ void nts_release(NtsHeader *object) {
   if (count == NTS_IMMORTAL) {
     return;
   }
-  /* The common release: a reference given back while others remain, of a type
-   * no cycle can pass through, so there is no candidate to buffer and no
-   * collection to start. A dying object is the rest's -- its count word is the
-   * dying list's link. */
-  if (count > 1 && (object->flags & NTS_DYING) == 0 &&
-      !object->descriptor->cyclic) {
-    object->reserved = count - 1;
-    return;
+  /* The common release: a reference given back while others remain. A dying
+   * object is the rest's -- its count word is the dying list's link. */
+  if (count > 1 && (object->flags & NTS_DYING) == 0) {
+    /* Of a type no cycle can pass through: no candidate to buffer and no
+     * collection to start. */
+    if (!object->descriptor->cyclic) {
+      object->reserved = count - 1;
+      return;
+    }
+    /* Of one a cycle can, already a candidate. All `nts_possible_root` does
+     * for it is mark it purple again, and the buffer does not grow, so this
+     * cannot be the release that reaches the collection threshold; one that
+     * came due while a collection could not run waits for the next new
+     * candidate or the next checkpoint. A linked list or a tree moved and
+     * walked is released this way over and over -- each move retains (black)
+     * and releases (purple) the same few objects -- and the call around it was
+     * a quarter of `awfy-towers`: 49.2 -> 35.2 us, `awfy-list` 18.3 -> 12.1. */
+    if ((object->flags & NTS_BUFFERED) != 0) {
+      object->reserved = count - 1;
+      object->flags = (object->flags & ~NTS_COLOR_MASK) | NTS_PURPLE;
+      return;
+    }
   }
   nts_release_counted(object);
 }
