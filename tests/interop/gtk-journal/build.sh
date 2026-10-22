@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build the journal (see src/main.ts) on C and LLVM, plain and under
+# Build the journal (see src/main.ts) on C and LLVM, without counting and under
 # reference counting, and run its workload on each against the seeded file:
 # the log -- counts, the sort's head, the chart's peak, the save's bytes --
 # must be the one its GJS twin (benchmarks/gtk/gjs/journal.js) prints too.
@@ -26,8 +26,10 @@ fi
 
 "$source/seed.sh" 5000 > /tmp/nts-gtk-journal.txt
 expected="loaded 5000 searched 26427 sorted river 0 added 5200 edited 199 edits 823 charted 50 peak 442 deleted 5199 saved 5199 515362 "
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

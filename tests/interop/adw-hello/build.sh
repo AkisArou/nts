@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build a libadwaita application as a C and an LLVM product, plain and under
+# Build a libadwaita application as a C and an LLVM product, without counting and under
 # reference counting, and run each (see src/main.ts). `G_DEBUG=fatal-criticals`
 # turns any GTK or Adwaita complaint that is critical into an end.
 set -eu
@@ -22,8 +22,10 @@ if [ ! -e /usr/share/gir-1.0/Adw-1.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 expected="status Hello from nts moved map 3 wifi true name Ada view grid activated 1 dismissed 1 shown true "
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

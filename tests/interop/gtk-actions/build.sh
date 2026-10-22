@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build an application with actions, a menu, accelerators and a style
-# provider, on C and LLVM, plain and under reference counting, and run each
+# provider, on C and LLVM, without counting and under reference counting, and run each
 # (see src/main.ts). `G_DEBUG=fatal-criticals` turns any GTK complaint into
 # an end -- which is the control for the constructor the literal chose: a
 # stateless `dark` would take `change_action_state` as a critical.
@@ -24,8 +24,10 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 expected="count 2 dark true accels <Control>b big true dialog rejected Operation was cancelled "
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

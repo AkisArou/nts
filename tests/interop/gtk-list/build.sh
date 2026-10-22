@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build list views over models -- a store, a model the program writes, a
-# model sorted and filtered by TypeScript closures -- on C and LLVM, plain and
+# model sorted and filtered by TypeScript closures -- on C and LLVM, without counting and
 # under reference counting, and run each (see src/main.ts).
 # `G_DEBUG=fatal-criticals` turns any GTK complaint into an end; "bound
 # nothing" would mean the factory never ran.
@@ -24,8 +24,10 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 expected="tasks 100 true task 0 spliced 3 2 b listed range 1000000 first line 0 items 1000 sorted apple,banana,fig,kiwi,pear filtered apple,banana bound rows bound tasks bound range "
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

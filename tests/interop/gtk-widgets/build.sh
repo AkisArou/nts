@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build a window of a stack, a grid, a drop-down, a switch and a widget that
-# draws itself, on C and LLVM, plain and under reference counting, and run
+# draws itself, on C and LLVM, without counting and under reference counting, and run
 # each (see src/main.ts).
 # `G_DEBUG=fatal-criticals` turns any GTK complaint into an end.
 set -eu
@@ -34,8 +34,10 @@ check_refused() {
     exit 1
   fi
 }
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

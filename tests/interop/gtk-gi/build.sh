@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build a GTK4 program written against the `gi:` surface, as a C and an LLVM
-# product, run each plain and under reference counting, and check the log
+# product, run each without counting and under reference counting, and check the log
 # (see src/main.ts).
 #
 # A name the surface failed to rename does not typecheck, so a wrong surface
@@ -27,8 +27,10 @@ fi
 
 expected="made hi! 6 true 1 wider 10 order=12 items=1 priority=0 string=64 book Solaris 413 true me title 978 tally count 2 3 "
 mkdir -p "$out"
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

@@ -1,6 +1,6 @@
 #!/bin/sh
 # GTK handles held where any value may go (see src/main.ts), built as a C and
-# an LLVM product, plain and under reference counting, each run with GTK's
+# an LLVM product, without counting and under reference counting, each run with GTK's
 # criticals fatal: a handle released once too often is one.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
@@ -19,13 +19,15 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   echo "SKIP gtk-values: no Gtk-4.0.gir"
   exit 0
 fi
-for mode in plain rc; do
+for mode in nogc rc; do
   watch="held alive"
   dropped="alive alive"
   copies="alive"
   [ "$mode" = rc ] && watch="held gone" && dropped="gone gone" && copies="gone"
   expected="button b|button b|number|label|object|true|true|true|b kept ac 3 walked one=b also=b same same watch $watch temporary $watch dropped $dropped copies c $copies kept boxes rgba:rgb(255,0,0) iter attrs:0 3 weight bold other other other typed "
-  flag=""
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build a program drawing with cairo -- offscreen, and in a drawing area's
-# draw function -- on C and LLVM, plain and under reference counting, and run
+# draw function -- on C and LLVM, without counting and under reference counting, and run
 # each (see src/main.ts). `G_DEBUG=fatal-criticals` turns any GTK complaint
 # into an end.
 set -eu
@@ -23,8 +23,10 @@ if [ ! -e /usr/share/gir-1.0/Gtk-4.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
 fi
 
 drawn="offscreen 64x32 in true false ok true drawn true size 100x50 counted 2 kept 1"
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

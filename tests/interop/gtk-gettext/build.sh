@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build a program using GJS's `gettext` module (runtime/gtk/gettext.ts) as a
-# C and an LLVM product, run each plain and under reference counting with a
+# C and an LLVM product, run each without counting and under reference counting with a
 # catalogue compiled from po/eo.po, and check the translations (see
 # src/main.ts). The control: the same binary with no catalogue bound answers
 # each msgid, so a pass is a translation and not an echo.
@@ -32,8 +32,10 @@ mkdir -p "$out/locale/eo/LC_MESSAGES"
 msgfmt -o "$out/locale/eo/LC_MESSAGES/nts-gettext.mo" "$source/po/eo.po"
 expected="Saluton pomo pomoj Malfermi Saluton Untranslated"
 untranslated="Hello apple apples Open Hello Untranslated"
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build a GTK4 program whose signal handlers are `async`, as a C and an LLVM
-# product, run each plain and under reference counting, and check the log
+# product, run each without counting and under reference counting, and check the log
 # (see src/main.ts).
 #
 # Refused where the program's loop does not checkpoint after a callback; a
@@ -27,8 +27,10 @@ fi
 
 expected="direct c1 after c2 a1 b1 emitted a2 b2 caught boom "
 mkdir -p "$out"
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

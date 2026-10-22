@@ -1,7 +1,7 @@
 #!/bin/sh
 # A buffer whose last use precedes its iterators' (src/main.ts), and an
 # iterator that escapes its buffer's block (escape/src/main.ts), each built as
-# a C and an LLVM product, plain and under reference counting, and run with
+# a C and an LLVM product, without counting and under reference counting, and run with
 # GTK's warnings fatal: an iterator into a freed buffer is a warning GTK gives.
 #
 # **One gap closed and one recorded, and the two arms differ in one thing.** A
@@ -44,15 +44,15 @@ run() {
   env GSK_RENDERER=cairo G_DEBUG=fatal-warnings \
     timeout 30 "$root/tests/interop/with-display.sh" "$out/$mode/$1/linux-gnu-x86_64/$1" 2>/dev/null | tr '\n' ' ' || true
 }
-# `check <product> <expected log> <same|differs>`: plain must always print it,
+# `check <product> <expected log> <same|differs>`: the nogc arm must print it,
 # and the third argument says what `--rc` must do. Spelled per arm rather than
 # per mode, because the two arms no longer answer the same way and a fixture
 # whose expectation is a mode is a fixture that cannot record one gap closing.
 check() {
   log=$(run "$1")
   echo "$1 ($mode): $log"
-  if [ "$mode" = plain ] && [ "$log" != "$2" ]; then
-    echo "FAILED gtk-iter-lifetime: $1 (plain) expected $2" >&2
+  if [ "$mode" = nogc ] && [ "$log" != "$2" ]; then
+    echo "FAILED gtk-iter-lifetime: $1 (nogc) expected $2" >&2
     exit 1
   fi
   [ "$mode" = rc ] || return 0
@@ -69,8 +69,10 @@ check() {
       ;;
   esac
 }
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

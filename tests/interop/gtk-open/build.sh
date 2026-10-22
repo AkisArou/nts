@@ -1,6 +1,6 @@
 #!/bin/sh
 # An application that opens files (see src/main.ts), built as a C and an LLVM
-# product, plain and under reference counting, each run with GLib's criticals
+# product, without counting and under reference counting, each run with GLib's criticals
 # fatal: a file released once too often is one.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
@@ -16,8 +16,10 @@ if [ ! -e /usr/share/gir-1.0/Gio-2.0.gir ] && [ -z "${GI_GIR_PATH:-}" ]; then
   exit 0
 fi
 expected="open 2 a.txt,b.txt hint kept a.txt,b.txt opened 1 "
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag

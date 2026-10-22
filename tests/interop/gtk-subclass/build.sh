@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build GTK4 programs whose classes extend GObject classes, as a C and an
-# LLVM product, run each plain and under reference counting, and check the
+# LLVM product, run each without counting and under reference counting, and check the
 # log (see src/main.ts).
 #
 # The arms that make a passing run mean something are in the program: a
@@ -31,8 +31,10 @@ expected="clicked 0! clicked 0!! type Nts_Counter count 2 seen 0|0! plain p hell
 # source, and a resource compiled here.
 mkdir -p "$out"
 glib-compile-resources --sourcedir "$source" --target "$out/templates.gresource" "$source/templates.gresource.xml"
-for mode in plain rc; do
-  flag=""
+for mode in nogc rc; do
+  # Each arm says what it is: `nts build` counts references unless told
+  # `--nogc`, so an arm with no flag would be a second `--rc` arm.
+  flag="--nogc"
   [ "$mode" = rc ] && flag="--rc"
   # shellcheck disable=SC2086
   "$nts" build "$source/tsconfig.json" --out "$out/$mode" $flag
