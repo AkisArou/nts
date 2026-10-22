@@ -6510,12 +6510,12 @@ struct Toolchain {
     ///
     /// [`compile_flags::LTO`]: nts_codegen_common::compile_flags::LTO
     lto: bool,
-    /// The CPU flags its compiles take: [`compile_flags::X86_64_V3`] for an
-    /// x86-64 host target that does not say `cpu: "baseline"`. Empty for the
-    /// cross toolchains until each is checked, as [`Toolchain::lto`] is.
-    ///
-    /// [`compile_flags::X86_64_V3`]: nts_codegen_common::compile_flags::X86_64_V3
+    /// The CPU flags its compiles take ([`cpu_flags`]). Empty for the cross
+    /// toolchains until each is checked, as [`Toolchain::lto`] is.
     cpu: Vec<String>,
+    /// What its LTO link adds besides [`lto_flags`]: the same tuning where
+    /// the link generates the code ([`cpu_flags_at_link`]).
+    cpu_at_link: Vec<String>,
 }
 
 impl Toolchain {
@@ -6567,38 +6567,52 @@ fn lto_flags() -> impl Iterator<Item = String> {
         .map(|flag| (*flag).to_owned())
 }
 
-/// What an LTO link adds besides [`lto_flags`]: [`compile_flags::LINK_LTO`],
-/// the code-generation flags that act at the link, where code is generated.
-///
-/// [`compile_flags::LINK_LTO`]: nts_codegen_common::compile_flags::LINK_LTO
-fn lto_link_flags() -> impl Iterator<Item = String> {
-    lto_flags().chain(
-        nts_codegen_common::compile_flags::LINK_LTO
-            .iter()
-            .map(|flag| (*flag).to_owned()),
-    )
-}
-
-/// The CPU flags for `target`: x86-64-v3 on x86-64 unless it says
-/// `cpu: "baseline"` ([`compile_flags::X86_64_V3`]), and nothing elsewhere.
-///
-/// [`compile_flags::X86_64_V3`]: nts_codegen_common::compile_flags::X86_64_V3
-fn cpu_flags(target: &nts_build::config::Target) -> Result<Vec<String>> {
-    let x86_64 = target
+fn is_x86_64(target: &nts_build::config::Target) -> bool {
+    target
         .arch
         .as_deref()
-        .map_or(std::env::consts::ARCH == "x86_64", |arch| arch == "x86_64");
+        .map_or(std::env::consts::ARCH == "x86_64", |arch| arch == "x86_64")
+}
+
+fn owned_flags(flags: &[&str]) -> impl Iterator<Item = String> {
+    flags.iter().map(|flag| (*flag).to_owned())
+}
+
+/// The CPU flags for `target`, and nothing on another architecture. On x86-64:
+/// its loop alignment ([`compile_flags::X86_64_LOOPS`]) at every CPU level, and
+/// x86-64-v3 ([`compile_flags::X86_64_V3`]) unless it says `cpu: "baseline"`.
+///
+/// [`compile_flags::X86_64_LOOPS`]: nts_codegen_common::compile_flags::X86_64_LOOPS
+/// [`compile_flags::X86_64_V3`]: nts_codegen_common::compile_flags::X86_64_V3
+fn cpu_flags(target: &nts_build::config::Target) -> Result<Vec<String>> {
+    let x86_64 = is_x86_64(target);
+    let loops = owned_flags(if x86_64 {
+        nts_codegen_common::compile_flags::X86_64_LOOPS
+    } else {
+        &[]
+    });
     match target.cpu.as_deref() {
-        None if x86_64 => Ok(nts_codegen_common::compile_flags::X86_64_V3
-            .iter()
-            .map(|flag| (*flag).to_owned())
+        None if x86_64 => Ok(loops
+            .chain(owned_flags(nts_codegen_common::compile_flags::X86_64_V3))
             .collect()),
-        None | Some("baseline") => Ok(Vec::new()),
+        None | Some("baseline") => Ok(loops.collect()),
         Some(other) => bail!(
             "target `{}` names cpu `{other}`; the one value is \"baseline\", which builds for every \
              x86-64 CPU instead of x86-64-v3",
             target.id
         ),
+    }
+}
+
+/// What an LTO link for `target` adds to generate code as [`cpu_flags`]
+/// compiles it: [`compile_flags::X86_64_LOOPS_AT_LINK`] on x86-64.
+///
+/// [`compile_flags::X86_64_LOOPS_AT_LINK`]: nts_codegen_common::compile_flags::X86_64_LOOPS_AT_LINK
+fn cpu_flags_at_link(target: &nts_build::config::Target) -> Vec<String> {
+    if is_x86_64(target) {
+        owned_flags(nts_codegen_common::compile_flags::X86_64_LOOPS_AT_LINK).collect()
+    } else {
+        Vec::new()
     }
 }
 
@@ -6620,6 +6634,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
             linker: None,
             lto,
             cpu: cpu_flags(target)?,
+            cpu_at_link: cpu_flags_at_link(target),
         });
     }
     if target.os == "macos" {
@@ -6659,6 +6674,7 @@ fn toolchain_for(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         linker: None,
         lto: false,
         cpu: Vec::new(),
+        cpu_at_link: Vec::new(),
     })
 }
 
@@ -6726,6 +6742,7 @@ fn apple_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Too
         linker: None,
         lto: false,
         cpu: Vec::new(),
+        cpu_at_link: Vec::new(),
     })
 }
 
@@ -6774,6 +6791,7 @@ fn ios_toolchain(name: &str, target: &nts_build::config::Target) -> Result<Toolc
         linker: None,
         lto: false,
         cpu: Vec::new(),
+        cpu_at_link: Vec::new(),
     })
 }
 
@@ -6841,6 +6859,7 @@ fn windows_toolchain(name: &str, target: &nts_build::config::Target) -> Result<T
         linker: Some(linker),
         lto: false,
         cpu: Vec::new(),
+        cpu_at_link: Vec::new(),
     })
 }
 
@@ -7141,7 +7160,7 @@ fn link_c(
         {
             let mut command = tools.link_command();
             if tools.lto {
-                command.args(lto_link_flags());
+                command.args(lto_flags()).args(&tools.cpu_at_link);
             }
             if shared {
                 command.arg(if format == ObjectFormat::MachO {

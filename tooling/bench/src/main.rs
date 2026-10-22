@@ -3178,16 +3178,24 @@ fn compile(
     // What a shipped program is built with (`compile_flags::OPTIMIZE` and
     // `LTO`), for nts's code and the C++ reference alike: the same compiler and
     // the same flags on both sides of the ratio, and the same as `nts build`.
-    // And the CPU a host build is for (`X86_64_V3`, as `nts build` takes it).
-    let cpu: &[&str] = if std::env::consts::ARCH == "x86_64" {
-        nts_codegen_common::compile_flags::X86_64_V3
+    // And the CPU a host build is for, as `nts build` takes it: on x86-64,
+    // `X86_64_V3` and its loop alignment, `X86_64_LOOPS` (at the link,
+    // `X86_64_LOOPS_AT_LINK`).
+    let x86_64 = std::env::consts::ARCH == "x86_64";
+    let (cpu, loops, loops_at_link): (&[&str], &[&str], &[&str]) = if x86_64 {
+        (
+            nts_codegen_common::compile_flags::X86_64_V3,
+            nts_codegen_common::compile_flags::X86_64_LOOPS,
+            nts_codegen_common::compile_flags::X86_64_LOOPS_AT_LINK,
+        )
     } else {
-        &[]
+        (&[], &[], &[])
     };
     let shared: Vec<&str> = nts_codegen_common::compile_flags::OPTIMIZE
         .iter()
         .chain(nts_codegen_common::compile_flags::LTO)
         .chain(cpu)
+        .chain(loops)
         .copied()
         .chain(["-Wall", "-Wextra", "-Werror"])
         .collect();
@@ -3244,7 +3252,7 @@ fn compile(
 
     let link = std::process::Command::new("clang++")
         .args(&shared)
-        .args(nts_codegen_common::compile_flags::LINK_LTO)
+        .args(loops_at_link)
         .args(&objects)
         .arg("-o")
         .arg(binary)

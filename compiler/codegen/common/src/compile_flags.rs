@@ -23,23 +23,23 @@
 ///   verification, which is the same fault in code that does not escape it.
 /// - `-fno-math-errno`: no JavaScript program can read `errno`, and while
 ///   `sqrt` may set it clang cannot inline it. Measured as noise on 20 rows.
-/// - `-falign-loops=32`: every loop starts on a 32-byte boundary, for a build
-///   that is not linked with LTO, where code is generated at compile time. The
-///   reason, and the one loss, are [`LINK_LTO`]'s. Under LTO this flag does
-///   nothing; it stays for the toolchains that do not link with [`LTO`] (the
-///   cross builds, today).
-pub const OPTIMIZE: &[&str] = &[
-    "-O2",
-    "-ffp-contract=off",
-    "-fno-math-errno",
-    "-falign-loops=32",
-];
-
-/// What a link with `-flto` adds, where code is generated at the link and a
-/// compile-time code-generation flag has no effect.
 ///
-/// - `-plugin-opt=-align-loops=32`: every loop starts on a 32-byte boundary.
-///   Where a hot loop lands decided whole rows: C and LLVM disagreed on the
+/// Tuning for one architecture is not here: see [`X86_64_LOOPS`].
+pub const OPTIMIZE: &[&str] = &["-O2", "-ffp-contract=off", "-fno-math-errno"];
+
+/// Every loop of an x86-64 program starts on a 32-byte boundary, at whatever
+/// CPU level it is built for; [`X86_64_LOOPS_AT_LINK`] says the same where an
+/// LTO link generates the code.
+///
+/// **x86-64 only.** What was measured is an x86 front end's fetch window, and
+/// it was in [`OPTIMIZE`], which every target reads, for one day: clang's
+/// ARM64 Windows backend cannot size a function whose loops are padded, and
+/// stopped (`fatal error: error in backend: Failed to evaluate function length
+/// in SEH unwind info`, clang 23.1.3, `tests/interop/windows-hello` for
+/// aarch64-w64-windows-gnu). Another architecture's alignment is that
+/// architecture's measurement.
+///
+/// - Where a hot loop lands decided whole rows: C and LLVM disagreed on the
 ///   same prepared program by up to 2.7x while executing the same instructions
 ///   per iteration, with one lane's loop straddling what the front end fetches
 ///   in one go (C's `dispatch` took 321M decoded-stream misses where LLVM's
@@ -62,7 +62,11 @@ pub const OPTIMIZE: &[&str] = &[
 ///   away, and no alignment tried gives it back (64 is no better). C's
 ///   `dispatch` gains 19%, and every lane now runs at the speed the code earns
 ///   rather than the speed its address happens to give it.
-pub const LINK_LTO: &[&str] = &["-Wl,-plugin-opt=-align-loops=32"];
+pub const X86_64_LOOPS: &[&str] = &["-falign-loops=32"];
+
+/// [`X86_64_LOOPS`] for a link with [`LTO`], where code is generated at the
+/// link and a compile-time code-generation flag has no effect.
+pub const X86_64_LOOPS_AT_LINK: &[&str] = &["-Wl,-plugin-opt=-align-loops=32"];
 
 /// Link-time optimization, at compile and at link, wherever the toolchain is
 /// clang: thin LTO, the user's decision of 2026-10-22 ("the benchmarks build
