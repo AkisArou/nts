@@ -48643,6 +48643,11 @@ impl<'a> FuncBuilder<'a> {
         position: usize,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(element);
+        if !object
+            && let Some(absent) = self.exhausted_pattern_element(element, value, position, None)?
+        {
+            return Ok(absent);
+        }
         Ok(if object {
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[value.0 as usize].ty.clone()
@@ -64139,6 +64144,74 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// An exhausted position of the pattern's own immediate array literal.
+    ///
+    /// The literal has already been evaluated, in order, including every
+    /// element's effects. An absent position yields `undefined`, then its
+    /// default runs, then the caller binds or assigns it. In particular a TDZ
+    /// assignment must raise from `PutValue`, not abort on an earlier `ArrayGet`:
+    /// test262's `staging/sm/expressions/destructuring-array-lexical.js`.
+    ///
+    /// Fold before building a branch: `const [[x] = [1]] = []` has no element
+    /// arm, but building that arm would still reconcile the empty literal's
+    /// numeric storage with the default's array storage and refuse it.
+    ///
+    /// An older `ArrayNew` is not proof: a local can grow before the pattern
+    /// reads it. Require the pattern's literal RHS/initializer, and its origin
+    /// on the allocation, rather than trusting a nominal tuple length.
+    fn exhausted_pattern_element(
+        &mut self,
+        element: NodeId,
+        value: ValueId,
+        position: usize,
+        default: Option<NodeId>,
+    ) -> Result<Option<ValueId>, Diagnostic> {
+        let Some(pattern) = self.syntactic_parent(element) else {
+            return Ok(None);
+        };
+        let Some(parent) = self.syntactic_parent(pattern) else {
+            return Ok(None);
+        };
+        let source = if self.kind_of(parent) == Some(syntax::VARIABLE_DECLARATION) {
+            self.child_slots::<4>(parent)
+                .and_then(|[name, _, _, initializer]| {
+                    (name == Some(pattern)).then_some(initializer).flatten()
+                })
+        } else {
+            self.assignment_default(parent)
+                .filter(|(target, _)| *target == pattern)
+                .map(|(_, source)| source)
+        };
+        let Some(source) = source else {
+            return Ok(None);
+        };
+        let allocation = &self.values[value.0 as usize];
+        if self.kind_of(source) != Some(syntax::ARRAY_LITERAL_EXPRESSION)
+            || allocation.origin.location != self.origin(source).location
+        {
+            return Ok(None);
+        }
+        let OpKind::ArrayNew { length, .. } = allocation.kind else {
+            return Ok(None);
+        };
+        let OpKind::ConstFloat(allocated) = self.values[length.0 as usize].kind else {
+            return Ok(None);
+        };
+        #[allow(clippy::cast_precision_loss)]
+        let at = position as f64;
+        if allocated > at {
+            return Ok(None);
+        }
+        match default {
+            Some(default) => self.lower_expression(default).map(Some),
+            None => Ok(Some(self.push(
+                OpKind::ConstUndefined,
+                HirType::Erased,
+                self.origin(element),
+            ))),
+        }
+    }
+
     /// Bind every name a destructuring pattern introduces.
     ///
     /// The initializer is lowered *once* and each name is a read of it, which
@@ -64186,6 +64259,9 @@ impl<'a> FuncBuilder<'a> {
         position: usize,
         default: Option<NodeId>,
     ) -> Result<Option<ValueId>, Diagnostic> {
+        if let Some(absent) = self.exhausted_pattern_element(element, value, position, default)? {
+            return Ok(Some(absent));
+        }
         let HirType::Managed(ManagedType::Array(element_ty)) =
             self.values[value.0 as usize].ty.clone()
         else {
@@ -64236,31 +64312,6 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(element);
         #[allow(clippy::cast_precision_loss)]
         let at = position as f64;
-        // **A source with no element at this position takes the default, and
-        // only the default.** `const [[x] = [1]] = []` reads position 0 of an
-        // array built with length 0, so `exhausted` below is a constant `true`
-        // and the element arm is unreachable -- but both arms still have to
-        // agree on a type, and they cannot: the element is whatever width the
-        // empty literal was given and the default is `number[]`. The refusal
-        // that came out, *a number where an array is wanted*, is about an arm
-        // that never runs.
-        //
-        // Folding it here rather than leaving it to the simplifier, because the
-        // disagreement is raised while the branch is being *built*.
-        //
-        // The test is **syntactic** -- the value is directly an `ArrayNew` with
-        // a constant length -- for the reason `rc.rs` gives for the same shape:
-        // a claim about every path that could reach one is a different and much
-        // larger claim. Growth cannot intervene either, because the reads a
-        // pattern emits follow the literal immediately and nothing is lowered
-        // between them.
-        if let Some(default) = default
-            && let OpKind::ArrayNew { length, .. } = self.values[value.0 as usize].kind
-            && let OpKind::ConstFloat(allocated) = self.values[length.0 as usize].kind
-            && allocated <= at
-        {
-            return self.lower_expression(default).map(Some);
-        }
         let index = self.push(OpKind::ConstFloat(at), HirType::NUMBER, origin.clone());
         // `OpKind::Length`, the plain read. `Place::ArrayLength` is the
         // *compound-assignment* path and refuses on sight -- "reading an array's
