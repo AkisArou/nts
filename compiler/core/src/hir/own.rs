@@ -612,6 +612,7 @@ fn classify(
                 Ownership::Produced
             } else if (is_load(kind) || repackages(kind))
                 && (decided.crossing.contains(value)
+                    || repackages_a_crossing_borrow(func, *value, decided.crossing)
                     || safely()
                     // A handle the host keeps alive on the stack needs no
                     // count of its own to survive its container letting go.
@@ -3247,6 +3248,33 @@ fn views_borrow(func: &Func, value: ValueId, crossing: &rustc_hash::FxHashSet<Va
                     ..
                 }
         )
+}
+
+/// Whether a value is an erasure, or a read-back of one, of something borrowed
+/// for its whole life.
+///
+/// An erased value is exactly what it wraps, seen through a tag
+/// (`counted_from`), so it is good for as long as the borrow it wraps: a
+/// class test on an element read out of an array and the narrowing that test
+/// licenses (`x instanceof C`, `class_sets`) need no count of their own.
+/// Without this the erasure took the count the borrow had just saved, and kept
+/// a retain and a release around every arm of a guarded call.
+fn repackages_a_crossing_borrow(
+    func: &Func,
+    value: ValueId,
+    crossing: &rustc_hash::FxHashSet<ValueId>,
+) -> bool {
+    let mut at = value;
+    // Bounded: a chain of repackagings is an erasure and a read-back.
+    for _ in 0..8 {
+        let (OpKind::Erase { value: inner, .. } | OpKind::Unerase { value: inner }) =
+            func.values[at.0 as usize].kind
+        else {
+            break;
+        };
+        at = inner;
+    }
+    at != value && crossing.contains(&at)
 }
 
 pub(super) fn repackages(kind: &OpKind) -> bool {
