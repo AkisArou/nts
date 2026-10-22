@@ -5607,17 +5607,23 @@ fn integral_remainder(func: &Func, op: &nts_core::hir::Op, out: &str) -> Option<
     ))
 }
 
-fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static str, Diagnostic> {
+fn binary(op: BinOp, float: bool, unsigned: bool, func: &Func) -> Result<&'static str, Diagnostic> {
     Ok(match (op, float) {
+        // **Integer `+`, `-` and `*` wrap, signed or not**, as the C backend's
+        // `wrapping_arithmetic` writes them. These carried `nsw` for every
+        // signed type, a promise that they never overflow, and the program
+        // does not keep it: `narrow::narrow_truncated` computes a `| 0` chain
+        // at 32 bits precisely because it is meant to wrap. clang kept the
+        // promise -- `icmp sgt (add nsw h, 1), h` folded to `true` -- and
+        // `tests/outcomes/a-wrapping-add-compared-with-its-operand-llvm` counted
+        // 10 where node and C count 9. Where an operation provably cannot
+        // overflow is a fact core has to state, for both backends at once.
         (BinOp::Add, true) => "fadd",
-        (BinOp::Add, false) if wraps => "add",
-        (BinOp::Add, false) => "add nsw",
+        (BinOp::Add, false) => "add",
         (BinOp::Sub, true) => "fsub",
-        (BinOp::Sub, false) if wraps => "sub",
-        (BinOp::Sub, false) => "sub nsw",
+        (BinOp::Sub, false) => "sub",
         (BinOp::Mul, true) => "fmul",
-        (BinOp::Mul, false) if wraps => "mul",
-        (BinOp::Mul, false) => "mul nsw",
+        (BinOp::Mul, false) => "mul",
         (BinOp::Div, true) => "fdiv",
         // LLVM's integer types carry no sign, so the *instruction* is where the
         // signedness has to be said -- and these six said "signed" whatever the
@@ -5630,10 +5636,10 @@ fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static s
         // 2^31, as do `slt` and `ult`, so this was a wrong answer waiting for a
         // program that reached one. Nothing in the corpus does, which is why
         // nothing caught it.
-        (BinOp::Div, false) if wraps => "udiv",
+        (BinOp::Div, false) if unsigned => "udiv",
         (BinOp::Div, false) => "sdiv",
         (BinOp::Rem, true) => "frem",
-        (BinOp::Rem, false) if wraps => "urem",
+        (BinOp::Rem, false) if unsigned => "urem",
         (BinOp::Rem, false) => "srem",
         // `ordered` comparisons, which answer false when either side is NaN --
         // which is what JavaScript's relational operators do.
@@ -5646,13 +5652,13 @@ fn binary(op: BinOp, float: bool, wraps: bool, func: &Func) -> Result<&'static s
         // And the same for the relations. `i1` makes it plainest: `slt` reads a
         // `true` as -1, so an unsigned comparison is not an optimization here
         // but the only correct spelling.
-        (BinOp::Lt, false) if wraps => "icmp ult",
+        (BinOp::Lt, false) if unsigned => "icmp ult",
         (BinOp::Lt, false) => "icmp slt",
-        (BinOp::Le, false) if wraps => "icmp ule",
+        (BinOp::Le, false) if unsigned => "icmp ule",
         (BinOp::Le, false) => "icmp sle",
-        (BinOp::Gt, false) if wraps => "icmp ugt",
+        (BinOp::Gt, false) if unsigned => "icmp ugt",
         (BinOp::Gt, false) => "icmp sgt",
-        (BinOp::Ge, false) if wraps => "icmp uge",
+        (BinOp::Ge, false) if unsigned => "icmp uge",
         (BinOp::Ge, false) => "icmp sge",
         (BinOp::Eq, false) => "icmp eq",
         (BinOp::Ne, false) => "icmp ne",
