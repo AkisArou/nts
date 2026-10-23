@@ -86,6 +86,7 @@ pub mod own;
 pub mod rc;
 pub mod reachable;
 mod refused;
+pub mod regions;
 pub mod runtime;
 pub mod scalarize;
 pub mod signatures;
@@ -5130,6 +5131,9 @@ pub struct Prepared {
     pub pruned: usize,
     /// Retains and releases inserted, if the provider counts references.
     pub counting: rc::Report,
+    /// Which calls a region could serve, where asked
+    /// ([`Options::report_regions`]) and the provider counts; empty otherwise.
+    pub regions: regions::Report,
     /// Allocations that stayed in the frame instead of reaching the allocator.
     pub framed: usize,
     /// Operations that turned out to return one of their own operands.
@@ -5522,6 +5526,11 @@ pub struct Options<'a> {
     /// `Options { provider: HostGc, ..default() }` would inherit native's
     /// answer.
     pub table_entries: Option<bool>,
+    /// Whether to work out which calls a region could serve
+    /// (`Prepared::regions`). Asked by the commands that print it, not by a
+    /// build: nothing acts on the answer yet, and a build should not pay for
+    /// one it does not read.
+    pub report_regions: bool,
 }
 
 impl Default for Options<'_> {
@@ -5549,6 +5558,7 @@ impl Default for Options<'_> {
             targets: native::Targets::only(HOST),
             // As the provider answers, resolved with it.
             table_entries: None,
+            report_regions: false,
         }
     }
 }
@@ -5581,6 +5591,8 @@ pub struct PreparationOptions<'a> {
     /// resolves it against the provider, so a caller building these directly
     /// with `..default()` inherits no other provider's answer.
     pub table_entries: Option<bool>,
+    /// [`Options::report_regions`].
+    pub report_regions: bool,
 }
 
 impl PreparationOptions<'_> {
@@ -5603,6 +5615,7 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
             roots: options.roots,
             targets: options.targets,
             table_entries: options.table_entries,
+            report_regions: options.report_regions,
         }
     }
 }
@@ -7710,6 +7723,10 @@ pub fn prepare_unverified(snapshot: &SemanticSnapshot, options: &Options<'_>) ->
         .into_unverified(&PreparationOptions::from(options))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the passes in their order, one statement each: split, the order is no longer in one place"
+)]
 fn prepare_lowered(
     mut lowered: lower::Lowered,
     foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
@@ -7874,6 +7891,15 @@ fn prepare_lowered(
         Provider::HostGc => 0,
     };
 
+    // Which calls a region could serve (`regions`), reported and not yet acted
+    // on: after escape analysis, which decides what lives in a frame, and
+    // before counting, whose operations a region's clone would leave out.
+    let regions = if options.report_regions && options.provider == Provider::ReferenceCounting {
+        regions::analyze(&program)
+    } else {
+        regions::Report::default()
+    };
+
     // Reference counting, after everything that could move or remove an
     // operation: a retain inserted before dead-code elimination would keep
     // alive exactly what that pass was about to drop.
@@ -7934,6 +7960,7 @@ fn prepare_lowered(
         cloned,
         copied,
         devirtualized,
+        regions,
         program,
         diagnostics: lowered.diagnostics,
         rejected,

@@ -3140,6 +3140,8 @@ fn prepared_program(
             callbacks_checkpoint: false,
             targets: nts_core::hir::native::Targets::only(hir::HOST),
             table_entries: backend.table_entries(),
+            // A report nothing measured here reads, and a build pays for it.
+            report_regions: false,
         },
     ) {
         Ok(prepared) => prepared,

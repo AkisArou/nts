@@ -681,6 +681,7 @@ INSPECTING
   types        every type the frontend resolved, as the schema records it
   hir          the lowered program; --prepared [--backend c|llvm|jvm|wasm] shows backend preparation
   stats        what preparation did to the program, as `key value` counts (takes hir --prepared's flags)
+  regions      which calls a region could serve under --rc, and why each other one cannot
   expect-ir    check the sources' `// expect-ir:` facts against the program each named backend receives
   facts        the facts lowering derived; --prepared for the prepared program
   refusals     every construct this program was refused for, with its reason
@@ -888,6 +889,14 @@ fn main() -> Result<()> {
         Some("stats") => {
             let rest: Vec<String> = args.collect();
             dump_stats(&project(&rest)?)
+        }
+        // Which calls a region could serve (`hir::regions`), and the first
+        // reason each other candidate cannot: the counts, the reasons ranked,
+        // then every candidate. Takes `stats`' flags; reports only under
+        // `--rc`, the one provider a region is for.
+        Some("regions") => {
+            let rest: Vec<String> = args.collect();
+            dump_regions(&project(&rest)?)
         }
         // The `// expect-ir:` facts in the project's sources, each checked
         // against the program every backend it names receives.
@@ -2615,7 +2624,16 @@ fn prepare_for_listing(
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
-    prepare_as(hir_preparation()?, tsconfig, snapshot)
+    prepare_as(hir_preparation()?, tsconfig, snapshot, false)
+}
+
+/// [`prepare_for_listing`], with the region report worked out
+/// (`hir::Options::report_regions`): for the commands that print it.
+fn prepare_reporting_regions(
+    tsconfig: &Utf8Path,
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+) -> Result<(String, hir::Prepared, Option<String>)> {
+    prepare_as(hir_preparation()?, tsconfig, snapshot, true)
 }
 
 /// [`prepare_for_listing`] for a backend the caller names, which is how
@@ -2624,6 +2642,7 @@ fn prepare_as(
     (backend, provider): (nts_codegen_common::Backend, hir::Provider),
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
+    report_regions: bool,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
     let header = format!(
         "preparation: backend={} provider={provider:?}",
@@ -2683,6 +2702,7 @@ fn prepare_as(
             hir::reachable::Roots::Entry,
         ),
         table_entries: backend.table_entries(),
+        report_regions,
         ..hir::Options::default()
     };
     // An invalid program is exactly the one worth reading, so the
@@ -2721,8 +2741,12 @@ fn check_expectations(tsconfig: &Utf8Path) -> Result<()> {
     // One preparation per backend, shared by every fact that names it.
     let mut programs = Vec::new();
     for backend in expect_ir::backends_named(&expectations) {
-        let (_, prepared, invalid) =
-            prepare_as((backend, provider_for(backend)?), tsconfig, &snapshot)?;
+        let (_, prepared, invalid) = prepare_as(
+            (backend, provider_for(backend)?),
+            tsconfig,
+            &snapshot,
+            false,
+        )?;
         if let Some(invalid) = invalid {
             bail!(
                 "the program {} receives does not verify:\n{invalid}",
@@ -2804,7 +2828,7 @@ fn typechecked_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::Sema
 /// `nts stats`: see the command's comment in `main`.
 fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
-    let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
+    let (header, prepared, invalid) = prepare_reporting_regions(tsconfig, &snapshot)?;
     println!("{header}");
     let program = &prepared.program;
     let mut ops = 0usize;
@@ -2870,6 +2894,44 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
         println!("rc.releases {}", counting.releases);
         println!("rc.moves {}", counting.moves);
         println!("rc.borrows {}", counting.borrows);
+        let regions = &prepared.regions;
+        println!("regions.candidates {}", regions.candidates);
+        println!("regions.sites {}", regions.sites);
+        println!("regions.raising {}", regions.raising);
+    }
+    if let Some(invalid) = invalid {
+        eprintln!("{invalid}");
+    }
+    Ok(())
+}
+
+/// `nts regions`: see the command's comment in `main`.
+fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
+    let snapshot = typechecked_snapshot(tsconfig)?;
+    let (header, prepared, invalid) = prepare_reporting_regions(tsconfig, &snapshot)?;
+    println!("{header}");
+    if !matches!(prepared.program.provider, hir::Provider::ReferenceCounting) {
+        println!("regions are for the counting provider: pass --rc");
+        return Ok(());
+    }
+    let regions = &prepared.regions;
+    println!(
+        "{} candidate(s), {} site(s), {} of them raising",
+        regions.candidates, regions.sites, regions.raising
+    );
+    let mut reasons: Vec<(&String, &usize)> = regions.refused.iter().collect();
+    reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    for (reason, count) in reasons {
+        println!("  {count:>5}  {reason}");
+    }
+    for call in &regions.calls {
+        match &call.verdict {
+            Ok(()) => println!("site     {} -> {}", call.caller, call.callee),
+            Err(refusal) => println!(
+                "refused  {} -> {}: {} (in {})",
+                call.caller, call.callee, refusal.reason, refusal.function
+            ),
+        }
     }
     if let Some(invalid) = invalid {
         eprintln!("{invalid}");

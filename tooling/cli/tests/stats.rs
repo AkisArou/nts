@@ -158,4 +158,15 @@ fn counting_is_printed_only_where_the_provider_counts() {
         keys,
         ["rc.retains", "rc.releases", "rc.moves", "rc.borrows"]
     );
+    // Regions are for the counting provider too, and printed only there.
+    assert!(plain.iter().all(|(key, _)| !key.starts_with("regions.")));
+    let regions: Vec<&str> = counted
+        .iter()
+        .map(|(key, _)| key.as_str())
+        .filter(|key| key.starts_with("regions."))
+        .collect();
+    assert_eq!(
+        regions,
+        ["regions.candidates", "regions.sites", "regions.raising"]
+    );
 }

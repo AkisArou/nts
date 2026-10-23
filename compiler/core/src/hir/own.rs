@@ -211,7 +211,7 @@ fn returning_from_the_stack(
 /// module's included), or inside a loop there. Counted over the program as it
 /// is when ownership runs, after every pass that can add a write, so a second
 /// writer anywhere -- the program's own or one a pass made -- leaves it out.
-fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
+pub(super) fn settled_globals(program: &Program) -> rustc_hash::FxHashSet<u32> {
     let mut writes: rustc_hash::FxHashMap<u32, usize> = rustc_hash::FxHashMap::default();
     for func in &program.funcs {
         let evaluates = super::lower::evaluates_module_scope(&func.name);
