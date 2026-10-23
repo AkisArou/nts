@@ -816,6 +816,22 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_raising", Support::WasmHelper),
     ("nts_refused", Support::Intrinsic),
     (
+        "nts_region_open",
+        Support::Decline("native memory/provider contract"),
+    ),
+    (
+        "nts_region_owns",
+        Support::Decline("native memory/provider contract"),
+    ),
+    (
+        "nts_region_reset",
+        Support::Decline("native memory/provider contract"),
+    ),
+    (
+        "nts_region_suspend",
+        Support::Decline("native memory/provider contract"),
+    ),
+    (
         "nts_register_holders",
         Support::Decline("native memory/provider contract"),
     ),

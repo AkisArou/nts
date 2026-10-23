@@ -223,6 +223,9 @@ struct NtsEnvironment {
   size_t bytes_held;
   bool draining;
   bool collecting;
+  /* The call region allocations come from, or null for the heap. Read by
+   * every `nts_alloc`, so it sits with what that reads. See `NtsRegion`. */
+  NtsRegion *region;
 
   /* -- allocation -- */
 #ifndef NTS_PROVIDER_RC
@@ -232,6 +235,9 @@ struct NtsEnvironment {
 #if NTS_RECYCLES
   void *recycled[NTS_CLASSES];
 #endif
+  /* Region blocks given back and kept for the next open, newest first. */
+  struct NtsRegionBlock *region_kept;
+  size_t region_kept_len;
 
   /* -- diagnostics, aggregated on read at a safe point -- */
   size_t allocated;
@@ -626,11 +632,279 @@ size_t nts_live_bytes(void) { return NTS_TOTAL(bytes_held); }
  * with `-Werror`. */
 #endif
 
+/* # Call regions (see the header for what they are for)
+ *
+ * A region is a chain of blocks bumped through, newest first. Its `NtsRegion`
+ * lives at the start of the first block it took, so an open costs a block from
+ * the kept list and no `malloc`. A block is 1 MiB; an allocation larger than a
+ * quarter of one gets a block of its own, chained behind the one being bumped
+ * through so the space left in that one is not abandoned.
+ *
+ * **Membership is never asked.** The compiler's facts say a region's objects
+ * are written only while it is the active region (nothing outside stores into
+ * them, and the caller only reads the result), and that nothing else grows
+ * while one is. So a growth that frees its old block frees region memory
+ * exactly when a region is active, and `nts_env->region` answers what an
+ * address-range check would. Blocks can then come from `malloc` like anything
+ * else: no address space reserved up front, nothing per platform. Under
+ * `NTS_POISON` the claim is checked against the chain instead of trusted.
+ *
+ * **Accounting by window.** While a region is active, every change to the
+ * allocated and reclaimed counts and to `bytes_held` is that region's -- the
+ * same facts again: its call makes nothing on the heap, and no heap object dies
+ * in it (a collection due then waits, see `nts_collect_cycles`). So each
+ * activation records the counters at its start and adds what moved at its end,
+ * and a reset gives back the difference. No allocation path learned anything,
+ * and a fifth one cannot be added and forgotten.
+ *
+ * An object made in a region is immortal (`nts_fresh_count`), so a reset is the
+ * only thing that frees one and a stray release from outside does nothing. A
+ * reset under `NTS_POISON` fills the blocks it keeps, so a read through a
+ * pointer that outlived its region is a pattern rather than a stale value;
+ * AddressSanitizer keeps no blocks at all and sees the read itself. */
+#ifdef NTS_PROVIDER_RC
+#define NTS_REGION_BLOCK ((size_t)1 << 20)
+#define NTS_REGION_OWN_BLOCK (NTS_REGION_BLOCK / 4u)
+/* Enough for the next open of a region the size of most results, and no more:
+ * 8 MiB of reused, already-touched memory per environment. A reset beyond it
+ * gives the block back to `malloc`, so a program that once parsed a large
+ * document does not hold its high-water mark forever. */
+#define NTS_REGION_KEEP 8u
+
+typedef struct NtsRegionBlock {
+  struct NtsRegionBlock *next;
+  /* The whole block, this header included. */
+  size_t size;
+} NtsRegionBlock;
+
+struct NtsRegion {
+  NtsRegionBlock *blocks;
+  unsigned char *top;
+  unsigned char *end;
+  /* The activation this one interrupted: an outer region whose call opened
+   * this one, or null for the heap. Activations nest like calls. */
+  NtsRegion *outer;
+  bool active;
+  /* What the counters moved by over every window so far, and where the open
+   * window started. */
+  size_t allocated;
+  size_t reclaimed;
+  size_t bytes;
+  size_t at_allocated;
+  size_t at_reclaimed;
+  size_t at_bytes;
+};
+
+static void nts_region_window_open(NtsRegion *region) {
+  region->at_allocated = nts_env->allocated;
+  region->at_reclaimed = nts_env->reclaimed;
+  region->at_bytes = nts_env->bytes_held;
+}
+
+static void nts_region_window_close(NtsRegion *region) {
+  region->allocated += nts_env->allocated - region->at_allocated;
+  region->reclaimed += nts_env->reclaimed - region->at_reclaimed;
+  region->bytes += nts_env->bytes_held - region->at_bytes;
+}
+
+static NtsRegionBlock *nts_region_block_take(size_t size) {
+  if (size == NTS_REGION_BLOCK && nts_env->region_kept) {
+    NtsRegionBlock *kept = nts_env->region_kept;
+    nts_env->region_kept = kept->next;
+    nts_env->region_kept_len--;
+    return kept;
+  }
+  NtsRegionBlock *block = (NtsRegionBlock *)malloc(size);
+  if (!block) {
+    fprintf(stderr, "nts: out of memory for a region\n");
+    abort();
+  }
+  block->size = size;
+  return block;
+}
+
+static void nts_region_block_give(NtsRegionBlock *block) {
+#if NTS_RECYCLES
+  if (block->size == NTS_REGION_BLOCK &&
+      nts_env->region_kept_len < NTS_REGION_KEEP) {
+#if NTS_POISON
+    memset(block + 1, 0xA5, block->size - sizeof *block);
+#endif
+    block->next = nts_env->region_kept;
+    nts_env->region_kept = block;
+    nts_env->region_kept_len++;
+    return;
+  }
+#endif
+  free(block);
+}
+
+/* The slow half of a bump: a block of its own for a large allocation, or a
+ * fresh block to bump through. */
+static NTS_NOINLINE void *nts_region_refill(NtsRegion *region, size_t bytes,
+                                            size_t align) {
+  size_t head = (sizeof(NtsRegionBlock) + align - 1u) & ~(align - 1u);
+  if (bytes > NTS_REGION_OWN_BLOCK) {
+    NtsRegionBlock *own = nts_region_block_take(head + align + bytes);
+    /* Behind the block being bumped through, which keeps its space. */
+    own->next = region->blocks->next;
+    region->blocks->next = own;
+    uintptr_t at =
+        ((uintptr_t)own + head + align - 1u) & ~(uintptr_t)(align - 1u);
+    return (void *)at;
+  }
+  NtsRegionBlock *block = nts_region_block_take(NTS_REGION_BLOCK);
+  block->next = region->blocks;
+  region->blocks = block;
+  region->top = (unsigned char *)(block + 1);
+  region->end = (unsigned char *)block + block->size;
+  uintptr_t at =
+      ((uintptr_t)region->top + align - 1u) & ~(uintptr_t)(align - 1u);
+  region->top = (unsigned char *)(at + bytes);
+  return (void *)at;
+}
+
+/* `align` is a power of two no larger than `NTS_ELEMENT_ALIGN`. */
+static inline void *nts_region_take(NtsRegion *region, size_t bytes,
+                                    size_t align) {
+  uintptr_t at =
+      ((uintptr_t)region->top + align - 1u) & ~(uintptr_t)(align - 1u);
+  if (at + bytes <= (uintptr_t)region->end) {
+    region->top = (unsigned char *)(at + bytes);
+    return (void *)at;
+  }
+  return nts_region_refill(region, bytes, align);
+}
+
+NtsRegion *nts_region_open(void) {
+  NtsRegionBlock *block = nts_region_block_take(NTS_REGION_BLOCK);
+  block->next = NULL;
+  NtsRegion *region = (NtsRegion *)(block + 1);
+  region->blocks = block;
+  region->top = (unsigned char *)(region + 1);
+  region->end = (unsigned char *)block + block->size;
+  region->outer = nts_env->region;
+  region->allocated = 0;
+  region->reclaimed = 0;
+  region->bytes = 0;
+  if (region->outer) {
+    nts_region_window_close(region->outer);
+  }
+  nts_region_window_open(region);
+  region->active = true;
+  nts_env->region = region;
+  return region;
+}
+
+void nts_region_suspend(NtsRegion *region) {
+  if (nts_env->region != region) {
+    fprintf(stderr, "nts: a region was suspended that is not the active one\n");
+    abort();
+  }
+  nts_region_window_close(region);
+  region->active = false;
+  nts_env->region = region->outer;
+  if (region->outer) {
+    nts_region_window_open(region->outer);
+  }
+  region->outer = NULL;
+}
+
+void nts_region_reset(NtsRegion *region) {
+  /* A throw out of the region's call reaches its reset with it still active:
+   * the suspend after the call never ran. */
+  if (region->active) {
+    if (nts_env->region != region) {
+      fprintf(stderr, "nts: a region was reset while one opened inside it is "
+                      "still active\n");
+      abort();
+    }
+    nts_region_suspend(region);
+  }
+  nts_env->reclaimed += region->allocated - region->reclaimed;
+  nts_env->bytes_held -= region->bytes;
+  /* `region` lives in the last block of the chain, given back last. */
+  NtsRegionBlock *block = region->blocks;
+  while (block) {
+    NtsRegionBlock *next = block->next;
+    nts_region_block_give(block);
+    block = next;
+  }
+}
+
+bool nts_region_owns(const NtsRegion *region, const void *pointer) {
+  uintptr_t at = (uintptr_t)pointer;
+  for (const NtsRegionBlock *block = region->blocks; block;
+       block = block->next) {
+    if (at >= (uintptr_t)block && at < (uintptr_t)block + block->size) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* Under `NTS_POISON`: refuse, by name, memory the facts say cannot be here. */
+#if NTS_POISON
+static void nts_region_expect_own(const void *pointer, const char *what) {
+  if (nts_env->region && !nts_region_owns(nts_env->region, pointer)) {
+    fprintf(stderr,
+            "nts: %s that is not the active region's was given back inside "
+            "it\n",
+            what);
+    abort();
+  }
+}
+#endif
+
+/* Whether a block an object owns beside itself -- an array's elements, a
+ * table, a buffer's bytes -- is being given back inside a region, which keeps
+ * it until its reset. Exactly when one is active: see the note on membership
+ * above. */
+static inline bool nts_region_keeps(const void *block, const char *what) {
+  if (nts_env->region == NULL) {
+    return false;
+  }
+#if NTS_POISON
+  nts_region_expect_own(block, what);
+#else
+  (void)block;
+  (void)what;
+#endif
+  return true;
+}
+#else
+/* NoGC never frees, so a region would buy nothing; and a host-GC backend never
+ * calls these. */
+NtsRegion *nts_region_open(void) { return NULL; }
+void nts_region_suspend(NtsRegion *region) { (void)region; }
+void nts_region_reset(NtsRegion *region) { (void)region; }
+bool nts_region_owns(const NtsRegion *region, const void *pointer) {
+  (void)region;
+  (void)pointer;
+  return false;
+}
+#endif
+
+/* The count a new object starts with: one reference, the caller's -- or, made
+ * in a region, none to count, because the region's reset is what frees it. */
+static inline uintptr_t nts_fresh_count(void) {
+#ifdef NTS_PROVIDER_RC
+  return nts_env->region ? (uintptr_t)NTS_IMMORTAL : 1u;
+#else
+  return 1u;
+#endif
+}
+
 void *nts_alloc(size_t bytes) {
   bytes = (bytes + 15u) & ~(size_t)15u;
   nts_env->bytes_held += bytes;
 
 #ifdef NTS_PROVIDER_RC
+  /* No size in front: only `nts_free_block` reads it, and nothing made in a
+   * region reaches it. */
+  if (__builtin_expect(nts_env->region != NULL, 0)) {
+    return nts_region_take(nts_env->region, bytes, 16u);
+  }
   /* Its own allocation, because it will be given back. The size is kept in
    * front of the object so that `nts_free` knows what it is returning without
    * consulting the descriptor -- which a freed object may no longer have. */
@@ -678,6 +952,16 @@ void *nts_alloc(size_t bytes) {
  */
 static void nts_free_block(void *object) {
 #ifdef NTS_PROVIDER_RC
+#if NTS_POISON
+  /* Nothing on the heap dies while a region is active: its call makes nothing
+   * there, and what it reads its caller keeps alive (the second of the three
+   * facts). A death here is an analysis that admitted a call it should not
+   * have, and its counts would land in the region's window. */
+  if (nts_env->region) {
+    fprintf(stderr, "nts: a heap object died inside a region's call\n");
+    abort();
+  }
+#endif
   size_t *block = (size_t *)((unsigned char *)object - 16u);
   size_t bytes = *block;
   nts_env->bytes_held -= bytes;
@@ -729,16 +1013,69 @@ static unsigned char *nts_array_inline_elements(const NtsArray *array) {
  * requires. */
 #if defined(_WIN32)
 #include <malloc.h>
-static void *nts_elements_alloc(size_t bytes) {
+static void *nts_elements_alloc_heap(size_t bytes) {
   return _aligned_malloc(bytes, NTS_ELEMENT_ALIGN);
 }
-static void nts_elements_free(void *block) { _aligned_free(block); }
+static void nts_elements_free_heap(void *block) { _aligned_free(block); }
 #else
-static void *nts_elements_alloc(size_t bytes) {
+static void *nts_elements_alloc_heap(size_t bytes) {
   return aligned_alloc(NTS_ELEMENT_ALIGN, bytes);
 }
-static void nts_elements_free(void *block) { free(block); }
+static void nts_elements_free_heap(void *block) { free(block); }
 #endif
+
+static void *nts_elements_alloc(size_t bytes) {
+#ifdef NTS_PROVIDER_RC
+  if (nts_env->region) {
+    return nts_region_take(nts_env->region, bytes, NTS_ELEMENT_ALIGN);
+  }
+#endif
+  return nts_elements_alloc_heap(bytes);
+}
+
+static void nts_elements_free(void *block) {
+#ifdef NTS_PROVIDER_RC
+  if (nts_region_keeps(block, "an element block")) {
+    return;
+  }
+#endif
+  nts_elements_free_heap(block);
+}
+
+/* The same for a map's table and a buffer's bytes, which `malloc` holds and
+ * `free` gives back -- or the active region does both. */
+static void *nts_side_alloc(size_t bytes) {
+#ifdef NTS_PROVIDER_RC
+  if (nts_env->region) {
+    return nts_region_take(nts_env->region, bytes, 16u);
+  }
+#endif
+  return malloc(bytes);
+}
+
+/* Zeroed: a region's block may be one a reset kept, and a fresh `ArrayBuffer`
+ * reads as zeroes. */
+static void *nts_side_zeroed(size_t bytes) {
+#ifdef NTS_PROVIDER_RC
+  if (nts_env->region) {
+    void *block = nts_region_take(nts_env->region, bytes, 16u);
+    memset(block, 0, bytes);
+    return block;
+  }
+#endif
+  return calloc(bytes, 1u);
+}
+
+static void nts_side_free(void *block, const char *what) {
+#ifdef NTS_PROVIDER_RC
+  if (nts_region_keeps(block, what)) {
+    return;
+  }
+#else
+  (void)what;
+#endif
+  free(block);
+}
 
 /* Whether an array's elements still sit in the block the array itself lives in.
  *
@@ -779,7 +1116,7 @@ static void nts_free_storage(NtsHeader *object) {
       nts_env->reclaimed++;
     }
     /* `keys` is the block: `values` and `index` point into it. */
-    free(map->keys);
+    nts_side_free(map->keys, "a table");
     map->keys = 0;
     map->values = 0;
     map->index = 0;
@@ -792,7 +1129,7 @@ static void nts_free_storage(NtsHeader *object) {
     if (buffer->bytes) {
       nts_env->bytes_held -= buffer->reserved_bytes;
       nts_env->reclaimed++;
-      free(buffer->bytes);
+      nts_side_free(buffer->bytes, "a buffer's bytes");
       buffer->bytes = 0;
     }
     return;
@@ -964,7 +1301,7 @@ NtsHeader *nts_object_new(const NtsDescriptor *descriptor) {
   memset(object, 0, descriptor->size);
   object->descriptor = descriptor;
   /* One reference: the caller's. */
-  object->reserved = 1;
+  object->reserved = nts_fresh_count();
   nts_note_allocation();
   return object;
 }
@@ -1998,6 +2335,13 @@ void nts_collect_cycles(void) {
   if (nts_env->collecting) {
     return;
   }
+  /* Not inside a region's call: what a collection frees would be counted in
+   * the region's window, and nothing the call made is a candidate anyway. One
+   * that came due waits for the next candidate or the next checkpoint, as one
+   * due during a collection does. */
+  if (nts_env->region) {
+    return;
+  }
   while (nts_collect_pass() && nts_env->roots_len > 0) {
   }
   nts_env->collect_at = nts_env->allocated - nts_env->reclaimed;
@@ -2493,7 +2837,7 @@ static NtsArray *nts_array_allocate(const NtsDescriptor *descriptor,
                  (size_t)count * descriptor->size;
   NtsArray *array = (NtsArray *)nts_alloc(bytes);
   array->header.descriptor = descriptor;
-  array->header.reserved = 1;
+  array->header.reserved = nts_fresh_count();
   nts_note_allocation();
   array->header.flags = 0;
   array->header.length = count;
@@ -3478,7 +3822,7 @@ NtsString *nts_str_raw(uint32_t length, int wide) {
   NtsString *out =
       (NtsString *)nts_alloc(NTS_STRING_UNITS + ((size_t)length + 1) * width);
   out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
-  out->reserved = 1;
+  out->reserved = nts_fresh_count();
   nts_note_allocation();
   out->flags = wide ? NTS_TWO_BYTE : 0u;
   out->length = length;
@@ -7709,7 +8053,7 @@ static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
                              bool holds_values) {
   NtsMap *map = (NtsMap *)nts_alloc(sizeof(NtsMap));
   map->header.descriptor = descriptor;
-  map->header.reserved = 1;
+  map->header.reserved = nts_fresh_count();
   map->header.flags = 0;
   map->header.length = 0;
   nts_note_allocation();
@@ -7775,7 +8119,7 @@ static double nts_time_clip(double ms) {
 NtsDate *nts_date_new(double ms) {
   NtsDate *date = (NtsDate *)nts_alloc(sizeof(NtsDate));
   date->header.descriptor = &nts_desc_date;
-  date->header.reserved = 1;
+  date->header.reserved = nts_fresh_count();
   date->header.flags = 0;
   date->header.length = 0;
   date->ms = nts_time_clip(ms);
@@ -7855,7 +8199,8 @@ static NtsBuffer *nts_buffer_make(size_t length, size_t reserved,
      only if the buffer is detached. A zero-length `calloc` may return null,
      and a `new ArrayBuffer(0)` that reported itself detached would be wrong
      about the one state every accessor branches on. */
-  unsigned char *bytes = (unsigned char *)calloc(reserved ? reserved : 1u, 1u);
+  unsigned char *bytes =
+      (unsigned char *)nts_side_zeroed(reserved ? reserved : 1u);
   if (!bytes) {
     /* Null rather than abort, because node answers this with a `RangeError`
        and the lowering turns the null into one. A length the *language*
@@ -7867,7 +8212,7 @@ static NtsBuffer *nts_buffer_make(size_t length, size_t reserved,
   }
   NtsBuffer *buffer = (NtsBuffer *)nts_alloc(sizeof(NtsBuffer));
   buffer->header.descriptor = &nts_desc_buffer;
-  buffer->header.reserved = 1;
+  buffer->header.reserved = nts_fresh_count();
   buffer->header.flags = 0;
   buffer->header.length = 0;
   buffer->length = length;
@@ -8257,7 +8602,7 @@ NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
      * long time by something that only ever asks whether it is detached. */
     nts_env->bytes_held -= buffer->reserved_bytes;
     nts_env->reclaimed++;
-    free(buffer->bytes);
+    nts_side_free(buffer->bytes, "a buffer's bytes");
     buffer->bytes = 0;
     buffer->length = 0;
     buffer->reserved_bytes = 0;
@@ -8402,7 +8747,7 @@ NtsView *nts_view_new(NtsBuffer *buffer, double byte_offset, double length,
                       double kind, bool tracking) {
   NtsView *view = (NtsView *)nts_alloc(sizeof(NtsView));
   view->header.descriptor = &nts_desc_view;
-  view->header.reserved = 1;
+  view->header.reserved = nts_fresh_count();
   view->header.flags = 0;
   view->header.length = 0;
   view->buffer = buffer;
@@ -8842,7 +9187,7 @@ static const NtsDescriptor nts_desc_symbol = {NTS_KIND_SYMBOL,
 NtsSymbol *nts_symbol_new(NtsString *description) {
   NtsSymbol *symbol = (NtsSymbol *)nts_alloc(sizeof(NtsSymbol));
   symbol->header.descriptor = &nts_desc_symbol;
-  symbol->header.reserved = 1;
+  symbol->header.reserved = nts_fresh_count();
   symbol->header.flags = 0;
   symbol->header.length = 0;
   symbol->description = description;
@@ -9106,7 +9451,7 @@ static void nts_map_rehash(NtsMap *map) {
   size_t value_bytes = map->holds_values ? key_bytes : 0u;
   size_t index_bytes = (size_t)slots * sizeof(int32_t);
   unsigned char *block =
-      (unsigned char *)malloc(key_bytes + value_bytes + index_bytes);
+      (unsigned char *)nts_side_alloc(key_bytes + value_bytes + index_bytes);
   if (!block) {
     fprintf(stderr, "nts: out of memory growing a map\n");
     abort();
@@ -9154,7 +9499,7 @@ static void nts_map_rehash(NtsMap *map) {
      * `allocated - reclaimed` -- would read every grown table as a leak. */
     nts_env->reclaimed++;
     /* `keys` is the block: `values` and `index` point into it. */
-    free(map->keys);
+    nts_side_free(map->keys, "a table");
   }
   map->keys = keys;
   map->values = values;

@@ -1411,6 +1411,40 @@ size_t nts_counted_releases(void);
    in the whole program and allocates a hundred objects an iteration. */
 size_t nts_counted_allocations(void);
 void nts_counting_reset(void);
+
+/* # Call regions
+ *
+ * Memory for everything one call makes, given back at once. For a call
+ * `r = f(args)` whose result the caller reads and then drops, the compiler can
+ * allocate all of `f`'s objects in a region, compile `f`'s clone without
+ * counting, and reset the region where `r` dies: no walk of the result and no
+ * free per object. Which calls qualify is decided in core, from three facts:
+ * nothing made inside escapes except through `r`; everything a region object
+ * points at outside outlives the reset; and nothing reached from `r` survives
+ * the reset point. The runtime trusts that answer and checks what it can
+ * under `NTS_POISON`.
+ *
+ *   nts_region_open      a new region, now the one allocations come from
+ *   nts_region_suspend   right after the call: allocation goes back to where
+ *                        it was before the open (the heap, or an outer region)
+ *   nts_region_reset     where the result dies: every block given back
+ *
+ * Activations nest like calls -- a region opened inside another's call is
+ * suspended before the outer one is -- but lifetimes need not: two results may
+ * be reset in either order, so each region owns its own blocks. An object
+ * allocated in one is immortal (`NTS_IMMORTAL`): retains and releases of it
+ * return on their first line, it is never a cycle candidate, and the reset is
+ * the only thing that frees it.
+ *
+ * Reference counting only. Under NoGC the three do nothing, and a host-GC
+ * backend never calls them. */
+typedef struct NtsRegion NtsRegion;
+NtsRegion *nts_region_open(void);
+void nts_region_suspend(NtsRegion *region);
+void nts_region_reset(NtsRegion *region);
+/* Whether `pointer` is memory `region` handed out. A walk of its blocks: for
+ * tests and for `NTS_POISON`'s checks, never on a path that is not one. */
+bool nts_region_owns(const NtsRegion *region, const void *pointer);
 void nts_release(NtsHeader *object);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
                                       double length);

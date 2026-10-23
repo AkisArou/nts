@@ -624,3 +624,17 @@ fn decimal_text_is_read_as_the_nearest_double() {
     let report = run_suite("number_parse", &["-DNTS_PROVIDER_RC"]);
     assert_eq!(checks(&report), 45, "{report}");
 }
+
+/// Call regions: while one is active, every object, string, grown array,
+/// rehashed table and buffer comes from it and is immortal; a suspend puts
+/// allocation back where it was; a reset brings the live counts and bytes back
+/// -- across growth, nesting, resets out of order and a reset reached before
+/// its suspend -- and a collection due inside the call waits for it. Again
+/// under `NTS_POISON`, where a reset fills the blocks it keeps.
+#[test]
+fn a_region_gives_back_everything_its_call_made() {
+    let report = run_suite("regions", &["-DNTS_PROVIDER_RC"]);
+    assert_eq!(checks(&report), 34, "{report}");
+    let poisoned = run_suite("regions", &["-DNTS_PROVIDER_RC", "-DNTS_POISON=1"]);
+    assert_eq!(checks(&poisoned), 35, "{poisoned}");
+}

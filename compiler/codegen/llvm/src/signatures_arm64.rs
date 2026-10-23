@@ -1981,6 +1981,30 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         attributes: &["noreturn"],
     },
     Signature {
+        name: "nts_region_open",
+        returns: "ptr",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_owns",
+        returns: "zeroext i1",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_reset",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_suspend",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_register_holders",
         returns: "void",
         params: &["i32", "ptr"],
