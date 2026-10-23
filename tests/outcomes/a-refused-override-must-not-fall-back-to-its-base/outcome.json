@@ -1,8 +1,8 @@
 {
   "run": "check",
   "category": "aborted",
-  "nts": "nts: refused at run time: `Refused#value` was refused: `eval`, a builtin this compiler does not provide is not supported by this lowering yet",
+  "nts": "nts: refused at run time: `Refused#value` was refused: `eval` is never provided: it evaluates source text, and a program compiled ahead of time carries no evaluator",
   "node": null,
-  "measured_with": "595a3da800145cbc",
+  "measured_with": "1c2d3d602cf7e89c",
   "source": "measured"
 }

@@ -122,7 +122,7 @@ fn an_imported_name_is_not_reported_as_a_missing_builtin() {
             "a name from a package must say so, not send its reader to `hir::builtin`: {line}"
         );
         assert!(
-            !line.contains("a builtin this compiler does not provide"),
+            !line.contains("is not provided by this compiler"),
             "and must not claim to be a builtin: {line}"
         );
     }
@@ -162,7 +162,7 @@ fn a_library_global_is_still_reported_as_a_builtin() {
     );
     for line in &library {
         assert!(
-            line.contains("a builtin this compiler does not provide"),
+            line.contains("is not provided by this compiler"),
             "a `lib.d.ts` global has no import to blame, and this is where a \
              reader should look in `hir::builtin`: {line}"
         );
@@ -204,7 +204,7 @@ fn a_provided_class_called_without_new_says_so() {
             "the class is provided, so the refusal must name the call form: {line}"
         );
         assert!(
-            !line.contains("a builtin this compiler does not provide"),
+            !line.contains("is not provided by this compiler"),
             "and must not send its reader to `hir::builtin`, where `TypeError` \
              is the second entry: {line}"
         );

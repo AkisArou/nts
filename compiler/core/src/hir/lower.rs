@@ -1255,6 +1255,26 @@ fn is_anonymous_shape(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// Lifting it means a descriptor of its own --- the way `Map` and `Set` share
 /// one struct and are told apart by a bit --- after which `new` and
 /// `instanceof` both work rather than both refusing.
+/// What a name with no definition here is: a builtin no provider supplies,
+/// refused as NTS1100 (`FuncBuilder::unprovided`), or a construct this lowering
+/// cannot represent, refused as NTS1001.
+enum Nameless {
+    Unprovided {
+        what: String,
+        why: Option<&'static str>,
+    },
+    /// A builtin no target will ever have: `eval` evaluates source text, and a
+    /// program compiled ahead of time carries no evaluator. NTS1101.
+    Never(String),
+    Unsupported(String),
+}
+
+impl Nameless {
+    const fn unprovided(what: String) -> Self {
+        Self::Unprovided { what, why: None }
+    }
+}
+
 const SHARED_BUFFER_REFUSAL: &str = "`new SharedArrayBuffer`, which would carry `ArrayBuffer`'s descriptor and answer \
      `instanceof ArrayBuffer` with `true`";
 
@@ -23202,9 +23222,9 @@ impl<'a> FuncBuilder<'a> {
     /// The symbol says which. `declarations` is empty exactly when the symbol
     /// was declared outside the decoded file set, which is what separates
     /// `console` from a name the program itself wrote.
-    fn describe_name(&self, id: NodeId, symbol: SymbolId) -> String {
+    fn describe_name(&self, id: NodeId, symbol: SymbolId) -> Nameless {
         let Some(record) = self.snapshot.symbols.get(symbol.0 as usize) else {
-            return "an unresolved name".to_owned();
+            return Nameless::Unsupported("an unresolved name".to_owned());
         };
         let is = |flag: SymbolFlags| record.flags.contains(flag);
         // A class this compiler provides, reached as a *value*. `Error` is a
@@ -23218,10 +23238,10 @@ impl<'a> FuncBuilder<'a> {
         {
             let name = &record.name;
             return match self.member_read_from(id) {
-                Some(member) => {
-                    format!("`{name}.{member}`, not a member of this compiler's `{name}`")
+                Some(member) => Nameless::unprovided(format!("`{name}.{member}`")),
+                None => {
+                    Nameless::Unsupported(format!("`{name}` used as a value rather than as a type"))
                 }
-                None => format!("`{name}` used as a value rather than as a type"),
             };
         }
         if is(SymbolFlags::MODULE) {
@@ -23235,9 +23255,18 @@ impl<'a> FuncBuilder<'a> {
             if let Some(member) = self.member_read_from(id)
                 && let Some(why) = Self::reflection_of_a_layout(&record.name, &member)
             {
-                return why;
+                return Nameless::Unsupported(why);
             }
-            return format!("`{}`, a namespace", record.name);
+            // A library's namespace -- `Intl`, `WebAssembly` -- is a builtin
+            // no provider here supplies; one the program declares is a
+            // namespace used as a value.
+            if record.declarations.is_empty() {
+                return Nameless::unprovided(match self.member_read_from(id) {
+                    Some(member) => format!("`{}.{member}`", record.name),
+                    None => format!("`{}`", record.name),
+                });
+            }
+            return Nameless::Unsupported(format!("`{}`, a namespace", record.name));
         }
         if is(SymbolFlags::ENUM) {
             // A *member* access is a constant and is lowered as one. Reaching
@@ -23245,10 +23274,10 @@ impl<'a> FuncBuilder<'a> {
             // `Colour[1]`, the reverse mapping, and that needs the table a
             // plain enum emits alongside its members. Saying which keeps this
             // from reading as "enums are unsupported", which they are not.
-            return format!(
+            return Nameless::Unsupported(format!(
                 "`{}` as an object rather than a member, which is the reverse mapping",
                 record.name
-            );
+            ));
         }
         if record.declarations.is_empty() {
             // Nothing in the compiled set declares it, so it is a global the
@@ -23263,7 +23292,7 @@ impl<'a> FuncBuilder<'a> {
             if record.name == "Math"
                 && let Some(member) = self.member_read_from(id)
             {
-                return format!("`Math.{member}`, not a member of this compiler's `Math`");
+                return Nameless::unprovided(format!("`Math.{member}`"));
             }
             // **`Date`'s two statics are two different answers**, and the
             // generic line below gave them one. Its instance methods are
@@ -23287,11 +23316,18 @@ impl<'a> FuncBuilder<'a> {
                 && let Some(member) = self.member_read_from(id)
             {
                 return match member.as_str() {
-                    "now" => "`Date.now`, which reads a clock this compiler has no capability                               for and no differential could check"
-                        .to_owned(),
-                    "UTC" => "`Date.UTC`, which is a pure function of its arguments rather                               than a clock, and is simply not built yet"
-                        .to_owned(),
-                    _ => format!("`Date.{member}`, a global member with no definition here"),
+                    "now" => Nameless::Unprovided {
+                        what: "`Date.now`".to_owned(),
+                        why: Some("it reads a clock, which no differential could check"),
+                    },
+                    "UTC" => Nameless::Unprovided {
+                        what: "`Date.UTC`".to_owned(),
+                        why: Some(
+                            "a pure function of its arguments rather than a clock, and simply \
+                             not built yet",
+                        ),
+                    },
+                    _ => Nameless::unprovided(format!("`Date.{member}`")),
                 };
             }
             // **`Object` and `Reflect` are a boundary, and the generic line
@@ -23319,19 +23355,16 @@ impl<'a> FuncBuilder<'a> {
             if let Some(member) = self.member_read_from(id)
                 && let Some(why) = Self::reflection_of_a_layout(&record.name, &member)
             {
-                return why;
+                return Nameless::Unsupported(why);
             }
             // With the member, when one is being read. `Object` was 44
             // refusals that could not be told apart, and they are not one
             // thing: `Object.keys` is a list the compiler is holding and
             // `Object.defineProperty` is a shape it does not have.
             if let Some(member) = self.member_read_from(id) {
-                return format!(
-                    "`{}.{member}`, a global member with no definition here",
-                    record.name
-                );
+                return Nameless::unprovided(format!("`{}.{member}`", record.name));
             }
-            return format!("`{}`, a global with no definition here", record.name);
+            return Nameless::unprovided(format!("`{}`", record.name));
         }
         // `resolve` and `reject` are not values. The executor's body is lowered
         // where the promise is built, so a call to one is the settle it stands
@@ -23343,20 +23376,20 @@ impl<'a> FuncBuilder<'a> {
             .symbol
             .is_some_and(|symbol| self.settlers.contains_key(&symbol.0))
         {
-            return format!(
+            return Nameless::Unsupported(format!(
                 "`{}` used as a value rather than called, which needs the executor to be a \
                  real closure over the promise",
                 record.name
-            );
+            ));
         }
         if is(SymbolFlags::FUNCTION) {
-            return format!("`{}`, a function used as a value", record.name);
+            return Nameless::Unsupported(format!("`{}`, a function used as a value", record.name));
         }
         if is(SymbolFlags::CLASS) {
-            return format!("`{}`, a class used as a value", record.name);
+            return Nameless::Unsupported(format!("`{}`, a class used as a value", record.name));
         }
         // Declared in this program, in a scope between here and module scope.
-        format!("`{}`, a name from an enclosing scope", record.name)
+        Nameless::Unsupported(format!("`{}`, a name from an enclosing scope", record.name))
     }
 
     /// Whether a declaration sits at module scope.
@@ -24011,6 +24044,36 @@ impl<'a> FuncBuilder<'a> {
             format!("{what} is not supported by this lowering yet"),
             self.location(id),
         )
+    }
+
+    /// A builtin this compiler does not provide: a name only a library declares
+    /// (`lib.es*`, `lib.dom`, `@types/node`) that reaches no implementation
+    /// here. One code for every such name, whatever the name, so that "this
+    /// target lacks `fetch`" is one question with one answer; NTS1001 stays
+    /// for a construct the lowering cannot represent yet. `why`, where there
+    /// is one, is the reason it is absent rather than merely unbuilt.
+    fn unprovided(&self, id: NodeId, what: &str, why: Option<&str>) -> Diagnostic {
+        let message = match why {
+            Some(why) => format!("{what} is not provided by this compiler: {why}"),
+            None => format!("{what} is not provided by this compiler"),
+        };
+        Diagnostic::error("NTS1100", message, self.location(id))
+    }
+
+    /// The refusal a [`Nameless`] answer makes.
+    fn refuse_nameless(&self, id: NodeId, nameless: &Nameless) -> Diagnostic {
+        match nameless {
+            Nameless::Unprovided { what, why } => self.unprovided(id, what, *why),
+            Nameless::Never(what) => Diagnostic::error(
+                "NTS1101",
+                format!(
+                    "{what} is never provided: it evaluates source text, and a program \
+                     compiled ahead of time carries no evaluator"
+                ),
+                self.location(id),
+            ),
+            Nameless::Unsupported(what) => self.unsupported(id, what),
+        }
     }
 
     /// One method or constructor of a class, as a function taking the instance.
@@ -67525,24 +67588,30 @@ impl<'a> FuncBuilder<'a> {
     /// lowering already refused is absent from them, which is exactly this
     /// case. `tests/refusals/a-value-of-function-type-called`
     /// pins the sentence.
-    fn no_such_callee(&self, callee_node: NodeId, name: &str) -> String {
+    fn no_such_callee(&self, callee_node: NodeId, name: &str) -> Nameless {
         let declared_here = self
             .node(callee_node)
             .symbol
             .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
             .is_some_and(|symbol| !symbol.declarations.is_empty());
         if crate::hir::PROVIDED_ERROR_NAMES.contains(&name) {
-            format!("`{name}`, a class this compiler provides, called without `new`")
+            Nameless::Unsupported(format!(
+                "`{name}`, a class this compiler provides, called without `new`"
+            ))
         } else if self.imported_from(callee_node).is_some() {
-            format!("`{name}`, an imported name whose implementation is not in this program")
+            Nameless::Unsupported(format!(
+                "`{name}`, an imported name whose implementation is not in this program"
+            ))
         } else if declared_here {
-            format!(
+            Nameless::Unsupported(format!(
                 "`{name}`, a value of type {} called as a function, where the type does not say \
                  which function it is",
                 self.describe_node(callee_node)
-            )
+            ))
+        } else if name == "eval" {
+            Nameless::Never(format!("`{name}`"))
         } else {
-            format!("`{name}`, a builtin this compiler does not provide")
+            Nameless::unprovided(format!("`{name}`"))
         }
     }
 
@@ -67783,7 +67852,7 @@ impl<'a> FuncBuilder<'a> {
             // What is missing is a `call` that constructs. Only a *provided*
             // class reaches this arm: a class the program declares is TS2348
             // before the compiler sees it, so the list is the whole of it.
-            return Err(self.unsupported(id, &self.no_such_callee(callee_node, &name)));
+            return Err(self.refuse_nameless(id, &self.no_such_callee(callee_node, &name)));
         }
         let callee = if defined {
             Callee::Direct(name)
@@ -82605,7 +82674,7 @@ impl<'a> FuncBuilder<'a> {
             let ty = HirType::Managed(ManagedType::Object(ty));
             return Ok(self.push(OpKind::ClosureStatic, ty, origin));
         }
-        Err(self.unsupported(id, &self.describe_name(id, symbol)))
+        Err(self.refuse_nameless(id, &self.describe_name(id, symbol)))
     }
 
     /// The signature `typeof C` names, as a class token's base.

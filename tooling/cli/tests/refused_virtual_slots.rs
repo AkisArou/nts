@@ -132,7 +132,7 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
             stderr.contains("aborted 3 time(s)"),
             "{backend}: {stdout}\n{stderr}"
         );
-        assert_eq!(stdout.matches("the compiled program aborted: nts: refused at run time: `Refused#value` was refused: `eval`, a builtin this compiler does not provide is not supported by this lowering yet").count(), 3, "{backend}: {stdout}\n{stderr}");
+        assert_eq!(stdout.matches("the compiled program aborted: nts: refused at run time: `Refused#value` was refused: `eval` is never provided: it evaluates source text, and a program compiled ahead of time carries no evaluator").count(), 3, "{backend}: {stdout}\n{stderr}");
     }
     std::fs::remove_dir_all(scratch).unwrap();
 }
@@ -149,7 +149,7 @@ fn assert_wasm_stops(scratch: &Path) {
         import {pathToFileURL} from 'node:url';
         const {instantiate} = await import(pathToFileURL(process.argv[1] + '/wasm/program.instance.mjs'));
         const m = instantiate();
-        const reason = '`eval`, a builtin this compiler does not provide is not supported by this lowering yet';
+        const reason = '`eval` is never provided: it evaluates source text, and a program compiled ahead of time carries no evaluator';
         for (const name of ['oneRefused', 'oneInherited', 'oneMixed']) {
             assert.throws(() => m[name](1), error => error.code === 'NTS5001'
                 && error.message.includes('Refused#value') && error.message.includes(reason));

@@ -1,4 +1,4 @@
-// expect: NTS1001 `JSON.stringify`, a global member with no definition here
+// expect: NTS1100 `JSON.stringify` is not provided by this compiler
 //
 // `JSON` is in §16's **gap** column, not the not-a-goal column, so this is a
 // blocker rather than a declared limit — and it had no fixture while it sat

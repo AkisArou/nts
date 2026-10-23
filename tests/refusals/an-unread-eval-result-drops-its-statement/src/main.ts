@@ -1,4 +1,4 @@
-// expect: NTS1001 `eval`, a builtin this compiler does not provide
+// expect: NTS1101 `eval` is never provided: it evaluates source text, and a program compiled ahead of time carries no evaluator
 //
 // `var result = eval(source())` with `result` never read. Until 093733f2d the
 // statement was dropped whole -- no refusal, and `source()` never ran -- and
