@@ -504,8 +504,8 @@ $DONOTEVALUATE();
             })
         );
         assert_eq!(record.body, "$DONOTEVALUATE();\n");
-        assert!(!record.source_hash.is_empty());
-        assert!(!record.body_hash.is_empty());
+        assert_ne!(record.source_hash, "");
+        assert_ne!(record.body_hash, "");
     }
 
     #[test]

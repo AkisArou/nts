@@ -764,7 +764,10 @@ fn proven_interface_fields_dispatch_to_each_class_storage() {
         ("setLevel", "level", true),
         ("nameOf", "name", false),
     ] {
-        assert!(tested(&program, function).is_empty());
+        assert_eq!(
+            tested(&program, function),
+            [] as [std::vec::Vec<std::string::String>; 0]
+        );
         assert_storage_rows(&program, function, member, writes);
     }
 }
@@ -831,7 +834,10 @@ fn an_access_through_the_class_is_not_tested() {
         eprintln!("SKIP interface_fields: tsgo is not built");
         return;
     };
-    assert!(tested(&program, "levelOfGreen").is_empty());
+    assert_eq!(
+        tested(&program, "levelOfGreen"),
+        [] as [std::vec::Vec<std::string::String>; 0]
+    );
     let func = program
         .funcs
         .iter()

@@ -3619,7 +3619,10 @@ mod pairing {
         let compiled = run(&[], &[(0, "nts: uncaught RangeError: r")]);
         let node = run(&["f 0 threw"], &[]);
         let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
-        assert!(got.disagreements.is_empty());
+        assert_eq!(
+            got.disagreements,
+            [] as [(std::string::String, std::string::String); 0]
+        );
         assert_eq!(got.refused, 1);
     }
 
@@ -3630,7 +3633,10 @@ mod pairing {
         let compiled = run(&[], &[]);
         let node = run(&["f 0 undefined"], &[]);
         let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
-        assert!(got.disagreements.is_empty());
+        assert_eq!(
+            got.disagreements,
+            [] as [(std::string::String, std::string::String); 0]
+        );
         assert_eq!(got.refused, 1);
     }
 }

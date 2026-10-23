@@ -2837,7 +2837,10 @@ mod tests {
                 if field == "unsigned word;" {
                     assert!(facts.records.contains_key("packet"));
                     assert!(binding.types.iter().any(|decl| decl.name() == "packet"));
-                    assert!(binding.refused.is_empty());
+                    assert_eq!(
+                        binding.refused,
+                        [] as [(std::string::String, std::string::String); 0]
+                    );
                 } else {
                     assert!(
                         !facts.records.contains_key("packet"),

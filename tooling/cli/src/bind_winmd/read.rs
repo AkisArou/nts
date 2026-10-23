@@ -694,7 +694,10 @@ mod tests {
             "DoNotReleaseAttribute",
         ] {
             assert_eq!(output.attributes[marker].len(), 1);
-            assert!(output.attributes[marker][0].is_empty());
+            assert_eq!(
+                output.attributes[marker][0],
+                [] as [(std::string::String, windows_metadata::Value); 0]
+            );
             assert!(!method.parameters[0].attributes.contains_key(marker));
         }
         let ignored = &output.attributes["IgnoreIfReturnAttribute"];

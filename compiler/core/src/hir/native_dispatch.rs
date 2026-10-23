@@ -487,7 +487,10 @@ mod tests {
         assert_eq!(analysis.get(ValueId(0)), crate::hir::facts::Facts::TOP);
         assert_eq!(crate::hir::fold::fold(&mut func, &analysis), 0);
         assert!(matches!(func.values[0].kind, OpKind::DispatchSlot(7)));
-        assert!(crate::hir::verify::operands(&func.values[0].kind).is_empty());
+        assert_eq!(
+            crate::hir::verify::operands(&func.values[0].kind),
+            [] as [ValueId; 0]
+        );
     }
 
     #[test]

@@ -246,7 +246,7 @@ mod tests {
         let framed = [0x93, UINT8, 4, 0xC4, 0x01, b'm', 0xC4, 0x00];
         let frame = read_frame(&mut framed.as_slice()).unwrap();
         assert_eq!(frame.message_type, MessageType::Response);
-        assert!(frame.payload.is_empty());
+        assert_eq!(frame.payload, [] as [u8; 0]);
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
         let mut buffer = Vec::new();
         write_frame(&mut buffer, MessageType::Response, "", b"null").unwrap();
         let frame = read_frame(&mut buffer.as_slice()).unwrap();
-        assert!(frame.method.is_empty());
+        assert_eq!(frame.method, "");
         assert_eq!(frame.payload, b"null");
     }
 }

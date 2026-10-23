@@ -221,7 +221,7 @@ mod tests {
             plan.source_units[0].logical_path,
             "harness/helpers/value.js"
         );
-        assert!(plan.source_units[0].prefix.is_empty());
+        assert_eq!(plan.source_units[0].prefix, "");
         assert_eq!(plan.source_units[1].kind, SourceUnitKind::Test);
         assert_eq!(plan.source_units[1].prefix, "\"use strict\";\n");
         assert_eq!(plan.source_units[1].source, record.body);

@@ -35,14 +35,14 @@ mod tests {
         let contract = parse_host_contract().expect("valid host contract");
         assert_eq!(contract.version, 1);
         assert_eq!(contract.declarations, "host.d.ts");
-        assert!(!contract.intrinsics.is_empty());
+        assert_ne!(contract.intrinsics, [] as [HostIntrinsic; 0]);
 
         let mut declarations = BTreeSet::new();
         let mut ids = BTreeSet::new();
         for intrinsic in contract.intrinsics {
-            assert!(!intrinsic.declaration.is_empty());
-            assert!(!intrinsic.id.is_empty());
-            assert!(!intrinsic.capability.is_empty());
+            assert_ne!(intrinsic.declaration, "");
+            assert_ne!(intrinsic.id, "");
+            assert_ne!(intrinsic.capability, "");
             assert!(declarations.insert(intrinsic.declaration));
             assert!(ids.insert(intrinsic.id));
         }

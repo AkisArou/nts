@@ -176,15 +176,15 @@ fn every_refused_receiver_has_a_typed_stop_and_valid_receivers_keep_their_bodies
                 .find(|layout| layout.name == class)
                 .unwrap();
             assert_eq!(layout.methods[slot].as_deref(), Some(method));
-            assert!(
+            assert_eq!(
                 stops(
                     program
                         .funcs
                         .iter()
                         .find(|func| func.name == method)
                         .unwrap()
-                )
-                .is_empty()
+                ),
+                [] as [&str; 0]
             );
         }
         for name in [

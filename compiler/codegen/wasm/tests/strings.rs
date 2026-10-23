@@ -117,7 +117,7 @@ fn builtin_strings_literals_live_globals_and_js_ranges_execute_exactly() {
         p.public_api.push((name.into(), name.into()));
     }
     let emitted = nts_codegen_wasm::emit(&p).unwrap();
-    assert!(emitted.manifest.features.is_empty());
+    assert_eq!(emitted.manifest.features, [] as [std::string::String; 0]);
     // Literals are imported string constants: compile-time, not host imports.
     assert!(!emitted.manifest.imports.iter().any(|i| i.module == "'"));
     assert!(

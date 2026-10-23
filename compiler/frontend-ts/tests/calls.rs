@@ -147,10 +147,9 @@ fn tagged_templates_resolve_through_the_same_call_target_table() {
             snapshot.nodes[declaration.0 as usize].kind,
             Syntax(syntax::FUNCTION_DECLARATION)
         );
-        assert!(
-            !snapshot.signatures[target.signature.0 as usize]
-                .parameters
-                .is_empty()
+        assert_ne!(
+            snapshot.signatures[target.signature.0 as usize].parameters,
+            [] as [nts_semantic_schema::ParameterRecord; 0]
         );
     }
 }

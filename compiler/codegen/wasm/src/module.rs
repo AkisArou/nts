@@ -1511,7 +1511,7 @@ mod tests {
         assert_eq!(sections(&emitted.bytes), [0, 1, 0, 1]);
         let manifest = &emitted.manifest;
         assert!(manifest.imports.is_empty() && manifest.builtins.is_empty());
-        assert!(manifest.features.is_empty());
+        assert_eq!(manifest.features, [] as [std::string::String; 0]);
     }
 
     #[test]

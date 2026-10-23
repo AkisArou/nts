@@ -2876,7 +2876,7 @@ impl<'a> Model<'a> {
             // Swift's `[String: V]`: a map of string keys, copied into the
             // `NSDictionary` a message takes and out of the one it answers.
             if base == "NSDictionary" && position != Position::Block {
-                return self.dictionary(pointee).map(&or_null);
+                return self.dictionary(pointee).map(or_null);
             }
             // Swift's `Set<T>`: copied into a TypeScript `Set` and out of one,
             // its elements objects -- hashed and compared by `-hash` and

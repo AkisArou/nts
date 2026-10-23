@@ -127,5 +127,8 @@ fn a_package_named_like_a_flag_is_refused_at_its_module() {
         "a flag passed as a package was accepted, or refused in other words: {:?}",
         prepared.diagnostics
     );
-    assert!(prepared.program.native_packages.is_empty());
+    assert_eq!(
+        prepared.program.native_packages,
+        [] as [nts_core::hir::NativePackage; 0]
+    );
 }

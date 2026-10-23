@@ -1135,7 +1135,7 @@ fn prepared_storage_verifier_catches_corrupted_counts_and_borrow_contracts() {
         return;
     };
     let prepared = hir::prepare(&snapshot).unwrap();
-    assert!(prepared.diagnostics.is_empty());
+    assert_eq!(prepared.diagnostics, [] as [nts_diagnostics::Diagnostic; 0]);
     for kind in 0..4 {
         let mut program = prepared.program.clone();
         let mut changed = false;

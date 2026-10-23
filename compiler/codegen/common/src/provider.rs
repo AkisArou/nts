@@ -146,7 +146,10 @@ mod tests {
     #[test]
     fn native_provider_lifetimes_are_not_reinterpreted() {
         for provider in [Provider::NoGc, Provider::ReferenceCounting] {
-            assert!(host_gc_diagnostics(&markers(provider), "native").is_empty());
+            assert_eq!(
+                host_gc_diagnostics(&markers(provider), "native"),
+                [] as [nts_diagnostics::Diagnostic; 0]
+            );
         }
     }
 }

@@ -470,7 +470,7 @@ pub(crate) fn implement(
     // Its own families' accessors, which a split face's members include: a
     // dispatch through a face that does not split names its class.
     if !split(program, layout) {
-        for declared in members(program, package, plan, layout).map_err(&refused)? {
+        for declared in members(program, package, plan, layout).map_err(refused)? {
             let Member::Slot { slot } = declared.kind else {
                 continue;
             };
@@ -504,7 +504,7 @@ pub(crate) fn implement(
     }
     faces.extend(implemented(program, layout));
     for face in faces {
-        for declared in members(program, package, plan, face).map_err(&refused)? {
+        for declared in members(program, package, plan, face).map_err(refused)? {
             if present(builder, &declared.member, &declared.descriptor) {
                 continue;
             }

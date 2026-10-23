@@ -205,7 +205,7 @@ mod tests {
     fn a_copy_to_itself_is_dropped() {
         // `jump b(%3)` into `b(%3)` is the common case for a loop-carried value
         // that the body did not change. Emitting `x = x` costs a line per edge.
-        assert!(edge_copies(&[v(3)], &[v(3)]).is_empty());
+        assert_eq!(edge_copies(&[v(3)], &[v(3)]), [] as [Copy; 0]);
     }
 
     #[test]

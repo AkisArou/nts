@@ -116,7 +116,10 @@ fn a_discarded_unsigned_mask_drops_storage_but_keeps_its_width_throw() {
         "{:?}",
         prepared.diagnostics
     );
-    assert!(prepared.program.uncompiled.is_empty());
+    assert_eq!(
+        prepared.program.uncompiled,
+        [] as [(std::string::String, std::string::String); 0]
+    );
     let body = prepared
         .program
         .funcs

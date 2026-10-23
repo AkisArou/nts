@@ -1742,13 +1742,13 @@ mod tests {
 
     #[test]
     fn a_whole_number_in_range_fits() {
-        assert!(
+        assert_eq!(
             number_fits(
                 Facts::new(0.0, 255.0, true, false, false),
                 &into(Scalar::UInt8, None),
                 false
-            )
-            .is_empty()
+            ),
+            [] as [Why; 0]
         );
     }
 
@@ -1787,7 +1787,10 @@ mod tests {
             number_fits(Facts::new(0.0, 10.0, false, true, false), &byte, false),
             vec![Why::Fraction, Why::NaN]
         );
-        assert!(number_fits(Facts::TOP, &into(Scalar::Double, None), false).is_empty());
+        assert_eq!(
+            number_fits(Facts::TOP, &into(Scalar::Double, None), false),
+            [] as [Why; 0]
+        );
         assert_eq!(
             number_fits(
                 Facts::new(0.0, 1.0, true, false, false),
@@ -1796,13 +1799,13 @@ mod tests {
             ),
             vec![Why::FloatExactness]
         );
-        assert!(
+        assert_eq!(
             number_fits(
                 Facts::new(0.0, 1.0, true, false, false),
                 &into(Scalar::Float, None),
                 true
-            )
-            .is_empty()
+            ),
+            [] as [Why; 0]
         );
     }
 

@@ -46,7 +46,7 @@ fn roots_and_both_arms_of_a_diamond_are_explicit() {
     let left = returns(&program, "left");
     let right = returns(&program, "right");
     let diamond = returns(&program, "diamond");
-    assert!(parents(&program, root).is_empty());
+    assert_eq!(parents(&program, root), []);
     assert_eq!(parents(&program, left), [root]);
     assert_eq!(parents(&program, right), [root]);
     assert_eq!(parents(&program, diamond), [left, right]);

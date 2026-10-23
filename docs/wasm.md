@@ -1420,7 +1420,7 @@ wasm-encoder/wasmparser, bitflags and leb128fmt.
 Dependencies are exactly pinned to wasm-encoder/wasmparser 0.261.0. Their
 published Cargo manifests declare Rust 1.88.0 and
 `Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT`, compatible with this
-workspace's Rust 1.97/Apache-2.0 policy. Both disable default features; encoder
+workspace's Rust 1.99/Apache-2.0 policy. Both disable default features; encoder
 enables `std`, parser enables `std`, `validate`, `features`. The scalar validator
 allows only floats, mutable globals, sign extension and saturating float-to-int
 instructions. GC/reference/EH proposals join explicitly with their implementation,

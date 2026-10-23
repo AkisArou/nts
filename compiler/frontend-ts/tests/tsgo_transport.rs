@@ -55,7 +55,7 @@ fn initialize_handshake_succeeds() {
     // Not asserting the value — case sensitivity is a property of the host
     // filesystem, and both answers are legitimate. Asserting it parsed at all is
     // the point: it proves the frame decoded and the JSON shape matches.
-    assert!(!response.current_directory.is_empty());
+    assert_ne!(response.current_directory, "");
     assert_eq!(client.round_trips(), 1);
 }
 
@@ -219,7 +219,7 @@ fn the_return_expression_decodes_as_a_three_child_binary() {
 
     let operator = &snapshot.nodes[binary.children[1].0 as usize];
     assert_eq!(operator.text, None, "the operator token carries no string");
-    assert!(operator.children.is_empty());
+    assert_eq!(operator.children, [] as [nts_semantic_schema::NodeId; 0]);
 }
 
 #[test]

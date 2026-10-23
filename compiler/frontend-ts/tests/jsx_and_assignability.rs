@@ -97,7 +97,7 @@ fn assignability_answers_a_question_the_snapshot_cannot() {
     let bytes = client
         .source_file(opened.snapshot, project, &path)
         .expect("source file");
-    assert!(!bytes.is_empty());
+    assert_ne!(bytes, [] as [u8; 0]);
 
     // `string` is assignable to `string`; `string` is not assignable to `number`.
     // Both operands come from the same program, so any two distinct primitives

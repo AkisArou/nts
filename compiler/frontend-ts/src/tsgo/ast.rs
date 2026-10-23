@@ -1243,7 +1243,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(decoded.nodes[0].children, vec![NodeId(1), NodeId(2)]);
-        assert!(decoded.nodes[1].children.is_empty());
+        assert_eq!(
+            decoded.nodes[1].children,
+            [] as [nts_semantic_schema::NodeId; 0]
+        );
     }
 
     #[test]
@@ -1503,7 +1506,7 @@ mod tests {
     fn an_empty_file_decodes_to_no_nodes() {
         // Just the sentinel. A file that fails to parse can legitimately be this.
         let decoded = decode(&payload(&[], &[]), SourceId(0)).unwrap();
-        assert!(decoded.nodes.is_empty());
+        assert_eq!(decoded.nodes, [] as [nts_semantic_schema::NodeRecord; 0]);
     }
 
     #[test]

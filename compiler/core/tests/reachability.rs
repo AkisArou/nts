@@ -121,7 +121,10 @@ fn a_declared_surface_is_checked_against_the_source() {
     );
 
     let good = vec!["pipeline".to_owned()];
-    assert!(hir::reachable::undeclared(&prepared.program, &good).is_empty());
+    assert_eq!(
+        hir::reachable::undeclared(&prepared.program, &good),
+        [] as [&str; 0]
+    );
 }
 
 #[test]

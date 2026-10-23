@@ -3066,9 +3066,8 @@ fn dispatch_forwarders(
     let mut forwarded: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
     let mut planned = Vec::new();
     for (slot, entry) in layout.methods.iter().enumerate() {
-        let selector = u32::try_from(slot)
-            .ok()
-            .is_some_and(|slot| program.interface_access.contains_selector(slot));
+        let selector =
+            u32::try_from(slot).is_ok_and(|slot| program.interface_access.contains_selector(slot));
         let Some(func_name) = entry else { continue };
         let Some(target) = program.funcs.iter().find(|f| &f.name == func_name) else {
             // A slot naming a function the program does not carry is a fact

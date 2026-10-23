@@ -94,9 +94,9 @@ fn sha1(data: &[u8]) -> [u8; 20] {
         message.push(0);
     }
     message.extend_from_slice(&length.to_be_bytes());
-    for block in message.chunks_exact(64) {
+    for block in message.as_chunks::<64>().0 {
         let mut words = [0u32; 80];
-        for (at, word) in block.chunks_exact(4).enumerate() {
+        for (at, word) in block.as_chunks::<4>().0.iter().enumerate() {
             words[at] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
         }
         for at in 16..80 {

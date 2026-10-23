@@ -4495,7 +4495,10 @@ mod tests {
             forget_consumed_arguments(&crossings, &args, true, Some(&consumed)),
             "    a1 = NULL;\n"
         );
-        assert!(forget_consumed_arguments(&crossings, &args, false, Some(&consumed)).is_empty());
+        assert_eq!(
+            forget_consumed_arguments(&crossings, &args, false, Some(&consumed)),
+            ""
+        );
     }
 
     #[test]

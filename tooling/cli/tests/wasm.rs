@@ -27,7 +27,10 @@ fn emit_wasm_writes_an_executable_artifact_and_declines_before_writing() {
     assert!(out.join("program.wasm").is_file());
     let origins: serde_json::Value =
         serde_json::from_slice(&std::fs::read(out.join("program.origins.json")).unwrap()).unwrap();
-    assert!(!origins["instructions"].as_array().unwrap().is_empty());
+    assert_ne!(
+        origins["instructions"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     let source = origins["instructions"][0]["origin"]["location"]["file"]
         .as_u64()
         .unwrap();
@@ -136,7 +139,10 @@ fn emit_wasm_declines_an_export_it_cannot_publish_and_writes_the_rest() {
     );
     let manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(out.join("program.wasm.json")).unwrap()).unwrap();
-    assert!(manifest["exports"].as_array().unwrap().is_empty());
+    assert_eq!(
+        manifest["exports"].as_array().unwrap().as_slice(),
+        [] as [serde_json::Value; 0]
+    );
     std::fs::remove_dir_all(out).unwrap();
 }
 

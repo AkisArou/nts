@@ -805,7 +805,7 @@ fn managed_runtime_declarations_must_agree_with_the_header() {
                 1
             );
         } else {
-            assert!(llvm.text.is_empty());
+            assert_eq!(llvm.text, "");
             assert!(
                 llvm.diagnostics
                     .iter()
@@ -1048,7 +1048,7 @@ fn conflicting_abis_and_runtime_collisions_are_refused() {
         assert!(prepared.diagnostics.is_empty(), "{:?}", prepared.diagnostics);
         let emitted = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(emitted.diagnostics.iter().any(|d| d.message.contains(expected)), "{:?}", emitted.diagnostics);
-        assert!(emitted.text.is_empty());
+        assert_eq!(emitted.text, "");
     }
 }
 

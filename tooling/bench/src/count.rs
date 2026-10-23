@@ -1740,7 +1740,10 @@ mod tests {
                 ("NTS_B".to_owned(), "x=y".to_owned())
             ]
         );
-        assert!(baseline_env("").expect("empty is empty").is_empty());
+        assert_eq!(
+            baseline_env("").expect("empty is empty"),
+            [] as [(std::string::String, std::string::String); 0]
+        );
         assert!(baseline_env("NOEQUALS").is_err());
         assert!(baseline_env("=1").is_err());
         assert!(baseline_env("A B=1").is_err());

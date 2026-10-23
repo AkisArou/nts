@@ -381,7 +381,7 @@ mod tests {
         const BAD: &str = "#error expected_second_probe\n";
         // The serial control differs only in scheduling. Both inputs must
         // already produce the expected independent clang answers.
-        assert!(super::compile(NAMESPACE, GOOD, &[]).unwrap().is_empty());
+        assert_eq!(super::compile(NAMESPACE, GOOD, &[]).unwrap(), "");
         assert!(
             super::compile(NAMESPACE, BAD, &[])
                 .unwrap()

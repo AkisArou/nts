@@ -182,7 +182,7 @@ mod tests {
         for &(name, support) in catalog::ROWS {
             let expected = match support {
                 Support::Decline(reason) => {
-                    assert!(!reason.is_empty());
+                    assert_ne!(reason, "");
                     None
                 }
                 Support::Intrinsic | Support::WasmHelper | Support::HostImport => Some(support),

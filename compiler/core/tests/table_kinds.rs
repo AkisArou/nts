@@ -93,7 +93,15 @@ fn a_narrow_kind_is_named_only_for_a_key_of_its_sort() {
         return;
     };
     let calls = keyed_calls(&program);
-    assert!(!calls.is_empty());
+    assert_ne!(
+        calls,
+        [] as [(
+            std::string::String,
+            std::string::String,
+            std::option::Option<nts_core::HirType>,
+            u32
+        ); 0]
+    );
     for (func, name, key, kind) in &calls {
         if *kind == hir::tables::ERASED {
             continue;

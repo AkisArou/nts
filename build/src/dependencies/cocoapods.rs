@@ -630,7 +630,10 @@ mod tests {
             relative(glob(&root, "Beep.xcframework", true)),
             ["Beep.xcframework"]
         );
-        assert!(glob(&root, "Classes/*.swift", false).is_empty());
+        assert_eq!(
+            glob(&root, "Classes/*.swift", false),
+            [] as [camino::Utf8PathBuf; 0]
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 

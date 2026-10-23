@@ -138,7 +138,7 @@ mod tests {
         assert_eq!(dispatch.targets(0), ["class"]);
         assert_eq!(dispatch.targets(1), ["class_raising"]);
         assert_eq!(dispatch.activate(1), ["b", "b_raising"]);
-        assert!(dispatch.targets(0).is_empty());
+        assert_eq!(dispatch.targets(0), [] as [&str; 0]);
         assert!(!dispatch.active.contains(&0));
     }
 
@@ -146,9 +146,9 @@ mod tests {
     fn a_slot_discovered_after_the_allocation_keeps_its_body() {
         let program = program();
         let mut dispatch = Dispatch::build(&program);
-        assert!(dispatch.activate(0).is_empty());
+        assert_eq!(dispatch.activate(0), [] as [&str; 0]);
         assert_eq!(dispatch.targets(0), ["a", "class"]);
-        assert!(dispatch.activate(0).is_empty());
+        assert_eq!(dispatch.activate(0), [] as [&str; 0]);
         assert!(!dispatch.active.contains(&1));
     }
 }

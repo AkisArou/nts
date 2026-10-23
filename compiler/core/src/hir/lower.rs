@@ -15326,7 +15326,7 @@ fn opaque_signature(snapshot: &LoweringSnapshot<'_>, declaration: NodeId) -> boo
                 .children(child)
                 .first()
                 .copied()
-                .is_some_and(&opaque_slot),
+                .is_some_and(opaque_slot),
             // The return annotation, which is the only type node a declaration
             // has among its direct children.
             Some(kind) if syntax::is_type_node(kind) => opaque_slot(child),
@@ -84202,8 +84202,7 @@ impl<'a> FuncBuilder<'a> {
             if self.member_return_type(type_id, member).is_some()
                 && self
                     .layout_of(operand, type_id)
-                    .ok()
-                    .is_some_and(|layout| self.field_named(type_id, &layout, member).is_some())
+                    .is_ok_and(|layout| self.field_named(type_id, &layout, member).is_some())
             {
                 return Err(self.unsupported(
                     operand,

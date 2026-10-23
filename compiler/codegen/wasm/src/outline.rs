@@ -444,7 +444,7 @@ mod tests {
     fn an_arm_that_branches_out_is_not() {
         let mut arm = throwing();
         arm.insert(0, I::Br(0));
-        assert!(regions(&body_with(&arm)).is_empty());
+        assert_eq!(regions(&body_with(&arm)), [] as [(usize, usize); 0]);
     }
 
     #[test]
@@ -457,7 +457,7 @@ mod tests {
         let inner = body_with(&throwing());
         body.code.insts.extend(inner.code.insts);
         body.code.instructions(&[I::End]);
-        assert!(regions(&body).is_empty());
+        assert_eq!(regions(&body), [] as [(usize, usize); 0]);
     }
 
     /// `throwing`'s work, then an `if`/`else` on local 0 whose arms are `then`
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn an_arm_whose_last_if_can_fall_out_is_not() {
         let arm = ending_in_if(&[I::Call(0), I::Unreachable], &[I::Nop]);
-        assert!(regions(&body_with(&arm)).is_empty());
+        assert_eq!(regions(&body_with(&arm)), [] as [(usize, usize); 0]);
     }
 
     /// Both arms raise, but a branch leaves the inner `if` before either does,
@@ -494,12 +494,15 @@ mod tests {
             &[I::LocalGet(1), I::BrIf(0), I::Call(0), I::Unreachable],
             &[I::Call(0), I::Unreachable],
         );
-        assert!(regions(&body_with(&arm)).is_empty());
+        assert_eq!(regions(&body_with(&arm)), [] as [(usize, usize); 0]);
     }
 
     #[test]
     fn a_small_arm_is_not() {
-        assert!(regions(&body_with(&[I::Call(0), I::Unreachable])).is_empty());
+        assert_eq!(
+            regions(&body_with(&[I::Call(0), I::Unreachable])),
+            [] as [(usize, usize); 0]
+        );
     }
 
     #[test]
@@ -536,6 +539,6 @@ mod tests {
         code.code.instructions(&arm);
         let (inputs, inner) = locals(&code.code.insts, 2);
         assert_eq!(inputs, vec![0, 1]);
-        assert!(inner.is_empty());
+        assert_eq!(inner, [] as [u32; 0]);
     }
 }
