@@ -247,6 +247,7 @@ pub(super) fn has_effects(op: &Op) -> bool {
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::Provided(_)
         | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined

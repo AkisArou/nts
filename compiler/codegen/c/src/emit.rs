@@ -5734,6 +5734,15 @@ fn emit_op(
         // parameter; a block parameter is written by the edges that jump here;
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
+        // Answered by preparation's first step (`hir::features`); arriving with
+        // one means a program was emitted unprepared.
+        OpKind::Provided(helper) => {
+            return Err(Diagnostic::error(
+                "NTS2007",
+                format!("`typeof {helper}` reached the emitter unanswered"),
+                op.origin.location,
+            ));
+        }
         OpKind::ConstInt(v) => format!("{name} = {};", integer_literal(*v)),
         OpKind::ConstHandle(bits) => {
             let ty = c_type_of(context.program, &op.ty, &op.origin)?;

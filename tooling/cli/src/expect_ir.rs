@@ -208,6 +208,7 @@ pub(crate) fn op_word(kind: &OpKind) -> &'static str {
         | OpKind::ConstNull
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic => "const",
+        OpKind::Provided(_) => "provided",
         OpKind::Erase { .. } => "erase",
         OpKind::TagOf { .. } => "tagof",
         OpKind::Unerase { .. } => "unerase",

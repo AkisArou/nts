@@ -501,6 +501,14 @@ pub fn check(
     let options = hir::Options {
         provider,
         table_entries: backend.table_entries(),
+        // What the backend provides, for a `typeof` of an intrinsic
+        // (`hir::features`): C's and LLVM's runtime header, each other
+        // backend's own table.
+        provided: hir::features::Provided::By(match backend {
+            Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
+            Backend::Jvm => nts_codegen_jvm::provides,
+            Backend::Wasm => nts_codegen_wasm::provides,
+        }),
         ..hir::Options::default()
     };
     let prepared = match hir::prepare_with(&snapshot, &options) {

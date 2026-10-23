@@ -3140,6 +3140,16 @@ fn prepared_program(
             callbacks_checkpoint: false,
             targets: nts_core::hir::native::Targets::only(hir::HOST),
             table_entries: backend.table_entries(),
+            // What the backend provides, for a `typeof` of an intrinsic
+            // (`hir::features`): C's and LLVM's runtime header, each other
+            // backend's own table.
+            provided: hir::features::Provided::By(match backend {
+                nts_codegen_common::Backend::C | nts_codegen_common::Backend::Llvm => {
+                    nts_codegen_llvm::provides
+                }
+                nts_codegen_common::Backend::Jvm => nts_codegen_jvm::provides,
+                nts_codegen_common::Backend::Wasm => nts_codegen_wasm::provides,
+            }),
         },
     ) {
         Ok(prepared) => prepared,

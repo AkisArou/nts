@@ -46,6 +46,15 @@ mod program;
 pub use program::JvmProgram;
 mod intcall;
 pub mod ops;
+
+/// Whether this backend provides the runtime helper `helper`: whether its closed
+/// table maps it to the JVM runtime (`ops::external`) or renders it inline
+/// (`ops::inline`). The answer to a `typeof` of an intrinsic here
+/// (`nts_core::hir::features`).
+#[must_use]
+pub fn provides(helper: &str) -> bool {
+    ops::external(helper).is_some() || ops::inline(helper).is_some()
+}
 pub mod split;
 mod split_faces;
 pub mod types;

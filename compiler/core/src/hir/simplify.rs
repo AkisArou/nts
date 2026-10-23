@@ -504,6 +504,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::Provided(_)
         | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined

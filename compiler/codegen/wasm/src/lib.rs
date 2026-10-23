@@ -80,6 +80,15 @@ use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
 use serde::{Deserialize, Serialize};
 pub use support::{Support, helper_support};
+
+/// Whether this backend provides the runtime helper `helper`: whether its
+/// catalog supports it, as an instruction, a module helper or a host import,
+/// rather than declining it or not knowing it. The answer to a `typeof` of an
+/// intrinsic here (`nts_core::hir::features`).
+#[must_use]
+pub fn provides(helper: &str) -> bool {
+    helper_support(helper).is_some_and(|support| !matches!(support, Support::Decline(_)))
+}
 pub use types::{Absence, BoundaryType};
 
 /// A complete artifact; failed/declined programs never return partial bytes.

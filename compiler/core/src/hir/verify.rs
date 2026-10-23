@@ -2338,6 +2338,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::DispatchSlot(_)
         | OpKind::ConstBool(_)
         | OpKind::ConstString(_)
+        | OpKind::Provided(_)
         | OpKind::ConstTemplate { .. }
         | OpKind::ConstNull
         | OpKind::ConstUndefined

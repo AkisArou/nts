@@ -720,6 +720,8 @@ impl<'b, 'p> Body<'b, 'p> {
             OpKind::CellReady { .. } | OpKind::Await { .. } | OpKind::Yield { .. } => {
                 return Err(format!("operation outside M1a: {:?}", op.kind).into());
             }
+            // Answered by preparation's first step (`hir::features`).
+            OpKind::Provided(helper) => return Err(format!("unanswered `typeof {helper}`").into()),
         }
         if self.types().slot(&op.ty)?.is_some() {
             self.instruction(&I::LocalSet(self.local(id)?));

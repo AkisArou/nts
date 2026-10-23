@@ -2692,6 +2692,7 @@ fn prepare_as(
             hir::reachable::Roots::Entry,
         ),
         table_entries: backend.table_entries(),
+        provided: emission::provided(backend),
         ..hir::Options::default()
     };
     // An invalid program is exactly the one worth reading, so the
@@ -3411,6 +3412,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
         } => format!("native.store %{}[%{}], %{}", pointer.0, index.0, value.0),
         OpKind::Param(n) => format!("%{index} = param {n} : {ty}"),
         OpKind::BlockParam(n) => format!("%{index} = blockparam {n} : {ty}"),
+        OpKind::Provided(helper) => format!("%{index} = provided {helper} : {ty}"),
         OpKind::ConstInt(_)
         | OpKind::ConstFloat(_)
         | OpKind::DispatchSlot(_)

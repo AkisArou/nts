@@ -49,6 +49,15 @@ mod objc;
 /// How many sixteen-byte arguments a Win64 runtime call can pass; see `indirect`.
 pub use indirect::SLOTS as WIN64_INDIRECT_SLOTS;
 pub mod signatures;
+
+/// Whether the C runtime provides `helper`, as C and LLVM programs link it: its
+/// header, which [`signatures`] lists whole (generated from it and checked
+/// against it). The answer to a `typeof` of an intrinsic on both backends
+/// (`nts_core::hir::features`).
+#[must_use]
+pub fn provides(helper: &str) -> bool {
+    signatures::signature(helper).is_some()
+}
 pub mod signatures_arm64;
 pub mod signatures_arm64_linux;
 pub mod signatures_arm64_windows;

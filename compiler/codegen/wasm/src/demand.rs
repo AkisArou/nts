@@ -165,6 +165,7 @@ fn operation(demand: &mut Demand, program: &Program, func: &Func, id: ValueId) {
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }
+        | OpKind::Provided(_)
         | OpKind::ArraySet { .. } => {}
     }
 }

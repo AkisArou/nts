@@ -29911,6 +29911,46 @@ impl<'a> FuncBuilder<'a> {
         )))
     }
 
+    /// `typeof` of an intrinsic: whether the backend provides it, which only
+    /// that backend's preparation can answer (`features`). The operand is not
+    /// evaluated; a declaration has no effects. Every other `typeof` is
+    /// [`Self::lower_typeof`]'s.
+    fn intrinsic_typeof(&mut self, id: NodeId) -> Option<ValueId> {
+        let operand = *self.children(id).first()?;
+        let helper = self.intrinsic_named_by(operand)?;
+        Some(self.push(
+            OpKind::Provided(helper),
+            HirType::Managed(ManagedType::String),
+            self.origin(id),
+        ))
+    }
+
+    /// The runtime helper an expression names, where it is an identifier
+    /// resolving to an `@ntsAbi intrinsic` declaration with no body: the
+    /// declaration's `@ntsSymbol`, else its own name, as a call to it is
+    /// lowered.
+    fn intrinsic_named_by(&self, expression: NodeId) -> Option<String> {
+        let name = self.through_parentheses(expression);
+        if self.kind_of(name) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.node(name).symbol?;
+        let declaration = *self
+            .snapshot
+            .symbols
+            .get(symbol.0 as usize)?
+            .declarations
+            .first()?;
+        let native = self.node(declaration).native.as_ref()?;
+        if native.abi.as_deref() != Some("intrinsic") || self.has_a_body(declaration) {
+            return None;
+        }
+        native
+            .symbol
+            .clone()
+            .or_else(|| self.declared_name(declaration))
+    }
+
     fn lower_typeof(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let operand = *self
             .children(id)
@@ -52186,7 +52226,10 @@ impl<'a> FuncBuilder<'a> {
             Some(syntax::TEMPLATE_EXPRESSION) => self.lower_template(id),
             Some(syntax::TAGGED_TEMPLATE_EXPRESSION) => self.lower_tagged_template(id),
             Some(syntax::DELETE_EXPRESSION) => self.lower_delete(id),
-            Some(syntax::TYPE_OF_EXPRESSION) => self.lower_typeof(id),
+            Some(syntax::TYPE_OF_EXPRESSION) => match self.intrinsic_typeof(id) {
+                Some(provided) => Ok(provided),
+                None => self.lower_typeof(id),
+            },
             Some(syntax::VOID_EXPRESSION) => self.lower_void(id),
             Some(syntax::REGULAR_EXPRESSION_LITERAL) => Err(self.unsupported(
                 id,

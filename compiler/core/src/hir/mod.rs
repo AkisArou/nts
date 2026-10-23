@@ -37,6 +37,7 @@ mod erased_uses;
 pub mod escape;
 mod exposure;
 pub mod facts;
+pub mod features;
 pub mod fields;
 pub mod flow;
 pub mod fold;
@@ -1290,6 +1291,13 @@ pub enum OpKind {
     DispatchSlot(u32),
     ConstBool(bool),
     ConstString(String),
+    /// `typeof` of an `@ntsAbi intrinsic` declaration, a string: `"function"`
+    /// where the backend the program is prepared for provides the helper,
+    /// `"undefined"` where it does not. Lowering is shared by every backend and
+    /// cannot answer, so it leaves this; the first step of preparation answers
+    /// it (`features::fold_provided`), so no later pass and no backend sees it.
+    /// The declaration is never evaluated: a declaration has no effects.
+    Provided(String),
     /// One immortal object per original source site, shared by every copy of
     /// the containing body. Backends cache by `site`, never by emitted name or
     /// equal contents: different sites must have different identities.
@@ -5538,6 +5546,9 @@ pub struct Options<'a> {
     /// `Options { provider: HostGc, ..default() }` would inherit native's
     /// answer.
     pub table_entries: Option<bool>,
+    /// Which runtime helpers the backend provides, for a `typeof` of an
+    /// intrinsic ([`features::Provided`]). Nothing, unless the driver says.
+    pub provided: features::Provided,
 }
 
 impl Default for Options<'_> {
@@ -5565,6 +5576,7 @@ impl Default for Options<'_> {
             targets: native::Targets::only(HOST),
             // As the provider answers, resolved with it.
             table_entries: None,
+            provided: features::Provided::Nothing,
         }
     }
 }
@@ -5597,6 +5609,8 @@ pub struct PreparationOptions<'a> {
     /// resolves it against the provider, so a caller building these directly
     /// with `..default()` inherits no other provider's answer.
     pub table_entries: Option<bool>,
+    /// [`Options::provided`].
+    pub provided: features::Provided,
 }
 
 impl PreparationOptions<'_> {
@@ -5619,6 +5633,7 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
             roots: options.roots,
             targets: options.targets,
             table_entries: options.table_entries,
+            provided: options.provided,
         }
     }
 }
@@ -7736,6 +7751,10 @@ fn prepare_lowered(
     options: &PreparationOptions<'_>,
 ) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
+    // First: whether this backend provides each helper a `typeof` asks about,
+    // so that the comparison, its branch and the arm the backend cannot run
+    // fold away before anything reads them (`features`).
+    features::fold_provided(&mut lowered.program, options.provided);
     // Before the check, and every analysis after it, reads them.
     lowered.program.targets = options.targets;
     lowered.program.roots = Some(options.roots.to_owned());

@@ -117,9 +117,22 @@ impl Metadata {
                 && emission.host.checkpoints_after_callbacks(),
             targets: emission.scalar_targets(),
             table_entries: backend.table_entries(),
+            provided: provided(backend),
             ..hir::PreparationOptions::default()
         })
     }
+}
+
+/// Which runtime helpers `backend` provides, for a `typeof` of an intrinsic
+/// (`hir::features`): the C runtime's header for C and LLVM, each other
+/// backend's own table. Every driver that prepares for a backend says, as it
+/// says `table_entries`.
+pub(super) fn provided(backend: Backend) -> hir::features::Provided {
+    hir::features::Provided::By(match backend {
+        Backend::C | Backend::Llvm => nts_codegen_llvm::provides,
+        Backend::Jvm => nts_codegen_jvm::provides,
+        Backend::Wasm => nts_codegen_wasm::provides,
+    })
 }
 
 /// The roots of a build that names no `--entry`.
