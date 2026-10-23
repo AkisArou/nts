@@ -9713,6 +9713,69 @@ static inline
   return nts_hash_key(key, map->kind);
 }
 
+/* Whether `key` is of the sort the table's kind hashes and compares.
+ *
+ * The kind is chosen at the constructor from the table's static key type
+ * (`key_kind_of` in lowering), and a view can widen that type: method
+ * parameters are bivariant, so a `Map<string, number>` is a `Map<unknown,
+ * unknown>`, and through that view a number may arrive as a key. A key the
+ * kind cannot hash is one no entry can equal -- a narrow table holds only keys
+ * that fit, and equal keys carry equal tags -- so a read answers "absent", and
+ * a write widens the table first (`nts_map_widen`). The JVM's table does the
+ * same (`NtsTable.eraseKeys`).
+ *
+ * An object key fits by any of the tags an object is erased with: a closure
+ * is `FUNCTION` where the compiler knew and `OBJECT` where it did not
+ * (`nts_tag_of_reference`), and identity is all a `REFERENCE` table reads. */
+static inline __attribute__((always_inline)) bool
+nts_map_fits(const NtsMap *map, NtsValue key) {
+  uint32_t tag = nts_value_tag(key);
+  switch (map->kind) {
+  case NTS_KEY_STRING:
+    return tag == NTS_TAG_STRING;
+  case NTS_KEY_NUMBER:
+    return tag == NTS_TAG_NUMBER;
+  case NTS_KEY_REFERENCE:
+    return tag >= NTS_TAG_FUNCTION && tag <= NTS_TAG_OBJECT;
+  case NTS_KEY_OBJC:
+    return tag == NTS_TAG_HANDLE_OBJC;
+  default:
+    return true;
+  }
+}
+
+static void nts_map_reindex(NtsMap *map);
+
+/* A table that a key of another sort is written to becomes erased: from here
+ * on it hashes and compares every key by its tag, as a table created as
+ * `Map<unknown, unknown>` does. An erased hash is not a narrow kind's -- it
+ * mixes the tag in, so that 3 and "3" do not collide by construction -- so
+ * every live entry's is taken again and the index rebuilt, once, the first
+ * time a key that does not fit arrives.
+ *
+ * An Objective-C table is the exception, refused by name: its keys compare by
+ * `-isEqual:`, which an erased table does not ask, so widening it would make
+ * two equal strings two keys. */
+static void nts_map_widen(NtsMap *map) {
+  if (map->kind == NTS_KEY_OBJC) {
+    fflush(stdout);
+    fputs("nts: refused at run time: a key that is not an Objective-C "
+          "object, written to a table of them\n",
+          stderr);
+    abort();
+  }
+  map->kind = NTS_KEY_ERASED;
+  for (uint32_t at = 0; at < map->used; at++) {
+    if (map->hashes[at] != 0) {
+      map->hashes[at] =
+          NTS_MAP_TAG(nts_hash_key(map->keys[at], NTS_KEY_ERASED));
+    }
+  }
+  if (map->slots) {
+    nts_map_reindex(map);
+  }
+}
+
 /* The bytes a table's block holds, for its accounting. */
 static size_t nts_map_block_bytes(uint32_t capacity, uint32_t slots,
                                   bool holds_values) {
@@ -9857,9 +9920,6 @@ static void nts_map_rehash(NtsMap *map) {
    * contents did not -- so `tooling/memory`'s allocation column showed `1` for
    * a table of any size, and could not have shown otherwise. */
   nts_note_allocation();
-  for (uint32_t slot = 0; slot < slots; slot++) {
-    index[slot] = NTS_MAP_EMPTY;
-  }
 
   /* Every entry at the index it already had, holes included, with its hash. */
   uint32_t out = map->used;
@@ -9888,13 +9948,20 @@ static void nts_map_rehash(NtsMap *map) {
   map->capacity = wanted;
   map->slots = slots;
   map->used = out;
+  nts_map_reindex(map);
+}
 
-  /* The index is rebuilt from the hashes the entries kept -- no key is hashed
-   * again -- and from the live entries only: a hole's hash is 0, and nothing
-   * should find its way back to one. */
-  uint32_t mask = slots - 1u;
-  for (uint32_t at = 0; at < out; at++) {
-    uint32_t hash = hashes[at];
+/* The index rebuilt from the hashes the entries kept -- no key is hashed
+ * again -- and from the live entries only: a hole's hash is 0, and nothing
+ * should find its way back to one. */
+static void nts_map_reindex(NtsMap *map) {
+  uint64_t *index = map->index;
+  uint32_t mask = map->slots - 1u;
+  for (uint32_t slot = 0; slot < map->slots; slot++) {
+    index[slot] = NTS_MAP_EMPTY;
+  }
+  for (uint32_t at = 0; at < map->used; at++) {
+    uint32_t hash = map->hashes[at];
     if (hash == 0) {
       continue;
     }
@@ -9938,6 +10005,9 @@ static void nts_map_rehash(NtsMap *map) {
  * 1.35x bun to 1.01x, and 0.72x `std::unordered_map` to 0.56x. */
 __attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
                                                     NtsValue key) {
+  if (!nts_map_fits(map, key)) {
+    return nts_value_of_undefined();
+  }
   int32_t at = nts_map_find(map, key, nts_map_hash(map, key), 0);
   if (at < 0 || !map->values) {
     return nts_value_of_undefined();
@@ -9948,7 +10018,8 @@ __attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
 
 __attribute__((always_inline)) bool nts_map_has(const NtsMap *map,
                                                 NtsValue key) {
-  return nts_map_find(map, key, nts_map_hash(map, key), 0) >= 0;
+  return nts_map_fits(map, key) &&
+         nts_map_find(map, key, nts_map_hash(map, key), 0) >= 0;
 }
 
 /* `map.set(k, v)` / `set.add(v)`, returning the collection, which is what both
@@ -10013,6 +10084,9 @@ nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot,
 __attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
                                                    NtsValue value) {
   key = nts_map_normalize(key);
+  if (!nts_map_fits(map, key)) {
+    nts_map_widen(map);
+  }
   uint32_t hash = nts_map_hash(map, key);
   uint32_t slot = 0;
   int32_t at = nts_map_find(map, key, hash, &slot);
@@ -10045,6 +10119,12 @@ static inline bool nts_map_entry_current(const NtsMap *map, uint64_t entry) {
 
 __attribute__((always_inline)) uint64_t nts_map_entry(const NtsMap *map,
                                                       NtsValue key) {
+  /* A key that does not fit names no slot: past the index, which no entry is
+   * current at, so the read and the write through it take `nts_map_get` and
+   * `nts_map_set`, which answer it. */
+  if (!nts_map_fits(map, key)) {
+    return nts_map_entry_of(map, map->slots);
+  }
   uint32_t slot = 0;
   nts_map_find(map, key, nts_map_hash(map, key), &slot);
   return nts_map_entry_of(map, slot);
@@ -10093,6 +10173,9 @@ nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value) {
 }
 
 bool nts_map_delete(NtsMap *map, NtsValue key) {
+  if (!nts_map_fits(map, key)) {
+    return false;
+  }
   uint32_t hash = nts_map_hash(map, key);
   uint32_t slot = 0;
   int32_t at = nts_map_find(map, key, hash, &slot);

@@ -488,6 +488,107 @@ int main(void) {
     nts_release(&m->header);
   }
 
+  /* --- a key of another sort -------------------------------------------
+   * A table built for one sort of key, reached through a view whose key type
+   * is wider (`Map<string, number>` as `Map<unknown, unknown>`). node:
+   *   const m = new Map([["a", 1]]) as Map<unknown, unknown>;
+   *   m.get(1) undefined; m.has(1) false; m.delete(1) false
+   *   m.set(1, "one"); m.set("k", 2); m.set(-0, 3)
+   *   => size 4, keys a,1,k,0 (Object.is(keys[3], -0) false);
+   *      m.get("a") 1, m.get(1) "one", m.get(0) 3, m.get("1") undefined    */
+  {
+    NtsMap *m = nts_map_new(NTS_KEY_STRING);
+    put(m, str("a"), num(1));
+    check("a number is absent from a string table",
+          nts_value_tag(nts_map_get(m, num(1))) == NTS_TAG_UNDEFINED &&
+              !nts_map_has(m, num(1)) && !nts_map_delete(m, num(1)));
+    uint64_t entry = nts_map_entry(m, num(1));
+    check("its entry names no slot, and reads undefined",
+          nts_value_tag(nts_map_entry_get(m, entry, num(1))) ==
+              NTS_TAG_UNDEFINED);
+    check("asking leaves the table as it was",
+          m->kind == NTS_KEY_STRING && m->header.length == 1);
+    put(m, num(1), str("one"));
+    put(m, str("k"), num(2));
+    put(m, num(-0.0), num(3));
+    check("writing one widens the table",
+          m->kind == NTS_KEY_ERASED && m->header.length == 4);
+    NtsValue one = nts_map_get(m, num(1));
+    check("and every key is found by its own sort",
+          nts_value_number(nts_map_get(m, str("a"))) == 1.0 &&
+              nts_value_tag(one) == NTS_TAG_STRING &&
+              nts_value_number(nts_map_get(m, str("k"))) == 2.0 &&
+              nts_value_number(nts_map_get(m, num(0.0))) == 3.0 &&
+              !nts_map_has(m, str("1")));
+    nts_value_release(one);
+    check("in the order it arrived, -0 stored as +0",
+          nts_value_tag(m->keys[0]) == NTS_TAG_STRING &&
+              nts_value_number(m->keys[1]) == 1.0 &&
+              nts_value_tag(m->keys[2]) == NTS_TAG_STRING &&
+              nts_value_tag(m->keys[3]) == NTS_TAG_NUMBER &&
+              !signbit(nts_value_number(m->keys[3])));
+    for (int i = 0; i < 40; i++) {
+      put(m, num(100 + i), num(i));
+    }
+    bool all = nts_value_number(nts_map_get(m, str("a"))) == 1.0;
+    for (int i = 0; i < 40; i++) {
+      all = all && nts_value_number(nts_map_get(m, num(100 + i))) == i;
+    }
+    check("a widened table grows and still finds every key",
+          all && m->header.length == 44);
+    nts_release(&m->header);
+
+    /* node: const t = new Map<string, number>() as Map<unknown, unknown>;
+     *       t.set(5, 6) through an update  =>  t.get(5) 6, size 1 */
+    NtsMap *t = nts_map_new(NTS_KEY_STRING);
+    put(t, str("x"), num(0));
+    uint64_t misfit = nts_map_entry(t, num(5));
+    nts_map_entry_set(t, misfit, num(5), num(6));
+    check("a write through a misfit's entry widens as `set` does",
+          t->kind == NTS_KEY_ERASED &&
+              nts_value_number(nts_map_get(t, num(5))) == 6.0 &&
+              nts_value_number(nts_map_get(t, str("x"))) == 0.0 &&
+              t->header.length == 2);
+    nts_release(&t->header);
+
+    /* node: const n = new Map([[1, "n"]]) as Map<unknown, unknown>;
+     *       n.has("1") false; n.set("1", "s")  =>  n.get(1) "n",
+     *       n.get("1") "s", size 2 */
+    NtsMap *n = nts_map_new(NTS_KEY_NUMBER);
+    put(n, num(1), num(10));
+    check("a string is absent from a number table", !nts_map_has(n, str("1")));
+    put(n, str("1"), num(20));
+    check("and 1 and \"1\" stay two keys once it is widened",
+          n->kind == NTS_KEY_ERASED && n->header.length == 2 &&
+              nts_value_number(nts_map_get(n, num(1))) == 10.0 &&
+              nts_value_number(nts_map_get(n, str("1"))) == 20.0);
+    nts_release(&n->header);
+
+    /* node: const o = {}; const r = new Map([[o, 1]]) as Map<unknown,
+     *       unknown>; r.get("o") undefined; r.set("o", 2)  =>  r.get(o) 1,
+     *       r.get("o") 2 */
+    NtsMap *object = nts_map_new(NTS_KEY_NUMBER);
+    NtsValue o = nts_value_of_reference(&object->header, NTS_TAG_OBJECT);
+    NtsMap *r = nts_map_new(NTS_KEY_REFERENCE);
+    put(r, o, num(1));
+    check("a closure's tag fits an object table as an object's does",
+          nts_value_number(nts_map_get(
+              r, nts_value_of_reference(&object->header, NTS_TAG_FUNCTION))) ==
+              1.0);
+    check("a string is absent from an object table",
+          nts_value_tag(nts_map_get(r, str("o"))) == NTS_TAG_UNDEFINED);
+    put(r, str("o"), num(2));
+    check("and both are found once it is widened",
+          r->kind == NTS_KEY_ERASED &&
+              nts_value_number(nts_map_get(r, o)) == 1.0 &&
+              nts_value_number(nts_map_get(r, str("o"))) == 2.0);
+    nts_release(&r->header);
+    nts_release(&object->header);
+    /* The key table was buffered as a possible cycle root when `r` gave it
+     * back; nothing else here would collect it. */
+    nts_collect_cycles();
+  }
+
   /* Every allocation above is gone, including the three side arrays each
    * table owns -- which is the leak `storage.c` covers for arrays, asked of
    * the type that has three of them. */
