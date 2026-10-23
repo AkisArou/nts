@@ -1,4 +1,4 @@
-// expect: NTS1100 `Date.UTC` is not provided by this compiler: a pure function of its arguments
+// expect: NTS1100 `Date.UTC` (es:Date) is not provided by this compiler: a pure function of its arguments
 //
 // **Not a clock**, which is the whole reason this has a fixture of its own.
 //

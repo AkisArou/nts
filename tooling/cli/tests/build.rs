@@ -327,7 +327,7 @@ export default defineConfig({
     );
     assert!(
         run.stderr
-            .contains("NTS1100 `Date.now` is not provided by this compiler"),
+            .contains("NTS1100 `Date.now` (es:Date) is not provided by this compiler"),
         "the build did not name the builtin:\n{}",
         run.stderr
     );

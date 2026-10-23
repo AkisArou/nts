@@ -1,4 +1,4 @@
-// expect: NTS1100 `Date.now` is not provided by this compiler: it reads a clock
+// expect: NTS1100 `Date.now` (es:Date) is not provided by this compiler: it reads a clock
 //
 // `Date.now()` is refused: the compiler has no clock capability. Every
 // function that calls it -- or calls something that calls it -- is

@@ -1262,6 +1262,9 @@ enum Nameless {
     Unprovided {
         what: String,
         why: Option<&'static str>,
+        /// The feature the name is (`es:JSON`), where its library says
+        /// (`SymbolRecord::library`).
+        feature: Option<String>,
     },
     /// A builtin no target will ever have: `eval` evaluates source text, and a
     /// program compiled ahead of time carries no evaluator. NTS1101.
@@ -1271,8 +1274,40 @@ enum Nameless {
 
 impl Nameless {
     const fn unprovided(what: String) -> Self {
-        Self::Unprovided { what, why: None }
+        Self::Unprovided {
+            what,
+            why: None,
+            feature: None,
+        }
     }
+
+    /// The same answer, naming the feature it is.
+    fn of_feature(self, named: Option<String>) -> Self {
+        match self {
+            Self::Unprovided { what, why, .. } => Self::Unprovided {
+                what,
+                why,
+                feature: named,
+            },
+            other => other,
+        }
+    }
+}
+
+/// The feature a library's global is: its library and its name, `es:JSON`,
+/// `dom:document`. Only where the name *is* the feature -- a global of
+/// TypeScript's own libraries. A package's or `@types/node`'s symbol may be a
+/// module's export, whose feature is the module (`node:assert`), which the
+/// symbol alone does not say.
+fn feature_of(record: &nts_semantic_schema::SymbolRecord) -> Option<String> {
+    let prefix = match record.library.as_ref()? {
+        nts_semantic_schema::Library::Es => "es",
+        nts_semantic_schema::Library::Dom => "dom",
+        nts_semantic_schema::Library::Node | nts_semantic_schema::Library::Package(_) => {
+            return None;
+        }
+    };
+    Some(format!("{prefix}:{}", record.name))
 }
 
 const SHARED_BUFFER_REFUSAL: &str = "`new SharedArrayBuffer`, which would carry `ArrayBuffer`'s descriptor and answer \
@@ -23238,7 +23273,9 @@ impl<'a> FuncBuilder<'a> {
         {
             let name = &record.name;
             return match self.member_read_from(id) {
-                Some(member) => self.provided_global_member(id, name, &member),
+                Some(member) => self
+                    .provided_global_member(id, name, &member)
+                    .of_feature(feature_of(record)),
                 None => {
                     Nameless::Unsupported(format!("`{name}` used as a value rather than as a type"))
                 }
@@ -23262,7 +23299,7 @@ impl<'a> FuncBuilder<'a> {
             // global like any other; one the program declares is a namespace
             // used as a value.
             if record.declarations.is_empty() {
-                return self.library_global(id, &record.name);
+                return self.library_global(id, record);
             }
             return Nameless::Unsupported(format!("`{}`, a namespace", record.name));
         }
@@ -23312,6 +23349,7 @@ impl<'a> FuncBuilder<'a> {
                     "now" => Nameless::Unprovided {
                         what: "`Date.now`".to_owned(),
                         why: Some("it reads a clock, which no differential could check"),
+                        feature: feature_of(record),
                     },
                     "UTC" => Nameless::Unprovided {
                         what: "`Date.UTC`".to_owned(),
@@ -23319,8 +23357,10 @@ impl<'a> FuncBuilder<'a> {
                             "a pure function of its arguments rather than a clock, and simply \
                              not built yet",
                         ),
+                        feature: feature_of(record),
                     },
-                    _ => Nameless::unprovided(format!("`Date.{member}`")),
+                    _ => Nameless::unprovided(format!("`Date.{member}`"))
+                        .of_feature(feature_of(record)),
                 };
             }
             // **`Object` and `Reflect` are a boundary, and the generic line
@@ -23354,7 +23394,7 @@ impl<'a> FuncBuilder<'a> {
             // refusals that could not be told apart, and they are not one
             // thing: `Object.keys` is a list the compiler is holding and
             // `Object.defineProperty` is a shape it does not have.
-            return self.library_global(id, &record.name);
+            return self.library_global(id, record);
         }
         // `resolve` and `reject` are not values. The executor's body is lowered
         // where the promise is built, so a call to one is the settle it stands
@@ -23385,7 +23425,8 @@ impl<'a> FuncBuilder<'a> {
     /// A library global reaching a refusal, by whether this compiler provides
     /// it (`builtin::provides_global`): one it does not is NTS1100, member or
     /// not; one it does was reached in a form its lowering does not take.
-    fn library_global(&self, id: NodeId, name: &str) -> Nameless {
+    fn library_global(&self, id: NodeId, record: &nts_semantic_schema::SymbolRecord) -> Nameless {
+        let name = record.name.as_str();
         // `arguments` is the language's own, which no library declares a
         // provider for: what has no lowering is the object.
         if name == "arguments" {
@@ -23395,14 +23436,15 @@ impl<'a> FuncBuilder<'a> {
             });
         }
         let provided = super::builtin::provides_global(name);
-        match self.member_read_from(id) {
+        let answer = match self.member_read_from(id) {
             Some(member) if provided => self.provided_global_member(id, name, &member),
             Some(member) => Nameless::unprovided(format!("`{name}.{member}`")),
             None if provided => Nameless::Unsupported(format!(
                 "`{name}`, a builtin this compiler provides, read as a value"
             )),
             None => Nameless::unprovided(format!("`{name}`")),
-        }
+        };
+        answer.of_feature(feature_of(record))
     }
 
     /// A member of a library global this compiler provides
@@ -24083,7 +24125,17 @@ impl<'a> FuncBuilder<'a> {
     /// target lacks `fetch`" is one question with one answer; NTS1001 stays
     /// for a construct the lowering cannot represent yet. `why`, where there
     /// is one, is the reason it is absent rather than merely unbuilt.
-    fn unprovided(&self, id: NodeId, what: &str, why: Option<&str>) -> Diagnostic {
+    fn unprovided(
+        &self,
+        id: NodeId,
+        what: &str,
+        why: Option<&str>,
+        feature: Option<&str>,
+    ) -> Diagnostic {
+        let what = match feature {
+            Some(feature) => format!("{what} ({feature})"),
+            None => what.to_owned(),
+        };
         let message = match why {
             Some(why) => format!("{what} is not provided by this compiler: {why}"),
             None => format!("{what} is not provided by this compiler"),
@@ -24094,7 +24146,9 @@ impl<'a> FuncBuilder<'a> {
     /// The refusal a [`Nameless`] answer makes.
     fn refuse_nameless(&self, id: NodeId, nameless: &Nameless) -> Diagnostic {
         match nameless {
-            Nameless::Unprovided { what, why } => self.unprovided(id, what, *why),
+            Nameless::Unprovided { what, why, feature } => {
+                self.unprovided(id, what, *why, feature.as_deref())
+            }
             Nameless::Never(what) => Diagnostic::error(
                 "NTS1101",
                 format!(
@@ -67650,7 +67704,12 @@ impl<'a> FuncBuilder<'a> {
                  not take"
             ))
         } else {
-            Nameless::unprovided(format!("`{name}`"))
+            let feature = self
+                .node(callee_node)
+                .symbol
+                .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
+                .and_then(feature_of);
+            Nameless::unprovided(format!("`{name}`")).of_feature(feature)
         }
     }
 
