@@ -21709,6 +21709,10 @@ struct FuncBuilder<'a> {
     dictionary_slots: Option<(NodeId, NodeId, Vec<Option<NodeId>>)>,
     /// The receiver, in a method.
     this: Option<ValueId>,
+    /// Field initializers being expanded at their allocation sites. A `new`
+    /// inside an initializer can reach that same initializer directly or
+    /// through another class; only repetition on the active path is recursive.
+    initializing_fields: Vec<NodeId>,
     /// The type this function's `return` statements must produce.
     ///
     /// Kept on the builder because a `return` needs it while the body is being
@@ -22161,6 +22165,7 @@ impl<'a> FuncBuilder<'a> {
             delegated_signature: None,
             dictionary_slots: None,
             this: None,
+            initializing_fields: Vec::new(),
             suffix: String::new(),
             qualified: rustc_hash::FxHashMap::default(),
             generic_calls: rustc_hash::FxHashMap::default(),
@@ -57392,10 +57397,18 @@ impl<'a> FuncBuilder<'a> {
                 // a conversion one line down that it never had to make; the
                 // want is already in hand here, and was being used only to
                 // coerce afterwards.
+                if self.initializing_fields.contains(&initializer) {
+                    return Err(self.unsupported(
+                        initializer,
+                        "a class field initializer that recursively initializes itself",
+                    ));
+                }
                 let want = layout.fields[field as usize].ty.clone();
+                self.initializing_fields.push(initializer);
                 let outer = self.this.replace(object);
                 let value = self.lower_expecting(initializer, &want);
                 self.this = outer;
+                self.initializing_fields.pop();
                 let value = value?;
                 // The layouts the field's own type needs, which used to be
                 // somebody else's doing. An initialiser was lowered at the
