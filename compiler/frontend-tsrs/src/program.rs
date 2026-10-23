@@ -3,6 +3,9 @@
 use std::cell::OnceCell;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::marker::PhantomData;
+
+use crate::{CapturePhase, SyntaxPhase, ViewPhase};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -43,7 +46,7 @@ pub struct SourceChanges {
     pub roots: Option<Vec<Utf8PathBuf>>,
 }
 
-/// A failure to load a project. TypeScript diagnostics are on `Checked` instead.
+/// A failure to load a project. TypeScript diagnostics are on `Finished` instead.
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
     #[error("cannot load native config {path}: {messages:?}")]
@@ -94,7 +97,6 @@ struct NativeProject {
     program: &'static Program,
     files: Vec<NativeFile>,
     file_index: FxHashMap<P<SourceFile>, usize>,
-    diagnostics: Vec<Diagnostic>,
     strings: crate::strings::StringPool,
 }
 
@@ -114,10 +116,10 @@ pub(crate) struct OwnedProgram {
     projects: Vec<NativeProject>,
     host: Arc<Host>,
     config_diagnostics: Vec<P<NativeDiagnostic>>,
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: OnceCell<Vec<Diagnostic>>,
     // The outer region owns configs and lazy work on the capture thread. The
     // loader has per-worker scratch regions, avoiding a cross-thread owner lock.
-    _region: Region,
+    region: Region,
     _loader_regions: Arc<ProgramRegions>,
 }
 
@@ -145,8 +147,8 @@ impl OwnedProgram {
             projects: Vec::new(),
             host,
             config_diagnostics: diagnostics,
-            diagnostics: Vec::new(),
-            _region: region.clone(),
+            diagnostics: OnceCell::new(),
+            region: region.clone(),
             _loader_regions: Arc::clone(&loader_regions),
         };
         let library_path = options
@@ -194,7 +196,6 @@ impl OwnedProgram {
                 program,
                 files: Vec::new(),
                 file_index: FxHashMap::default(),
-                diagnostics: Vec::new(),
                 strings: crate::strings::StringPool::new(region.clone()),
             });
             owned.projects.last_mut().expect("program registered").files = program
@@ -214,12 +215,15 @@ impl OwnedProgram {
                 .map(|(index, file)| (file.source, index))
                 .collect();
         }
-        // Finish all pool work before exposing any capture view. Later semantic
-        // questions use only this program's persistent first checker.
-        owned.diagnostics = owned.collect_diagnostics();
-        owned.projects[0].diagnostics.clone_from(&owned.diagnostics);
+        // Capture starts on the pristine designated checker. Pool diagnostics
+        // run only after Checked::finish consumes all semantic borrows.
         drop(scope);
         Ok(owned)
+    }
+
+    fn finish(&self) {
+        let _scope = self.region.enter();
+        self.diagnostics.get_or_init(|| self.collect_diagnostics());
     }
 
     fn diagnostic(&self, native: P<NativeDiagnostic>) -> Diagnostic {
@@ -352,17 +356,15 @@ impl Drop for OwnedProgram {
     }
 }
 
-/// Borrowed access to one checked revision. Dropping it permits `revise`.
+/// Capture phase of one native revision, on its pristine designated checker.
 ///
-/// All pool diagnostics finish before this view exists. Capture questions use
-/// the persistent first checker with a scoped guard, and never run with pool
-/// work. AST/file views may stay live during a question; no guard escapes it.
-#[derive(Clone, Copy)]
+/// Semantic views borrow this value. `finish` consumes it after capture,
+/// runs pool diagnostics, and returns syntax-only access and owned answers.
+/// Dropping the current phase and all its views permits `Session::revise`.
 pub struct Checked<'s> {
     owner: &'s OwnedProgram,
     case_sensitivity: CaseSensitivity,
 }
-
 impl fmt::Debug for Checked<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Checked")
@@ -370,7 +372,6 @@ impl fmt::Debug for Checked<'_> {
             .finish_non_exhaustive()
     }
 }
-
 impl<'s> Checked<'s> {
     pub(crate) fn new(owner: &'s OwnedProgram, case_sensitivity: CaseSensitivity) -> Self {
         Self {
@@ -379,29 +380,78 @@ impl<'s> Checked<'s> {
         }
     }
     #[must_use]
-    pub const fn case_sensitivity(self) -> CaseSensitivity {
+    pub const fn case_sensitivity(&self) -> CaseSensitivity {
         self.case_sensitivity
     }
-    pub fn projects(self) -> impl ExactSizeIterator<Item = Project<'s>> {
-        self.owner.projects.iter().map(|native| Project { native })
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_>> {
+        self.owner.projects.iter().map(|native| Project {
+            native,
+            owner: self.owner,
+            phase: PhantomData,
+        })
     }
     #[must_use]
-    pub fn inputs(self) -> Vec<Input> {
+    pub fn inputs(&self) -> Vec<Input> {
+        self.owner.host.inputs()
+    }
+    /// Finish all semantic capture before diagnostics can warm any checker.
+    #[must_use]
+    pub fn finish(self) -> Finished<'s> {
+        self.owner.finish();
+        Finished {
+            owner: self.owner,
+            case_sensitivity: self.case_sensitivity,
+        }
+    }
+}
+
+/// Finished revision: diagnostics, inputs, and syntax-only borrowed views.
+pub struct Finished<'s> {
+    owner: &'s OwnedProgram,
+    case_sensitivity: CaseSensitivity,
+}
+impl fmt::Debug for Finished<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Finished")
+            .field("projects", &self.owner.projects.len())
+            .finish_non_exhaustive()
+    }
+}
+impl Finished<'_> {
+    #[must_use]
+    pub const fn case_sensitivity(&self) -> CaseSensitivity {
+        self.case_sensitivity
+    }
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>> {
+        self.owner.projects.iter().map(|native| Project {
+            native,
+            owner: self.owner,
+            phase: PhantomData,
+        })
+    }
+    #[must_use]
+    pub fn inputs(&self) -> Vec<Input> {
         self.owner.host.inputs()
     }
     #[must_use]
-    pub fn diagnostics(self) -> Vec<Diagnostic> {
-        self.owner.diagnostics.clone()
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.owner
+            .diagnostics
+            .get()
+            .expect("Finished ran diagnostics")
+            .clone()
     }
 }
 
 /// The requested native config's program, including imported reference sources.
 #[derive(Clone, Copy)]
-pub struct Project<'s> {
+pub struct Project<'s, S: ViewPhase = CapturePhase> {
     native: &'s NativeProject,
+    owner: &'s OwnedProgram,
+    phase: PhantomData<S>,
 }
 
-impl fmt::Debug for Project<'_> {
+impl<S: ViewPhase> fmt::Debug for Project<'_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Project")
             .field("config_path", &self.config_path())
@@ -409,12 +459,19 @@ impl fmt::Debug for Project<'_> {
     }
 }
 
-impl<'s> Project<'s> {
-    /// Diagnostics only for this program/config, completed before capture.
+impl Project<'_, SyntaxPhase> {
+    /// Diagnostics of this requested program/config, after capture.
     #[must_use]
     pub fn diagnostics(self) -> Vec<Diagnostic> {
-        self.native.diagnostics.clone()
+        self.owner
+            .diagnostics
+            .get()
+            .expect("Finished ran diagnostics")
+            .clone()
     }
+}
+
+impl<'s, S: ViewPhase> Project<'s, S> {
     #[must_use]
     pub fn semantics(self) -> ProjectSemantics {
         let options = self.native.program.options();
@@ -448,22 +505,24 @@ impl<'s> Project<'s> {
     pub fn checker_count(self) -> usize {
         self.native.program.checker_count()
     }
-    pub fn files(self) -> impl ExactSizeIterator<Item = File<'s>> {
+    pub fn files(self) -> impl ExactSizeIterator<Item = File<'s, S>> {
         self.native.files.iter().map(move |native| File {
             native,
             project: self.native,
+            phase: PhantomData,
         })
     }
 }
 
 /// One native source file. Its text and UTF-16 index belong to this revision.
 #[derive(Clone, Copy)]
-pub struct File<'s> {
+pub struct File<'s, S: ViewPhase = CapturePhase> {
     native: &'s NativeFile,
     project: &'s NativeProject,
+    phase: PhantomData<S>,
 }
 
-impl fmt::Debug for File<'_> {
+impl<S: ViewPhase> fmt::Debug for File<'_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("File")
             .field("path", &self.path())
@@ -471,7 +530,7 @@ impl fmt::Debug for File<'_> {
     }
 }
 
-impl<'s> File<'s> {
+impl<'s, S: ViewPhase> File<'s, S> {
     pub(crate) fn program_path(self) -> &'s Utf8Path {
         crate::host::native_path(self.project.program.command_line().get().config_name())
     }
@@ -489,26 +548,6 @@ impl<'s> File<'s> {
             other.program_path()
         );
     }
-    /// Every question acquires the same persistent first checker. No guard
-    /// survives this call, and all pool diagnostics have already finished.
-    pub(crate) fn with_checker<R>(
-        self,
-        question: impl FnOnce(&mut tsrs_compiler::Checker) -> R,
-    ) -> R {
-        let mut checker = self.project.program.get_type_checker(&Context::default());
-        question(&mut checker)
-    }
-    pub(crate) fn node_view(self, native: P<tsrs_ast::Node>) -> Option<crate::Node<'s>> {
-        let source = tsrs_ast::get_source_file_of_node(native)?;
-        let index = *self.project.file_index.get(&source)?;
-        Some(crate::Node::new(
-            native,
-            Self {
-                native: &self.project.files[index],
-                project: self.project,
-            },
-        ))
-    }
     pub(crate) fn native_scope(self) -> tsrs_core::arena::RegionScope {
         self.project.strings.enter()
     }
@@ -525,7 +564,7 @@ impl<'s> File<'s> {
         std::ptr::eq(self.native, other.native)
     }
     #[must_use]
-    pub fn root(self) -> crate::Node<'s> {
+    pub fn root(self) -> crate::Node<'s, S> {
         crate::Node::new(self.native.source.as_node(), self)
     }
     #[must_use]
@@ -571,6 +610,30 @@ impl<'s> File<'s> {
     }
 }
 
+impl<'s> File<'s> {
+    /// Every question acquires the same persistent first checker. No guard
+    /// survives this call, and no pool diagnostics have run yet.
+    pub(crate) fn with_checker<R>(
+        self,
+        question: impl FnOnce(&mut tsrs_compiler::Checker) -> R,
+    ) -> R {
+        let mut checker = self.project.program.get_type_checker(&Context::default());
+        question(&mut checker)
+    }
+    pub(crate) fn node_view(self, native: P<tsrs_ast::Node>) -> Option<crate::Node<'s>> {
+        let source = tsrs_ast::get_source_file_of_node(native)?;
+        let index = *self.project.file_index.get(&source)?;
+        Some(crate::Node::new(
+            native,
+            Self {
+                native: &self.project.files[index],
+                project: self.project,
+                phase: PhantomData,
+            },
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -607,7 +670,10 @@ mod tests {
     #[test]
     fn one_checker_is_exact_and_runs_on_the_checking_thread() {
         run(options(1), |session| {
-            let checked = session.open(project()).expect("inline project loads");
+            let checked = session
+                .open(project())
+                .expect("inline project loads")
+                .finish();
             let project = checked.projects().next().expect("root program");
             assert_eq!(project.checker_count(), 1);
             assert!(project.native.program.single_threaded());
@@ -630,7 +696,10 @@ mod tests {
 
     fn capture(count: u16) -> (Vec<(String, String)>, Vec<Diagnostic>) {
         run(options(count), |session| {
-            let checked = session.open(project()).expect("inline project loads");
+            let checked = session
+                .open(project())
+                .expect("inline project loads")
+                .finish();
             let project = checked.projects().next().expect("root program");
             assert_eq!(project.checker_count(), usize::from(count));
             let mut files: Vec<_> = project
@@ -657,7 +726,7 @@ mod tests {
         for _ in 0..8 {
             run(options(1), |session| {
                 {
-                    let checked = session.open(project()).expect("initial project");
+                    let checked = session.open(project()).expect("initial project").finish();
                     let file = checked
                         .projects()
                         .next()
@@ -675,7 +744,7 @@ mod tests {
                     "a.ts".into(),
                     Some("export const value: string = 'now';".to_owned()),
                 );
-                let checked = session.revise(changes).expect("revision loads");
+                let checked = session.revise(changes).expect("revision loads").finish();
                 assert!(!checked.diagnostics().iter().any(|d| d.code == 2322));
                 assert!(
                     checked
@@ -739,7 +808,7 @@ mod tests {
                 ] {
                     spec.overlays.insert(name.into(), text.to_owned());
                 }
-                let checked = session.open(spec).expect("reference graph loads");
+                let checked = session.open(spec).expect("reference graph loads").finish();
                 assert_eq!(checked.projects().len(), 1);
                 assert_eq!(
                     checked
@@ -780,7 +849,7 @@ mod tests {
                 "index.js".into(),
                 "let duplicate; let duplicate;".to_owned(),
             );
-            let checked = session.open(spec).expect("JavaScript config");
+            let checked = session.open(spec).expect("JavaScript config").finish();
             assert!(checked.diagnostics().iter().any(|d| d.code == 2451));
         });
     }
@@ -813,7 +882,7 @@ mod tests {
                     "index.ts".into(),
                     "export class Value { value = 1; }".to_owned(),
                 );
-                let checked = session.open(spec).expect("semantics config");
+                let checked = session.open(spec).expect("semantics config").finish();
                 let semantics = checked.projects().next().expect("root program").semantics();
                 assert_eq!(semantics.use_define_for_class_fields, define);
                 assert_eq!(semantics.isolated_modules, isolated);
@@ -831,7 +900,8 @@ mod tests {
             run(options, |session| {
                 let checked = session
                     .open(ProjectSpec::new("tests/workspace/apps/node/tsconfig.json"))
-                    .expect("node workspace app");
+                    .expect("node workspace app")
+                    .finish();
                 assert_eq!(checked.projects().len(), 1);
                 let project = checked.projects().next().expect("requested program");
                 assert_eq!(project.root_paths().len(), 1);
@@ -859,7 +929,8 @@ mod tests {
                 assert_eq!(project.diagnostics(), checked.diagnostics());
                 let checked = session
                     .open(ProjectSpec::new("tests/workspace/tsconfig.solution.json"))
-                    .expect("workspace solution");
+                    .expect("workspace solution")
+                    .finish();
                 assert_eq!(checked.projects().len(), 1);
                 let project = checked.projects().next().expect("solution program");
                 assert_eq!(project.root_paths().len(), 0);

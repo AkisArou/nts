@@ -15,6 +15,7 @@ use tsrs_core::P;
 
 use crate::program::File;
 use crate::text::{BytePos, Utf16Pos, Utf16Span};
+use crate::{CapturePhase, ViewPhase};
 
 #[path = "ast_roles.rs"]
 mod roles;
@@ -25,12 +26,12 @@ pub type NativeKind = u16;
 
 /// An opaque syntax identity, valid only in the borrowed checked revision.
 #[derive(Clone, Copy)]
-pub struct Node<'p> {
+pub struct Node<'p, S: ViewPhase = CapturePhase> {
     pub(super) native: P<NativeNode>,
-    file: File<'p>,
+    file: File<'p, S>,
 }
 
-impl fmt::Debug for Node<'_> {
+impl<S: ViewPhase> fmt::Debug for Node<'_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Node")
             .field("kind", &self.kind())
@@ -40,21 +41,21 @@ impl fmt::Debug for Node<'_> {
     }
 }
 
-impl PartialEq for Node<'_> {
+impl<S: ViewPhase> PartialEq for Node<'_, S> {
     fn eq(&self, other: &Self) -> bool {
         self.native == other.native && self.file.same_identity(other.file)
     }
 }
-impl Eq for Node<'_> {}
-impl Hash for Node<'_> {
+impl<S: ViewPhase> Eq for Node<'_, S> {}
+impl<S: ViewPhase> Hash for Node<'_, S> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.native.hash(state);
         self.file.identity().hash(state);
     }
 }
 
-impl<'p> Node<'p> {
-    pub(crate) fn new(native: P<NativeNode>, file: File<'p>) -> Self {
+impl<'p, S: ViewPhase> Node<'p, S> {
+    pub(crate) fn new(native: P<NativeNode>, file: File<'p, S>) -> Self {
         Self { native, file }
     }
     #[must_use]
@@ -62,7 +63,7 @@ impl<'p> Node<'p> {
         self.native.kind() as NativeKind
     }
     #[must_use]
-    pub const fn source_file(self) -> File<'p> {
+    pub const fn source_file(self) -> File<'p, S> {
         self.file
     }
     #[must_use]
@@ -86,7 +87,7 @@ impl<'p> Node<'p> {
         Some(self.file.span(BytePos(byte), BytePos(byte)).start)
     }
     /// Present fields in native visitor order. An empty list is still an edge.
-    pub fn edges(self) -> impl Iterator<Item = Edge<'p>> {
+    pub fn edges(self) -> impl Iterator<Item = Edge<'p, S>> {
         let _scope = self.file.native_scope();
         roles::edges(self).into_iter()
     }
@@ -98,7 +99,7 @@ impl<'p> Node<'p> {
         })
     }
     #[must_use]
-    pub fn list(self, role: ListRole) -> Option<List<'p>> {
+    pub fn list(self, role: ListRole) -> Option<List<'p, S>> {
         self.edges().find_map(|edge| match edge {
             Edge::List { role: found, list } if role == found => Some(list),
             _ => None,
@@ -265,7 +266,7 @@ impl<'p> Node<'p> {
         attributes
     }
 
-    pub fn documentation(self) -> impl Iterator<Item = Documentation<'p>> {
+    pub fn documentation(self) -> impl Iterator<Item = Documentation<'p, S>> {
         let _scope = self.file.native_scope();
         let mut documents = Vec::new();
         for &native in self.native.jsdoc(Some(self.file.native_source().get())) {
@@ -443,8 +444,8 @@ pub struct NodeAttributes {
     pub has_body: bool,
 }
 #[derive(Debug, Clone)]
-pub struct Documentation<'p> {
-    pub source_file: File<'p>,
+pub struct Documentation<'p, S: ViewPhase = CapturePhase> {
+    pub source_file: File<'p, S>,
     pub span: Option<Utf16Span>,
     pub raw: &'p str,
     pub tags: Vec<DocumentationTag<'p>>,
@@ -457,9 +458,9 @@ pub struct DocumentationTag<'p> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Edge<'p> {
-    Node { role: ChildRole, node: Node<'p> },
-    List { role: ListRole, list: List<'p> },
+pub enum Edge<'p, S: ViewPhase = CapturePhase> {
+    Node { role: ChildRole, node: Node<'p, S> },
+    List { role: ListRole, list: List<'p, S> },
 }
 
 #[derive(Clone, Copy)]
@@ -481,13 +482,13 @@ impl ListStorage {
 
 /// A present list field, including an honestly empty list.
 #[derive(Clone, Copy)]
-pub struct List<'p> {
-    parent: Node<'p>,
+pub struct List<'p, S: ViewPhase = CapturePhase> {
+    parent: Node<'p, S>,
     role: ListRole,
     storage: ListStorage,
 }
 
-impl fmt::Debug for List<'_> {
+impl<S: ViewPhase> fmt::Debug for List<'_, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("List")
             .field("role", &self.role)
@@ -495,20 +496,20 @@ impl fmt::Debug for List<'_> {
             .finish()
     }
 }
-impl PartialEq for List<'_> {
+impl<S: ViewPhase> PartialEq for List<'_, S> {
     fn eq(&self, other: &Self) -> bool {
         self.parent == other.parent && self.role == other.role
     }
 }
-impl Eq for List<'_> {}
-impl Hash for List<'_> {
+impl<S: ViewPhase> Eq for List<'_, S> {}
+impl<S: ViewPhase> Hash for List<'_, S> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.parent.hash(state);
         self.role.hash(state);
     }
 }
 
-impl<'p> List<'p> {
+impl<'p, S: ViewPhase> List<'p, S> {
     /// The first token after leading list trivia, including an empty list's
     /// closing delimiter. Span itself retains the native raw start.
     #[must_use]
@@ -534,7 +535,7 @@ impl<'p> List<'p> {
                 .span(BytePos(loc.source_pos()?), BytePos(loc.source_end()?)),
         )
     }
-    pub fn iter(self) -> impl ExactSizeIterator<Item = Node<'p>> {
+    pub fn iter(self) -> impl ExactSizeIterator<Item = Node<'p, S>> {
         let _scope = self.parent.file.native_scope();
         self.storage
             .nodes()
@@ -552,13 +553,13 @@ impl<'p> List<'p> {
     }
 }
 
-struct Edges<'p> {
-    parent: Node<'p>,
-    edges: Vec<Edge<'p>>,
+struct Edges<'p, S: ViewPhase = CapturePhase> {
+    parent: Node<'p, S>,
+    edges: Vec<Edge<'p, S>>,
 }
 
-impl<'p> Edges<'p> {
-    fn new(parent: Node<'p>) -> Self {
+impl<'p, S: ViewPhase> Edges<'p, S> {
+    fn new(parent: Node<'p, S>) -> Self {
         Self {
             parent,
             edges: Vec::new(),
@@ -595,7 +596,7 @@ impl<'p> Edges<'p> {
     fn slice(&mut self, role: ListRole, nodes: &'static [P<NativeNode>]) {
         self.push_list(role, ListStorage::Slice(nodes));
     }
-    fn finish(self) -> Vec<Edge<'p>> {
+    fn finish(self) -> Vec<Edge<'p, S>> {
         self.edges
     }
 }

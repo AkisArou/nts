@@ -94,7 +94,7 @@ for (const [name, role] of [["ChildRole", "child"], ["ListRole", "list"]]) {
   for (const { fields } of entries) for (const f of fields) if (f.role === role) rust += `/// ${f.cardinality}\n${f.variant},\n`;
   rust += "}\n\n";
 }
-rust += '#[expect(clippy::too_many_lines, clippy::match_same_arms, reason = "mechanical exhaustive native-node dispatch retains one arm per upstream payload")]\npub(super) fn edges(node: Node<\'_>) -> Vec<Edge<\'_>> {\nlet mut edges = Edges::new(node);\nmatch node.native.data() {\n';
+rust += '#[expect(clippy::too_many_lines, clippy::match_same_arms, reason = "mechanical exhaustive native-node dispatch retains one arm per upstream payload")]\npub(super) fn edges<S: crate::ViewPhase>(node: Node<\'_, S>) -> Vec<Edge<\'_, S>> {\nlet mut edges = Edges::new(node);\nmatch node.native.data() {\n';
 function edge(f: Field, direct = false): string {
   return `edges.${method.get(f.variant)}(${f.role === "child" ? "ChildRole" : "ListRole"}::${f.variant}, data.${direct ? f.field : access.get(f.variant)});\n`;
 }

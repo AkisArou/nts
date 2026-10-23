@@ -38,7 +38,7 @@ fn spec(source: &str) -> ProjectSpec {
     spec.overlays.insert("main.ts".into(), source.to_owned());
     spec
 }
-fn source(checked: Checked<'_>) -> File<'_> {
+fn source<'p>(checked: &'p Checked<'_>) -> File<'p> {
     checked
         .projects()
         .next()
@@ -67,12 +67,7 @@ fn function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checke
             let checked = session
                 .open(spec("export function value(): number { return 1; }"))
                 .expect("project");
-            assert!(
-                checked.diagnostics().is_empty(),
-                "{:?}",
-                checked.diagnostics()
-            );
-            let file = source(checked);
+            let file = source(&checked);
             let function = statements(file)[0];
             let name = function
                 .child(ChildRole::FunctionDeclarationName)
@@ -108,7 +103,7 @@ fn function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checke
                     .into_iter()
                     .map(|e| plain(e.name).to_owned())
                     .collect(),
-                checked.diagnostics(),
+                checked.finish().diagnostics(),
             )
         })
     }
@@ -127,7 +122,7 @@ export interface Shape { valid(): this is Shape; }
 "#,
             ))
             .expect("project");
-        let declarations = statements(source(checked));
+        let declarations = statements(source(&checked));
         let signatures: Vec<_> = declarations[..2]
             .iter()
             .map(|d| {
@@ -175,12 +170,7 @@ export interface Shape { valid(): this is Shape; }
 fn parameters_keep_defaults_rest_this_and_generic_types() {
     run(options(4), |session| {
         let checked = session.open(spec("export function args<T extends string>(this: Date, first: T, defaulted = 1, optional?: number, ...rest: string[]): T { return first; }")).expect("project");
-        assert!(
-            checked.diagnostics().is_empty(),
-            "{:?}",
-            checked.diagnostics()
-        );
-        let declaration = statements(source(checked))[0];
+        let declaration = statements(source(&checked))[0];
         let signature = declaration
             .child(ChildRole::FunctionDeclarationName)
             .expect("name")
@@ -222,7 +212,7 @@ export const enum Values { Number = 3, Text = "\ud800", Infinity = 1 / 0, NotNum
 "#,
             ))
             .expect("project");
-        let file = source(checked);
+        let file = source(&checked);
         let declarations = statements(file);
         let exports = file.module_symbol().expect("module").exports();
         let exported = |name: &str| {
@@ -288,19 +278,25 @@ fn cross_program_assignability_is_a_bug_with_both_config_paths() {
             .expect("one program");
         let two = crate::program::OwnedProgram::open(&options(1), &project_spec("two.json"))
             .expect("two program");
-        let ty = |owner| {
-            source(Checked::new(owner, CaseSensitivity::Sensitive))
-                .module_symbol()
-                .expect("module")
-                .exports()[0]
-                .symbol
-                .ty()
-        };
-        let _ = ty(&one).assignable_to(ty(&two));
+        let checked_one = Checked::new(&one, CaseSensitivity::Sensitive);
+        let checked_two = Checked::new(&two, CaseSensitivity::Sensitive);
+        let ty_one = source(&checked_one)
+            .module_symbol()
+            .expect("module")
+            .exports()[0]
+            .symbol
+            .ty();
+        let ty_two = source(&checked_two)
+            .module_symbol()
+            .expect("module")
+            .exports()[0]
+            .symbol
+            .ty();
+        let _ = ty_one.assignable_to(ty_two);
     });
 }
 
-fn with_graph(test: fn(Checked<'_>)) {
+fn with_graph(test: fn(&Checked<'_>)) {
     for count in [1, 4] {
         run(options(count), move |session| {
             let checked = session
@@ -331,12 +327,13 @@ export type Nothing = {};
 "#,
                 ))
                 .expect("project");
+            test(&checked);
+            let finished = checked.finish();
             assert!(
-                checked.diagnostics().is_empty(),
+                finished.diagnostics().is_empty(),
                 "{:?}",
-                checked.diagnostics()
+                finished.diagnostics()
             );
-            test(checked);
         });
     }
 }
@@ -471,19 +468,196 @@ fn generic_conditional_index_template_and_substitution_facts_are_native() {
     });
 }
 
-fn descendants(node: Node<'_>) -> Vec<Node<'_>> {
+fn descendants<S: ViewPhase>(node: Node<'_, S>) -> Vec<Node<'_, S>> {
     let mut pending = vec![node];
     let mut nodes = Vec::new();
     while let Some(node) = pending.pop() {
         nodes.push(node);
-        for edge in node.edges() {
-            match edge {
-                Edge::Node { node, .. } => pending.push(node),
-                Edge::List { list, .. } => pending.extend(list.iter()),
-            }
-        }
+        let children: Vec<_> = node
+            .edges()
+            .flat_map(|edge| match edge {
+                Edge::Node { node, .. } => vec![node],
+                Edge::List { list, .. } => list.iter().collect(),
+            })
+            .collect();
+        pending.extend(children.into_iter().rev());
     }
     nodes
+}
+
+#[test]
+fn finishing_preserves_syntax_metadata_and_finishes_diagnostics() {
+    run(options(1), |session| {
+        let checked = session
+            .open(spec("export const value: number = 1;"))
+            .expect("project");
+        let digest = source(&checked).content_digest();
+        let before = descendants(source(&checked).root()).len();
+        let finished = checked.finish();
+        assert!(
+            finished.diagnostics().is_empty(),
+            "{:?}",
+            finished.diagnostics()
+        );
+        let project = finished.projects().next().expect("program");
+        assert_eq!(project.diagnostics(), finished.diagnostics());
+        let file = project
+            .files()
+            .find(|f| f.path().ends_with("main.ts"))
+            .expect("source");
+        assert_eq!(file.content_digest(), digest);
+        assert_eq!(descendants(file.root()).len(), before);
+        assert!(file.text().contains("export const value"));
+        assert!(file.root().span().is_some());
+        assert_eq!(project.root_paths().len(), 1);
+        assert_ne!(finished.inputs(), []);
+    });
+}
+
+#[test]
+fn pristine_capture_and_private_fixture_facts_do_not_depend_on_checker_count() {
+    type CapturedNode = (u16, Option<usize>, usize);
+    #[expect(
+        clippy::mutable_key_type,
+        reason = "opaque semantic Eq/Hash identities do not depend on interior caches"
+    )]
+    fn capture(count: u16) -> (Vec<CapturedNode>, Vec<Diagnostic>) {
+        run(options(count), |session| {
+            let fixture = include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/programs/two-private-names-that-collide/src/main.ts"
+            ));
+            let checked = session.open(spec(fixture)).expect("private fixture");
+            let facts = {
+                let mut symbols = std::collections::HashMap::new();
+                let mut types = std::collections::HashMap::new();
+                descendants(source(&checked).root())
+                    .into_iter()
+                    .map(|node| {
+                        let symbol = node.symbol().map(|symbol| {
+                            let next = symbols.len();
+                            *symbols.entry(symbol).or_insert(next)
+                        });
+                        let next = types.len();
+                        let ty = *types.entry(node.ty()).or_insert(next);
+                        (node.kind(), symbol, ty)
+                    })
+                    .collect()
+            };
+            let finished = checked.finish();
+            (facts, finished.diagnostics())
+        })
+    }
+    let one = capture(1);
+    assert!(one.1.is_empty(), "{:?}", one.1);
+    assert_eq!(one, capture(4));
+}
+
+#[test]
+fn builtin_bindings_use_checker_identity_and_ignore_legal_local_shadows() {
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session.open(spec("export function builtins() { return [undefined, NaN, Infinity, globalThis, arguments]; } export function shadow() { const NaN = 1, Infinity = 2, undefined = 3, globalThis = 4; return [NaN, Infinity, undefined, globalThis]; }")).expect("project");
+            let declarations = statements(source(&checked));
+            let bindings: Vec<_> = descendants(declarations[0])
+                .into_iter()
+                .filter_map(|node| node.symbol().and_then(Symbol::builtin_binding))
+                .collect();
+            for expected in [
+                BuiltinBinding::Undefined,
+                BuiltinBinding::NaN,
+                BuiltinBinding::Infinity,
+                BuiltinBinding::GlobalThis,
+                BuiltinBinding::Arguments,
+            ] {
+                assert!(
+                    bindings.contains(&expected),
+                    "{expected:?} absent from {bindings:?}"
+                );
+            }
+            assert!(
+                descendants(declarations[1])
+                    .into_iter()
+                    .filter_map(Node::symbol)
+                    .all(|symbol| symbol.builtin_binding().is_none())
+            );
+            let finished = checked.finish();
+            assert!(
+                finished.diagnostics().is_empty(),
+                "{:?}",
+                finished.diagnostics()
+            );
+        });
+    }
+}
+
+#[test]
+fn a_parameter_named_arguments_is_not_the_checker_builtin() {
+    run(options(1), |session| {
+        let checked = session
+            .open(spec(
+                "function shadow(arguments: number) { return arguments; }",
+            ))
+            .expect("parameter project");
+        let names: Vec<_> = descendants(source(&checked).root())
+            .into_iter()
+            .filter(|node| node.name_text() == Some("arguments"))
+            .collect();
+        assert_eq!(names.len(), 2);
+        for node in names {
+            assert_eq!(
+                node.symbol().expect("parameter symbol").builtin_binding(),
+                None
+            );
+        }
+        // TypeScript 7.1 checks TypeScript in strict mode. Even an invalid
+        // local binding must not be mistaken for the checker's builtin.
+        assert!(
+            checked
+                .finish()
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == 1100)
+        );
+    });
+}
+
+#[test]
+fn tagged_template_calls_have_a_native_selected_signature() {
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session.open(spec("export function tag(strings: TemplateStringsArray, value: number): number { return value; } export const result = tag`value=${1}`;")).expect("tagged project");
+            let nodes = descendants(source(&checked).root());
+            let tagged = nodes
+                .iter()
+                .find(|node| node.native.kind() == tsrs_ast::Kind::TaggedTemplateExpression)
+                .expect("tagged call");
+            let signature = tagged
+                .resolved_signature()
+                .expect("selected tagged signature");
+            assert_eq!(signature.parameters().len(), 2);
+            assert_eq!(signature.return_type().kind(), TypeKind::Number);
+            assert_eq!(
+                signature
+                    .declaration()
+                    .expect("tag declaration")
+                    .child(ChildRole::FunctionDeclarationName)
+                    .and_then(Node::name_text),
+                Some("tag")
+            );
+            let literal = nodes
+                .iter()
+                .find(|node| node.native.kind() == tsrs_ast::Kind::NumericLiteral)
+                .expect("substitution");
+            assert!(literal.resolved_signature().is_none());
+            let finished = checked.finish();
+            assert!(
+                finished.diagnostics().is_empty(),
+                "{:?}",
+                finished.diagnostics()
+            );
+        });
+    }
 }
 
 #[test]
@@ -503,12 +677,7 @@ export const date = new Date();
 ",
                 ))
                 .expect("project");
-            assert!(
-                checked.diagnostics().is_empty(),
-                "{:?}",
-                checked.diagnostics()
-            );
-            let file = source(checked);
+            let file = source(&checked);
             for node in descendants(file.root()) {
                 if let Some(signature) = node.resolved_signature() {
                     let declaration = signature.declaration().expect("selected declaration");
@@ -547,7 +716,7 @@ fn semantic_views_release_with_each_revision_and_session() {
                 let checked = session
                     .open(spec("export function value() { return 1; }"))
                     .expect("project");
-                let function = statements(source(checked))[0];
+                let function = statements(source(&checked))[0];
                 let name = function
                     .child(ChildRole::FunctionDeclarationName)
                     .expect("name");
@@ -565,7 +734,7 @@ fn semantic_views_release_with_each_revision_and_session() {
                 Some("export function value() { return 'changed'; }".to_owned()),
             );
             let checked = session.revise(change).expect("revision");
-            let function = statements(source(checked))[0];
+            let function = statements(source(&checked))[0];
             let name = function
                 .child(ChildRole::FunctionDeclarationName)
                 .expect("name");
@@ -580,7 +749,7 @@ fn semantic_views_release_with_each_revision_and_session() {
     }
     run(options(1), |session| {
         let checked = session.open(spec("const local = 1;")).expect("script");
-        assert!(source(checked).module_symbol().is_none());
+        assert!(source(&checked).module_symbol().is_none());
     });
 }
 
@@ -593,8 +762,9 @@ fn unrepresentable_module_paths_never_become_public_invalid_utf8() {
                     "import {{ value }} from './{escaped}'; export {{ value }};"
                 )))
                 .expect("project");
-            assert!(checked.diagnostics().iter().any(|d| d.code == 2307));
-            checked.inputs()
+            let finished = checked.finish();
+            assert!(finished.diagnostics().iter().any(|d| d.code == 2307));
+            finished.inputs()
         })
     }
     let invalid = capture(r"\ud800");
@@ -657,7 +827,7 @@ fn every_host_observation_rejects_non_unicode_before_the_filesystem() {
         let checked = session
             .open(spec(r#"import "./\ud800";"#))
             .expect("project");
-        let file = source(checked);
+        let file = source(&checked);
         let raw = file.native_source().imports.get()[0].text();
         let host =
             crate::host::Host::new("/__nts_semantic_test__", &std::collections::BTreeMap::new());
@@ -690,11 +860,6 @@ fn a_surrogate_pair_module_name_resolves_to_a_real_unicode_file() {
             .insert("😀.ts".into(), "export const value = 1;".to_owned());
         let checked = session.open(project).expect("project");
         assert!(
-            checked.diagnostics().is_empty(),
-            "{:?}",
-            checked.diagnostics()
-        );
-        assert!(
             checked
                 .projects()
                 .next()
@@ -715,7 +880,7 @@ fn a_surrogate_pair_module_name_resolves_to_a_real_unicode_file() {
 fn private_names_keep_written_spelling_and_distinct_class_identity() {
     run(options(1), |session| {
         let checked = session.open(spec("export class A { #count = 1; } export class B { #count = 2; } export const ___three = 3;")).expect("project");
-        let file = source(checked);
+        let file = source(&checked);
         let declarations = statements(file);
         let first = private_symbol(declarations[0]);
         let second = private_symbol(declarations[1]);
@@ -751,7 +916,7 @@ fn special_export_names_are_semantic_while_member_names_are_plain() {
     ] {
         run(options(1), |session| {
             let checked = session.open(spec(text)).expect("project");
-            let exports = source(checked).module_symbol().expect("module").exports();
+            let exports = source(&checked).module_symbol().expect("module").exports();
             let expected = if text.contains("export =") {
                 InternalName::ExportEquals
             } else {
@@ -777,7 +942,7 @@ fn special_export_names_are_semantic_while_member_names_are_plain() {
                 "export const object = { default: 1, 'module.exports': 2, 'export=': 3, this: 4 };",
             ))
             .expect("project");
-        let properties = source(checked).module_symbol().expect("module").exports()[0]
+        let properties = source(&checked).module_symbol().expect("module").exports()[0]
             .symbol
             .ty()
             .properties();
@@ -828,7 +993,7 @@ fn symbol_keyed_properties_preserve_the_unique_key_type_and_declaration() {
     for count in [1, 4] {
         run(options(count), |session| {
             let checked = session.open(spec("export const key: unique symbol = Symbol('key'); export interface Keys { [key]: number; [Symbol.iterator](): Iterator<number>; }")).expect("project");
-            let file = source(checked);
+            let file = source(&checked);
             let declarations = statements(file);
             let key = file
                 .module_symbol()

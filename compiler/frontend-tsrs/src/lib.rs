@@ -11,6 +11,8 @@ mod environment;
 #[cfg(feature = "tsrs")]
 mod host;
 #[cfg(feature = "tsrs")]
+mod phase;
+#[cfg(feature = "tsrs")]
 mod program;
 #[cfg(feature = "tsrs")]
 mod semantic;
@@ -23,8 +25,10 @@ pub use ast::*;
 #[cfg(feature = "tsrs")]
 pub use host::{Input, InputKind, InputPath};
 #[cfg(feature = "tsrs")]
+pub use phase::{CapturePhase, SyntaxPhase, ViewPhase};
+#[cfg(feature = "tsrs")]
 pub use program::{
-    Checked, Diagnostic, DiagnosticCategory, File, LoadError, Project, ProjectSemantics,
+    Checked, Diagnostic, DiagnosticCategory, File, Finished, LoadError, Project, ProjectSemantics,
     ProjectSpec, SourceChanges,
 };
 #[cfg(feature = "tsrs")]

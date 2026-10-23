@@ -1,7 +1,7 @@
 //! Native checking-thread and program ownership.
 //!
 //! Capture uses one program checker for every semantic question. Diagnostics
-//! may use the configured pool; their handles never feed capture identities.
+//! run on the configured pool after capture; their handles never feed capture identities.
 //! Stable type ordering is pinned on. AST/file views may be live during a
 //! typing question, but no internal checker borrow escapes a query method.
 

@@ -53,7 +53,7 @@ impl Environment {
             }
         }
         let settings = format!(
-            "cwd={};lib={:?};checkers={:?};stable=true;history=canonical;pool-before-capture;first-checker;compressed={};shared-graph={}",
+            "cwd={};lib={:?};checkers={:?};stable=true;history=canonical;capture-before-pool;first-checker;compressed={};shared-graph={}",
             options.cwd,
             options.library_path,
             options.checker_count,

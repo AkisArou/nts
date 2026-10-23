@@ -12,8 +12,11 @@ through `Program::get_type_checker`. Its native guard is held only during
 that question and released before returning any view. Keeping the guard
 between questions would deadlock later pool diagnostics. The checker object
 and its arena persist for the whole program; recycling and leaf freeing stay
-off, stableTypeOrdering stays on. All pool diagnostics finish before Checked/capture starts. Capture never
-runs concurrently with pool work. The first checker therefore stays uncontended.
+off, stableTypeOrdering stays on. Capture starts on the pristine designated checker, before any pool diagnostics
+run. `Checked::finish(self)` consumes the capture phase and runs diagnostics,
+returning `Finished` with owned diagnostics and syntax-only reborrows. Capture
+never runs concurrently with pool work. Thus checker cache state at capture
+is independent of the configured pool size, and its mutex stays uncontended.
 Question inputs must belong to the same program; cross-program assignability
 is a release-mode assertion naming both config paths, never a bool answer.
 Within each program every route to a logical type/symbol/signature uses that
@@ -50,7 +53,7 @@ pub enum SymbolName<'p> {
 impl<'p> Node<'p> {
     pub fn symbol(self) -> Option<Symbol<'p>>;
     pub fn ty(self) -> Type<'p>;
-    pub fn resolved_signature(self) -> Option<Signature<'p>>; // call/new only
+    pub fn resolved_signature(self) -> Option<Signature<'p>>; // call/new/tagged template
     pub fn constant(self) -> Option<Constant<'p>>;
     pub fn type_text(self) -> String; // native rendering at this location
 }
@@ -60,6 +63,7 @@ impl<'p> File<'p> {
 impl<'p> Symbol<'p> {
     pub fn name(self) -> SymbolName<'p>;
     pub fn classification(self) -> SymbolClassification;
+    pub fn builtin_binding(self) -> Option<BuiltinBinding>; // checker identity, never spelling
     pub fn declarations(self) -> impl ExactSizeIterator<Item = Declaration<'p>>;
     pub fn alias_target(self) -> Option<Symbol<'p>>; // final target; non-alias None
     pub fn exports(self) -> Vec<Export<'p>>; // non-module/empty module: empty
@@ -68,6 +72,7 @@ impl<'p> Symbol<'p> {
     pub fn declared_type(self) -> Option<Type<'p>>; // non-type declaration None
     pub fn readonly(self) -> bool; // computed checker result
 }
+pub enum BuiltinBinding { Undefined, NaN, Infinity, GlobalThis, Arguments }
 pub struct SymbolClassification {
     pub alias: bool, pub module: bool, pub type_literal: bool,
     pub object_literal: bool, pub method: bool, pub getter: bool,
@@ -177,7 +182,7 @@ documentation tests also check.
 | --- | --- | --- |
 | 1 (1) | Resolved compiler options, project/config identity and current directory, explicit root files, source files in the program, and filesystem case sensitivity. | Project::{semantics,config_path,cwd,root_paths,files}; Checked::case_sensitivity. Checker-only options stay native; runtime fields are effective ProjectSemantics. |
 | 2 (1) | Per-file normalized path, declaration-file status, default-library status and external-library status. These decide which ASTs nts captures; they do not replace declaration-source identity for symbols outside that set. | File::{path,is_declaration,is_default_library,is_external_library}. Inclusion is builder policy. |
-| 3 (1) | The program's parse/configuration/options/syntactic/semantic diagnostics, including diagnostics for ordinary JavaScript that are ECMAScript early errors. | Project::diagnostics (requested config scope) and Checked::diagnostics, completed before capture; includes unfiltered native unchecked-JS early-error facts. Selection/refusals are builder policy. |
+| 3 (1) | The program's parse/configuration/options/syntactic/semantic diagnostics, including diagnostics for ordinary JavaScript that are ECMAScript early errors. | Project<SyntaxPhase>::diagnostics (requested config scope) and Finished::diagnostics, completed by Checked::finish after capture; includes unfiltered native unchecked-JS early-error facts. Selection/refusals are builder policy. |
 | 4 (1) | Source contents plus added/generated root files and rewritten source contents. Revisions must recheck the affected program and expose the resulting files and diagnostics. | File::text, Session::{open,revise}, ProjectSpec roots/overlays and SourceChanges. |
 | 5 (1) | Each source's actual imported module specifiers, including re-exports, import types and literal import calls. Generated-source preflight consumes this semantic list. | File::imports. |
 | 6 (1) | Package manifests and nts surface declarations used for source inclusion and surface validation; these filesystem reads remain nts policy and must be tracked as inputs. | Builder filesystem/surface policy; native host answers in Checked::inputs. |
@@ -213,7 +218,7 @@ documentation tests also check.
 | 36 (6) | Actual callee declaration when it belongs to the captured program, so nts can link a direct call to its declaration. | Signature::declaration -> source-associated Node; captured-versus-external linkage is builder policy. |
 | 37 (7) | The checker constant value at eligible nodes: number including NaN and signed infinities, or string, and an honest absence where not constant. | Node::constant -> typed number (NaN/infinities preserved) or JsString; raw-spelling authority/budget are builder policy. |
 | 38 (7) | The checker-rendered type text at a transform's requested AST node/location. This is a transform input, not a serialized type protocol. | Node::type_text renders with this source location, also usable by compiler refusal messages. |
-| 39 (7) | Diagnostics after a source rewrite, with per-file error spans, so transforms can revise or stop at their existing limit. | Session::revise returns a newly checked revision and Checked::diagnostics; transform stopping limits are builder policy. |
+| 39 (7) | Diagnostics after a source rewrite, with per-file error spans, so transforms can revise or stop at their existing limit. | Session::revise returns a fresh capture revision; Checked::finish returns Finished::diagnostics; transform stopping limits are builder policy. |
 | 40 (8) | Source identity/content digest and any rewrite origin/map for every captured source and configuration input. | File::{path,content_digest}; Checked::inputs; rewrite origin/map retained by builder transform policy. |
-| 41 (8) | Diagnostics with severity/category, code, primary and related/nested message text, filename and exact span. | Checked::diagnostics -> category/code/message/path/UTF-16 span/chain/related. |
+| 41 (8) | Diagnostics with severity/category, code, primary and related/nested message text, filename and exact span. | Finished::diagnostics -> category/code/message/path/UTF-16 span/chain/related. |
 | 42 (8) | The complete facts accumulated above for module linking, native/scalar bindings, JVM attribute validation and schema validation. | Methods above provide facts; final module linking, bindings/JVM attributes, tally and snapshot validation are builder policy. |

@@ -858,7 +858,7 @@ pub enum ListRole {
     clippy::match_same_arms,
     reason = "mechanical exhaustive native-node dispatch retains one arm per upstream payload"
 )]
-pub(super) fn edges(node: Node<'_>) -> Vec<Edge<'_>> {
+pub(super) fn edges<S: crate::ViewPhase>(node: Node<'_, S>) -> Vec<Edge<'_, S>> {
     let mut edges = Edges::new(node);
     match node.native.data() {
         NodeData::Token => {}

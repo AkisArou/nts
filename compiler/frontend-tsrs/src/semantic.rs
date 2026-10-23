@@ -17,6 +17,26 @@
 //!     let _ = ty.kind();
 //! }
 //! ```
+//! A semantic view cannot remain in use across diagnostic finalization:
+//! ```compile_fail
+//! use nts_frontend_tsrs::{Session, ProjectSpec};
+//! fn invalid(session: &mut Session, spec: ProjectSpec) {
+//!     let checked = session.open(spec).unwrap();
+//!     let file = checked.projects().next().unwrap().files().next().unwrap();
+//!     let ty = file.root().ty();
+//!     let finished = checked.finish();
+//!     let _ = ty.kind();
+//! }
+//! ```
+//! Finished views expose syntax and metadata, without checker services:
+//! ```compile_fail
+//! use nts_frontend_tsrs::{Session, ProjectSpec};
+//! fn invalid(session: &mut Session, spec: ProjectSpec) {
+//!     let finished = session.open(spec).unwrap().finish();
+//!     let file = finished.projects().next().unwrap().files().next().unwrap();
+//!     let _ = file.root().ty();
+//! }
+//! ```
 
 #[cfg(test)]
 #[path = "semantic_test.rs"]
@@ -107,7 +127,9 @@ impl<'p> Node<'p> {
     pub fn resolved_signature(self) -> Option<Signature<'p>> {
         if !matches!(
             self.native.kind(),
-            tsrs_ast::Kind::CallExpression | tsrs_ast::Kind::NewExpression
+            tsrs_ast::Kind::CallExpression
+                | tsrs_ast::Kind::NewExpression
+                | tsrs_ast::Kind::TaggedTemplateExpression
         ) {
             return None;
         }
@@ -136,6 +158,37 @@ impl<'p> File<'p> {
 }
 
 impl<'p> Symbol<'p> {
+    /// A built-in binding by checker identity, never by its written name alone.
+    #[must_use]
+    pub fn builtin_binding(self) -> Option<BuiltinBinding> {
+        let binding = self.file.with_checker(|checker| {
+            if self.native == checker.get_undefined_symbol() {
+                return Some(BuiltinBinding::Undefined);
+            }
+            if self.native == checker.get_arguments_symbol() {
+                return Some(BuiltinBinding::Arguments);
+            }
+            if self.native == checker.global_this_symbol {
+                return Some(BuiltinBinding::GlobalThis);
+            }
+            let binding = match self.native.name().as_bytes() {
+                b"NaN" => BuiltinBinding::NaN,
+                b"Infinity" => BuiltinBinding::Infinity,
+                _ => return None,
+            };
+            let global =
+                checker.get_global_symbol_exported(self.native.name(), SymbolFlags::Value, None)?;
+            (checker.get_merged_symbol_exported(global) == self.native).then_some(binding)
+        })?;
+        if matches!(binding, BuiltinBinding::NaN | BuiltinBinding::Infinity)
+            && !self
+                .declarations()
+                .any(|declaration| declaration.source_file().is_default_library())
+        {
+            return None;
+        }
+        Some(binding)
+    }
     fn new(native: P<NativeSymbol>, file: File<'p>) -> Self {
         let native = file.with_checker(|c| c.get_merged_symbol_exported(native));
         Self { native, file }
@@ -248,6 +301,15 @@ impl<'p> Symbol<'p> {
         self.file
             .with_checker(|c| c.is_readonly_symbol_exported(self.native))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuiltinBinding {
+    Undefined,
+    NaN,
+    Infinity,
+    GlobalThis,
+    Arguments,
 }
 
 #[derive(Debug, Clone, Copy)]

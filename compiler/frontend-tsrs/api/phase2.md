@@ -1,8 +1,9 @@
 # Native file and AST declarations
 
 Phase 1–2 contract for direct capture. Signatures below are declarations,
-not implementations. Session/file primitives already exist in `src/`; AST
-views are the next implementation group. No upstream handle is public.
+not implementations. The implementations live in `src/`. No upstream handle
+is public. Capture is followed by diagnostics through a consuming typestate
+transition; finished views expose syntax and metadata only.
 
 `Checked`, `Project`, `File`, `Node` and `List` are borrowed views, neither
 Send nor Sync. Nodes/lists implement Copy, Eq and Hash using one identity
@@ -35,29 +36,42 @@ impl Session {
     pub fn cache_identity(&self) -> String;
     pub fn case_sensitivity(&self) -> CaseSensitivity;
 }
-impl<'p> Checked<'p> {
-    pub fn projects(self) -> impl ExactSizeIterator<Item = Project<'p>>; // requested config only; native source redirects resolve references
-    pub fn case_sensitivity(self) -> CaseSensitivity;
-    pub fn diagnostics(self) -> Vec<Diagnostic>;
-    pub fn inputs(self) -> Vec<Input>;
+pub enum CapturePhase {}
+pub enum SyntaxPhase {}
+pub trait ViewPhase: /* sealed */ Copy + Debug + Eq + Hash {}
+// Project, File, Node, List, Edge and Documentation carry a phase parameter
+// S: ViewPhase = CapturePhase. Only capture views have checker services.
+impl<'p> Checked<'p> { // not Copy or Clone
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_>>;
+    pub fn case_sensitivity(&self) -> CaseSensitivity;
+    pub fn inputs(&self) -> Vec<Input>; // observations so far
+    pub fn finish(self) -> Finished<'p>; // consumes capture, runs pool diagnostics
 }
-impl<'p> Project<'p> {
+impl Finished<'_> {
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>>;
+    pub fn case_sensitivity(&self) -> CaseSensitivity;
+    pub fn diagnostics(&self) -> Vec<Diagnostic>;
+    pub fn inputs(&self) -> Vec<Input>; // includes diagnostic reads
+}
+impl Project<'_, SyntaxPhase> {
+    pub fn diagnostics(self) -> Vec<Diagnostic>; // this requested program only
+}
+impl<'p, S: ViewPhase> Project<'p, S> {
     pub fn config_path(self) -> &'p Utf8Path;
     pub fn cwd(self) -> &'p Utf8Path;
     pub fn root_paths(self) -> impl ExactSizeIterator<Item = &'p Utf8Path>;
-    pub fn diagnostics(self) -> Vec<Diagnostic>; // this requested program only
     pub fn checker_count(self) -> usize; // effective count, never misreports 1
-    pub fn files(self) -> impl ExactSizeIterator<Item = File<'p>>;
+    pub fn files(self) -> impl ExactSizeIterator<Item = File<'p, S>>;
     pub fn semantics(self) -> ProjectSemantics;
 }
-impl<'p> File<'p> {
+impl<'p, S: ViewPhase> File<'p, S> {
     pub fn path(self) -> &'p Utf8Path;
     pub fn text(self) -> &'p str; // original UTF-8 source
     pub fn content_digest(self) -> u128;
     pub fn is_declaration(self) -> bool;
     pub fn is_default_library(self) -> bool;
     pub fn is_external_library(self) -> bool;
-    pub fn root(self) -> Node<'p>;
+    pub fn root(self) -> Node<'p, S>;
     pub fn imports(self) -> impl Iterator<Item = JsString<'p>>; // lossless; preflight refuses non-UTF8 filesystem specifiers by name
     pub fn span(self, start: BytePos, end: BytePos) -> Utf16Span;
 }
@@ -65,28 +79,28 @@ pub type NativeKind = u16; // the ONE native->nts mapping belongs to capture
 pub struct BytePos(pub u32);
 pub struct Utf16Pos(pub u32);
 pub struct Utf16Span { pub start: Utf16Pos, pub end: Utf16Pos }
-impl<'p> Node<'p> {
+impl<'p, S: ViewPhase> Node<'p, S> {
     pub fn kind(self) -> NativeKind;
-    pub fn source_file(self) -> File<'p>;
-    pub fn parent(self) -> Option<Node<'p>>;
+    pub fn source_file(self) -> File<'p, S>;
+    pub fn parent(self) -> Option<Node<'p, S>>;
     pub fn span(self) -> Option<Utf16Span>; // synthetic: None
     pub fn token_start(self) -> Option<Utf16Pos>; // excludes trivia; synthetic: None
-    pub fn edges(self) -> impl Iterator<Item = Edge<'p>>;
-    pub fn child(self, role: ChildRole) -> Option<Node<'p>>;
-    pub fn list(self, role: ListRole) -> Option<List<'p>>;
+    pub fn edges(self) -> impl Iterator<Item = Edge<'p, S>>;
+    pub fn child(self, role: ChildRole) -> Option<Node<'p, S>>;
+    pub fn list(self, role: ListRole) -> Option<List<'p, S>>;
     pub fn name_text(self) -> Option<&'p str>; // identifier/private identifier
     pub fn literal(self) -> Option<Literal<'p>>;
     pub fn attributes(self) -> NodeAttributes;
-    pub fn documentation(self) -> impl Iterator<Item = Documentation<'p>>;
+    pub fn documentation(self) -> impl Iterator<Item = Documentation<'p, S>>;
 }
-pub enum Edge<'p> {
-    Node { role: ChildRole, node: Node<'p> },
-    List { role: ListRole, list: List<'p> },
+pub enum Edge<'p, S: ViewPhase = CapturePhase> {
+    Node { role: ChildRole, node: Node<'p, S> },
+    List { role: ListRole, list: List<'p, S> },
 }
-impl<'p> List<'p> {
+impl<'p, S: ViewPhase> List<'p, S> {
     pub fn span(self) -> Option<Utf16Span>; // native raw start
     pub fn token_start(self) -> Option<Utf16Pos>; // skips trivia, even if empty
-    pub fn iter(self) -> impl ExactSizeIterator<Item = Node<'p>>;
+    pub fn iter(self) -> impl ExactSizeIterator<Item = Node<'p, S>>;
     pub fn has_trailing_comma(self) -> bool;
 }
 pub struct ProjectSemantics {
