@@ -4618,6 +4618,7 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
         HirType::Managed(ManagedType::BoxedBigInt) => "NtsBigIntBox *",
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(ManagedType::Date) => "NtsDate *",
+        HirType::Managed(ManagedType::Region) => "NtsHeader *",
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *",
         // One C type for both, because it is one runtime object: `NtsView`
         // carries its element kind in its descriptor, so a declaration that does
@@ -6209,7 +6210,7 @@ mod tests {
     /// match arm is not evidence that anything was tested.
     fn every_managed_variant() -> Vec<ManagedType> {
         use nts_semantic_schema::schema::TypeId;
-        const COUNT: usize = 15;
+        const COUNT: usize = 16;
         fn position(kind: &ManagedType) -> usize {
             match kind {
                 ManagedType::String => 0,
@@ -6227,6 +6228,7 @@ mod tests {
                 ManagedType::Symbol => 12,
                 ManagedType::Template => 13,
                 ManagedType::BoxedBigInt => 14,
+                ManagedType::Region => 15,
             }
         }
         let number = || Box::new(HirType::NUMBER);
@@ -6249,6 +6251,7 @@ mod tests {
             ManagedType::Symbol,
             ManagedType::Template,
             ManagedType::BoxedBigInt,
+            ManagedType::Region,
         ];
         let mut covered: Vec<usize> = samples.iter().map(position).collect();
         covered.sort_unstable();

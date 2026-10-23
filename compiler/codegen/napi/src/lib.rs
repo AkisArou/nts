@@ -249,6 +249,8 @@ fn cross(ty: &HirType, layouts: &[hir::Layout], classes: &FxHashSet<String>) -> 
         // `Date`, which is a construction on the other side rather than a
         // handle to this one. Refused rather than marshalled as its number.
         HirType::Managed(ManagedType::Date) => None,
+        // Never in a signature: made and held inside one function.
+        HirType::Managed(ManagedType::Region) => None,
         // An `ArrayBuffer`'s bytes could cross -- N-API has
         // `napi_create_external_arraybuffer` for exactly this shape -- but
         // handing them over means deciding who owns them afterwards, and a
@@ -376,6 +378,7 @@ fn spell(ty: &HirType) -> String {
         HirType::Managed(ManagedType::Template) => "an immutable template object".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "symbol".to_owned(),
         HirType::Managed(ManagedType::Date) => "Date".to_owned(),
+        HirType::Managed(ManagedType::Region) => "a region's handle".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "ArrayBuffer".to_owned(),
         HirType::Managed(ManagedType::View(_)) => "TypedArray".to_owned(),
         HirType::Managed(ManagedType::AnyView) => "ArrayBufferView".to_owned(),
@@ -428,6 +431,7 @@ fn c_type(ty: &HirType, layouts: &[hir::Layout]) -> String {
         HirType::Managed(ManagedType::String) => "NtsString *".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "NtsSymbol *".to_owned(),
         HirType::Managed(ManagedType::Date) => "NtsDate *".to_owned(),
+        HirType::Managed(ManagedType::Region) => "NtsHeader *".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "NtsBuffer *".to_owned(),
         HirType::Managed(ManagedType::View(_) | ManagedType::AnyView) => "NtsView *".to_owned(),
         HirType::Managed(ManagedType::DataView) => "NtsDataView *".to_owned(),

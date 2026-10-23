@@ -288,6 +288,21 @@ impl<'p> Shared<'p> {
         }
     }
 
+    /// The functions `at` calls directly.
+    fn callees(&self, at: usize) -> Vec<usize> {
+        self.program.funcs[at]
+            .values
+            .iter()
+            .filter_map(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } => self.by_name.get(name.as_str()).copied(),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Every function a call to `root` can run, `root` first.
     fn members(&self, root: usize) -> Vec<usize> {
         let mut seen: FxHashSet<usize> = FxHashSet::default();
@@ -342,6 +357,19 @@ struct Facts<'p, 's> {
     allocates: Vec<bool>,
     /// Whether a call may raise a value it made.
     raises: Vec<bool>,
+    /// Whether a call builds a string by appending. A string made in a region
+    /// is immortal, and an append onto an immortal string copies it; and a
+    /// clone is never counted, so the concatenations counting would have
+    /// turned into appends in place stay copies. A string built that way in a
+    /// region is built in quadratic time.
+    appends: Vec<bool>,
+    /// Whether a call allocates repeatedly -- in a loop, in a member that
+    /// recurses, or in a call to one that does -- so that what it makes can
+    /// outweigh what a region costs to open and give back. A call that makes a
+    /// string or two does not, and a region would only slow it.
+    repeats: Vec<bool>,
+    /// The members of a region's call that can call themselves.
+    recursive: FxHashSet<usize>,
     /// Parameter slots the function stores into, itself or through a callee:
     /// its callers must pass something made inside the call there.
     containers: Vec<FxHashSet<u32>>,
@@ -377,6 +405,19 @@ impl<'p, 's> Facts<'p, 's> {
                 (members.to_vec(), fresh)
             }
         };
+        let recursive = match scope {
+            Scope::Program => FxHashSet::default(),
+            Scope::Region { members, .. } => members
+                .iter()
+                .copied()
+                .filter(|member| {
+                    let callees = shared.callees(*member);
+                    callees
+                        .iter()
+                        .any(|callee| shared.members(*callee).contains(member))
+                })
+                .collect(),
+        };
         Self {
             shared,
             program,
@@ -385,6 +426,9 @@ impl<'p, 's> Facts<'p, 's> {
             returns_fresh: vec![true; count],
             allocates: vec![false; count],
             raises: vec![false; count],
+            appends: vec![false; count],
+            repeats: vec![false; count],
+            recursive,
             containers: vec![FxHashSet::default(); count],
             kept: vec![FxHashSet::default(); count],
             stale: FxHashSet::default(),
@@ -439,7 +483,12 @@ impl<'p, 's> Facts<'p, 's> {
                 // Nothing at all: stored, it points at nothing, and a store
                 // into it throws before it writes.
                 | OpKind::ConstNull
-                | OpKind::ConstUndefined => true,
+                | OpKind::ConstUndefined
+                // Immortal, and never a container: harmless wherever a fresh
+                // value is.
+                | OpKind::ConstString(_)
+                | OpKind::ConstTemplate { .. }
+                | OpKind::ClosureStatic => true,
                 OpKind::Param(slot) => self.fresh_params[at].contains(slot),
                 OpKind::Call {
                     callee: Callee::Direct(name),
@@ -597,43 +646,30 @@ impl<'p, 's> Facts<'p, 's> {
             allowed: &allowed,
             allocates: false,
             raises: false,
+            appends: false,
             containers: self.containers[at].clone(),
             kept: self.kept[at].clone(),
             stale: Vec::new(),
             refused: None,
         };
-        for block in &func.blocks {
+        let mut repeats = false;
+        for (index, block) in func.blocks.iter().enumerate() {
+            let looped =
+                super::loops::in_a_cycle(func, BlockId(u32::try_from(index).unwrap_or(u32::MAX)));
             for op in &block.ops {
-                judged.op(self, &func.values[op.0 as usize].kind);
+                let kind = &func.values[op.0 as usize].kind;
+                judged.op(self, kind);
+                let (makes, callee_repeats) = self.allocating(kind);
+                repeats |= callee_repeats || (makes && (looped || self.recursive.contains(&at)));
             }
         }
-        let mut refuted: Vec<(usize, u32)> = Vec::new();
-        for op in &func.values {
-            if let OpKind::Call {
-                callee: Callee::Direct(name),
-                args,
-                ..
-            } = &op.kind
-                && let Some(callee) = self.callee(name)
-            {
-                for (slot, arg) in args.iter().enumerate() {
-                    let slot = u32::try_from(slot).unwrap_or(u32::MAX);
-                    if self.fresh_params[callee].contains(&slot) && !fresh.contains(arg) {
-                        refuted.push((callee, slot));
-                    }
-                }
-            }
-        }
-        let returns_fresh = func.blocks.iter().all(|block| match block.terminator {
-            Terminator::Return(Some(value)) => {
-                !func.values[value.0 as usize].ty.is_counted() || fresh.contains(&value)
-            }
-            _ => true,
-        });
+        let refuted = self.refuted_params(func, &fresh);
+        let returns_fresh = returns_only(func, &fresh);
         let reads_only = self.reads_only_params(at);
         let Judged {
             allocates,
             raises,
+            appends,
             containers,
             kept,
             stale,
@@ -655,6 +691,14 @@ impl<'p, 's> Facts<'p, 's> {
         }
         if raises && !self.raises[at] {
             self.raises[at] = true;
+            changed = true;
+        }
+        if appends && !self.appends[at] {
+            self.appends[at] = true;
+            changed = true;
+        }
+        if repeats && !self.repeats[at] {
+            self.repeats[at] = true;
             changed = true;
         }
         if containers.len() != self.containers[at].len() {
@@ -701,7 +745,12 @@ impl<'p, 's> Facts<'p, 's> {
 
     /// Whether every use of `starts`, and of everything read out of them,
     /// only reads (fact 3). The first use that does more, otherwise.
-    fn only_read(&self, at: usize, starts: &[ValueId], returning: Returning) -> Result<(), String> {
+    fn only_read(
+        &self,
+        at: usize,
+        starts: &[ValueId],
+        returning: Returning,
+    ) -> Result<Vec<ValueId>, String> {
         let func = &self.program.funcs[at];
         let uses = &self.shared.uses[at];
         let mut pending: Vec<ValueId> = starts.to_vec();
@@ -730,7 +779,9 @@ impl<'p, 's> Facts<'p, 's> {
                 }
             }
         }
-        Ok(())
+        let mut read: Vec<ValueId> = seen.into_iter().collect();
+        read.sort_unstable();
+        Ok(read)
     }
 
     /// Whether one operation only reads `value`, and whether what it answers
@@ -826,10 +877,83 @@ impl<'p, 's> Facts<'p, 's> {
         if !self.containers[root].is_empty() {
             return Err(at(root, "stores into an argument"));
         }
-        // Not that it returns something it made: what it returns is read and
-        // then dropped by the caller (fact 3) whatever it is, and a result that
-        // is an argument or a literal is only a region with less in it.
+        // What it returns is the caller's to release, which is harmless only
+        // on an object the region made or an immortal: an argument or a
+        // global's value handed back would be released once too often.
+        if !self.returns_fresh[root] {
+            return Err(at(root, "may return something not made in the call"));
+        }
+        if self.raises[root] {
+            return Err(at(root, "may raise a value it made"));
+        }
+        if self.appends[root] {
+            return Err(at(root, "builds a string by appending"));
+        }
+        if !self.repeats[root] {
+            return Err(at(
+                root,
+                "allocates too little for a region to pay for itself",
+            ));
+        }
         Ok(())
+    }
+
+    /// The callees' fresh parameters this function's calls refute: a slot it
+    /// fills with something not made in the call.
+    fn refuted_params(&self, func: &Func, fresh: &FxHashSet<ValueId>) -> Vec<(usize, u32)> {
+        let mut refuted = Vec::new();
+        for op in &func.values {
+            if let OpKind::Call {
+                callee: Callee::Direct(name),
+                args,
+                ..
+            } = &op.kind
+                && let Some(callee) = self.callee(name)
+            {
+                for (slot, arg) in args.iter().enumerate() {
+                    let slot = u32::try_from(slot).unwrap_or(u32::MAX);
+                    if self.fresh_params[callee].contains(&slot) && !fresh.contains(arg) {
+                        refuted.push((callee, slot));
+                    }
+                }
+            }
+        }
+        refuted
+    }
+
+    /// Whether one operation allocates, and whether it is a call to one that
+    /// allocates repeatedly.
+    fn allocating(&self, kind: &OpKind) -> (bool, bool) {
+        match kind {
+            OpKind::ObjectNew { frame: false }
+            | OpKind::ArrayNew { .. }
+            | OpKind::Binary {
+                op: super::BinOp::Concat,
+                ..
+            } => (true, false),
+            OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } => self.callee(name).map_or((false, false), |callee| {
+                (self.allocates[callee], self.repeats[callee])
+            }),
+            OpKind::Call {
+                callee: Callee::External(name),
+                ..
+            } => (
+                matches!(
+                    helper(name),
+                    Some(
+                        Helper::Makes
+                            | Helper::Fills { .. }
+                            | Helper::Grows { .. }
+                            | Helper::Takes { .. }
+                    )
+                ),
+                false,
+            ),
+            _ => (false, false),
+        }
     }
 }
 
@@ -855,6 +979,7 @@ struct Judged<'f> {
     allowed: &'f FxHashSet<ValueId>,
     allocates: bool,
     raises: bool,
+    appends: bool,
     containers: FxHashSet<u32>,
     kept: FxHashSet<u32>,
     stale: Vec<Slot>,
@@ -917,12 +1042,14 @@ impl Judged<'_> {
 
     fn op(&mut self, facts: &Facts<'_, '_>, kind: &OpKind) {
         match kind {
-            OpKind::ObjectNew { .. }
-            | OpKind::ArrayNew { .. }
-            | OpKind::Binary {
+            OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. } => self.allocates = true,
+            OpKind::Binary {
                 op: super::BinOp::Concat,
                 ..
-            } => self.allocates = true,
+            } => {
+                self.allocates = true;
+                self.appends = true;
+            }
             OpKind::FieldSet {
                 object,
                 field,
@@ -963,6 +1090,7 @@ impl Judged<'_> {
                 };
                 self.allocates |= facts.allocates[callee];
                 self.raises |= facts.raises[callee];
+                self.appends |= facts.appends[callee];
                 for (slot, arg) in args.iter().enumerate() {
                     let slot = u32::try_from(slot).unwrap_or(u32::MAX);
                     if facts.containers[callee].contains(&slot) {
@@ -993,6 +1121,7 @@ impl Judged<'_> {
                 }
                 Some(Helper::Grows { into: at } | Helper::Takes { from: at }) => {
                     self.allocates = true;
+                    self.appends |= name == "nts_str_append";
                     if let Some(container) = args.get(at).copied() {
                         self.contain(container);
                     }
@@ -1006,16 +1135,38 @@ impl Judged<'_> {
     }
 }
 
+/// A call a region serves: what the rewrite needs to know about it.
+#[derive(Debug, Clone)]
+struct Site {
+    caller: usize,
+    call: ValueId,
+    root: usize,
+    /// The root's parameter slots whose argument it keeps (fact 2).
+    kept: Vec<u32>,
+    /// The result and everything read out of it in the caller (fact 3).
+    read: Vec<ValueId>,
+    /// Where the caller holds the handle.
+    holds: Vec<Hold>,
+    /// What a call to the root can run, the root first.
+    members: Vec<usize>,
+}
+
 /// Which calls in `program` a region could serve.
 #[must_use]
 pub fn analyze(program: &Program) -> Report {
+    judge(program).0
+}
+
+fn judge(program: &Program) -> (Report, Vec<Site>) {
     let shared = Shared::new(program);
     let mut whole = Facts::new(&shared, Scope::Program);
     whole.settle();
     // One scope per callee, shared by every call to it.
-    let mut regions: FxHashMap<usize, Facts<'_, '_>> = FxHashMap::default();
+    let mut regions: FxHashMap<usize, (Facts<'_, '_>, Vec<usize>)> = FxHashMap::default();
     let mut report = Report::default();
+    let mut sites = Vec::new();
     for (caller, func) in program.funcs.iter().enumerate() {
+        let mut flow: Option<Flow> = None;
         for block in &func.blocks {
             for call in &block.ops {
                 let op = &func.values[call.0 as usize];
@@ -1033,7 +1184,7 @@ pub fn analyze(program: &Program) -> Report {
                     continue;
                 }
                 report.candidates += 1;
-                let region = regions.entry(root).or_insert_with(|| {
+                let (region, members) = regions.entry(root).or_insert_with(|| {
                     let members = shared.members(root);
                     let mut facts = Facts::new(
                         &shared,
@@ -1043,9 +1194,9 @@ pub fn analyze(program: &Program) -> Report {
                         },
                     );
                     facts.settle();
-                    facts
+                    (facts, members)
                 });
-                let verdict = region.body_verdict(root).and_then(|()| {
+                let read = region.body_verdict(root).and_then(|()| {
                     whole
                         .only_read(caller, &[*call], Returning::Escapes)
                         .map_err(|reason| Refusal {
@@ -1053,14 +1204,32 @@ pub fn analyze(program: &Program) -> Report {
                             function: func.name.clone(),
                         })
                 });
-                match &verdict {
-                    Ok(()) => {
+                let read = read.and_then(|read| {
+                    let flow = flow.get_or_insert_with(|| Flow::of(func));
+                    flow.holds(*call, &read)
+                        .map(|holds| (read, holds))
+                        .map_err(|reason| Refusal {
+                            reason: reason.to_owned(),
+                            function: func.name.clone(),
+                        })
+                });
+                let verdict = read.as_ref().map(|_| ()).map_err(Clone::clone);
+                match read {
+                    Ok((read, holds)) => {
                         report.sites += 1;
-                        if region.raises[root] {
-                            report.raising += 1;
-                        }
+                        let mut kept: Vec<u32> = region.kept[root].iter().copied().collect();
+                        kept.sort_unstable();
+                        sites.push(Site {
+                            caller,
+                            call: *call,
+                            root,
+                            kept,
+                            read,
+                            holds,
+                            members: members.clone(),
+                        });
                     }
-                    Err(refusal) => *report.refused.entry(refusal.reason.clone()).or_default() += 1,
+                    Err(refusal) => *report.refused.entry(refusal.reason).or_default() += 1,
                 }
                 report.calls.push(Candidate {
                     caller: func.name.clone(),
@@ -1070,5 +1239,317 @@ pub fn analyze(program: &Program) -> Report {
             }
         }
     }
+    (report, sites)
+}
+
+/// A caller's liveness and dominators, for where a served call's handle is
+/// held.
+struct Flow {
+    live: super::liveness::Liveness,
+    idom: Vec<Option<BlockId>>,
+    block_of: FxHashMap<ValueId, usize>,
+    /// What each block's terminator hands along its edges.
+    handed_on: Vec<Vec<ValueId>>,
+    predecessors: Vec<Vec<usize>>,
+}
+
+/// Where a served call's handle is held.
+#[derive(Debug, Clone, Copy)]
+enum Hold {
+    /// After the block's last operation reading the result.
+    After(usize),
+    /// First thing in the block, where the result died on the edge in.
+    OnEntry(usize),
+}
+
+impl Flow {
+    fn of(func: &Func) -> Self {
+        let reachable = super::verify::reachable_blocks(func);
+        let mut block_of = FxHashMap::default();
+        for (index, block) in func.blocks.iter().enumerate() {
+            for op in &block.ops {
+                block_of.insert(*op, index);
+            }
+        }
+        Self {
+            live: super::liveness::analyze(func),
+            idom: super::verify::dominators(func, &reachable),
+            block_of,
+            handed_on: func
+                .blocks
+                .iter()
+                .map(|block| handed_on(&block.terminator))
+                .collect(),
+            predecessors: {
+                let mut into = vec![Vec::new(); func.blocks.len()];
+                for (index, block) in func.blocks.iter().enumerate() {
+                    for target in block.terminator.successors() {
+                        into[target.0 as usize].push(index);
+                    }
+                }
+                into
+            },
+        }
+    }
+
+    /// Whether something read out of the result outlives a block: live out of
+    /// it, or handed along one of its edges -- which liveness counts as the
+    /// terminator's read, not as live out.
+    fn outlives(&self, index: usize, here: BlockId, read: &FxHashSet<ValueId>) -> bool {
+        self.live
+            .live_out(here)
+            .iter()
+            .any(|value| read.contains(value))
+            || self.handed_on[index]
+                .iter()
+                .any(|value| read.contains(value))
+    }
+
+    fn dominates(&self, over: usize, block: usize) -> bool {
+        let mut at = Some(BlockId(u32::try_from(block).unwrap_or(u32::MAX)));
+        while let Some(here) = at {
+            if here.0 as usize == over {
+                return true;
+            }
+            at = self.idom[here.0 as usize];
+        }
+        false
+    }
+
+    /// Where a handle made at `call` is held: in each block where something
+    /// read out of the result is last alive -- after the block's last reader
+    /// of it, or on entry where it died along the edge in. Refused unless the
+    /// call dominates every block such a value is in, so the handle is defined
+    /// on every path to a hold, and unless the values die somewhere.
+    fn holds(&self, call: ValueId, read: &[ValueId]) -> Result<Vec<Hold>, &'static str> {
+        let Some(home) = self.block_of.get(&call).copied() else {
+            return Err("the call is in no block");
+        };
+        let read: FxHashSet<ValueId> = read.iter().copied().collect();
+        let mut holds = Vec::new();
+        for index in 0..self.idom.len() {
+            let here = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+            let present = self
+                .live
+                .available(here)
+                .iter()
+                .any(|value| read.contains(value));
+            if present {
+                if !self.dominates(home, index) {
+                    return Err("what is read out of the result meets a value from another path");
+                }
+                if !self.outlives(index, here, &read) {
+                    holds.push(Hold::After(index));
+                }
+            } else if self.dominates(home, index)
+                && self.predecessors[index].iter().any(|from| {
+                    self.outlives(
+                        *from,
+                        BlockId(u32::try_from(*from).unwrap_or(u32::MAX)),
+                        &read,
+                    )
+                })
+            {
+                holds.push(Hold::OnEntry(index));
+            }
+        }
+        if holds.is_empty() {
+            Err("what is read out of the result never dies")
+        } else {
+            Ok(holds)
+        }
+    }
+}
+
+/// Whether an operation ends a served call's region window
+/// (`nts_region_end_call`), which nothing may come between the call and.
+#[must_use]
+pub(super) fn ends_a_call(kind: &OpKind) -> bool {
+    matches!(
+        kind,
+        OpKind::Call {
+            callee: Callee::External(name),
+            ..
+        } if name == "nts_region_end_call"
+    )
+}
+
+/// Whether every reference a function returns is among `fresh`.
+fn returns_only(func: &Func, fresh: &FxHashSet<ValueId>) -> bool {
+    func.blocks.iter().all(|block| match block.terminator {
+        Terminator::Return(Some(value)) => {
+            !func.values[value.0 as usize].ty.is_counted() || fresh.contains(&value)
+        }
+        _ => true,
+    })
+}
+
+/// The values a terminator passes along its edges.
+fn handed_on(terminator: &Terminator) -> Vec<ValueId> {
+    match terminator {
+        Terminator::Jump { args, .. } => args.clone(),
+        Terminator::Branch {
+            then_args,
+            else_args,
+            ..
+        } => then_args.iter().chain(else_args).copied().collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// What a region's clone of a function is called.
+pub const CLONE_SUFFIX: &str = "#region";
+
+/// Whether a function is a region's clone: compiled with nothing counted,
+/// because everything it makes is the region's and everything else it only
+/// reads (`rc::insert` passes it by).
+#[must_use]
+pub fn is_clone(name: &str) -> bool {
+    name.ends_with(CLONE_SUFFIX)
+}
+
+/// Serve every call a region can (R3): clone what each call can run, with
+/// nothing counted, and around each call open a region behind a counted
+/// handle that the caller holds where the result is last read.
+///
+/// Returns the report the sites were chosen from.
+pub fn rewrite(program: &mut Program) -> Report {
+    let (report, sites) = judge(program);
+    if sites.is_empty() {
+        return report;
+    }
+    // One clone per function any served call can run, shared by every site:
+    // a clone retargets its calls to clones, and every call a member makes is
+    // to a member.
+    let mut cloned: Vec<usize> = sites
+        .iter()
+        .flat_map(|site| site.members.iter().copied())
+        .collect();
+    cloned.sort_unstable();
+    cloned.dedup();
+    let names: FxHashSet<String> = cloned
+        .iter()
+        .map(|member| program.funcs[*member].name.clone())
+        .collect();
+    for member in &cloned {
+        let mut clone = program.funcs[*member].clone();
+        clone.name.push_str(CLONE_SUFFIX);
+        clone.exported = false;
+        for op in &mut clone.values {
+            if let OpKind::Call {
+                callee: Callee::Direct(name),
+                ..
+            } = &mut op.kind
+                && names.contains(name.as_str())
+            {
+                name.push_str(CLONE_SUFFIX);
+            }
+        }
+        program.funcs.push(clone);
+    }
+    let mut by_caller: FxHashMap<usize, Vec<&Site>> = FxHashMap::default();
+    for site in &sites {
+        by_caller.entry(site.caller).or_default().push(site);
+    }
+    for (caller, at_sites) in by_caller {
+        let root_names: Vec<String> = at_sites
+            .iter()
+            .map(|site| program.funcs[site.root].name.clone())
+            .collect();
+        let func = &mut program.funcs[caller];
+        for (site, root) in at_sites.into_iter().zip(root_names) {
+            serve(func, site, &root);
+        }
+    }
     report
+}
+
+/// One call, served: `begin`, `keep` for each kept argument, the clone, `end`
+/// right after it -- before a raise is tested -- and a `hold` in each block
+/// where what was read out of the result is last alive.
+fn serve(func: &mut Func, site: &Site, root: &str) {
+    let origin = func.values[site.call.0 as usize].origin.clone();
+    let push = |func: &mut Func, kind: OpKind, ty: HirType| -> ValueId {
+        let id = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
+        func.values.push(super::Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        });
+        id
+    };
+    let runtime = |name: &str, args: Vec<ValueId>| OpKind::Call {
+        callee: Callee::External(name.to_owned()),
+        args,
+        frame: None,
+    };
+    let handle = push(
+        func,
+        runtime("nts_region_begin", Vec::new()),
+        HirType::Managed(super::ManagedType::Region),
+    );
+    let OpKind::Call { args, .. } = &func.values[site.call.0 as usize].kind else {
+        return;
+    };
+    let kept: Vec<ValueId> = site
+        .kept
+        .iter()
+        .filter_map(|slot| args.get(*slot as usize).copied())
+        .filter(|arg| func.values[arg.0 as usize].ty.is_counted())
+        .collect();
+    let mut before = vec![handle];
+    for arg in kept {
+        before.push(push(
+            func,
+            runtime("nts_region_keep", vec![handle, arg]),
+            HirType::Void,
+        ));
+    }
+    let end = push(
+        func,
+        runtime("nts_region_end_call", vec![handle]),
+        HirType::Void,
+    );
+    if let OpKind::Call {
+        callee: Callee::Direct(name),
+        ..
+    } = &mut func.values[site.call.0 as usize].kind
+    {
+        *name = format!("{root}{CLONE_SUFFIX}");
+    }
+    for block in &mut func.blocks {
+        if let Some(at) = block.ops.iter().position(|op| *op == site.call) {
+            block.ops.insert(at + 1, end);
+            for (offset, op) in before.iter().enumerate() {
+                block.ops.insert(at + offset, *op);
+            }
+            break;
+        }
+    }
+    // The holds: in each block where something read out of the result is
+    // present and none of it outlives the block, after the last operation that
+    // reads it. Reference counting releases the handle after the last hold on
+    // each path, and that release is the reset.
+    let read: FxHashSet<ValueId> = site.read.iter().copied().collect();
+    for place in &site.holds {
+        let hold = push(
+            func,
+            runtime("nts_region_hold", vec![handle]),
+            HirType::Void,
+        );
+        let (index, at) = match *place {
+            Hold::OnEntry(index) => (index, 0),
+            Hold::After(index) => {
+                let last = func.blocks[index].ops.iter().rposition(|op| {
+                    super::verify::operands(&func.values[op.0 as usize].kind)
+                        .iter()
+                        .any(|operand| read.contains(operand))
+                        || *op == site.call
+                        || *op == end
+                });
+                (index, last.map_or(0, |last| last + 1))
+            }
+        };
+        func.blocks[index].ops.insert(at, hold);
+    }
 }

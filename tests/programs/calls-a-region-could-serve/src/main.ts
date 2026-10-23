@@ -91,25 +91,78 @@ export function countsWhileBuilding(count: number): number {
 }
 
 // Site (fact 2): an argument kept in what the call made -- the caller keeps
-// the argument alive to the reset.
-function prepend(value: number, rest: Cell): Cell {
-  return new Cell(value, new Cell(value + 1, rest));
+// the argument alive to the reset. The head is always a cell the call made:
+// a call that could hand its argument back is refused, since the caller gives
+// up the result it is handed.
+function prepend(count: number, rest: Cell): Cell {
+  let head = new Cell(-1, rest);
+  for (let index = 0; index < count; index++) {
+    head = new Cell(index, head);
+  }
+  return head;
 }
 export function prependsToAnArgument(count: number): number {
   const rest = new Cell(count, null);
-  const list = prepend(count, rest);
+  const list = prepend(bounded(count), rest);
   return total(list);
 }
 
 // Refused (fact 2), the control's one difference: what is kept is a field of
 // the argument, which its owner could replace and free before the reset.
-function prependField(value: number, holder: Holder): Cell {
-  return new Cell(value, new Cell(value + 1, holder.cell));
+function prependField(count: number, holder: Holder): Cell {
+  let head = new Cell(-1, holder.cell);
+  for (let index = 0; index < count; index++) {
+    head = new Cell(index, head);
+  }
+  return head;
 }
 export function prependsToAField(count: number): number {
   const holder = new Holder();
-  const list = prependField(count, holder);
+  const list = prependField(bounded(count), holder);
   return total(list);
+}
+
+// Site: a temporary the call only reads, which dies at the call -- its
+// release must come after the region's call has ended, or it is freed inside
+// the region's window.
+function fromValues(values: number[]): Cell | null {
+  let head: Cell | null = null;
+  for (let index = 0; index < values.length; index++) {
+    head = new Cell(values[index], head);
+  }
+  return head;
+}
+export function buildsFromATemporary(count: number): number {
+  const list = fromValues([count, count + 1, count + 2]);
+  return total(list);
+}
+
+// Site: an argument the call stores straight into a field it made, which
+// ownership reads as taking the argument over. A clone counts nothing, so it
+// takes nothing over: the caller keeps its own reference and gives it up.
+function wrap(count: number, rest: Cell): Cell {
+  const head = new Cell(-1, null);
+  head.next = rest;
+  let at: Cell = head;
+  for (let index = 0; index < count; index++) {
+    at = new Cell(index, at);
+  }
+  return at;
+}
+export function wrapsAnArgument(count: number): number {
+  const list = wrap(bounded(count), new Cell(count, null));
+  return total(list);
+}
+
+// Refused (the cost): one cell is too little for a region to pay for opening
+// and giving back -- a call allocates repeatedly, in a loop or a recursion,
+// or a region only slows it.
+function single(value: number): Cell {
+  return new Cell(value, null);
+}
+export function readsOneCell(count: number): number {
+  const cell = single(count);
+  return cell.value;
 }
 
 // Refused (fact 1): the callee stores into its argument.

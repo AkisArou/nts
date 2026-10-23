@@ -9385,6 +9385,7 @@ fn managed_word(managed: &ManagedType) -> &'static str {
         ManagedType::Table(_, _) => "a table",
         ManagedType::Set(_) => "a set",
         ManagedType::Date => "a date",
+        ManagedType::Region => "a region's handle",
         ManagedType::Buffer => "a buffer",
         ManagedType::View(_) | ManagedType::AnyView => "a typed array",
         ManagedType::DataView => "a data view",
@@ -18620,6 +18621,7 @@ fn objects_in(ty: &HirType, into: &mut Vec<TypeId>) {
         | ManagedType::BoxedBigInt
         | ManagedType::Template
         | ManagedType::Date
+        | ManagedType::Region
         | ManagedType::Buffer
         | ManagedType::AnyView
         | ManagedType::DataView
@@ -18877,6 +18879,7 @@ fn named_representation(ty: &HirType) -> &'static str {
             ManagedType::Symbol => "a symbol",
             ManagedType::View(_) | ManagedType::AnyView => "a typed array",
             ManagedType::Date => "a date",
+            ManagedType::Region => "a region's handle",
             ManagedType::Buffer => "a buffer",
             ManagedType::DataView => "a data view",
             // Exhaustive on purpose. A new representation should have to answer

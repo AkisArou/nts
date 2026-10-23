@@ -130,6 +130,7 @@ pub fn shape_of(ty: &HirType) -> Option<Shape> {
             | ManagedType::BoxedBigInt
             | ManagedType::Symbol
             | ManagedType::Date
+            | ManagedType::Region
             | ManagedType::Buffer
             | ManagedType::View(_)
             | ManagedType::AnyView

@@ -126,6 +126,7 @@ impl<'a> Graph<'a> {
                 | ManagedType::BoxedBigInt
                 | ManagedType::Template
                 | ManagedType::Date
+                | ManagedType::Region
                 | ManagedType::Buffer
                 | ManagedType::AnyView
                 | ManagedType::DataView

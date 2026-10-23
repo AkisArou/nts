@@ -268,6 +268,15 @@ pub fn summarize(program: &Program, layouts: &[Layout]) -> Summaries {
             program,
             super::reachable::Roots::EntrySurface,
         ))
+        // A region's clone counts nothing, so it takes nothing over: it is lent
+        // its arguments, and its caller gives up its own (`regions`).
+        .chain(
+            program
+                .funcs
+                .iter()
+                .map(|func| func.name.as_str())
+                .filter(|name| super::regions::is_clone(name)),
+        )
         .collect();
     // Computed before the literal because the slot answer is derived from it:
     // a slot mutates when an implementation in it does.
@@ -2259,6 +2268,7 @@ fn counted_here(func: &Func, layouts: &[Layout], value: ValueId) -> bool {
         | OpKind::ConstUndefined
         | OpKind::ClosureStatic
         | OpKind::Call { frame: Some(_), .. } => false,
+
         // A frame object has no count of its own -- it goes away when the frame
         // does, and counting it would at best be wasted work and at worst call
         // `free` on a stack address. But it still *ends*, and if it holds

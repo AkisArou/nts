@@ -2244,7 +2244,8 @@ impl Type {
             Self::Managed(ty) => match ty {
                 ManagedType::BoxedBigInt => "NtsBigIntBox *",
                 ManagedType::String => "NtsString *",
-                ManagedType::Object(_) => "NtsHeader *",
+                // A region's handle is a box, read as nothing but a header.
+                ManagedType::Object(_) | ManagedType::Region => "NtsHeader *",
                 ManagedType::Array(_) => "NtsArray *",
                 ManagedType::Template => "const NtsArray *",
                 ManagedType::Promise(_) => "NtsPromise *",

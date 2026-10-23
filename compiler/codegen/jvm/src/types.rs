@@ -896,6 +896,7 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
         // different objects and a `Date | null` needs an absence a `double`
         // has no room for.
         HirType::Managed(ManagedType::Date) => nts_jvm_emitter::descriptor::object(DATE),
+        HirType::Managed(ManagedType::Region) => return None, // native counting only
         // A description and an identity. The identity is the whole of it --
         // two symbols with the same description are different values -- so it
         // is a class, and `NtsMap` keys it by reference through the `default`
@@ -941,6 +942,8 @@ pub fn descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 #[allow(clippy::match_same_arms)]
 pub fn kind(ty: &HirType) -> Option<Kind> {
     Some(match ty {
+        // Native counting only: no backend on a managed heap makes one.
+        HirType::Managed(ManagedType::Region) => return None,
         HirType::Erased
         | HirType::BigInt
         | HirType::Managed(
@@ -989,6 +992,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
         Kind::Float => VType::Float,
         Kind::Double => VType::Double,
         Kind::Ref => match ty {
+            HirType::Managed(ManagedType::Region) => return None,
             HirType::Erased => VType::Object(VALUE.to_owned()),
             HirType::BigInt | HirType::Managed(ManagedType::BoxedBigInt) => {
                 VType::Object(BIGINT.to_owned())
@@ -1069,6 +1073,7 @@ pub fn vtype(shape: Shape<'_>, ty: &HirType) -> Option<VType> {
 #[must_use]
 pub fn describe(ty: &HirType) -> String {
     match ty {
+        HirType::Managed(ManagedType::Region) => "a region's handle".to_owned(),
         HirType::Never => "a value of type `never`".to_owned(),
         HirType::NativePointer(name) => format!("a native pointer to {name}"),
         HirType::BigInt => "a bigint".to_owned(),

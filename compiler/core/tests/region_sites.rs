@@ -22,7 +22,6 @@ fn report(name: &str) -> Option<hir::regions::Report> {
     let options = hir::Options {
         provider: hir::Provider::ReferenceCounting,
         roots: hir::reachable::Roots::EveryExport,
-        report_regions: true,
         ..hir::Options::default()
     };
     Some(hir::prepare_unverified(&snapshot, &options).regions)
@@ -50,6 +49,11 @@ fn a_call_whose_result_is_read_and_dropped_is_a_site() {
         return;
     };
     assert_eq!(verdict(&report, "readsAList", "build"), Ok(()));
+    // A temporary it only reads, dying at the call.
+    assert_eq!(
+        verdict(&report, "buildsFromATemporary", "fromValues"),
+        Ok(())
+    );
     // A function that calls itself is judged by what its body does.
     assert_eq!(verdict(&report, "readsARecursiveList", "buildDown"), Ok(()));
 }
@@ -92,9 +96,22 @@ fn an_argument_may_be_kept_and_a_field_of_one_may_not() {
         return;
     };
     assert_eq!(verdict(&report, "prependsToAnArgument", "prepend"), Ok(()));
+    // Stored straight into a field: what ownership calls taking it over.
+    assert_eq!(verdict(&report, "wrapsAnArgument", "wrap"), Ok(()));
     assert_eq!(
         verdict(&report, "prependsToAField", "prependField"),
         Err("passes a value read from outside the call to be kept".to_owned())
+    );
+}
+
+#[test]
+fn a_call_that_allocates_once_is_not_worth_a_region() {
+    let Some(report) = report("calls-a-region-could-serve") else {
+        return;
+    };
+    assert_eq!(
+        verdict(&report, "readsOneCell", "single"),
+        Err("allocates too little for a region to pay for itself".to_owned())
     );
 }
 

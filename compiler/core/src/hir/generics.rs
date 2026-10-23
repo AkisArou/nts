@@ -1461,6 +1461,7 @@ pub(crate) fn spell(ty: &super::HirType) -> String {
         HirType::Managed(ManagedType::Template) => "template".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "sym".to_owned(),
         HirType::Managed(ManagedType::Date) => "date".to_owned(),
+        HirType::Managed(ManagedType::Region) => "region".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "buffer".to_owned(),
         HirType::Managed(ManagedType::View(element)) => format!("view{}", spell(element)),
         HirType::Managed(ManagedType::DataView) => "dataview".to_owned(),

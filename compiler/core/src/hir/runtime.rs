@@ -2146,8 +2146,23 @@ pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
 /// stop still mutates through that store.
 #[must_use]
 pub fn stores_nothing(name: &str) -> bool {
-    reads_only(name) || RETAINS_ONLY_ITS_RESULT.contains(&name) || name == "nts_refused"
+    reads_only(name)
+        || RETAINS_ONLY_ITS_RESULT.contains(&name)
+        || REGION_CALLS.contains(&name)
+        || name == "nts_refused"
 }
+
+/// What `regions::rewrite` puts around a call it serves. None stores into
+/// the program: they open and close the runtime's own region, retain an
+/// argument into its kept list, or do nothing at all (`nts_region_hold`). A
+/// call that may store would break every borrow across it, and the caller's
+/// walk of the result -- the whole point -- is borrows.
+pub const REGION_CALLS: &[&str] = &[
+    "nts_region_begin",
+    "nts_region_end_call",
+    "nts_region_hold",
+    "nts_region_keep",
+];
 
 #[cfg(test)]
 mod tests {

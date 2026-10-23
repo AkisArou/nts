@@ -419,6 +419,11 @@ pub(crate) fn erase_in(
 ) -> Result<(), Failure> {
     crate::arrays::dense_stack(m, code, ty)?;
     match ty {
+        HirType::Managed(ManagedType::Region) => {
+            return Err(Failure::Invariant(
+                "a region's handle, which only native counting makes".into(),
+            ));
+        }
         HirType::Erased
         | HirType::Managed(
             ManagedType::Object(_)

@@ -324,6 +324,7 @@ fn c_type(ty: &HirType) -> String {
         // rather than to be reached.
         HirType::Managed(nts_core::hir::ManagedType::Symbol) => "NtsSymbol *",
         HirType::Managed(nts_core::hir::ManagedType::Date) => "NtsDate *",
+        HirType::Managed(nts_core::hir::ManagedType::Region) => "NtsHeader *",
         // `emit.rs`'s spelling; never a scalar signature's, so here to be right.
         HirType::Managed(nts_core::hir::ManagedType::BoxedBigInt) => "NtsBigIntBox *",
         HirType::Managed(nts_core::hir::ManagedType::Buffer) => "NtsBuffer *",

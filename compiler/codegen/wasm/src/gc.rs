@@ -1321,6 +1321,9 @@ impl<'a> Builder<'a> {
             return Ok(Some(*slot));
         }
         let slot = match ty {
+            HirType::Managed(ManagedType::Region) => {
+                return Err("a region's handle, which only native counting makes".to_owned());
+            }
             HirType::Bool | HirType::Int { .. } | HirType::Float { .. } => {
                 PendingSlot::Scalar(types::value_slot(ty)?)
             }

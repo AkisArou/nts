@@ -1,15 +1,13 @@
-ideal 17
-allocated 17
-because seventeen links, one reference each, and the walk owes nothing.
+ideal 1
+allocated 18
+because one operation: the release of the region's handle, which is its reset.
 because
-because Building is all moves. Walking holds no store and no call, so every
-because step is a borrow of the link before it, back to a head the frame owns
-because for the whole function and never gives up early.
+because `build` makes a list `work` only walks and then drops, so the call is
+because served by a region (`hir::regions`): seventeen links made in one region,
+because given back at once after the walk. Building is the clone, which counts
+because nothing. Walking holds no store and no call, so every step is a borrow of
+because the link before it, back to a head the frame owns for the whole function
+because -- the call's result, whose release is nothing because a region's object
+because is immortal until the reset.
 because
-because The distance from seventeen is the price of an anchor having to be a
-because parameter. Nothing about a parameter makes it a better anchor than a
-because local the function is holding anyway -- what matters is that the anchor
-because outlives the borrow, and a local can be made to.
-because
-because Allocations: seventeen links, for the reason `traversal` needs thirty
-because three: a list built in a loop outlives the iterations that built it.
+because Allocations: seventeen links, made in the region, and the handle.

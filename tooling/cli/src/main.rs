@@ -2624,16 +2624,7 @@ fn prepare_for_listing(
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
-    prepare_as(hir_preparation()?, tsconfig, snapshot, false)
-}
-
-/// [`prepare_for_listing`], with the region report worked out
-/// (`hir::Options::report_regions`): for the commands that print it.
-fn prepare_reporting_regions(
-    tsconfig: &Utf8Path,
-    snapshot: &nts_semantic_schema::SemanticSnapshot,
-) -> Result<(String, hir::Prepared, Option<String>)> {
-    prepare_as(hir_preparation()?, tsconfig, snapshot, true)
+    prepare_as(hir_preparation()?, tsconfig, snapshot)
 }
 
 /// [`prepare_for_listing`] for a backend the caller names, which is how
@@ -2642,7 +2633,6 @@ fn prepare_as(
     (backend, provider): (nts_codegen_common::Backend, hir::Provider),
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
-    report_regions: bool,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
     let header = format!(
         "preparation: backend={} provider={provider:?}",
@@ -2702,7 +2692,6 @@ fn prepare_as(
             hir::reachable::Roots::Entry,
         ),
         table_entries: backend.table_entries(),
-        report_regions,
         ..hir::Options::default()
     };
     // An invalid program is exactly the one worth reading, so the
@@ -2741,12 +2730,8 @@ fn check_expectations(tsconfig: &Utf8Path) -> Result<()> {
     // One preparation per backend, shared by every fact that names it.
     let mut programs = Vec::new();
     for backend in expect_ir::backends_named(&expectations) {
-        let (_, prepared, invalid) = prepare_as(
-            (backend, provider_for(backend)?),
-            tsconfig,
-            &snapshot,
-            false,
-        )?;
+        let (_, prepared, invalid) =
+            prepare_as((backend, provider_for(backend)?), tsconfig, &snapshot)?;
         if let Some(invalid) = invalid {
             bail!(
                 "the program {} receives does not verify:\n{invalid}",
@@ -2828,7 +2813,7 @@ fn typechecked_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::Sema
 /// `nts stats`: see the command's comment in `main`.
 fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
-    let (header, prepared, invalid) = prepare_reporting_regions(tsconfig, &snapshot)?;
+    let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
     println!("{header}");
     let program = &prepared.program;
     let mut ops = 0usize;
@@ -2908,7 +2893,7 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
 /// `nts regions`: see the command's comment in `main`.
 fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
-    let (header, prepared, invalid) = prepare_reporting_regions(tsconfig, &snapshot)?;
+    let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
     println!("{header}");
     if !matches!(prepared.program.provider, hir::Provider::ReferenceCounting) {
         println!("regions are for the counting provider: pass --rc");
@@ -3023,6 +3008,7 @@ fn render(ty: &HirType) -> String {
         HirType::Managed(ManagedType::BoxedBigInt) => "managed<bigint-box>".to_owned(),
         HirType::Managed(ManagedType::Symbol) => "managed<sym>".to_owned(),
         HirType::Managed(ManagedType::Date) => "managed<date>".to_owned(),
+        HirType::Managed(ManagedType::Region) => "managed<region>".to_owned(),
         HirType::Managed(ManagedType::Buffer) => "managed<buffer>".to_owned(),
         HirType::Managed(ManagedType::View(element)) => {
             format!("managed<view<{}>>", render(element))

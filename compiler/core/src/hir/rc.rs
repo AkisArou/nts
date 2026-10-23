@@ -133,6 +133,11 @@ pub fn insert(program: &mut Program) -> Report {
     let globals: Vec<HirType> = program.globals.iter().map(|held| held.ty.clone()).collect();
     let summaries = own::summarize(program, &layouts);
     for func in &mut program.funcs {
+        // A region's clone counts nothing: what it makes is the region's,
+        // immortal, and everything else it only reads (`regions`).
+        if super::regions::is_clone(&func.name) {
+            continue;
+        }
         // Nothing an inert function does can invalidate a borrow, so nothing in
         // it needs a count -- except what leaves. See `own::inert`.
         let one = if own::inert(func) {
@@ -621,9 +626,19 @@ fn release_at_last_use(
         }
         let op = ops[index];
         let read = reads_of(&mut leaning, block.frame_names, op);
+        // Nothing runs between a call a region serves and its end
+        // (`regions`): what dies at the call is released after the end, or
+        // the free would land inside the region's window -- counted as the
+        // region's, and given back twice by its reset.
+        let at = match ops.get(index + 1) {
+            Some(next) if super::regions::ends_a_call(&func.values[next.0 as usize].kind) => {
+                index + 1
+            }
+            _ => index,
+        };
         for value in read {
             if pending.remove(&value) {
-                after.entry(index).or_default().push(value);
+                after.entry(at).or_default().push(value);
             }
         }
     }
@@ -1393,6 +1408,16 @@ fn release_value(
     value: ValueId,
     report: &mut Report,
 ) {
+    // A call a region serves answers something its region made: immortal, and
+    // given back by the region's reset (`regions`). It is tracked like any
+    // owned value -- a walk of the result borrows from it -- and only its
+    // release differs: there is nothing to give back.
+    if matches!(
+        &func.values[value.0 as usize].kind,
+        OpKind::Call { callee: super::Callee::Direct(name), .. } if super::regions::is_clone(name)
+    ) {
+        return;
+    }
     if !matches!(
         func.values[value.0 as usize].kind,
         OpKind::ObjectNew { frame: true }

@@ -304,6 +304,12 @@ pub enum ManagedType {
     /// than a generated one, so a layout for it would have a field nothing may
     /// read.
     Date,
+    /// A call region's handle (`regions`): a box on the heap whose death
+    /// resets the region. Only reference counting makes one, from the calls
+    /// `regions::rewrite` emits, and the program never reads it. A managed type
+    /// rather than a class for the reason `Date` is one: its C type is the
+    /// runtime's (`NtsHeader *`), with no field for a layout to describe.
+    Region,
     /// An `ArrayBuffer`: a byte length and the bytes.
     ///
     /// Carrying nothing, on the same standard as [`ManagedType::Date`]. A
@@ -3925,6 +3931,7 @@ impl Program {
                 | ManagedType::BoxedBigInt
                 | ManagedType::Template
                 | ManagedType::Date
+                | ManagedType::Region
                 | ManagedType::Buffer
                 | ManagedType::AnyView
                 | ManagedType::DataView
@@ -4348,7 +4355,10 @@ pub fn sets_length(name: &str) -> bool {
 /// store into the borrowed container or a call that stores nothing, and this
 /// list makes the same assumption, no wider.
 fn keeps_field_borrows(name: &str) -> bool {
-    KEEPS_FIELD_BORROWS.contains(&name)
+    // And what `regions` puts around a served call: none runs program code or
+    // writes a field, and the hold after a walk of the result must not end the
+    // walk's borrows -- it is the walk's own handle.
+    KEEPS_FIELD_BORROWS.contains(&name) || runtime::REGION_CALLS.contains(&name)
 }
 
 /// The strongly connected component of each node, by Tarjan's algorithm with
@@ -5131,8 +5141,8 @@ pub struct Prepared {
     pub pruned: usize,
     /// Retains and releases inserted, if the provider counts references.
     pub counting: rc::Report,
-    /// Which calls a region could serve, where asked
-    /// ([`Options::report_regions`]) and the provider counts; empty otherwise.
+    /// Which calls a region serves, and why each other candidate is not one;
+    /// empty unless the provider counts.
     pub regions: regions::Report,
     /// Allocations that stayed in the frame instead of reaching the allocator.
     pub framed: usize,
@@ -5526,11 +5536,6 @@ pub struct Options<'a> {
     /// `Options { provider: HostGc, ..default() }` would inherit native's
     /// answer.
     pub table_entries: Option<bool>,
-    /// Whether to work out which calls a region could serve
-    /// (`Prepared::regions`). Asked by the commands that print it, not by a
-    /// build: nothing acts on the answer yet, and a build should not pay for
-    /// one it does not read.
-    pub report_regions: bool,
 }
 
 impl Default for Options<'_> {
@@ -5558,7 +5563,6 @@ impl Default for Options<'_> {
             targets: native::Targets::only(HOST),
             // As the provider answers, resolved with it.
             table_entries: None,
-            report_regions: false,
         }
     }
 }
@@ -5591,8 +5595,6 @@ pub struct PreparationOptions<'a> {
     /// resolves it against the provider, so a caller building these directly
     /// with `..default()` inherits no other provider's answer.
     pub table_entries: Option<bool>,
-    /// [`Options::report_regions`].
-    pub report_regions: bool,
 }
 
 impl PreparationOptions<'_> {
@@ -5615,7 +5617,6 @@ impl<'a> From<&Options<'a>> for PreparationOptions<'a> {
             roots: options.roots,
             targets: options.targets,
             table_entries: options.table_entries,
-            report_regions: options.report_regions,
         }
     }
 }
@@ -7891,11 +7892,13 @@ fn prepare_lowered(
         Provider::HostGc => 0,
     };
 
-    // Which calls a region could serve (`regions`), reported and not yet acted
-    // on: after escape analysis, which decides what lives in a frame, and
-    // before counting, whose operations a region's clone would leave out.
-    let regions = if options.report_regions && options.provider == Provider::ReferenceCounting {
-        regions::analyze(&program)
+    // Calls a region serves (`regions`): everything one makes allocated in a
+    // region given back where its result is last read. After escape analysis,
+    // which decides what lives in a frame, and before counting, which places
+    // the reset (the region's handle dies after its last hold) and passes the
+    // uncounted clones by.
+    let regions = if options.provider == Provider::ReferenceCounting {
+        regions::rewrite(&mut program)
     } else {
         regions::Report::default()
     };
