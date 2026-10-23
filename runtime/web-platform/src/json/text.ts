@@ -27,16 +27,22 @@ const HEX = "0123456789abcdef";
 /**
  * The runtime's escape kernel, where the target provides it: C and LLVM programs link the C
  * runtime's (`nts_json_quote`, `nts_json_first_escape` in `runtime/c/nts_runtime.c`), which
- * finds the first unit needing an escape 32 bytes at a time. Each function below asks
- * `typeof` first, and the compiler answers it for the backend it prepares
+ * finds the first unit needing an escape 32 bytes at a time. The two constants below ask
+ * `typeof`, and the compiler answers it for the backend it prepares, wherever one is read
  * (`compiler/core/src/hir/features.rs`), so the arm a target cannot run is never compiled
- * there. Node, Bun, the JVM and Wasm answer `"undefined"` and run the TypeScript, which stays
- * the specification: the kernel is tested against it unit for unit.
+ * there. Node, Bun, the JVM and Wasm answer `false` and run the TypeScript, which stays the
+ * specification: the kernel is tested against it unit for unit.
+ *
+ * **Asked once, here, and not in each function.** A host answers a `typeof` of a name nothing
+ * declares by a lookup it cannot cache: Bun spent 130 ns on each one, and the functions asking
+ * it ran unoptimised, `json-build-join` 8.9 times slower than without the question.
  */
 /** @ntsAbi intrinsic */
 declare function nts_json_quote(value: string): string;
 /** @ntsAbi intrinsic */
 declare function nts_json_first_escape(value: string, from: number): number;
+const QUOTE_KERNEL = typeof nts_json_quote === "function";
+const SCAN_KERNEL = typeof nts_json_first_escape === "function";
 
 /**
  * Every escape below U+0100, whole, built once.
@@ -113,7 +119,7 @@ function unicodeEscape(unit: number): string {
  * `from` is an index, a whole number from 0 to the length, as every caller passes.
  */
 export function firstEscapeIndex(value: string, from: number): number {
-  if (typeof nts_json_first_escape === "function") return nts_json_first_escape(value, from);
+  if (SCAN_KERNEL) return nts_json_first_escape(value, from);
   for (let at = from; at < value.length; at++) {
     const unit = value.charCodeAt(at);
     // The common case is a character that needs nothing.
@@ -154,7 +160,7 @@ export function firstEscapeIndex(value: string, from: number): number {
  * bytes, which does not pay for a second entry point and its row in every helper table.
  */
 export function quoteFromIndex(value: string, from: number): string {
-  if (typeof nts_json_quote === "function") return nts_json_quote(value);
+  if (QUOTE_KERNEL) return nts_json_quote(value);
   let out = '"';
   let plainFrom = 0;
   let at = from;
@@ -178,7 +184,7 @@ export function quoteFromIndex(value: string, from: number): string {
 }
 
 export function quoteJSONString(value: string): string {
-  if (typeof nts_json_quote === "function") return nts_json_quote(value);
+  if (QUOTE_KERNEL) return nts_json_quote(value);
   const first = firstEscapeIndex(value, 0);
   // Nothing needs escaping, which is the common case: most strings in most documents contain
   // nothing Table 78 or 25.5.4.3 has anything to say about.

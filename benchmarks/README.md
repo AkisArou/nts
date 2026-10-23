@@ -206,6 +206,19 @@ Best of five processes usually reaches node's fast mode, so a ratio is against
 node at its best, the conservative comparison -- and a node swing between
 sittings is node's, not ours.
 
+**A question the compiler answers must cost an engine nothing.** The engine
+columns run the same TypeScript the compiler reads, so source written for the
+compiler is source node and Bun run. `runtime/web-platform/src/json/text.ts`
+once asked `typeof nts_json_quote === "function"` in every call: free on every
+nts backend, where the answer is a constant of the backend, and on Bun a lookup
+of a name nothing declares, which it could not cache and which left the asking
+functions unoptimised. Bun's `json-build-append` read 130.69 us against 7.06
+without the question, `json-build-join` 135.61 against 12.25, and node paid
+10-15% on the same rows (2026-10-23, CPU 4). Such a question is asked once, in
+a module `const`, which the compiler reads as the question wherever the `const`
+is read. The node and Bun columns of the rows importing `text.ts` measured
+between 98b3c67be and the commit that says so are void.
+
 **Best of five, after calibrating to ~100 ms of work.** The minimum is the run
 least contaminated by the scheduler; a mean measures the machine's other tenants
 as much as the code.

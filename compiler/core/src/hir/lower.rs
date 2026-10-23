@@ -366,6 +366,16 @@ struct ModuleScope {
     /// literal type is ([`declared_literal`]). Not storage: there is no value
     /// for a global to start from, and the type is the whole of it.
     string_constants: rustc_hash::FxHashMap<u32, String>,
+    /// Symbol to its initializer, for a `const` that asks whether the target
+    /// provides a runtime helper -- `const KERNEL = typeof nts_json_quote ===
+    /// "function"` -- lowered where it is read, so that each read is the
+    /// question itself and folds for the backend being prepared
+    /// ([`super::features`]), as the inline `typeof` does. Not storage: the
+    /// answer is a constant of the backend, and a slot `module#init` writes
+    /// would hide it from the fold. Hosts ask once, at module load, where a
+    /// bare `typeof` of an undeclared name in every call cost Bun 130 ns and
+    /// the optimisation of the function asking.
+    questions: rustc_hash::FxHashMap<u32, NodeId>,
     /// A binding's native pointer constants, lossless bits beside their type.
     /// Kept out of `constant_value`, which computes JavaScript arithmetic.
     native_constants: rustc_hash::FxHashMap<u32, (u64, HirType)>,
@@ -9146,6 +9156,18 @@ fn collect_module_scope(
         // the number and which nothing ever writes.
         if kind == nts_semantic_schema::VariableKind::Const && constant.is_some() {
             scope.constants.insert(symbol.0, value);
+            if !declaration_is_exported(&probe, id) {
+                continue;
+            }
+        }
+        // A `const` that asks whether the target provides a runtime helper is
+        // that question wherever it is read (`ModuleScope::questions`), and
+        // needs a global only to be exported, as a folded constant does.
+        if kind == nts_semantic_schema::VariableKind::Const
+            && let Some(initializer) = initializer
+            && probe.asks_what_is_provided(initializer)
+        {
+            scope.questions.insert(symbol.0, initializer);
             if !declaration_is_exported(&probe, id) {
                 continue;
             }
@@ -30028,6 +30050,67 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::String),
             self.origin(id),
         )))
+    }
+
+    /// A module name that is a value rather than storage, read: a binding's
+    /// native constant, a string constant, or a `const` holding the question of
+    /// what the target provides, which is that question asked here
+    /// (`ModuleScope::questions`).
+    fn constant_name(
+        &mut self,
+        id: NodeId,
+        symbol: SymbolId,
+    ) -> Option<Result<ValueId, Diagnostic>> {
+        if let Some(value) = self
+            .native_constant(id, symbol)
+            .or_else(|| self.string_constant(id, symbol))
+        {
+            return Some(Ok(value));
+        }
+        let question = *self.module.questions.get(&symbol.0)?;
+        Some(self.lower_expression(question))
+    }
+
+    /// Whether an expression is a question only the backend can answer:
+    /// `typeof` of an intrinsic ([`Self::intrinsic_named_by`]), alone or
+    /// compared with a string literal by `===`, `!==`, `==` or `!=`. Nothing in
+    /// it has an effect, so it can be asked wherever a `const` holding it is
+    /// read (`ModuleScope::questions`).
+    fn asks_what_is_provided(&self, expression: NodeId) -> bool {
+        let asks = |node: NodeId| {
+            let node = self.through_parentheses(node);
+            self.kind_of(node) == Some(syntax::TYPE_OF_EXPRESSION)
+                && self
+                    .children(node)
+                    .first()
+                    .is_some_and(|operand| self.intrinsic_named_by(*operand).is_some())
+        };
+        let literal = |node: NodeId| {
+            matches!(
+                self.kind_of(self.through_parentheses(node)),
+                Some(syntax::STRING_LITERAL | syntax::NO_SUBSTITUTION_TEMPLATE_LITERAL)
+            )
+        };
+        let expression = self.through_parentheses(expression);
+        if asks(expression) {
+            return true;
+        }
+        if self.kind_of(expression) != Some(syntax::BINARY_EXPRESSION) {
+            return false;
+        }
+        let children = self.children(expression);
+        let [lhs, operator, rhs] = children.as_slice() else {
+            return false;
+        };
+        matches!(
+            self.kind_of(*operator),
+            Some(
+                syntax::EQUALS_EQUALS_EQUALS_TOKEN
+                    | syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN
+                    | syntax::EQUALS_EQUALS_TOKEN
+                    | syntax::EXCLAMATION_EQUALS_TOKEN
+            )
+        ) && ((asks(*lhs) && literal(*rhs)) || (literal(*lhs) && asks(*rhs)))
     }
 
     /// `typeof` of an intrinsic: whether the backend provides it, which only
@@ -82617,11 +82700,8 @@ impl<'a> FuncBuilder<'a> {
                 return self.lower_accessor_on(id, receiver, window, &getter, None);
             }
         }
-        if let Some(value) = self
-            .native_constant(id, symbol)
-            .or_else(|| self.string_constant(id, symbol))
-        {
-            return Ok(value);
+        if let Some(value) = self.constant_name(id, symbol) {
+            return value;
         }
         let origin = self.origin(id);
         if let Some(constant) = self.module.constants.get(&symbol.0).copied() {
