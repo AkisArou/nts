@@ -1116,15 +1116,18 @@ static bool nts_array_is_inline(const NtsArray *array) {
  *
  * Called from `nts_free` rather than from the two death paths, so that a third
  * one cannot be added without it. */
+/* A table's block size, for its accounting: beside the table's code below. */
+static size_t nts_map_block_bytes(uint32_t capacity, uint32_t slots,
+                                  bool holds_values);
+
 static void nts_free_storage(NtsHeader *object) {
   /* A map owns three of them, and a Set two -- the same question the array
    * above answers, asked of the type that made the question worth asking. */
   if (object->descriptor->kind == NTS_KIND_MAP) {
     NtsMap *map = (NtsMap *)object;
-    nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
-    nts_env->bytes_held -= (size_t)map->slots * sizeof(int32_t);
-    if (map->values) {
-      nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
+    if (map->keys) {
+      nts_env->bytes_held -=
+          nts_map_block_bytes(map->capacity, map->slots, map->holds_values);
     }
     /* Paired with the `nts_note_allocation` in `nts_map_rehash`, the same way
      * the rehash pairs the one it replaces. A table that was never grown has no
@@ -1132,11 +1135,12 @@ static void nts_free_storage(NtsHeader *object) {
     if (map->keys) {
       nts_env->reclaimed++;
     }
-    /* `keys` is the block: `values` and `index` point into it. */
+    /* `keys` is the block: the other columns point into it. */
     nts_side_free(map->keys, "a table");
     map->keys = 0;
     map->values = 0;
     map->index = 0;
+    map->hashes = 0;
     return;
   }
   /* The bytes an `ArrayBuffer` owns. A transferred buffer already gave them
@@ -8150,8 +8154,8 @@ int nts_string_cmp(const NtsString *a, const NtsString *b) {
  * collector walks straight past a hole without being taught about holes. */
 #define NTS_TAG_HOLE 0xFFFFFFFFu
 
-#define NTS_MAP_EMPTY (-1)
-#define NTS_MAP_DELETED (-2)
+#define NTS_MAP_EMPTY 0ull
+#define NTS_MAP_DELETED (~0ull)
 
 /* Load factor 1/2, so a probe chain stays short. */
 #define NTS_MAP_SLOTS_FOR(entries) ((entries) * 2u)
@@ -8413,9 +8417,10 @@ static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
   map->generation = 0;
   map->index = 0;
   map->keys = 0;
-  /* The three arrays are allocated on the first insertion rather than here, so
-   * that a map nothing is ever put into costs one header. */
+  /* The arrays are allocated on the first insertion rather than here, so that
+   * a map nothing is ever put into costs one header. */
   map->values = 0;
+  map->hashes = 0;
   return map;
 }
 
@@ -9692,6 +9697,30 @@ NtsMap *nts_table_new(double kind) {
   return nts_map_alloc(&nts_desc_table, (uint32_t)kind, true);
 }
 
+/* A key's hash, and the tag the table keeps for it.
+ *
+ * The tag is the hash with its top bit set, so it is never 0 -- 0 marks a hole
+ * in the hash column and an empty index slot -- and it is computed beside the
+ * slot rather than before it: the slot is `hash & mask`, which no mask below
+ * 2^31 slots reads the top bit of, so tag and slot agree and the lookup's
+ * address does not wait on a fix-up. `hash ? hash : 1` did, and cost
+ * symbol-keyed-map a cycle a lookup. */
+#define NTS_MAP_TAG(hash) ((hash) | 0x80000000u)
+
+static inline
+    __attribute__((always_inline)) uint32_t nts_map_hash(const NtsMap *map,
+                                                         NtsValue key) {
+  return nts_hash_key(key, map->kind);
+}
+
+/* The bytes a table's block holds, for its accounting. */
+static size_t nts_map_block_bytes(uint32_t capacity, uint32_t slots,
+                                  bool holds_values) {
+  size_t column = (size_t)capacity * sizeof(NtsValue);
+  return column + (holds_values ? column : 0u) +
+         (size_t)slots * sizeof(uint64_t) + (size_t)capacity * sizeof(uint32_t);
+}
+
 /* Where `key` lives, or -1.
  *
  * `insert_at` receives the slot a fresh key would take: the first DELETED slot
@@ -9699,6 +9728,14 @@ NtsMap *nts_table_new(double kind) {
  * make the table grow, and the terminating EMPTY otherwise. */
 static inline __attribute__((always_inline)) int32_t nts_map_find(
     const NtsMap *map, NtsValue key, uint32_t hash, uint32_t *insert_at) {
+  /* An empty table, which has no index yet.
+   *
+   * No small-table scan: one was tried, below eight entries as the JVM's
+   * table does, and made symbol-keyed-map 1.17x (C) and 1.28x (LLVM) slower
+   * across three link layouts. A scan still hashes the key first while its
+   * columns hold erased values, then compares up to eight hashes where the
+   * index compares one. It pays where a key can be compared without hashing,
+   * which typed key columns are for. */
   if (map->slots == 0) {
     if (insert_at) {
       *insert_at = 0;
@@ -9709,22 +9746,26 @@ static inline __attribute__((always_inline)) int32_t nts_map_find(
   uint32_t slot = hash & mask;
   uint32_t reuse = map->slots; /* none seen */
   for (uint32_t step = 0; step < map->slots; step++) {
-    int32_t at = map->index[slot];
-    if (at == NTS_MAP_EMPTY) {
+    uint64_t entry = map->index[slot];
+    if (entry == NTS_MAP_EMPTY) {
       if (insert_at) {
         *insert_at = reuse < map->slots ? reuse : slot;
       }
       return -1;
     }
-    if (at == NTS_MAP_DELETED) {
+    if (entry == NTS_MAP_DELETED) {
       if (reuse == map->slots) {
         reuse = slot;
       }
-    } else if (nts_key_eq(map->keys[at], key, map->kind)) {
-      if (insert_at) {
-        *insert_at = slot;
+    } else if ((uint32_t)(entry >> 32) == NTS_MAP_TAG(hash)) {
+      /* Only a key of the same hash is loaded at all. */
+      uint32_t at = (uint32_t)entry - 1u;
+      if (nts_key_eq(map->keys[at], key, map->kind)) {
+        if (insert_at) {
+          *insert_at = slot;
+        }
+        return (int32_t)at;
       }
-      return at;
     }
     slot = (slot + 1u) & mask;
   }
@@ -9782,24 +9823,23 @@ static void nts_map_rehash(NtsMap *map) {
     slots *= 2u;
   }
 
-  /* One block, sliced, rather than three.
+  /* One block, sliced, rather than four.
    *
-   * The three arrays are allocated and freed together and always have been --
-   * they are the same table -- so nothing was buying the separate `malloc`s
-   * except the code being written that way. A table of seventeen entries grows
-   * three times, and `tooling/memory/cases/map-and-set` counted 3 blocks a
-   * rehash for a `Map` and 2 for a `Set`: seventeen allocations for two
-   * containers.
+   * The arrays are allocated and freed together and always have been -- they
+   * are the same table -- so nothing was buying separate `malloc`s except the
+   * code being written that way. A table of seventeen entries grows three
+   * times, and `tooling/memory/cases/map-and-set` counted 3 blocks a rehash
+   * for a `Map` and 2 for a `Set`: seventeen allocations for two containers.
    *
    * `keys` first, so the block's base is what `free` is given. `NtsValue` is
-   * sixteen bytes and `wanted` is a whole number of them, so `values` and then
-   * `index` are aligned by construction rather than by padding -- and the
-   * index, which every lookup touches, now sits next to the keys it indexes. */
+   * sixteen bytes, so `values` and then the 8-byte `index` are aligned by
+   * construction rather than by padding; the 4-byte `hashes` go last. */
   size_t key_bytes = (size_t)wanted * sizeof(NtsValue);
   size_t value_bytes = map->holds_values ? key_bytes : 0u;
-  size_t index_bytes = (size_t)slots * sizeof(int32_t);
-  unsigned char *block =
-      (unsigned char *)nts_side_alloc(key_bytes + value_bytes + index_bytes);
+  size_t index_bytes = (size_t)slots * sizeof(uint64_t);
+  size_t hash_bytes = (size_t)wanted * sizeof(uint32_t);
+  unsigned char *block = (unsigned char *)nts_side_alloc(
+      key_bytes + value_bytes + index_bytes + hash_bytes);
   if (!block) {
     fprintf(stderr, "nts: out of memory growing a map\n");
     abort();
@@ -9807,67 +9847,62 @@ static void nts_map_rehash(NtsMap *map) {
   NtsValue *keys = (NtsValue *)(void *)block;
   NtsValue *values =
       map->holds_values ? (NtsValue *)(void *)(block + key_bytes) : 0;
-  int32_t *index = (int32_t *)(void *)(block + key_bytes + value_bytes);
+  uint64_t *index = (uint64_t *)(void *)(block + key_bytes + value_bytes);
+  uint32_t *hashes =
+      (uint32_t *)(void *)(block + key_bytes + value_bytes + index_bytes);
   /* Counted, which they were not.
    *
    * `nts_note_allocation` says "objects, arrays, strings and maps all come
-   * through it", and a map's *header* did while the three blocks holding its
-   * actual contents did not -- so `tooling/memory`'s allocation column showed
-   * `1` for a table of any size, and could not have shown otherwise. The bytes
-   * were already tracked a few lines below; only the count was missing.
-   *
-   * These stay `malloc` rather than `nts_alloc` on purpose: a table reallocates
-   * as it grows, and the bump provider cannot give a block back. */
+   * through it", and a map's *header* did while the blocks holding its actual
+   * contents did not -- so `tooling/memory`'s allocation column showed `1` for
+   * a table of any size, and could not have shown otherwise. */
   nts_note_allocation();
   for (uint32_t slot = 0; slot < slots; slot++) {
     index[slot] = NTS_MAP_EMPTY;
   }
 
-  /* Every entry at the index it already had, holes included. */
+  /* Every entry at the index it already had, holes included, with its hash. */
   uint32_t out = map->used;
   for (uint32_t at = 0; at < out; at++) {
     keys[at] = map->keys[at];
     if (values) {
       values[at] = map->values[at];
     }
+    hashes[at] = map->hashes[at];
   }
 
-  nts_env->bytes_held += (size_t)wanted * sizeof(NtsValue);
-  nts_env->bytes_held += (size_t)slots * sizeof(int32_t);
-  if (map->holds_values) {
-    nts_env->bytes_held += (size_t)wanted * sizeof(NtsValue);
-  }
+  nts_env->bytes_held += nts_map_block_bytes(wanted, slots, map->holds_values);
   if (map->keys) {
-    nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
-    nts_env->bytes_held -= (size_t)map->slots * sizeof(int32_t);
-    if (map->values) {
-      nts_env->bytes_held -= (size_t)map->capacity * sizeof(NtsValue);
-    }
+    nts_env->bytes_held -=
+        nts_map_block_bytes(map->capacity, map->slots, map->holds_values);
     /* Paired with the one above, or `nts_live_count` -- which is
      * `allocated - reclaimed` -- would read every grown table as a leak. */
     nts_env->reclaimed++;
-    /* `keys` is the block: `values` and `index` point into it. */
+    /* `keys` is the block: the other columns point into it. */
     nts_side_free(map->keys, "a table");
   }
   map->keys = keys;
   map->values = values;
   map->index = index;
+  map->hashes = hashes;
   map->capacity = wanted;
   map->slots = slots;
   map->used = out;
 
-  /* The index is rebuilt from the live entries only: a hole has no key to
-   * hash, and nothing should find its way back to one. */
+  /* The index is rebuilt from the hashes the entries kept -- no key is hashed
+   * again -- and from the live entries only: a hole's hash is 0, and nothing
+   * should find its way back to one. */
   uint32_t mask = slots - 1u;
   for (uint32_t at = 0; at < out; at++) {
-    if (nts_map_is_hole(keys[at])) {
+    uint32_t hash = hashes[at];
+    if (hash == 0) {
       continue;
     }
-    uint32_t slot = nts_hash_key(keys[at], map->kind) & mask;
+    uint32_t slot = hash & mask;
     while (index[slot] != NTS_MAP_EMPTY) {
       slot = (slot + 1u) & mask;
     }
-    index[slot] = (int32_t)at;
+    index[slot] = ((uint64_t)hash << 32) | (at + 1u);
   }
   /* Every slot moved, so every entry taken before is stale. */
   map->generation++;
@@ -9903,7 +9938,7 @@ static void nts_map_rehash(NtsMap *map) {
  * 1.35x bun to 1.01x, and 0.72x `std::unordered_map` to 0.56x. */
 __attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
                                                     NtsValue key) {
-  int32_t at = nts_map_find(map, key, nts_hash_key(key, map->kind), 0);
+  int32_t at = nts_map_find(map, key, nts_map_hash(map, key), 0);
   if (at < 0 || !map->values) {
     return nts_value_of_undefined();
   }
@@ -9913,7 +9948,7 @@ __attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
 
 __attribute__((always_inline)) bool nts_map_has(const NtsMap *map,
                                                 NtsValue key) {
-  return nts_map_find(map, key, nts_hash_key(key, map->kind), 0) >= 0;
+  return nts_map_find(map, key, nts_map_hash(map, key), 0) >= 0;
 }
 
 /* `map.set(k, v)` / `set.add(v)`, returning the collection, which is what both
@@ -9957,17 +9992,19 @@ nts_map_overwrite(NtsMap *map, int32_t at, NtsValue value) {
   }
 }
 
-/* A fresh key at `slot`, the one `nts_map_find` said it would take, in a table
- * with room for one more entry. */
+/* A fresh key of `hash` at `slot`, the one `nts_map_find` said it would take,
+ * in a table with room for one more entry. */
 static inline __attribute__((always_inline)) void
-nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot) {
+nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot,
+                  uint32_t hash) {
   nts_value_retain(key);
   if (map->values) {
     nts_value_retain(value);
     map->values[map->used] = value;
   }
   map->keys[map->used] = key;
-  map->index[slot] = (int32_t)map->used;
+  map->hashes[map->used] = NTS_MAP_TAG(hash);
+  map->index[slot] = ((uint64_t)NTS_MAP_TAG(hash) << 32) | (map->used + 1u);
   map->used++;
   map->header.length++;
   map->generation++;
@@ -9976,7 +10013,7 @@ nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot) {
 __attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
                                                    NtsValue value) {
   key = nts_map_normalize(key);
-  uint32_t hash = nts_hash_key(key, map->kind);
+  uint32_t hash = nts_map_hash(map, key);
   uint32_t slot = 0;
   int32_t at = nts_map_find(map, key, hash, &slot);
   if (at >= 0) {
@@ -9987,7 +10024,7 @@ __attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
     nts_map_rehash(map);
     nts_map_find(map, key, hash, &slot);
   }
-  nts_map_insert_at(map, key, value, slot);
+  nts_map_insert_at(map, key, value, slot, hash);
   return nts_map_same(map);
 }
 
@@ -10009,7 +10046,7 @@ static inline bool nts_map_entry_current(const NtsMap *map, uint64_t entry) {
 __attribute__((always_inline)) uint64_t nts_map_entry(const NtsMap *map,
                                                       NtsValue key) {
   uint32_t slot = 0;
-  nts_map_find(map, key, nts_hash_key(key, map->kind), &slot);
+  nts_map_find(map, key, nts_map_hash(map, key), &slot);
   return nts_map_entry_of(map, slot);
 }
 
@@ -10022,10 +10059,11 @@ __attribute__((always_inline)) NtsValue nts_map_entry_get(const NtsMap *map,
   if (!nts_map_entry_current(map, entry)) {
     return nts_map_get(map, key);
   }
-  int32_t at = map->index[(uint32_t)entry];
-  if (at < 0 || !map->values) {
+  uint64_t held = map->index[(uint32_t)entry];
+  if (held == NTS_MAP_EMPTY || held == NTS_MAP_DELETED || !map->values) {
     return nts_value_of_undefined();
   }
+  uint32_t at = (uint32_t)held - 1u;
   nts_value_retain(map->values[at]);
   return map->values[at];
 }
@@ -10039,20 +10077,23 @@ nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value) {
     return nts_map_set(map, key, value);
   }
   uint32_t slot = (uint32_t)entry;
-  int32_t at = map->index[slot];
-  if (at >= 0) {
-    nts_map_overwrite(map, at, value);
+  uint64_t held = map->index[slot];
+  if (held != NTS_MAP_EMPTY && held != NTS_MAP_DELETED) {
+    nts_map_overwrite(map, (int32_t)((uint32_t)held - 1u), value);
     return nts_map_same(map);
   }
   if (map->used == map->capacity) {
     return nts_map_set(map, key, value);
   }
-  nts_map_insert_at(map, nts_map_normalize(key), value, slot);
+  /* A fresh key, so its hash is taken again: the entry has room for the slot
+   * and not for it, and the insertion is the rarer half of an update. */
+  key = nts_map_normalize(key);
+  nts_map_insert_at(map, key, value, slot, nts_map_hash(map, key));
   return nts_map_same(map);
 }
 
 bool nts_map_delete(NtsMap *map, NtsValue key) {
-  uint32_t hash = nts_hash_key(key, map->kind);
+  uint32_t hash = nts_map_hash(map, key);
   uint32_t slot = 0;
   int32_t at = nts_map_find(map, key, hash, &slot);
   if (at < 0) {
@@ -10065,6 +10106,7 @@ bool nts_map_delete(NtsMap *map, NtsValue key) {
     nts_value_release(map->values[at]);
     map->values[at] = nts_value_of_undefined();
   }
+  map->hashes[at] = 0;
   /* DELETED rather than EMPTY: a key further along the probe chain was placed
    * past this slot and would become unreachable if the chain ended here. */
   map->index[slot] = NTS_MAP_DELETED;
@@ -10084,6 +10126,7 @@ void nts_map_clear(NtsMap *map) {
      * is a reference it would follow into freed memory. */
     map->keys[at].tag = NTS_TAG_HOLE;
     map->keys[at].as.reference = 0;
+    map->hashes[at] = 0;
     if (map->values) {
       nts_value_release(map->values[at]);
       map->values[at] = nts_value_of_undefined();
@@ -10142,7 +10185,7 @@ int32_t nts_map_next(const NtsMap *map, int32_t from) {
     return -1;
   }
   for (uint32_t at = (uint32_t)from; at < map->used; at++) {
-    if (!nts_map_is_hole(map->keys[at])) {
+    if (map->hashes[at] != 0) {
       return (int32_t)at;
     }
   }

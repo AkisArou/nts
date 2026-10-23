@@ -944,7 +944,7 @@ typedef struct NtsMap {
   uint32_t used;
   uint32_t capacity;
   /* Index slots, a power of two, kept at twice `capacity` so that at least
-   * half are empty and a probe always terminates. */
+   * half are empty and a probe always terminates; 0 before the first insert. */
   uint32_t slots;
   /* Which hash and comparison: one of `NTS_KEY_*`. */
   uint32_t kind;
@@ -956,9 +956,16 @@ typedef struct NtsMap {
    * after `holds_values`, so no field after it moved; a field added here
    * changes the layout now, and `index` with it. */
   uint32_t generation;
-  int32_t *index;
+  /* `slots` 64-bit slots: an entry's hash in the high half beside its
+   * position plus one in the low half, so a probe turns away another key
+   * without loading it. 0 is empty and all ones a deleted slot. */
+  uint64_t *index;
   NtsValue *keys;
   NtsValue *values;
+  /* Each entry's hash, never 0 for a live one: growth rebuilds the index from
+   * these without hashing a key again, and a hole is a 0 here as well as a
+   * hole tag in `keys`. */
+  uint32_t *hashes;
 } NtsMap;
 
 /* How to hash and compare this map's keys, decided from the static key type.
