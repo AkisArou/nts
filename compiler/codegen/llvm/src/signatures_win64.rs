@@ -2295,6 +2295,36 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_str_append_at",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_append_char_at",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_append_char_code",
+        returns: "ptr",
+        params: &["ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_append_number",
+        returns: "ptr",
+        params: &["ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_append_slice",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double", "double"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_at",
         returns: "ptr",
         params: &["ptr", "double"],
@@ -2335,6 +2365,36 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         returns: "double",
         params: &["ptr", "double"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_str_concat_at",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_concat_char_at",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_concat_char_code",
+        returns: "ptr",
+        params: &["ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_concat_number",
+        returns: "ptr",
+        params: &["ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_concat_slice",
+        returns: "ptr",
+        params: &["ptr", "ptr", "double", "double"],
+        attributes: &[],
     },
     Signature {
         name: "nts_str_ends_with",

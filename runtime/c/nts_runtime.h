@@ -2085,6 +2085,29 @@ NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
  * arriving, or out of room: allocate, copy both, release the old one. */
 NtsString *nts_str_append(NtsString *a, const NtsString *b);
 
+/* `a + String(n)`, `a + s[at]`, `a + s.charAt(at)`,
+ * `a + String.fromCharCode(code)` and `a + s.slice(from, to)`, appended
+ * without making the string on the right. `nts_str_append_*` is
+ * **consuming** `a` and grows it as `nts_str_append` does: in place where the
+ * count says nobody else holds it and it has room, else a grown copy.
+ * `nts_str_concat_*` leaves `a` alone and answers a fresh string, as
+ * `nts_concat` does; `rc` picks it where `a` survives the append.
+ * `_at` stops out of range, as `nts_str_at` does; the others keep their
+ * method's rules. */
+NtsString *nts_str_append_number(NtsString *a, double n);
+NtsString *nts_str_concat_number(const NtsString *a, double n);
+NtsString *nts_str_append_at(NtsString *a, const NtsString *s, double at);
+NtsString *nts_str_concat_at(const NtsString *a, const NtsString *s, double at);
+NtsString *nts_str_append_char_at(NtsString *a, const NtsString *s, double at);
+NtsString *nts_str_concat_char_at(const NtsString *a, const NtsString *s,
+                                  double at);
+NtsString *nts_str_append_char_code(NtsString *a, double code);
+NtsString *nts_str_concat_char_code(const NtsString *a, double code);
+NtsString *nts_str_append_slice(NtsString *a, const NtsString *s, double from,
+                                double to);
+NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
+                                double from, double to);
+
 /* Frame storage for a string of at most `units` code units.
  *
  * `uint16_t` because a slice of a wide string is wide, and this has to hold the

@@ -640,3 +640,14 @@ fn a_region_gives_back_everything_its_call_made() {
     let poisoned = run_suite("regions", &["-DNTS_PROVIDER_RC", "-DNTS_POISON=1"]);
     assert_eq!(checks(&poisoned), 39, "{poisoned}");
 }
+
+/// The appends that write a number, a unit or a slice into the string they
+/// extend, on five receivers -- in place with room, a grown copy, shared, hashed
+/// by a lookup, a table's key -- their non-consuming twins, which write none of
+/// them, and each against its method's own rules.
+#[test]
+fn an_append_writes_in_place_only_into_a_grown_string_nobody_else_holds() {
+    let report = run_suite("string_appends", &["-DNTS_PROVIDER_RC"]);
+    assert!(report.contains("string append checks passed"), "{report}");
+    assert_eq!(checks(&report), 50, "{report}");
+}

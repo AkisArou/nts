@@ -3708,95 +3708,79 @@ static uint32_t nts_str_capacity(const NtsString *s) {
   return (s->flags & NTS_GROWN) != 0 ? nts_round_up_pow2(s->length) : s->length;
 }
 
-__attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
-                                                         const NtsString *b) {
-  uint32_t total = a->length + b->length;
-  int wide = ((a->flags | b->flags) & NTS_TWO_BYTE) != 0;
-  int already_wide = (a->flags & NTS_TWO_BYTE) != 0;
-
-  /* In place, when every one of these holds. `reserved == 1` is the whole
-   * safety argument: one reference exists and this call is consuming it, so
-   * nobody can be looking at the units being overwritten. An immortal string --
-   * a literal, or frame storage -- fails it, which is right: neither is ours to
-   * write. */
-  if (a->reserved == 1u && wide == already_wide &&
-      total <= nts_str_capacity(a)) {
-    /* One unit on the right, spelled out rather than handed to a copy.
-     *
-     * `out += c` is the shape a decoder writes, once per code point, and the
-     * right-hand side of it is a string of length one. `memcpy` of one byte is
-     * a call into the C library's vector dispatch, which reads its length,
-     * picks a strategy and moves a byte: on `benches/cases/node-utf8` that was
-     * 494,776 calls to `__memcpy_avx_unaligned_erms`, seven per cent of the
-     * whole program, to do 494,776 bytes of work.
-     *
-     * The branch is free where it does not hit -- one compare against a length
-     * already loaded -- and where it does it is a store. */
-    if (wide) {
-      uint16_t *units = NTS_ELEMENTS(a, uint16_t);
-      if (b->length == 1u) {
-        units[a->length] = nts_unit(b, 0);
-      } else {
-        nts_widen(units + a->length, b);
-      }
-      units[total] = 0;
-    } else {
-      unsigned char *bytes = NTS_ELEMENTS(a, unsigned char);
-      if (b->length == 1u) {
-        bytes[a->length] = NTS_ELEMENTS(b, unsigned char)[0];
-      } else {
-        memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
-      }
-      bytes[total] = 0;
-    }
-    a->length = total;
-    /* No hash to give up: a string with room for this append is `NTS_GROWN`,
-     * and hashing a string clears that (`NTS_HASHED`). */
-    return a;
-  }
-
-  /* Otherwise a new one, sized to the next power of two so that the *next*
-   * append has somewhere to go. That is what makes a loop of n appends cost
-   * log n allocations instead of n, and it is why the capacity can be derived
-   * from the length rather than stored beside it. */
+/* A grown copy of `a` with room for `total` units at width `wide`, holding
+ * `a`'s units and its length. `a` is left for the caller to retire once it has
+ * appended, since what it appends may be read out of `a` itself. Out of line:
+ * every append inlines `nts_str_reserve`, and this is its rare half. */
+static NTS_NOINLINE NtsString *nts_str_regrow(const NtsString *a,
+                                              uint32_t total, int wide) {
+  /* Sized to the next power of two so that the *next* append has somewhere to
+   * go. That is what makes a loop of n appends cost log n allocations instead
+   * of n, and it is why the capacity can be derived from the length rather
+   * than stored beside it. */
   NtsString *out = nts_str_raw(nts_round_up_pow2(total), wide);
   if (wide) {
-    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
-    nts_widen(units, a);
-    nts_widen(units + a->length, b);
-    units[total] = 0;
+    nts_widen(NTS_ELEMENTS(out, uint16_t), a);
   } else {
-    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
-    memcpy(bytes, NTS_ELEMENTS(a, unsigned char), a->length);
-    memcpy(bytes + a->length, NTS_ELEMENTS(b, unsigned char), b->length);
-    bytes[total] = 0;
+    memcpy(NTS_ELEMENTS(out, unsigned char), NTS_ELEMENTS(a, unsigned char),
+           a->length);
   }
-  out->length = total;
+  out->length = a->length;
   out->flags |= NTS_GROWN;
-  /* The old storage, returned rather than released. A release is the right
-   * thing when somebody else may still hold this -- `reserved != 1` -- and a
-   * counted operation the caller is charged for either way. Where the count
-   * says the string is ours alone, there is nothing to decide: no other
-   * reference exists, a string has no fields to give back, and one with no
-   * reference fields is never a collection candidate, so nothing is buffered
-   * that could be left pointing at it.
-   *
-   * `nts_free_string` and not `nts_free_block`: the first does the reclaiming
-   * bookkeeping, and `nts_live_count` is how reference counting is tested.
-   * Freeing the block alone gave the memory back and left the object counted
-   * as live, which the suite reported as five leaks -- correctly. It was
-   * `nts_destroy`, the general death path, which costs a string a walk of
-   * everything it does not hold: 13% of `json-serialize` and 15% of
-   * `json-stringify-typed`, whose accumulators outgrow their blocks.
-   *
-   * This is what keeps growth off the bill. Six reallocations building a string
-   * were six releases, and the operation they were counted against is one the
-   * program never asked for. */
+  return out;
+}
+
+/* `a`, which the caller hands over, with room for `extra` more code units, two
+ * bytes wide if `wide` or if `a` already is: `a` itself where the append may
+ * write into it, or a grown copy (`nts_str_regrow`). The caller writes the
+ * units, the terminator and the length, and then, if it was handed a copy,
+ * gives `a` back (`nts_str_retire`).
+ *
+ * One growth policy for every append -- `nts_str_append`, and the helpers that
+ * append a number, a unit or a slice without making a string of it first.
+ *
+ * In place when every one of these holds. `reserved == 1` is the whole safety
+ * argument: one reference exists and this call is consuming it, so nobody can
+ * be looking at the units being overwritten. An immortal string -- a literal,
+ * or frame storage -- fails it, which is right: neither is ours to write. And
+ * the room is there only in an `NTS_GROWN` string, which is never hashed
+ * (`NTS_HASHED`), so no kept hash can go stale. */
+static inline NtsString *nts_str_reserve(NtsString *a, uint32_t extra,
+                                         int wide) {
+  const int already_wide = (a->flags & NTS_TWO_BYTE) != 0;
+  wide = wide || already_wide;
+  const uint32_t total = a->length + extra;
+  if (a->reserved == 1u && wide == already_wide &&
+      total <= nts_str_capacity(a)) {
+    return a;
+  }
+  return nts_str_regrow(a, total, wide);
+}
+
+/* Give back the string a grown copy replaced.
+ *
+ * Returned rather than released where the count says it is ours alone: no
+ * other reference exists, a string has no fields to give back, and one with no
+ * reference fields is never a collection candidate, so nothing is buffered that
+ * could be left pointing at it.
+ *
+ * `nts_free_string` and not `nts_free_block`: the first does the reclaiming
+ * bookkeeping, and `nts_live_count` is how reference counting is tested.
+ * Freeing the block alone gave the memory back and left the object counted as
+ * live, which the suite reported as five leaks -- correctly. It was
+ * `nts_destroy`, the general death path, which costs a string a walk of
+ * everything it does not hold: 13% of `json-serialize` and 15% of
+ * `json-stringify-typed`, whose accumulators outgrow their blocks.
+ *
+ * This is what keeps growth off the bill. Six reallocations building a string
+ * were six releases, and the operation they were counted against is one the
+ * program never asked for. */
+static inline void nts_str_retire(NtsString *a) {
   if (a->reserved == 1u) {
     nts_free_string((NtsHeader *)a);
   } else if (a->reserved != NTS_IMMORTAL) {
-    /* Out of line: this function is inlined into every append, and a string
-     * both shared and outgrown is the rare case. `nts_release` inlines its fast
+    /* Out of line: this is inlined into every append, and a string both
+     * shared and outgrown is the rare case. `nts_release` inlines its fast
      * path, and copied into an append loop it took a register the loop kept
      * its index in (`str-append-loop`, +23%). */
     nts_release_counted((NtsHeader *)a);
@@ -3805,6 +3789,46 @@ __attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
    * back -- retain and release both return on their first line -- so releasing
    * one is a call that decides nothing, and `let out = ""` in front of a loop
    * put exactly one of those on every string built in this program. */
+}
+
+__attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
+                                                         const NtsString *b) {
+  const uint32_t at = a->length;
+  const uint32_t total = at + b->length;
+  NtsString *out =
+      nts_str_reserve(a, b->length, (b->flags & NTS_TWO_BYTE) != 0);
+  /* One unit on the right, spelled out rather than handed to a copy.
+   *
+   * `out += c` is the shape a decoder writes, once per code point, and the
+   * right-hand side of it is a string of length one. `memcpy` of one byte is a
+   * call into the C library's vector dispatch, which reads its length, picks a
+   * strategy and moves a byte: on `benches/cases/node-utf8` that was 494,776
+   * calls to `__memcpy_avx_unaligned_erms`, seven per cent of the whole
+   * program, to do 494,776 bytes of work.
+   *
+   * The branch is free where it does not hit -- one compare against a length
+   * already loaded -- and where it does it is a store. */
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
+    if (b->length == 1u) {
+      units[at] = nts_unit(b, 0);
+    } else {
+      nts_widen(units + at, b);
+    }
+    units[total] = 0;
+  } else {
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
+    if (b->length == 1u) {
+      bytes[at] = NTS_ELEMENTS(b, unsigned char)[0];
+    } else {
+      memcpy(bytes + at, NTS_ELEMENTS(b, unsigned char), b->length);
+    }
+    bytes[total] = 0;
+  }
+  out->length = total;
+  if (out != a) {
+    nts_str_retire(a);
+  }
   return out;
 }
 
@@ -4247,6 +4271,248 @@ NtsString *nts_str_substring_general(NtsHeader *into, const NtsString *s,
 
 NtsString *nts_str_substring(const NtsString *s, double from, double to) {
   return nts_str_substring_general(NULL, s, from, to);
+}
+
+/* # Appending without making the string appended
+ *
+ * `out += String(n)`, `out += s[i]`, `out += s.charAt(i)`,
+ * `out += String.fromCharCode(c)` and `out += s.slice(a, b)` each made a
+ * string to append -- a number's text, a one-unit string, a slice -- copied it
+ * onto `out` and gave it back. These write it into `out` directly
+ * (`hir::destinations` sends the calls here).
+ *
+ * Two entry points for each, as `+` has two. `nts_str_append_*` consumes `a`,
+ * as `nts_str_append` does, and grows it by the same policy
+ * (`nts_str_reserve`): in place only where the count is one. `nts_str_concat_*`
+ * leaves `a` as it was and answers a fresh grown string, as `nts_concat` does:
+ * `rc` chooses it where `a` is read again or is not this function's to give,
+ * which is the split it makes between `nts_str_append` and `nts_concat`, so no
+ * call ever asks which it is. Each reads what it appends before reserving,
+ * since that may be `a` itself. */
+
+static uint32_t nts_number_format(char *out, double x);
+static uint32_t nts_digits10(uint32_t n);
+static int nts_u32toa(char *buf, uint32_t n);
+
+/* Where an append writes: `a` or its grown copy when `a` is handed over, else
+ * always a fresh grown copy. `consume` is a constant at every call. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_room(NtsString *a, uint32_t extra, int wide, int consume) {
+  if (consume) {
+    return nts_str_reserve(a, extra, wide);
+  }
+  return nts_str_regrow(a, a->length + extra,
+                        wide || (a->flags & NTS_TWO_BYTE) != 0);
+}
+
+/* After writing: give back the string a copy replaced, when it was handed
+ * over. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_written(NtsString *out, NtsString *a, int consume) {
+  if (consume && out != a) {
+    nts_str_retire(a);
+  }
+  return out;
+}
+
+/* Nothing to append: `a` itself when handed over, else a fresh copy, since
+ * the non-consuming entry answers a string of its own. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_unchanged(NtsString *a, int consume) {
+  if (consume) {
+    return a;
+  }
+  return nts_str_regrow(a, a->length, (a->flags & NTS_TWO_BYTE) != 0);
+}
+
+/* One code unit onto `a`. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_unit(NtsString *a, uint16_t unit, int consume) {
+  const uint32_t at = a->length;
+  NtsString *out = nts_str_room(a, 1u, unit > 0xFFu, consume);
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
+    units[at] = unit;
+    units[at + 1u] = 0;
+  } else {
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
+    bytes[at] = (unsigned char)unit;
+    bytes[at + 1u] = 0;
+  }
+  out->length = at + 1u;
+  return nts_str_written(out, a, consume);
+}
+
+/* `a + String(n)`: the number's text, as `nts_number_to_string` writes it,
+ * straight into the string.
+ *
+ * A whole number in the `i32` range takes `nts_number_to_string_into`'s fast
+ * path: its digits counted first (`nts_digits10`), so exactly that much room is
+ * reserved and they are written where they go, with no scratch buffer. Every
+ * count and identifier a template writes is one; through the general
+ * formatter and a copy, `str-template` was 3-6% slower than the string it
+ * replaced. Anything else is `nts_number_format` and one copy. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_number(NtsString *a, double n, int consume) {
+  char text[NTS_NUMBER_STRING_MAX];
+  const int32_t whole =
+      n >= -2147483648.0 && n <= 2147483647.0 ? (int32_t)n : 0;
+  const int integral = (double)whole == n;
+  const uint32_t magnitude =
+      whole < 0 ? (uint32_t)(-(int64_t)whole) : (uint32_t)whole;
+  const uint32_t sign = whole < 0 ? 1u : 0u;
+  const uint32_t length =
+      integral ? nts_digits10(magnitude) + sign : nts_number_format(text, n);
+  const uint32_t at = a->length;
+  NtsString *out = nts_str_room(a, length, 0, consume);
+  if ((out->flags & NTS_TWO_BYTE) == 0) {
+    char *data = (char *)NTS_ELEMENTS(out, unsigned char) + at;
+    if (integral) {
+      if (sign != 0u) {
+        data[0] = '-';
+      }
+      nts_u32toa(data + sign, magnitude);
+    } else {
+      memcpy(data, text, length);
+    }
+    data[length] = 0;
+  } else {
+    if (integral) {
+      if (sign != 0u) {
+        text[0] = '-';
+      }
+      nts_u32toa(text + sign, magnitude);
+    }
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t) + at;
+    for (uint32_t i = 0; i < length; i++) {
+      units[i] = (unsigned char)text[i];
+    }
+    units[length] = 0;
+  }
+  out->length = at + length;
+  return nts_str_written(out, a, consume);
+}
+
+/* `a + s[i]`, with `s[i]`'s rule for an index that is not there: it stops the
+ * program, as `nts_str_at` does, and `s[1.7]` and `s[NaN]` are not indices. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_at(NtsString *a, const NtsString *s, double at, int consume) {
+  if (!(at >= 0.0 && at < (double)s->length) || at != nts_to_integer(at)) {
+    nts_bounds(at, s->length);
+  }
+  return nts_str_add_unit(a, nts_unit(s, (uint32_t)at), consume);
+}
+
+/* `a + s.charAt(i)`: the index converted as `charAt` converts it, and nothing
+ * appended for one outside the string, which `charAt` answers with `""`. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_char_at(NtsString *a, const NtsString *s, double at, int consume) {
+  at = nts_to_integer(at);
+  if (at < 0 || at >= (double)s->length) {
+    return nts_str_unchanged(a, consume);
+  }
+  return nts_str_add_unit(a, nts_unit(s, (uint32_t)at), consume);
+}
+
+/* `a + s.slice(from, to)`, with `slice`'s bounds: negative counts from the
+ * end, and an empty range appends nothing. A slice of a wide string that
+ * holds no wide unit keeps a narrow `a` narrow, as `nts_str_slice` would have
+ * made the slice itself narrow. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_slice(NtsString *a, const NtsString *s, double from, double to,
+                  int consume) {
+  const uint32_t start = nts_str_clamp(from, s->length, 1);
+  const uint32_t end = nts_str_clamp(to, s->length, 1);
+  if (end <= start) {
+    return nts_str_unchanged(a, consume);
+  }
+  const uint32_t length = end - start;
+  const int from_wide = (s->flags & NTS_TWO_BYTE) != 0;
+  int wide = 0;
+  if (from_wide && (a->flags & NTS_TWO_BYTE) == 0) {
+    const uint16_t *units = NTS_ELEMENTS(s, const uint16_t) + start;
+    for (uint32_t i = 0; i < length && !wide; i++) {
+      wide = units[i] > 0xFFu;
+    }
+  }
+  const uint32_t at = a->length;
+  NtsString *out = nts_str_room(a, length, wide, consume);
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    uint16_t *into = NTS_ELEMENTS(out, uint16_t) + at;
+    if (from_wide) {
+      memcpy(into, NTS_ELEMENTS(s, const uint16_t) + start,
+             (size_t)length * sizeof(uint16_t));
+    } else {
+      const unsigned char *bytes = NTS_ELEMENTS(s, const unsigned char) + start;
+      for (uint32_t i = 0; i < length; i++) {
+        into[i] = bytes[i];
+      }
+    }
+    into[length] = 0;
+  } else {
+    unsigned char *into = NTS_ELEMENTS(out, unsigned char) + at;
+    if (from_wide) {
+      const uint16_t *units = NTS_ELEMENTS(s, const uint16_t) + start;
+      for (uint32_t i = 0; i < length; i++) {
+        into[i] = (unsigned char)units[i];
+      }
+    } else {
+      memcpy(into, NTS_ELEMENTS(s, const unsigned char) + start, length);
+    }
+    into[length] = 0;
+  }
+  out->length = at + length;
+  return nts_str_written(out, a, consume);
+}
+
+/* Inlined, as `nts_number_to_string_into` is: a caller that knows its number
+ * is whole folds the range test away and keeps the digit loop. */
+__attribute__((always_inline)) NtsString *nts_str_append_number(NtsString *a,
+                                                                double n) {
+  return nts_str_add_number(a, n, 1);
+}
+
+__attribute__((always_inline)) NtsString *
+nts_str_concat_number(const NtsString *a, double n) {
+  return nts_str_add_number((NtsString *)a, n, 0);
+}
+
+NtsString *nts_str_append_at(NtsString *a, const NtsString *s, double at) {
+  return nts_str_add_at(a, s, at, 1);
+}
+
+NtsString *nts_str_concat_at(const NtsString *a, const NtsString *s,
+                             double at) {
+  return nts_str_add_at((NtsString *)a, s, at, 0);
+}
+
+NtsString *nts_str_append_char_at(NtsString *a, const NtsString *s, double at) {
+  return nts_str_add_char_at(a, s, at, 1);
+}
+
+NtsString *nts_str_concat_char_at(const NtsString *a, const NtsString *s,
+                                  double at) {
+  return nts_str_add_char_at((NtsString *)a, s, at, 0);
+}
+
+/* `a + String.fromCharCode(c)`, one argument: its code unit, by the same
+ * conversion as `nts_string_from_char_code`. */
+NtsString *nts_str_append_char_code(NtsString *a, double code) {
+  return nts_str_add_unit(a, nts_to_uint16(code), 1);
+}
+
+NtsString *nts_str_concat_char_code(const NtsString *a, double code) {
+  return nts_str_add_unit((NtsString *)a, nts_to_uint16(code), 0);
+}
+
+NtsString *nts_str_append_slice(NtsString *a, const NtsString *s, double from,
+                                double to) {
+  return nts_str_add_slice(a, s, from, to, 1);
+}
+
+NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
+                                double from, double to) {
+  return nts_str_add_slice((NtsString *)a, s, from, to, 0);
 }
 
 /* The elements of an array of numbers. */

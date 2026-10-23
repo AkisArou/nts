@@ -1164,6 +1164,36 @@ static SIGNATURES: &[Declared] = &[
     ),
     ("nts_str_append", &[None, None], None),
     (
+        "nts_str_append_at",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_append_char_at",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_append_char_code",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_append_number",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_append_slice",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
+    ),
+    (
         "nts_str_at",
         &[None, Some(HirType::Float { bits: 64 })],
         None,
@@ -1219,6 +1249,36 @@ static SIGNATURES: &[Declared] = &[
         "nts_str_code_point_at",
         &[None, Some(HirType::Float { bits: 64 })],
         Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_str_concat_at",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_concat_char_at",
+        &[None, None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_concat_char_code",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_concat_number",
+        &[None, Some(HirType::Float { bits: 64 })],
+        None,
+    ),
+    (
+        "nts_str_concat_slice",
+        &[
+            None,
+            None,
+            Some(HirType::Float { bits: 64 }),
+            Some(HirType::Float { bits: 64 }),
+        ],
+        None,
     ),
     ("nts_str_ends_with", &[None, None], Some(HirType::Bool)),
     ("nts_str_includes", &[None, None], Some(HirType::Bool)),
@@ -1943,6 +2003,11 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // `nts_map_next` / `nts_map_key_at` walk they replace never made the
         // table escape.
         "nts_concat"
+        | "nts_str_concat_at"
+        | "nts_str_concat_char_at"
+        | "nts_str_concat_char_code"
+        | "nts_str_concat_number"
+        | "nts_str_concat_slice"
         | "nts_string_eq"
         | "nts_str_index_of"
         | "nts_str_last_index_of"
@@ -1952,8 +2017,14 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         | "nts_map_keys_into"
         | "nts_map_values_into" => Some(&[]),
         // The left is consumed and the result may *be* it, so it is kept; the
-        // right is only read.
-        "nts_str_append" => Some(&[0]),
+        // right is only read. The same for the appends that write a number, a
+        // unit or a slice without making a string of it.
+        "nts_str_append"
+        | "nts_str_append_at"
+        | "nts_str_append_char_at"
+        | "nts_str_append_char_code"
+        | "nts_str_append_number"
+        | "nts_str_append_slice" => Some(&[0]),
         // The presence helpers touch one word of the header and keep nothing.
         //
         // Saying so is what lets the object stay on the stack. Without it,

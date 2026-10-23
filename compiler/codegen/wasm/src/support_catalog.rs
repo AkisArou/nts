@@ -891,6 +891,26 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("string helper not yet implemented"),
     ),
     ("nts_str_append", Support::Intrinsic),
+    (
+        "nts_str_append_at",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_append_char_at",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_append_char_code",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_append_number",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_append_slice",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
     ("nts_str_at", Support::Intrinsic),
     (
         "nts_str_at_into",
@@ -906,6 +926,26 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_str_char_code_at_int", Support::WasmHelper),
     ("nts_str_char_code_at_int_fn", Support::WasmHelper),
     ("nts_str_code_point_at", Support::HostImport),
+    (
+        "nts_str_concat_at",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_concat_char_at",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_concat_char_code",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_concat_number",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_concat_slice",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
     ("nts_str_ends_with", Support::WasmHelper),
     ("nts_str_includes", Support::HostImport),
     ("nts_str_index_of", Support::HostImport),

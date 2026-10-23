@@ -2481,6 +2481,12 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 /// held it -- invisible to valgrind for a managed object, whose freed memory
 /// the runtime pools, and a `g_object_unref` of a freed `GObject` for a handle.
 ///
+/// **The appends that write a number, a unit or a slice** (`nts_str_append_number`
+/// and its siblings) take their left side as `nts_str_append` does: in place
+/// where the count is one, else a grown copy with the old one given back. They
+/// are made before counting (`hir::destinations`), so the move is decided
+/// here, where `nts_str_append`'s is decided in `rc`'s concatenation arm.
+///
 /// **`nts_raise` too**, its one argument. The raise slot takes the caller's
 /// reference, uncounted, and `nts_raise_take` hands that same reference to the
 /// handler as its own. Missing from here, the raising copy of a method released
@@ -2492,7 +2498,12 @@ fn initializing_only(program: &Program, layouts: &[Layout]) -> rustc_hash::FxHas
 pub(super) fn consumes(name: &str) -> Option<usize> {
     match name {
         "nts_array_push_ref" | "nts_array_unshift_ref" | "nts_array_push_value" => Some(1),
-        "nts_raise" => Some(0),
+        "nts_raise"
+        | "nts_str_append_at"
+        | "nts_str_append_char_at"
+        | "nts_str_append_char_code"
+        | "nts_str_append_number"
+        | "nts_str_append_slice" => Some(0),
         _ => None,
     }
 }
@@ -4450,6 +4461,18 @@ mod tests {
         (
             "nts_str_append",
             "takes its left side's reference (a move) and hands that back",
+        ),
+        (
+            "nts_str_append_char_at",
+            "takes its left side's reference (a move) and hands that back, unchanged out of range",
+        ),
+        (
+            "nts_str_append_slice",
+            "takes its left side's reference (a move) and hands that back, unchanged for an empty slice",
+        ),
+        (
+            "nts_str_reserve",
+            "the growth step every append shares: takes the string's reference and hands it, or its grown copy, back",
         ),
         (
             "nts_array_same",

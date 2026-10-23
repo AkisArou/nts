@@ -421,4 +421,11 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// program keeps the plain `get` and `set`, and this lane's string-key doors
 /// with them. The day this lane's tables answer an entry, it opts in there and
 /// maps these three.
-const REFUSED_FLOOR: usize = 128;
+///
+/// 133 for `nts_str_append_number`, `_at`, `_char_at`, `_char_code` and
+/// `_slice`, the appends that write a number, a unit or a slice into the
+/// string they extend (`hir::destinations`). Preparation makes them only under
+/// reference counting, which a host-GC program never has; this lane builds the
+/// same strings in its `StringBuilder`s. 138 with their non-consuming twins
+/// (`nts_str_concat_*`), which `rc` picks where the left side survives.
+const REFUSED_FLOOR: usize = 138;
