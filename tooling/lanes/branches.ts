@@ -1,6 +1,7 @@
 // Read-only inventory; proposals here never execute cleanup.
 // node tooling/lanes/branches.ts [--repo PATH] [--out PATH]
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -22,6 +23,7 @@ type Worktree = {
   locked: string | null; active: string[]; protected: boolean; protection: string | null; missing: boolean; lane: string; dirty: boolean | null;
   tracked: { status: string; path: string; from?: string }[]; untracked: string[];
   inputs: { status: string; path: string; reason: string; link?: string; target?: string }[];
+  missingInputs: { status: string; path: string }[];
   buildOutputs: { status: string; path: string }[];
   snapshotFiles: { tracked: Worktree["tracked"]; untracked: string[] };
   rootModifiedAt: string | null; lastModifiedAt: string | null;
@@ -123,7 +125,7 @@ export function parseWorktrees(raw: string): Worktree[] {
     if (field.startsWith("worktree ")) {
       w = { path: field.slice(9), sha: "", branch: null, detached: false, prunable: null, locked: null,
         active: [], protected: false, protection: null, missing: false, lane: "unknown", dirty: null, tracked: [], untracked: [],
-        inputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null,
+        inputs: [], missingInputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null,
         target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, sharedWith: [] }, errors: [], notes: [],
         proposal: { action: "NEEDS A PERSON", reason: "Not inspected" } };
       trees.push(w);
@@ -153,7 +155,7 @@ export function parseStatus(raw: string): { tracked: Worktree["tracked"]; untrac
 }
 function canonical(path: string): string { try { return realpathSync(path); } catch { return resolve(path); } }
 function live(pid: number): boolean { try { process.kill(pid, 0); return true; } catch { return false; } }
-function defaultActive(home: string): Map<string, string[]> {
+function defaultActive(home: string, trees: Worktree[]): Map<string, string[]> {
   const active = new Map<string, string[]>();
   const add = (path: string, why: string) => { const p = canonical(path); active.set(p, [...(active.get(p) ?? []), why]); };
   for (const lane of ["compiler", "compiler-helper", "tsrs-native", "tsrs", "tsrs-frontend71", "tsrs-query"])
@@ -171,6 +173,18 @@ function defaultActive(home: string): Map<string, string[]> {
     const pid = /\bpid\s+(\d+)/.exec(marker)?.[1];
     if (pid && live(Number(pid))) add(join(ctl, "gate-tree"), `Live landing marker PID ${pid}`);
   } catch { /* No marker means no detected landing. */ }
+  // A landing's queue entry disappears when the train takes it, but its
+  // caller may still be alive in the source tree. Keep all trees with live
+  // processes inside them, including these landing sources and probe trees.
+  try {
+    for (const pid of readdirSync("/proc").filter(p => /^\d+$/.test(p))) {
+      try {
+        const cwd = canonical(readlinkSync(`/proc/${pid}/cwd`));
+        const tree = trees.filter(w => within(canonical(w.path), cwd)).sort((a, b) => b.path.length - a.path.length)[0];
+        if (tree) add(tree.path, `Live PID ${pid} (${readFileSync(`/proc/${pid}/comm`, "utf8").trim()}) working inside tree`);
+      } catch { /* Processes can exit, or belong to another user. */ }
+    }
+  } catch { /* /proc is unavailable off Linux; explicit list/queue still apply. */ }
   return active;
 }
 
@@ -201,7 +215,10 @@ export function inputFor(tree: string, path: string): { reason: string; link?: s
   return null;
 }
 export function buildOutput(path: string): boolean {
-  return /\.(o|obj)$/.test(path) || /(^|\/)out(\/|$)/.test(path) || path.startsWith("results/benchmarks/");
+  return /\.(o|obj)$/.test(path) || /(^|\/)out(\/|$)/.test(path) || path === "target" || path.startsWith("target/") || path.startsWith("results/benchmarks/");
+}
+export function missingInput(status: string, path: string): boolean {
+  return path.startsWith("third_party/") && (status === " D" || status === "D ");
 }
 function pathLane(path: string): string {
   for (const part of resolve(path).split(sep).reverse()) {
@@ -248,6 +265,7 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
     }
     const parsed = parseStatus(raw);
     for (const entry of parsed.tracked) {
+      if (missingInput(entry.status, entry.path)) { w.missingInputs.push({ status: entry.status, path: entry.path }); continue; }
       const input = inputFor(w.path, entry.path);
       if (input && (!entry.from || inputFor(w.path, entry.from))) w.inputs.push({ status: entry.status, path: entry.path, ...input });
       else w.tracked.push(entry);
@@ -328,7 +346,7 @@ export async function inventory(options: Options) {
   const laneFile = join(repo, "tooling/lanes/lanes.json");
   const lanes = JSON.parse(readFileSync(laneFile, "utf8")).lanes as Record<string, { branch: string }>;
   const trees = parseWorktrees(git(repo, ["worktree", "list", "--porcelain", "-z"]));
-  const active = options.activeTrees ? new Map(options.activeTrees.map(p => [canonical(p), ["Explicit active tree"]])) : defaultActive(home);
+  const active = options.activeTrees ? new Map(options.activeTrees.map(p => [canonical(p), ["Explicit active tree"]])) : defaultActive(home, trees);
   const sizeCache = new Map<string, number>();
   for (const w of trees) {
     w.lane = w.branch ? owner(w.branch, lanes).lane : pathLane(w.path);
@@ -426,8 +444,11 @@ export async function inventory(options: Options) {
     const existing = archives.find(a => a.ref === ref);
     if ((candidates.length > 1 && (candidates.some(w => w.dirty) || new Set(candidates.map(w => w.sha)).size > 1)) || (existing && (candidates[0].dirty || existing.sha !== candidates[0].sha))) {
       for (const w of candidates) {
-        w.notes.push(`Requested archive destination ${ref}; choose a distinct ref before cleanup.`);
-        w.proposal = { action: "NEEDS A PERSON", reason: `Archive destination collision: ${ref}` };
+        const unique = `${ref}-${createHash("sha256").update(resolve(w.path)).digest("hex").slice(0, 12)}`;
+        w.notes.push(`Disambiguated colliding archive basename: ${ref} -> ${unique}.`);
+        if (archives.some(a => a.ref === unique) || trees.some(x => x !== w && x.proposal.archiveRef === unique))
+          w.proposal = { action: "NEEDS A PERSON", reason: `Disambiguated archive destination also exists: ${unique}` };
+        else w.proposal.archiveRef = unique;
       }
     }
   }
@@ -479,13 +500,14 @@ export async function inventory(options: Options) {
       targetDefinition: "du -s -B1 allocated bytes; target symlink resolved, nested symlinks not followed; shared real paths counted once in total.",
       landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only matches are archived before proposed branch deletion (MainClaude, Orcode 5f16afb4-4064-4d43-bf56-573216406c5e).",
       diffstatDefinition: "Unmatched commits: unique file paths across the series; summed added/deleted lines; binary-file changes counted separately. Merges diff against the first parent; renames count as delete/add.",
-      inputDefinition: "Status paths under external symlinks, and the patched third_party/typescript-go gitlink, are INPUTS and do not count as work. Expected linked-submodule errors use the read-only pathspec fallback.",
-      snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, excluding inputs, *.o, *.obj, out/ and results/benchmarks/*; preserve HEAD as the parent. Snapshot refs must not overwrite existing archives.",
+      inputDefinition: "Status paths under external symlinks, and the patched third_party/typescript-go gitlink, are INPUTS and do not count as work. Pure deletions under third_party/ are MISSING INPUTS, retained in HEAD (MainClaude, Orcode 5183622e-e243-43e9-ad34-c16ababacade). Other deletions and nonlinked additions/modifications remain work. Expected linked-submodule errors use the read-only pathspec fallback.",
+      snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, excluding linked/missing inputs, *.o, *.obj, target/, out/ and results/benchmarks/*; preserve HEAD as the parent. Colliding snapshot basenames get a stable path-hash suffix, approved in Orcode 5183622e; no existing archive is overwritten.",
       targetFreedDefinition: "Estimated exclusive target allocation freed if all proposals are approved: real paths counted once, only inside retiring trees, and only when no retained worktree references the target. External/shared targets are excluded.",
       checkedOutRule: "Lane homes and active trees are kept. Branches checked out only by retiring/pruned trees inherit retirement: landed branches delete, unlanded branches archive then delete. Old unchecked-out compiler branches archive by the compiler owner's decision; tsrs policy is unchanged." },
     totals: { branches: branches.length, landed: count(branches.map(b => b.stateOfLanding)), branchActions: count(branches.map(b => b.proposal.action)),
       worktrees: trees.length, dirtyWorktrees: trees.filter(w => w.dirty).length, inaccessibleOrIncompleteWorktrees: trees.filter(w => !w.missing && (w.errors.length || w.dirty === null)).length,
       missingWorktrees: trees.filter(w => w.missing).length, worktreesWithInputs: trees.filter(w => w.inputs.length).length,
+      worktreesWithMissingInputs: trees.filter(w => w.missingInputs.length).length,
       worktreeActions: count(trees.map(w => w.proposal.action)), archiveRefs: archives.length, archivesByLane: archiveCounts,
       uniqueTargetBytes: [...sizeCache.values()].reduce((a, b) => a + b, 0), uniqueTargetPaths: sizeCache.size,
       unknownTargetSizes: trees.filter(w => w.target.bytes === null).length,
@@ -516,14 +538,14 @@ export function markdown(report: Awaited<ReturnType<typeof inventory>>): string 
     report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.diffstatDefinition, report.policy.inputDefinition, report.policy.snapshotDefinition, report.policy.checkedOutRule, "",
     ...(report.warnings.length ? ["## Snapshot warnings", "", ...report.warnings.map(w => `- ${w}`), ""] : []),
     "## Branches", "", table(["Branch", "Lane / state", "Tip / commit date", "Checkout (retiring marked)", "Landed state", "Unmatched diffstat", "Proposed action", "Reason / archive ref"], report.branches.map(b => [b.name, `${b.lane} / ${b.state}`, `${b.sha.slice(0, 12)} / ${b.date}`, b.checkedOut.map(p => p + (b.retiringCheckouts.includes(p) ? " (retiring)" : "")).join("; ") || "none", b.stateOfLanding, diffstat(b.unmatchedDiffstat), b.proposal.action, [b.proposal.reason, b.proposal.archiveRef].filter(Boolean).join("; ")])), "",
-    "## Worktrees", "", table(["Path", "Branch / detached HEAD", "Prunable / locked", "Last modified", "Status / inputs", "target size", "Proposed action / reason / archive"], report.worktrees.map(w => [w.path, w.branch ?? `detached ${w.sha.slice(0, 12)}`, [w.prunable && `prunable: ${w.prunable}`, w.locked && `locked: ${w.locked}`].filter(Boolean).join("; ") || "no", w.lastModifiedAt, `${w.missing ? "MISSING" : w.dirty === null ? "UNKNOWN" : w.dirty ? "DIRTY" : w.buildOutputs.length ? "build outputs only" : "clean"}; ${w.inputs.length} INPUTS`, `${gib(w.target.bytes)}${w.target.sharedWith.length ? " (shared)" : ""}`, `${w.proposal.action}: ${w.proposal.reason}${w.proposal.archiveRef ? `; ${w.proposal.archiveRef}` : ""}`])), "",
+    "## Worktrees", "", table(["Path", "Branch / detached HEAD", "Prunable / locked", "Last modified", "Status / inputs / missing inputs", "target size", "Proposed action / reason / archive"], report.worktrees.map(w => [w.path, w.branch ?? `detached ${w.sha.slice(0, 12)}`, [w.prunable && `prunable: ${w.prunable}`, w.locked && `locked: ${w.locked}`].filter(Boolean).join("; ") || "no", w.lastModifiedAt, `${w.missing ? "MISSING" : w.dirty === null ? "UNKNOWN" : w.dirty ? "DIRTY" : w.buildOutputs.length ? "build outputs only" : "clean"}; ${w.inputs.length} INPUTS; ${w.missingInputs.length} MISSING INPUTS`, `${gib(w.target.bytes)}${w.target.sharedWith.length ? " (shared)" : ""}`, `${w.proposal.action}: ${w.proposal.reason}${w.proposal.archiveRef ? `; ${w.proposal.archiveRef}` : ""}`])), "",
     "## Archive refs by lane", "", table(["Lane", "Count"], Object.entries(report.totals.archivesByLane)), "",
     "Unknown archive ownership includes legacy flat names with no lanes.json prefix match. Every archive ref is retained; exact names and tips are in JSON.", "",
     "## Unmatched branch commits", ""];
   for (const b of report.branches.filter(b => b.unmatched.length || b.errors.length)) lines.push(`### ${cell(b.name)} (${b.stateOfLanding})`, "", ...b.errors.map(e => cell(e)), table(["SHA", "Commit date", "Subject", "Diffstat"], b.unmatched.map(c => [c.sha, c.date, c.subject, diffstat(c.diffstat)])), "");
   lines.push("## Worktree changes and inspection errors", "");
-  for (const w of report.worktrees.filter(w => w.tracked.length || w.untracked.length || w.inputs.length || w.errors.length || w.notes.length)) {
-    lines.push(`### ${cell(w.path)}`, "", "Tracked changes:", "", w.tracked.length ? table(["Status", "Path", "From", "Snapshot?"], w.tracked.map(c => [c.status, c.path, c.from, buildOutput(c.path) ? "excluded build output" : "yes"])) : "None recorded.", "", "Untracked non-ignored files:", "", w.untracked.length ? table(["Path", "Snapshot?"], w.untracked.map(p => [p, buildOutput(p) ? "excluded build output" : "yes"])) : "None recorded.", "", "Linked/patched inputs (not work):", "", w.inputs.length ? table(["Status", "Path", "Reason", "Symlink", "Target"], w.inputs.map(i => [i.status, i.path, i.reason, i.link, i.target])) : "None.", "", ...w.notes.map(n => `Note: ${cell(n)}`), ...w.errors.map(e => `Inspection error: ${cell(e)}`), "");
+  for (const w of report.worktrees.filter(w => w.tracked.length || w.untracked.length || w.inputs.length || w.missingInputs.length || w.errors.length || w.notes.length)) {
+    lines.push(`### ${cell(w.path)}`, "", "Tracked changes:", "", w.tracked.length ? table(["Status", "Path", "From", "Snapshot?"], w.tracked.map(c => [c.status, c.path, c.from, buildOutput(c.path) ? "excluded build output" : "yes"])) : "None recorded.", "", "Untracked non-ignored files:", "", w.untracked.length ? table(["Path", "Snapshot?"], w.untracked.map(p => [p, buildOutput(p) ? "excluded build output" : "yes"])) : "None recorded.", "", "Linked/patched inputs (not work):", "", w.inputs.length ? table(["Status", "Path", "Reason", "Symlink", "Target"], w.inputs.map(i => [i.status, i.path, i.reason, i.link, i.target])) : "None.", "", "Missing inputs (pure third_party/ deletions; content retained in HEAD):", "", w.missingInputs.length ? table(["Status", "Path"], w.missingInputs.map(i => [i.status, i.path])) : "None.", "", ...w.notes.map(n => `Note: ${cell(n)}`), ...w.errors.map(e => `Inspection error: ${cell(e)}`), "");
   }
   return lines.join("\n") + "\n";
 }

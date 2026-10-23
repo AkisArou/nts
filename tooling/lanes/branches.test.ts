@@ -1,16 +1,17 @@
 // node --test tooling/lanes/branches.test.ts
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildOutput, inputFor, inventory, markdown, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
+import { buildOutput, inputFor, inventory, markdown, missingInput, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
 
 test("inventory classifies replays and subjects, protects work, and leaves Git untouched", async () => {
   const parent = join(homedir(), ".cache/nts-scratch/branch-inventory");
   mkdirSync(parent, { recursive: true });
   const scratch = mkdtempSync(join(parent, "test-")), repo = join(scratch, "repo");
+  let activeChild: ReturnType<typeof spawn> | undefined;
   mkdirSync(repo);
   const env = { ...process.env, GIT_AUTHOR_NAME: "inventory-test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "inventory-test", GIT_COMMITTER_EMAIL: "test@example.invalid", GIT_AUTHOR_DATE: "2026-10-10T12:00:00Z", GIT_COMMITTER_DATE: "2026-10-10T12:00:00Z" };
   const git = (args: string[], cwd = repo) => {
@@ -29,6 +30,10 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     writeFileSync(join(repo, "tooling/lanes/lanes.json"), JSON.stringify({ lanes: { compiler: { branch: "compiler/" }, wasm: { branch: "wasm/" }, jvm: { branch: "jvm/" }, tsrs: { branch: "tsrs/" } } }));
     writeFileSync(join(repo, ".gitignore"), "ignored\ntarget\n");
     writeFileSync(join(repo, "base"), "base\n");
+    mkdirSync(join(repo, "third_party"));
+    writeFileSync(join(repo, "third_party/input-file"), "pristine input\n");
+    writeFileSync(join(repo, "third_party/modified-input"), "before\n");
+    writeFileSync(join(repo, "delete-me"), "ordinary source\n");
     git(["add", "."]); git(["commit", "-qm", "base"]);
     commit("historical", "old patch\n", "historical patch");
     git(["rm", "-q", "historical"]); git(["commit", "-qm", "remove historical patch"]);
@@ -67,10 +72,15 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     writeFileSync(join(dirty, "base"), "changed\n");
     writeFileSync(join(dirty, "untracked"), "not ignored\n");
     writeFileSync(join(dirty, "ignored"), "ignored\n");
+    rmSync(join(dirty, "delete-me"));
+    writeFileSync(join(dirty, "third_party/modified-input"), "local modification is work\n");
+    writeFileSync(join(dirty, "third_party/added"), "local addition is work\n");
     mkdirSync(join(dirty, "out")); mkdirSync(join(dirty, "results/benchmarks"), { recursive: true });
     for (const path of ["artifact.o", "artifact.obj", "out/generated", "results/benchmarks/timing"]) writeFileSync(join(dirty, path), "throwaway\n");
     git(["worktree", "add", "-q", "--detach", clean, base]);
     git(["worktree", "add", "-q", "--detach", active, base]);
+    activeChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: active, stdio: "ignore" });
+    await new Promise<void>((ok, fail) => { activeChild!.once("spawn", ok); activeChild!.once("error", fail); });
     const linked = join(scratch, "linked-submodule");
     git(["worktree", "add", "-q", "--detach", linked, "HEAD"]);
     rmSync(join(linked, "dep"), { recursive: true });
@@ -79,7 +89,8 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     // These entries are external INPUTS, not uncommitted work. An internal
     // symlink is still work and must be snapshotted.
     symlinkSync(repo, join(clean, "node_modules"));
-    mkdirSync(join(clean, "third_party")); symlinkSync(repo, join(clean, "third_party/chromium"));
+    mkdirSync(join(clean, "third_party"), { recursive: true }); symlinkSync(repo, join(clean, "third_party/chromium"));
+    rmSync(join(clean, "third_party/input-file"));
     symlinkSync("base", join(dirty, "internal-link"));
     assert.equal(inputFor(dirty, "internal-link"), null);
     assert.ok(inputFor(clean, "third_party/chromium/base"));
@@ -106,7 +117,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
       const path = git(["rev-parse", "--path-format=absolute", "--git-path", "index"], tree);
       return { path, bytes: readFileSync(path), time: statSync(path).mtimeMs };
     });
-    const r = await inventory({ repo, now: new Date("2026-10-23T20:00:00Z"), home: scratch, activeTrees: [active], protectedTree: repo });
+    const r = await inventory({ repo, now: new Date("2026-10-23T20:00:00Z"), home: scratch, protectedTree: repo });
     const branch = (name: string) => r.branches.find(b => b.name === name)!;
     assert.equal(branch("compiler/ancestor").stateOfLanding, "ANCESTOR");
     assert.equal(branch("compiler/ancestor").proposal.action, "delete branch");
@@ -137,7 +148,9 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.equal(branch("jvm/home").proposal.action, "keep");
     const dw = r.worktrees.find(w => w.path === dirty)!;
     assert.equal(dw.dirty, true);
-    assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", "untracked"]);
+    assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", "third_party/added", "untracked"]);
+    assert.ok(dw.snapshotFiles.tracked.some(e => e.path === "delete-me" && e.status === " D"));
+    assert.ok(dw.snapshotFiles.tracked.some(e => e.path === "third_party/modified-input"));
     assert.equal(dw.buildOutputs.length, 4);
     assert.equal(dw.tracked[0].path, "base");
     assert.equal(dw.proposal.action, "snapshot then remove");
@@ -153,10 +166,17 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     const cw = r.worktrees.find(w => w.path === clean)!;
     assert.equal(cw.dirty, false);
     assert.equal(cw.inputs.length, 2);
+    assert.deepEqual(cw.missingInputs, [{ status: " D", path: "third_party/input-file" }]);
     assert.equal(r.worktrees.find(w => w.path === lane)!.proposal.action, "keep");
     assert.equal(r.worktrees.find(w => w.path === lane)!.dirty, true);
     assert.equal(r.worktrees.find(w => w.path === stale)!.proposal.action, "prune stale registration");
-    for (const tree of collisions) assert.match(r.worktrees.find(w => w.path === tree)!.proposal.reason, /Archive destination collision/);
+    const collisionRefs = collisions.map(tree => {
+      const w = r.worktrees.find(w => w.path === tree)!;
+      assert.equal(w.proposal.action, "snapshot then remove");
+      assert.match(w.proposal.archiveRef!, /snapshot\/collision-[0-9a-f]{12}$/);
+      return w.proposal.archiveRef;
+    });
+    assert.equal(new Set(collisionRefs).size, 2);
     assert.equal(r.totals.uniqueTargetPaths, 2);
     assert.ok(r.totals.uniqueTargetBytes > 0);
     assert.equal(r.worktrees.find(w => w.path === clean)!.target.sharedWith[0], repo);
@@ -176,7 +196,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
       assert.deepEqual(readFileSync(index.path), index.bytes);
       assert.equal(statSync(index.path).mtimeMs, index.time);
     }
-  } finally { rmSync(scratch, { recursive: true, force: true }); }
+  } finally { activeChild?.kill(); rmSync(scratch, { recursive: true, force: true }); }
 });
 
 test("NUL parsers preserve unusual filenames and prunable worktrees", () => {
@@ -191,6 +211,10 @@ test("NUL parsers preserve unusual filenames and prunable worktrees", () => {
   assert.deepEqual(parseDiffstats(`${sha}\0\n2\t3\tpath\nwith\ttabs\0-\t-\timage\0`).get(sha), {
     stat: { files: 2, insertions: 2, deletions: 3, binaryFiles: 1 }, paths: ["path\nwith\ttabs", "image"],
   });
-  for (const path of ["a.o", "nested/a.obj", "out/code.c", "nested/out/code.c", "results/benchmarks/cells.tsv"]) assert.equal(buildOutput(path), true);
+  for (const path of ["a.o", "nested/a.obj", "out/code.c", "nested/out/code.c", "target/cache", "results/benchmarks/cells.tsv"]) assert.equal(buildOutput(path), true);
   assert.equal(buildOutput("compiler/outcome.rs"), false);
+  assert.equal(missingInput(" D", "third_party/input"), true);
+  assert.equal(missingInput("D ", "third_party/input"), true);
+  for (const status of [" M", "A ", "DD", "MD"]) assert.equal(missingInput(status, "third_party/input"), false);
+  assert.equal(missingInput(" D", "compiler/source"), false);
 });
