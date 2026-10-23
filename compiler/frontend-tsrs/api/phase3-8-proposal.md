@@ -82,7 +82,9 @@ pub struct SymbolClassification {
 }
 pub struct Export<'p> { pub name: SymbolName<'p>, pub symbol: Symbol<'p> }
 
+pub use nts_semantic_schema::WellKnownSymbol;
 impl<'p> Type<'p> {
+    pub fn well_known_symbol(self) -> Option<WellKnownSymbol>; // UniqueSymbol declared in the default library SymbolConstructor
     pub fn kind(self) -> TypeKind;
     pub fn symbol(self) -> Option<Symbol<'p>>;
     pub fn literal(self) -> Option<TypeLiteral<'p>>;

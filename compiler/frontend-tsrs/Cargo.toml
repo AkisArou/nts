@@ -10,10 +10,11 @@ publish.workspace = true
 default = []
 # Transitional until tsrs is the only frontend. The switch deletes this gate
 # and folds native checks into ordinary workspace Clippy and tests.
-tsrs = ["dep:tsrs_ast", "dep:tsrs_checker", "dep:tsrs_compiler", "dep:tsrs_core", "dep:tsrs_diagnostics", "dep:tsrs_scanner", "dep:tsrs_tsoptions", "dep:tsrs_vfs"]
+tsrs = ["dep:nts-semantic-schema", "dep:tsrs_ast", "dep:tsrs_checker", "dep:tsrs_compiler", "dep:tsrs_core", "dep:tsrs_diagnostics", "dep:tsrs_scanner", "dep:tsrs_tsoptions", "dep:tsrs_vfs"]
 
 [dependencies]
 camino.workspace = true
+nts-semantic-schema = { workspace = true, optional = true }
 rustc-hash.workspace = true
 thiserror.workspace = true
 xxhash-rust.workspace = true

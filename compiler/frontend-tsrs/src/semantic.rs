@@ -49,6 +49,7 @@ pub use graph::*;
 #[path = "symbol_name.rs"]
 mod names;
 pub use names::{InternalName, SymbolName};
+pub use nts_semantic_schema::WellKnownSymbol;
 
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -438,6 +439,51 @@ impl<'p> Type<'p> {
         self.file
             .with_checker(|_| self.native.symbol())
             .map(|native| Symbol::new(native, self.file))
+    }
+    /// An ECMAScript symbol key by its default-library declaration.
+    /// User unique symbols and new `SymbolConstructor` augmentations are None.
+    #[must_use]
+    pub fn well_known_symbol(self) -> Option<WellKnownSymbol> {
+        if self.kind() != TypeKind::UniqueSymbol {
+            return None;
+        }
+        self.symbol()?.declarations().find_map(|declaration| {
+            if declaration.native.kind() != tsrs_ast::Kind::PropertySignature
+                || !declaration.source_file().is_default_library()
+            {
+                return None;
+            }
+            let interface = declaration.parent()?;
+            if interface.native.kind() != tsrs_ast::Kind::InterfaceDeclaration
+                || interface
+                    .child(crate::ChildRole::InterfaceDeclarationName)?
+                    .name_text()
+                    != Some("SymbolConstructor")
+            {
+                return None;
+            }
+            let name = declaration
+                .child(crate::ChildRole::PropertySignatureDeclarationName)?
+                .name_text()?;
+            Some(match name {
+                "asyncIterator" => WellKnownSymbol::AsyncIterator,
+                "hasInstance" => WellKnownSymbol::HasInstance,
+                "isConcatSpreadable" => WellKnownSymbol::IsConcatSpreadable,
+                "iterator" => WellKnownSymbol::Iterator,
+                "match" => WellKnownSymbol::Match,
+                "matchAll" => WellKnownSymbol::MatchAll,
+                "replace" => WellKnownSymbol::Replace,
+                "search" => WellKnownSymbol::Search,
+                "species" => WellKnownSymbol::Species,
+                "split" => WellKnownSymbol::Split,
+                "toPrimitive" => WellKnownSymbol::ToPrimitive,
+                "toStringTag" => WellKnownSymbol::ToStringTag,
+                "unscopables" => WellKnownSymbol::Unscopables,
+                "dispose" => WellKnownSymbol::Dispose,
+                "asyncDispose" => WellKnownSymbol::AsyncDispose,
+                _ => return None,
+            })
+        })
     }
     #[must_use]
     pub fn non_inferrable(self) -> bool {

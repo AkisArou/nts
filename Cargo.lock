@@ -533,6 +533,7 @@ name = "nts-frontend-tsrs"
 version = "0.0.0"
 dependencies = [
  "camino",
+ "nts-semantic-schema",
  "rustc-hash",
  "thiserror",
  "tsrs_ast",

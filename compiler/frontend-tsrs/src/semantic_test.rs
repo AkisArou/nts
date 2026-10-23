@@ -1,4 +1,5 @@
 use std::collections::hash_map::DefaultHasher;
+use std::fmt::Write as _;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroU16;
 
@@ -1042,6 +1043,75 @@ fn symbol_keyed_properties_preserve_the_unique_key_type_and_declaration() {
                     .and_then(Node::name_text),
                 Some("SymbolConstructor")
             );
+        });
+    }
+}
+
+#[test]
+fn well_known_keys_require_the_default_library_property_identity() {
+    let expected = [
+        ("asyncIterator", WellKnownSymbol::AsyncIterator),
+        ("hasInstance", WellKnownSymbol::HasInstance),
+        ("isConcatSpreadable", WellKnownSymbol::IsConcatSpreadable),
+        ("iterator", WellKnownSymbol::Iterator),
+        ("match", WellKnownSymbol::Match),
+        ("matchAll", WellKnownSymbol::MatchAll),
+        ("replace", WellKnownSymbol::Replace),
+        ("search", WellKnownSymbol::Search),
+        ("species", WellKnownSymbol::Species),
+        ("split", WellKnownSymbol::Split),
+        ("toPrimitive", WellKnownSymbol::ToPrimitive),
+        ("toStringTag", WellKnownSymbol::ToStringTag),
+        ("unscopables", WellKnownSymbol::Unscopables),
+        ("dispose", WellKnownSymbol::Dispose),
+        ("asyncDispose", WellKnownSymbol::AsyncDispose),
+    ];
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let mut source_text = String::from(
+                "declare const iterator: unique symbol; declare global { interface SymbolConstructor { readonly ntsAugmented: unique symbol; } } export const user = iterator; export const augmented = Symbol.ntsAugmented; export const keys = [",
+            );
+            for (name, _) in expected {
+                write!(source_text, "Symbol.{name},").expect("String write");
+            }
+            source_text.push_str("];");
+            let checked = session.open(spec(&source_text)).expect("symbol keys");
+            let nodes = descendants(source(&checked).root());
+            let mut library_keys = 0;
+            let mut user_names = 0;
+            for node in nodes {
+                if node.native.kind() == tsrs_ast::Kind::PropertyAccessExpression {
+                    let name = node
+                        .child(ChildRole::PropertyAccessExpressionName)
+                        .and_then(Node::name_text)
+                        .expect("property name");
+                    let ty = node.ty();
+                    assert_eq!(ty.kind(), TypeKind::UniqueSymbol);
+                    if name == "ntsAugmented" {
+                        assert_eq!(ty.well_known_symbol(), None);
+                    } else {
+                        let key = expected
+                            .iter()
+                            .find(|(text, _)| *text == name)
+                            .expect("known key")
+                            .1;
+                        assert_eq!(ty.well_known_symbol(), Some(key));
+                        library_keys += 1;
+                    }
+                } else if node.name_text() == Some("iterator")
+                    && node.native.kind() == tsrs_ast::Kind::Identifier
+                    && node.parent().is_some_and(|parent| {
+                        parent.native.kind() != tsrs_ast::Kind::PropertyAccessExpression
+                    })
+                {
+                    assert_eq!(node.ty().kind(), TypeKind::UniqueSymbol);
+                    assert_eq!(node.ty().well_known_symbol(), None);
+                    user_names += 1;
+                }
+            }
+            assert_eq!(library_keys, expected.len());
+            assert_eq!(user_names, 2);
+            assert_eq!(checked.finish().diagnostics(), []);
         });
     }
 }
