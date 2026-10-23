@@ -4832,6 +4832,13 @@ fn emit_body(
     writer.dedent();
 
     writer.indent();
+    // The operations a block holds: the arena keeps the ones a fold pruned
+    // with their block, and nothing names their storage.
+    let held: rustc_hash::FxHashSet<ValueId> = func
+        .blocks
+        .iter()
+        .flat_map(|block| block.ops.iter().copied())
+        .collect();
     for (index, op) in func.values.iter().enumerate() {
         // A parameter is already declared by the signature, a value nothing
         // reads was dropped by dead-code elimination, and an operation that
@@ -4845,9 +4852,15 @@ fn emit_body(
         // `c.length` on a literal into a number, the slice becomes a call
         // nobody reads, and the assignment is dropped while the frame it writes
         // into is still named.
+        //
+        // **Only for a call a block holds.** A call in an arm a fold pruned --
+        // the TypeScript side of a `Provided` question the target answers with
+        // its kernel, as `String#json`'s escape loop is on C -- is never
+        // emitted, and its frame was an unused variable `-Werror` refused.
         if let OpKind::Call {
             frame: Some(units), ..
         } = op.kind
+            && held.contains(&ValueId(u32::try_from(index).unwrap_or(u32::MAX)))
         {
             writer.line(
                 &op.origin,
