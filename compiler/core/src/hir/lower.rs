@@ -55336,6 +55336,17 @@ impl<'a> FuncBuilder<'a> {
             Some(base) => super::builtin::error_fields(base),
             None => Vec::new(),
         };
+        // **A class defines its parameter properties first.** TypeScript emits
+        // `constructor(public x: number)` as a field declared before every
+        // other one the class writes (an assignment before every initializer,
+        // without define semantics), so `class P { label = "p";
+        // constructor(public x: number) {} }` is `x` then `label` -- and the
+        // checker lists its own members in source order, `label` first. A
+        // layout is the order `Object.keys` and `JSON.stringify` answer, so
+        // the parameters are laid out first: after a provided base's fields,
+        // in their own order.
+        let prefix = fields.len();
+        let mut parameters = Vec::new();
         for property in properties {
             if provided.is_some() && !property.own {
                 continue;
@@ -55523,7 +55534,16 @@ impl<'a> FuncBuilder<'a> {
             } else {
                 field_ty
             };
-            fields.push(Field {
+            let parameter = property.own
+                && property.declaration.is_some_and(|declaration| {
+                    self.kind_of(declaration) == Some(syntax::PARAMETER)
+                });
+            (if parameter {
+                &mut parameters
+            } else {
+                &mut fields
+            })
+            .push(Field {
                 name: property.name.clone(),
                 ty: field_ty,
                 readonly: property.readonly,
@@ -55548,6 +55568,7 @@ impl<'a> FuncBuilder<'a> {
                 },
             });
         }
+        fields.splice(prefix..prefix, parameters);
         Ok(fields)
     }
 
