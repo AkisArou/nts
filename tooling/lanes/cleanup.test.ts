@@ -165,6 +165,17 @@ test("only exact SSH daemon names exempt EACCES; unreadable node and readable ac
       const result = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: denied, logPath: join(f.root, `${comm}-denied.jsonl`) });
       assert.ok(result.skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
     }
+    writeFileSync(join(pid, "comm"), "systemd\n");
+    const command = "/usr/lib/systemd/systemd\0--user\0";
+    writeFileSync(join(pid, "cmdline"), command);
+    const manager = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: denied, logPath: join(f.root, "user-manager.jsonl") });
+    assert.deepEqual(manager.skipped, []);
+    assert.ok(readFileSync(manager.log, "utf8").includes('"comm":"systemd"'));
+    for (const [n, cmdline] of ["/usr/lib/systemd/systemd\0--system\0", "/wrong/systemd\0--user\0", command + "--extra\0"].entries()) {
+      writeFileSync(join(pid, "cmdline"), cmdline);
+      const result = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: denied, logPath: join(f.root, `wrong-manager-${n}.jsonl`) });
+      assert.ok(result.skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
+    }
     symlinkSync(path, join(pid, "cwd"));
     const result = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, logPath: join(f.root, "active.jsonl") });
     assert.ok(result.skipped.some(i => i.item === path && /process cwd inside tree: PID 123/.test(i.reason!)));

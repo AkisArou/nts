@@ -104,8 +104,13 @@ class Cleaner {
           // candidate trees. No other unreadable process gets this exemption.
           let comm: string | undefined;
           try { comm = readFileSync(join(proc, pid, "comm"), "utf8").replace(/\n$/, ""); } catch {}
-          if (comm === "sshd-session" || comm === "sshd") {
-            this.emit("process-cwd-exemption", path, "info", { pid, comm, reason: "non-dumpable SSH login daemon; cwd is the user's home" });
+          let cmdline: string | undefined;
+          if (comm === "systemd") try { cmdline = readFileSync(join(proc, pid, "cmdline"), "utf8"); } catch {}
+          // MainClaude / user, Orcode d523f4f9, 2026-10-23: only this
+          // exact user-manager command is also known to live outside trees.
+          const userManager = comm === "systemd" && cmdline === "/usr/lib/systemd/systemd\0--user\0";
+          if (comm === "sshd-session" || comm === "sshd" || userManager) {
+            this.emit("process-cwd-exemption", path, "info", { pid, comm, ...(userManager ? { cmdline } : {}), reason: userManager ? "non-dumpable systemd user manager; cwd is outside worktrees" : "non-dumpable SSH login daemon; cwd is the user's home" });
             continue;
           }
         }
