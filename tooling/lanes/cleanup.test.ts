@@ -181,3 +181,26 @@ test("only exact SSH daemon names exempt EACCES; unreadable node and readable ac
     assert.ok(result.skipped.some(i => i.item === path && /process cwd inside tree: PID 123/.test(i.reason!)));
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
+
+test("the exact PAM helper requires an independently verified user-manager parent", async () => {
+  const f = await fixture();
+  try {
+    const path = f.tree("idle"), child = join(f.procRoot, "123"), parent = join(f.procRoot, "999");
+    mkdirSync(child); mkdirSync(parent);
+    writeFileSync(join(child, "comm"), "(sd-pam)\n"); writeFileSync(join(child, "cmdline"), "(sd-pam)\0");
+    writeFileSync(join(child, "status"), "PPid:\t999\n");
+    writeFileSync(join(parent, "comm"), "systemd\n"); writeFileSync(join(parent, "cmdline"), "/usr/lib/systemd/systemd\0--user\0");
+    const report = await f.report();
+    const denied = () => { const error = new Error("Permission denied") as NodeJS.ErrnoException; error.code = "EACCES"; throw error; };
+    const run = (name: string) => cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: denied, logPath: join(f.root, `${name}.jsonl`) });
+    const allowed = run("valid-parent"); assert.deepEqual(allowed.skipped, []);
+    const events = readFileSync(allowed.log, "utf8").split("\n").filter(Boolean).map(s => JSON.parse(s) as Event);
+    assert.ok(events.some(e => e.operation === "process-cwd-exemption" && e.pid === "123" && e.parent === "999"));
+    writeFileSync(join(child, "status"), "PPid:\t998\n");
+    assert.ok(run("wrong-parent").skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
+    writeFileSync(join(child, "status"), "PPid:\t999\n"); writeFileSync(join(parent, "cmdline"), "/usr/lib/systemd/systemd\0--system\0");
+    assert.ok(run("wrong-parent-command").skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
+    writeFileSync(join(parent, "cmdline"), "/usr/lib/systemd/systemd\0--user\0"); writeFileSync(join(child, "cmdline"), "(sd-pam)\0--extra\0");
+    assert.ok(run("wrong-child-command").skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});

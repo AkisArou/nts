@@ -92,9 +92,22 @@ class Cleaner {
     // Dependency injection keeps isolated tests independent of unrelated host
     // sessions. The CLI always uses the real /proc and fails closed on EACCES.
     const proc = this.options.procRoot ?? "/proc";
+    const readCwd = this.options.readCwd ?? readlinkSync;
+    const managers = new Set<string>();
+    const exemptManager = (pid: string): boolean => {
+      if (managers.has(pid)) return true;
+      try {
+        if (readFileSync(join(proc, pid, "comm"), "utf8") !== "systemd\n" || readFileSync(join(proc, pid, "cmdline"), "utf8") !== "/usr/lib/systemd/systemd\0--user\0") return false;
+        try { readCwd(join(proc, pid, "cwd")); return false; }
+        catch (e) { if ((e as NodeJS.ErrnoException).code !== "EACCES") return false; }
+      } catch { return false; }
+      managers.add(pid);
+      this.emit("process-cwd-exemption", path, "info", { pid, comm: "systemd", cmdline: "/usr/lib/systemd/systemd\0--user\0", reason: "non-dumpable systemd user manager; cwd is outside worktrees" });
+      return true;
+    };
     for (const pid of readdirSync(proc).filter(s => /^\d+$/.test(s))) {
       try {
-        const cwd = (this.options.readCwd ?? readlinkSync)(join(proc, pid, "cwd"));
+        const cwd = readCwd(join(proc, pid, "cwd"));
         const alternatives = [cwd, ...(cwd.endsWith(" (deleted)") ? [cwd.slice(0, -10)] : [])];
         if (alternatives.some(c => within(canonical(path), canonical(c)))) found.push(pid);
       } catch (e) {
@@ -104,13 +117,18 @@ class Cleaner {
           // candidate trees. No other unreadable process gets this exemption.
           let comm: string | undefined;
           try { comm = readFileSync(join(proc, pid, "comm"), "utf8").replace(/\n$/, ""); } catch {}
-          let cmdline: string | undefined;
-          if (comm === "systemd") try { cmdline = readFileSync(join(proc, pid, "cmdline"), "utf8"); } catch {}
           // MainClaude / user, Orcode d523f4f9, 2026-10-23: only this
           // exact user-manager command is also known to live outside trees.
-          const userManager = comm === "systemd" && cmdline === "/usr/lib/systemd/systemd\0--user\0";
-          if (comm === "sshd-session" || comm === "sshd" || userManager) {
-            this.emit("process-cwd-exemption", path, "info", { pid, comm, ...(userManager ? { cmdline } : {}), reason: userManager ? "non-dumpable systemd user manager; cwd is outside worktrees" : "non-dumpable SSH login daemon; cwd is the user's home" });
+          if (comm === "systemd" && exemptManager(pid)) continue;
+          // Orcode 56b10d2c: the exact PAM helper must also have a parent
+          // independently verified and logged as an exempt user manager.
+          let pamParent: string | undefined;
+          if (comm === "(sd-pam)") try {
+            const parent = /^PPid:\s*(\d+)$/m.exec(readFileSync(join(proc, pid, "status"), "utf8"))?.[1];
+            if (parent && readFileSync(join(proc, pid, "cmdline"), "utf8") === "(sd-pam)\0" && exemptManager(parent)) pamParent = parent;
+          } catch {}
+          if (comm === "sshd-session" || comm === "sshd" || pamParent) {
+            this.emit("process-cwd-exemption", path, "info", { pid, comm, ...(pamParent ? { parent: pamParent, cmdline: "(sd-pam)\0" } : {}), reason: pamParent ? "PAM helper of the verified user manager; cwd is outside worktrees" : "non-dumpable SSH login daemon; cwd is the user's home" });
             continue;
           }
         }
