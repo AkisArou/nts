@@ -103,6 +103,31 @@ pub fn appended_calls(func: &Func) -> BTreeSet<ValueId> {
         .collect()
 }
 
+/// Runtime-helper calls in `func` whose string answer's one live use is the
+/// right operand of a concatenation: `out + String(n)`, `out + s[i]`, the
+/// appends a helper could write into `out` instead of making a string.
+#[must_use]
+pub fn appended_runtime_calls(func: &Func) -> BTreeSet<ValueId> {
+    let reads = reads(func);
+    func.blocks
+        .iter()
+        .flat_map(|block| block.ops.iter().copied())
+        .filter(|&id| {
+            let op = func.value(id);
+            matches!(
+                op.kind,
+                OpKind::Call {
+                    callee: Callee::External(_),
+                    ..
+                }
+            ) && is_string(&op.ty)
+                && reads
+                    .get(&id)
+                    .is_some_and(|&(count, appended)| count == 1 && appended)
+        })
+        .collect()
+}
+
 /// How many live reads each value has, and whether every one is the right
 /// operand of a concatenation.
 fn reads(func: &Func) -> BTreeMap<ValueId, (usize, bool)> {
@@ -287,6 +312,13 @@ fn accumulates(func: &Func, members: &BTreeSet<ValueId>) -> bool {
 /// per-member site, and `json-build-append`'s two. A call seed needs a
 /// concatenation onto it: an accumulation that is only a call's answer is
 /// that call returned, which [`ReturnedString::Call`] already says.
+///
+/// A runtime helper's answer seeds one too. `numberText` returns
+/// `Number.isFinite(value) ? String(value) : "null"`: the two arms meet in a
+/// block parameter, and with the helper's `String(value)` a member the return
+/// is an accumulation, so appended it writes the number into the caller's
+/// string (`nts_str_append_number`) or the literal, where it was a value to
+/// copy. A seed is only ever appended by value, so it need not be fresh.
 fn defined_as_an_accumulation(func: &Func, members: &BTreeSet<ValueId>) -> bool {
     let live: BTreeSet<ValueId> = func
         .blocks
@@ -301,7 +333,7 @@ fn defined_as_an_accumulation(func: &Func, members: &BTreeSet<ValueId>) -> bool 
         match &func.value(member).kind {
             OpKind::ConstString(_) => literal = true,
             OpKind::Call {
-                callee: Callee::Direct(_),
+                callee: Callee::Direct(_) | Callee::External(_),
                 ..
             } => call = true,
             OpKind::BlockParam(_) => {}
@@ -549,6 +581,71 @@ mod tests {
             ])))
         );
         assert_eq!(appended_calls(&member), BTreeSet::from([ValueId(3)]));
+    }
+
+    /// `return finite ? String(value) : "null"`: a runtime helper's answer and a
+    /// literal meeting in a block parameter are an accumulation, which a
+    /// caller's string can take the number or the literal into.
+    #[test]
+    fn a_helper_answer_or_a_literal_is_accumulated() {
+        let text = Func {
+            values: vec![
+                op(OpKind::ConstBool(true), crate::hir::HirType::Bool),
+                op(
+                    OpKind::Call {
+                        callee: Callee::External("nts_number_to_string".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    },
+                    STR,
+                ),
+                op(OpKind::ConstString("null".to_owned()), STR),
+                op(OpKind::BlockParam(0), STR),
+            ],
+            blocks: vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0)],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(0),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(1)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(3),
+                        args: vec![ValueId(1)],
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(2)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(3),
+                        args: vec![ValueId(2)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(3)],
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(Some(ValueId(3))),
+                },
+            ],
+            ..func(Vec::new(), Terminator::Unreachable)
+        };
+        assert_eq!(
+            returned_strings(&text).unwrap().get(&ValueId(3)),
+            Some(&ReturnedString::Accumulated(BTreeSet::from([
+                ValueId(1),
+                ValueId(2),
+                ValueId(3)
+            ])))
+        );
     }
 
     /// A returned call whose answer something else reads has to exist, so it

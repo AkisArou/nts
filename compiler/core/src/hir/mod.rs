@@ -108,7 +108,9 @@ pub use nts_semantic_schema::TypeId as ClassId;
 
 /// How the uses of an erased answer take it: the walk each backend reads
 /// before it decides a box need not be built.
-pub use appended_results::{ReturnedString, appended_calls, returned_strings};
+pub use appended_results::{
+    ReturnedString, appended_calls, appended_runtime_calls, returned_strings,
+};
 pub use erased_uses::{ErasedUses, erased_uses};
 
 /// How a value is represented in a machine.
