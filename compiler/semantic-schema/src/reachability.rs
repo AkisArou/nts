@@ -362,6 +362,7 @@ mod tests {
             declarations,
             ty: None,
             aliased: None,
+            library: None,
         }
     }
 

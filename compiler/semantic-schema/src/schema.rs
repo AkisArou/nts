@@ -58,8 +58,9 @@ use crate::origin::Origin;
 /// `instanceof` test (`@ntsBoundBy`, `@ntsIs`), and `bound_types`, the types
 /// those bindings resolve to. 44: declaration-attached JVM contracts and their
 /// three-way parameter-retention evidence. 45: `packages`, a module's
-/// pkg-config packages (`@ntsPackage`).
-pub const SCHEMA_VERSION: u32 = 45;
+/// pkg-config packages (`@ntsPackage`). 46: `SymbolRecord::library`, the
+/// library a symbol the program does not declare comes from.
+pub const SCHEMA_VERSION: u32 = 46;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -368,6 +369,103 @@ pub struct SymbolRecord {
     /// Followed to the end of the chain, so a re-export costs a reader one hop
     /// rather than as many as the program happens to have.
     pub aliased: Option<SymbolId>,
+    /// The library that declares a symbol the program does not: its feature's
+    /// family (`es:JSON`, `web:fetch`, `node:fs`), which is what a builtin's
+    /// provider is chosen by. `None` where any declaration is in the decoded
+    /// file set -- the program's own, however a library also declares it --
+    /// and so set only where `declarations` is empty. Decided from the first
+    /// declaration's file by [`Library::of_path`], the one classifier every
+    /// frontend calls.
+    pub library: Option<Library>,
+}
+
+/// Which library a declaration file belongs to.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Library {
+    /// TypeScript's ECMAScript libraries: `lib.es*.d.ts`, `lib.decorators*`,
+    /// `lib.scripthost`.
+    Es,
+    /// TypeScript's web libraries: `lib.dom*.d.ts` and `lib.webworker*.d.ts`.
+    Dom,
+    /// `@types/node`.
+    Node,
+    /// Any other package's declarations, by its name (`@scope/name` whole).
+    Package(String),
+}
+
+impl Library {
+    /// The library a declaration file belongs to, from its path as the
+    /// checker names it: a file TypeScript bundles (`lib.*.d.ts`), or one under
+    /// a `node_modules` directory, by the package it is in. `None` for any
+    /// other file, which is the program's.
+    #[must_use]
+    pub fn of_path(path: &str) -> Option<Self> {
+        if let Some((_, inside)) = path.rsplit_once("/node_modules/") {
+            let mut segments = inside.split('/');
+            let first = segments.next()?;
+            let package = if first.starts_with('@') {
+                format!("{first}/{}", segments.next()?)
+            } else {
+                first.to_owned()
+            };
+            return Some(if package == "@types/node" {
+                Self::Node
+            } else {
+                Self::Package(package)
+            });
+        }
+        let file = path.rsplit('/').next().unwrap_or(path);
+        let name = file.strip_prefix("lib.")?.strip_suffix(".d.ts")?;
+        if name.starts_with("dom") || name.starts_with("webworker") {
+            Some(Self::Dom)
+        } else if name.starts_with("es")
+            || name.starts_with("decorators")
+            || name.starts_with("scripthost")
+        {
+            Some(Self::Es)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod library_tests {
+    use super::Library;
+
+    #[test]
+    fn a_declaration_file_names_its_library() {
+        assert_eq!(
+            Library::of_path("bundled:///libs/lib.es5.d.ts"),
+            Some(Library::Es)
+        );
+        assert_eq!(
+            Library::of_path("bundled:///libs/lib.es2015.promise.d.ts"),
+            Some(Library::Es)
+        );
+        assert_eq!(
+            Library::of_path("bundled:///libs/lib.dom.d.ts"),
+            Some(Library::Dom)
+        );
+        assert_eq!(
+            Library::of_path("bundled:///libs/lib.webworker.importscripts.d.ts"),
+            Some(Library::Dom)
+        );
+        assert_eq!(
+            Library::of_path("/p/node_modules/@types/node/globals.d.ts"),
+            Some(Library::Node)
+        );
+        assert_eq!(
+            Library::of_path("/p/node_modules/.pnpm/x/node_modules/@nts/gi-gtk/index.d.ts"),
+            Some(Library::Package("@nts/gi-gtk".to_owned()))
+        );
+        assert_eq!(
+            Library::of_path("/p/node_modules/left-pad/index.d.ts"),
+            Some(Library::Package("left-pad".to_owned()))
+        );
+        assert_eq!(Library::of_path("/p/src/main.ts"), None);
+        assert_eq!(Library::of_path("/p/src/lib.helpers.ts"), None);
+    }
 }
 
 /// What kind of entity a symbol names.

@@ -17,7 +17,7 @@
 
 use nts_diagnostics::SourceId;
 use nts_semantic_schema::{
-    ModuleRecord, NodeId, NodeKind, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord,
+    Library, ModuleRecord, NodeId, NodeKind, SemanticSnapshot, SymbolFlags, SymbolId, SymbolRecord,
 };
 use rustc_hash::FxHashMap;
 
@@ -152,6 +152,7 @@ impl Deferred {
                 .collect();
             if let Some(record) = snapshot.symbols.get_mut(symbol.0 as usize) {
                 add_declarations(&mut record.declarations, mapped);
+                owned_by_the_program(record);
             }
         }
     }
@@ -354,6 +355,21 @@ fn intern(
     id
 }
 
+/// A symbol some decoded file declares is the program's, whatever library also
+/// declares it (`SymbolRecord::library`).
+fn owned_by_the_program(record: &mut SymbolRecord) {
+    if !record.declarations.is_empty() {
+        record.library = None;
+    }
+}
+
+/// The file a declaration handle names: `<index>.<kind>.<path>`.
+fn handle_path(handle: &NodeHandle) -> Option<&str> {
+    let (_index, rest) = handle.0.split_once('.')?;
+    let (_kind, path) = rest.split_once('.')?;
+    Some(path)
+}
+
 /// Add `more` to a symbol's declarations: each once, in node order, which is
 /// the order of the files and of the declarations in each -- stable however
 /// the files were visited.
@@ -401,10 +417,21 @@ pub(super) fn intern_declared(
         // files, so a record that has some may still lack this file's.
         if let Some(record) = snapshot.symbols.get_mut(existing.0 as usize) {
             add_declarations(&mut record.declarations, declarations);
+            owned_by_the_program(record);
         }
         return existing;
     }
 
+    // From the first declaration's file while no decoded file declares it:
+    // cleared by `owned_by_the_program` the moment one does.
+    let library = if declarations.is_empty() {
+        response
+            .declarations
+            .iter()
+            .find_map(|handle| Library::of_path(handle_path(handle)?))
+    } else {
+        None
+    };
     let id = SymbolId(u32::try_from(snapshot.symbols.len()).unwrap_or(u32::MAX));
     snapshot.symbols.push(SymbolRecord {
         name: normalize_name(&response.name, root),
@@ -418,6 +445,7 @@ pub(super) fn intern_declared(
         // here, because resolving needs the client and interning is also done
         // from the export walk, where the target is already in hand.
         aliased: None,
+        library,
     });
     interned.insert(response.id, id);
     id

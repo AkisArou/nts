@@ -202,6 +202,7 @@ mod tests {
                 declarations: Vec::new(),
                 ty: None,
                 aliased: None,
+                library: None,
             });
         }
         let object = |symbol: u32| TypeRecord {

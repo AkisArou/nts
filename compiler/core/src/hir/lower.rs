@@ -86100,6 +86100,7 @@ mod tests {
                 declarations: vec![NodeId(index)],
                 ty: None,
                 aliased: None,
+                library: None,
             });
         }
         for symbol in [0, 0, 1, 0, 0] {
