@@ -27,6 +27,25 @@ fn report(name: &str) -> Option<hir::regions::Report> {
     Some(hir::prepare_unverified(&snapshot, &options).regions)
 }
 
+fn prepared(name: &str) -> Option<hir::Program> {
+    let tsgo = nts_frontend_ts::tsgo::locate()?;
+    let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs")
+        .join(name)
+        .join("tsconfig.json")
+        .canonicalize_utf8()
+        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
+    let snapshot = nts_frontend_ts::TsgoApi::for_compilation(tsgo)
+        .snapshot(&tsconfig)
+        .expect("snapshot should succeed");
+    let options = hir::Options {
+        provider: hir::Provider::ReferenceCounting,
+        roots: hir::reachable::Roots::EveryExport,
+        ..hir::Options::default()
+    };
+    Some(hir::prepare_unverified(&snapshot, &options).program)
+}
+
 /// The verdict of the one candidate from `from` to `to`.
 fn verdict(report: &hir::regions::Report, from: &str, to: &str) -> Result<(), String> {
     let found: Vec<_> = report
@@ -112,6 +131,28 @@ fn a_call_that_allocates_once_is_not_worth_a_region() {
     assert_eq!(
         verdict(&report, "readsOneCell", "single"),
         Err("allocates too little for a region to pay for itself".to_owned())
+    );
+}
+
+/// A function whose every call a region serves is called only as its clone,
+/// and is gone: a function nothing calls is a C `static` its compiler warns
+/// about, and `-Werror` refused three JSON rows for it.
+#[test]
+fn a_function_only_regions_call_is_left_as_its_clone() {
+    let Some(program) = prepared("calls-a-region-could-serve") else {
+        return;
+    };
+    let names: Vec<&str> = program
+        .funcs
+        .iter()
+        .map(|func| func.name.as_str())
+        .collect();
+    assert!(names.contains(&"fromValues#region"), "{names:?}");
+    assert!(!names.contains(&"fromValues"), "{names:?}");
+    // Called unserved elsewhere, so both stay.
+    assert!(
+        names.contains(&"build") && names.contains(&"build#region"),
+        "{names:?}"
     );
 }
 
