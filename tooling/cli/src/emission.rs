@@ -153,6 +153,36 @@ pub(super) fn default_roots(configured: bool, backend: Backend) -> hir::reachabl
     }
 }
 
+/// A product is the program its source says, or none: a builtin no provider
+/// here supplies (NTS1100), or one no target ever will (NTS1101), stops
+/// `nts build` before anything is written. Left to the lowering's usual
+/// course, the function reaching it would be refused and every statement
+/// calling that dropped, and the artifact would do less than its source says
+/// on C, LLVM and the JVM -- Wasm already declined such a program whole. The
+/// inspection commands (`emit-c`, `hir`, `check`) still compile what they can:
+/// what lowers is what they are for.
+fn unprovided_stops_the_build(prepared: &hir::Prepared, sources: &[SourceFile]) -> Result<()> {
+    let unprovided: Vec<&nts_diagnostics::Diagnostic> = prepared
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.code.as_str(), "NTS1100" | "NTS1101"))
+        .collect();
+    if unprovided.is_empty() {
+        return Ok(());
+    }
+    let mut locations = nts_diagnostics::SourceLocations::new(sources);
+    let lines: Vec<String> = unprovided
+        .iter()
+        .map(|diagnostic| locations.diagnostic_line(diagnostic))
+        .collect();
+    anyhow::bail!(
+        "{}\n{} builtin(s) this compiler does not provide; a build is the program its source \
+         says, so nothing was written",
+        lines.join("\n"),
+        unprovided.len()
+    )
+}
+
 #[derive(Debug)]
 pub(super) struct Input {
     pub raw: hir::RawProgram,
@@ -198,6 +228,9 @@ impl Input {
             .raw
             .into_prepared(&options)
             .map_err(|error| refused(&self.metadata.sources, &error, report))?;
+        if emission.product.is_some() {
+            unprovided_stops_the_build(&prepared, &self.metadata.sources)?;
+        }
         Ok((prepared, self.metadata))
     }
 }

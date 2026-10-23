@@ -288,6 +288,64 @@ export default defineConfig({
     assert_eq!(via_llvm, via_c, "the llvm build disagrees with the C build");
 }
 
+/// A builtin this compiler does not provide stops `nts build` (NTS1100), on
+/// both native backends, before anything is written: a product is the program
+/// its source says. `emit-c` would compile the rest and drop the statement
+/// that calls the refused function, which is what a build must never ship.
+/// The control is the same program reading a constant where it read the
+/// clock, which builds.
+#[test]
+fn a_builtin_this_compiler_does_not_provide_stops_the_build() {
+    if !available() {
+        eprintln!("skipping: needs node, the tsgo frontend, clang and nm");
+        return;
+    }
+    let config = r#"
+import { app, defineConfig, target } from "@nts/config";
+export default defineConfig({
+  products: {
+    viaC: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "c" })] }),
+    viaLlvm: app({ kind: "executable", entry: "./src/main.ts", targets: [target.linux({ backend: "llvm" })] }),
+  },
+});
+"#;
+    let source = |stamp: &str| {
+        format!(
+            "function stamp(): number {{ return {stamp}; }}\n\
+             function plain(n: number): number {{ return n + 1; }}\n\
+             console.log(plain(41));\n\
+             console.log(stamp() > 0);\n"
+        )
+    };
+    let project = fixture("build-unprovided", config);
+    std::fs::write(project.join("src/main.ts"), source("Date.now()")).expect("entry");
+    let run = build(&project, &[]);
+    assert!(
+        !run.ok,
+        "a build reaching `Date.now` succeeded:\n{}",
+        run.stdout
+    );
+    assert!(
+        run.stderr
+            .contains("NTS1100 `Date.now` is not provided by this compiler"),
+        "the build did not name the builtin:\n{}",
+        run.stderr
+    );
+    for product in ["viaC", "viaLlvm"] {
+        let exe = project.join(format!(".nts/build/{product}/linux-gnu-x86_64/{product}"));
+        assert!(
+            !exe.exists(),
+            "{product} wrote an artifact: {}",
+            exe.display()
+        );
+    }
+
+    let control = fixture("build-unprovided-control", config);
+    std::fs::write(control.join("src/main.ts"), source("1")).expect("entry");
+    let run = build(&control, &[]);
+    assert!(run.ok, "the control failed:\n{}{}", run.stdout, run.stderr);
+}
+
 /// A static library built on `backend: "llvm"` evaluates its module when it
 /// loads, as the C build's does: the constructor is `llvm.global_ctors` in the
 /// program's own object, so the member a consumer pulls in for `total` brings
@@ -584,11 +642,13 @@ fn a_build_that_drops_functions_says_how_many() {
     // deleted, and it had never once checked anything. A check whose answer does
     // not depend on its input is not a check.
     let project = fixture("build-dropped", SHARED);
-    // `console.table` inspects structure, which this compiler does not, and
-    // lowering refuses it by name.
+    // A regular-expression literal, which lowering refuses by name (NTS1001)
+    // and a build drops. Not a builtin this compiler lacks: that stops the
+    // build instead (`a_builtin_this_compiler_does_not_provide_stops_the_build`),
+    // and `console.table`, which this used until then, is one.
     std::fs::write(
         project.join("src/main.ts"),
-        "export function published(): void { console.table([1]); }\n",
+        "export function published(): void { console.log(/a/.source); }\n",
     )
     .expect("writing the program");
     let run = build(&project, &[]);
