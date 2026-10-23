@@ -31,6 +31,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+/* The JSON escape kernel's vectors (`nts_json_scan_narrow`). */
+#if defined(__AVX2__)
+#include <immintrin.h>
+#endif
 
 void nts_hresult_clear(int32_t status, void *slot, size_t size) {
   if (status < 0) {
@@ -4524,6 +4528,327 @@ NtsString *nts_str_append_slice(NtsString *a, const NtsString *s, double from,
 NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
                                 double from, double to) {
   return nts_str_add_slice((NtsString *)a, s, from, to, 0);
+}
+
+/* # JSON's quoted strings: 25.5.4.3 `QuoteJSONString`
+ *
+ * `runtime/web-platform/src/json/text.ts` is the specification and the oracle.
+ * Its `quoteJSONString` and `firstEscapeIndex` call these where the target
+ * provides them (`typeof nts_json_quote === "function"`, which `hir::features`
+ * answers per backend) and keep their own loops everywhere else, so node, Bun
+ * and every target without them run the TypeScript, and any difference is a
+ * disagreement the differential sees.
+ *
+ * Table 78 escapes seven units by name -- `\b`, `\t`, `\n`, `\f`, `\r`, `\"`
+ * and `\\` -- and every other control character, and a surrogate with no
+ * partner, is `\uXXXX` in lowercase. A well-formed pair is one code point and
+ * is written as it stands; `/` and U+007F are written bare.
+ *
+ * Almost nothing in a document needs any of it, so the work is finding the
+ * first unit that does: 32 bytes at a time with AVX2 (x86-64-v3, the default
+ * native target), eight at a time in a 64-bit word otherwise (`cpu:
+ * "baseline"`, and aarch64 until it has a NEON kernel), and one at a time for
+ * a string shorter than eight. A tail shorter than a step is read as the last
+ * whole step, overlapping what was already read, with the units before it
+ * shifted out of the answer. A wide string's surrogates are found as
+ * candidates by the same comparison and settled one by one, against their
+ * neighbour. */
+
+/* Bit 7 of each byte of `word` set where JSON text escapes that byte: below
+ * U+0020, `"` or `\`. Exact per byte -- no carry crosses into a neighbour, as
+ * the classic has-a-zero-byte trick's borrow does -- so the lowest set bit is
+ * the first such byte whatever the bytes before it were, which the overlapping
+ * last step relies on. */
+static inline uint64_t nts_json_escapes_in_word(uint64_t word) {
+  const uint64_t low = 0x7F7F7F7F7F7F7F7Full;
+  const uint64_t high = 0x8080808080808080ull;
+  /* Bit 7 set where a byte is at least U+0020: below 0x80 by the sum, at or
+   * above it by its own bit. */
+  const uint64_t printable = ((word & low) + 0x6060606060606060ull) | word;
+  const uint64_t quote = word ^ 0x2222222222222222ull;
+  const uint64_t backslash = word ^ 0x5C5C5C5C5C5C5C5Cull;
+  /* Bit 7 clear only where the byte is zero: the sum reaches 0x80 for every
+   * other below 0x80, and its own bit is set for the rest. */
+  const uint64_t not_quote = ((quote & low) + low) | quote;
+  const uint64_t not_backslash = ((backslash & low) + low) | backslash;
+  return ~(printable & not_quote & not_backslash) & high;
+}
+
+/* The first unit at or after `at` that JSON text escapes in a narrow string's
+ * `units`, or `length`. A narrow string holds no surrogate, so every candidate
+ * is an answer. */
+static uint32_t nts_json_scan_narrow(const unsigned char *units, uint32_t at,
+                                     uint32_t length) {
+#if defined(__AVX2__)
+  const __m256i quote = _mm256_set1_epi8('"');
+  const __m256i backslash = _mm256_set1_epi8('\\');
+  const __m256i control = _mm256_set1_epi8(0x1F);
+  while (at < length && length >= 32u) {
+    const uint32_t from = length - at < 32u ? length - 32u : at;
+    const __m256i bytes =
+        _mm256_loadu_si256((const __m256i *)(const void *)(units + from));
+    /* Below U+0020 where the unsigned minimum with 0x1F is the byte itself. */
+    const __m256i hits = _mm256_or_si256(
+        _mm256_or_si256(_mm256_cmpeq_epi8(bytes, quote),
+                        _mm256_cmpeq_epi8(bytes, backslash)),
+        _mm256_cmpeq_epi8(_mm256_min_epu8(bytes, control), bytes));
+    const uint32_t mask = (uint32_t)_mm256_movemask_epi8(hits) >> (at - from);
+    if (mask != 0u) {
+      return at + (uint32_t)__builtin_ctz(mask);
+    }
+    at = from + 32u;
+  }
+#endif
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  while (at < length && length >= 8u) {
+    const uint32_t from = length - at < 8u ? length - 8u : at;
+    uint64_t word;
+    memcpy(&word, units + from, sizeof word);
+    const uint64_t mask = nts_json_escapes_in_word(word) >> (8u * (at - from));
+    if (mask != 0u) {
+      return at + (uint32_t)__builtin_ctzll(mask) / 8u;
+    }
+    at = from + 8u;
+  }
+#endif
+  for (; at < length; at++) {
+    if (units[at] < 0x20u || units[at] == '"' || units[at] == '\\') {
+      return at;
+    }
+  }
+  return length;
+}
+
+/* The first unit at or after `at` in a wide string's `units` that JSON text
+ * escapes or that is a surrogate, which it escapes unless its partner is
+ * beside it; or `length`. */
+static uint32_t nts_json_candidates_wide(const uint16_t *units, uint32_t at,
+                                         uint32_t length) {
+#if defined(__AVX2__)
+  const __m256i quote = _mm256_set1_epi16('"');
+  const __m256i backslash = _mm256_set1_epi16('\\');
+  const __m256i control = _mm256_set1_epi16(0x1F);
+  const __m256i surrogate_bits = _mm256_set1_epi16((short)0xF800);
+  const __m256i surrogate = _mm256_set1_epi16((short)0xD800);
+  while (at < length && length >= 16u) {
+    const uint32_t from = length - at < 16u ? length - 16u : at;
+    const __m256i x =
+        _mm256_loadu_si256((const __m256i *)(const void *)(units + from));
+    const __m256i hits = _mm256_or_si256(
+        _mm256_or_si256(_mm256_cmpeq_epi16(x, quote),
+                        _mm256_cmpeq_epi16(x, backslash)),
+        _mm256_or_si256(_mm256_cmpeq_epi16(_mm256_min_epu16(x, control), x),
+                        _mm256_cmpeq_epi16(_mm256_and_si256(x, surrogate_bits),
+                                           surrogate)));
+    /* Two mask bits a unit. */
+    const uint32_t mask =
+        (uint32_t)_mm256_movemask_epi8(hits) >> (2u * (at - from));
+    if (mask != 0u) {
+      return at + (uint32_t)__builtin_ctz(mask) / 2u;
+    }
+    at = from + 16u;
+  }
+#endif
+  for (; at < length; at++) {
+    const uint16_t unit = units[at];
+    if (unit < 0x20u || unit == '"' || unit == '\\' ||
+        (unit & 0xF800u) == 0xD800u) {
+      return at;
+    }
+  }
+  return length;
+}
+
+/* `nts_json_scan_narrow` for a wide string: its candidates, less each lead
+ * whose trail follows it, which is one code point written as it stands. */
+static uint32_t nts_json_scan_wide(const uint16_t *units, uint32_t at,
+                                   uint32_t length) {
+  for (;;) {
+    at = nts_json_candidates_wide(units, at, length);
+    if (at == length || (units[at] & 0xF800u) != 0xD800u) {
+      return at;
+    }
+    if (units[at] > 0xDBFFu || at + 1u == length ||
+        (units[at + 1u] & 0xFC00u) != 0xDC00u) {
+      return at;
+    }
+    at += 2u;
+  }
+}
+
+/* The first unit at or after `at` that JSON text escapes in `s`, or its
+ * length. */
+static uint32_t nts_json_scan(const NtsString *s, uint32_t at) {
+  if ((s->flags & NTS_TWO_BYTE) != 0) {
+    return nts_json_scan_wide(NTS_ELEMENTS(s, const uint16_t), at, s->length);
+  }
+  return nts_json_scan_narrow(NTS_ELEMENTS(s, const unsigned char), at,
+                              s->length);
+}
+
+/* The escape JSON text writes for `unit`, which it escapes, into `text`; how
+ * many units it is. */
+static uint32_t nts_json_escape(char text[6], uint16_t unit) {
+  static const char hex[] = "0123456789abcdef";
+  text[0] = '\\';
+  switch (unit) {
+  case '"':
+    text[1] = '"';
+    return 2u;
+  case '\\':
+    text[1] = '\\';
+    return 2u;
+  case '\b':
+    text[1] = 'b';
+    return 2u;
+  case '\t':
+    text[1] = 't';
+    return 2u;
+  case '\n':
+    text[1] = 'n';
+    return 2u;
+  case '\f':
+    text[1] = 'f';
+    return 2u;
+  case '\r':
+    text[1] = 'r';
+    return 2u;
+  default:
+    text[1] = 'u';
+    text[2] = hex[unit >> 12];
+    text[3] = hex[(unit >> 8) & 0xFu];
+    text[4] = hex[(unit >> 4) & 0xFu];
+    text[5] = hex[unit & 0xFu];
+    return 6u;
+  }
+}
+
+/* How many units `s` quoted takes, `first` being its first escape: its own,
+ * the two quotes, and what each escape adds. Refused past the longest string
+ * this runtime builds, counting the `before` units it is appended to, as
+ * `nts_str_raw` refuses the string the TypeScript would have made. */
+static uint32_t nts_json_quoted_length(uint32_t before, const NtsString *s,
+                                       uint32_t first) {
+  uint64_t total = (uint64_t)s->length + 2u;
+  char text[6];
+  for (uint32_t at = first; at < s->length; at = nts_json_scan(s, at + 1u)) {
+    total += nts_json_escape(text, nts_unit(s, at)) - 1u;
+  }
+  if ((uint64_t)before + total > (uint64_t)NTS_MAX_LENGTH) {
+    fprintf(stderr, NTS_REFUSED "a string of %llu code units is too long\n",
+            (unsigned long long)((uint64_t)before + total));
+    abort();
+  }
+  return (uint32_t)total;
+}
+
+/* `count` units of ASCII `text` into `out` at unit `into`; where it ends. */
+static inline uint32_t nts_json_put_text(NtsString *out, uint32_t into,
+                                         const char *text, uint32_t count) {
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t) + into;
+    for (uint32_t i = 0; i < count; i++) {
+      units[i] = (unsigned char)text[i];
+    }
+  } else {
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char) + into;
+    for (uint32_t i = 0; i < count; i++) {
+      bytes[i] = (unsigned char)text[i];
+    }
+  }
+  return into + count;
+}
+
+/* Units [from, to) of `s` into `out` at unit `into`, widened where `out` is
+ * wide and `s` is not; where they end. `out` is never narrower than `s`. */
+static inline uint32_t nts_json_put_units(NtsString *out, uint32_t into,
+                                          const NtsString *s, uint32_t from,
+                                          uint32_t to) {
+  const uint32_t count = to - from;
+  if ((out->flags & NTS_TWO_BYTE) == 0) {
+    memcpy(NTS_ELEMENTS(out, unsigned char) + into,
+           NTS_ELEMENTS(s, const unsigned char) + from, count);
+  } else if ((s->flags & NTS_TWO_BYTE) != 0) {
+    memcpy(NTS_ELEMENTS(out, uint16_t) + into,
+           NTS_ELEMENTS(s, const uint16_t) + from,
+           (size_t)count * sizeof(uint16_t));
+  } else {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t) + into;
+    const unsigned char *bytes = NTS_ELEMENTS(s, const unsigned char) + from;
+    for (uint32_t i = 0; i < count; i++) {
+      units[i] = bytes[i];
+    }
+  }
+  return into + count;
+}
+
+/* `s` quoted, into `out` from unit `into` on, `first` being its first escape:
+ * the quote, each plain run and each escape, the quote, and the terminator.
+ * Every escape after the first is found by the same scan, resuming where the
+ * last stopped, so `s` is read once end to end.
+ *
+ * `out` may be `s` itself, appended to in place: everything written lands at
+ * or past `into`, which is at or past `s`'s length, and everything read is
+ * before it. */
+static void nts_json_write(NtsString *out, uint32_t into, const NtsString *s,
+                           uint32_t first) {
+  const uint32_t length = s->length;
+  char text[6];
+  uint32_t plain = 0;
+  into = nts_json_put_text(out, into, "\"", 1u);
+  for (uint32_t at = first; at < length; at = nts_json_scan(s, plain)) {
+    into = nts_json_put_units(out, into, s, plain, at);
+    into = nts_json_put_text(out, into, text,
+                             nts_json_escape(text, nts_unit(s, at)));
+    plain = at + 1u;
+  }
+  into = nts_json_put_units(out, into, s, plain, length);
+  into = nts_json_put_text(out, into, "\"", 1u);
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    NTS_ELEMENTS(out, uint16_t)[into] = 0;
+  } else {
+    NTS_ELEMENTS(out, unsigned char)[into] = 0;
+  }
+}
+
+/* `a + quoteJSONString(s)`, by `nts_str_append_*`'s rules: wide where either
+ * side is, as `nts_str_append` widens, and `s` read whole before `a` is
+ * reserved, since it may be `a` itself. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_json_quoted(NtsString *a, const NtsString *s, int consume) {
+  const uint32_t first = nts_json_scan(s, 0u);
+  const uint32_t at = a->length;
+  const uint32_t length = nts_json_quoted_length(at, s, first);
+  NtsString *out =
+      nts_str_room(a, length, (s->flags & NTS_TWO_BYTE) != 0, consume);
+  nts_json_write(out, at, s, first);
+  out->length = at + length;
+  return nts_str_written(out, a, consume);
+}
+
+NtsString *nts_json_quote(const NtsString *s) {
+  const uint32_t first = nts_json_scan(s, 0u);
+  NtsString *out = nts_str_raw(nts_json_quoted_length(0u, s, first),
+                               (s->flags & NTS_TWO_BYTE) != 0);
+  nts_json_write(out, 0u, s, first);
+  return out;
+}
+
+double nts_json_first_escape(const NtsString *s, double from) {
+  /* The TypeScript loop's own guard: nothing from the end on, nor from NaN. */
+  if (!(from < (double)s->length)) {
+    return -1.0;
+  }
+  const uint32_t at = nts_json_scan(s, from > 0.0 ? (uint32_t)from : 0u);
+  return at == s->length ? -1.0 : (double)at;
+}
+
+NtsString *nts_str_append_json_quoted(NtsString *a, const NtsString *s) {
+  return nts_str_add_json_quoted(a, s, 1);
+}
+
+NtsString *nts_str_concat_json_quoted(const NtsString *a, const NtsString *s) {
+  return nts_str_add_json_quoted((NtsString *)a, s, 0);
 }
 
 /* The elements of an array of numbers. */

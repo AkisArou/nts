@@ -641,6 +641,29 @@ fn a_region_gives_back_everything_its_call_made() {
     assert_eq!(checks(&poisoned), 39, "{poisoned}");
 }
 
+/// JSON's quoted strings against a reference written from `text.ts`, at every
+/// edge of the kernel's 32-, 16- and 8-unit steps, narrow and wide, with
+/// surrogates and drawn strings, then the appends' receivers -- once as built
+/// for the baseline (the word and the unit loop) and, on an x86-64 host, once
+/// for x86-64-v3 (AVX2).
+#[test]
+fn a_json_string_is_quoted_as_text_ts_quotes_it_by_both_kernels() {
+    let mut builds: Vec<&[&str]> = vec![&[]];
+    if cfg!(target_arch = "x86_64") {
+        builds.push(&["-march=x86-64-v3"]);
+    }
+    for cpu in builds {
+        let mut flags = vec!["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"];
+        flags.extend_from_slice(cpu);
+        let report = run_suite("json_quote", &flags);
+        assert!(
+            report.contains("json quote checks passed"),
+            "{cpu:?}: {report}"
+        );
+        assert_eq!(checks(&report), 38, "{cpu:?}: {report}");
+    }
+}
+
 /// The appends that write a number, a unit or a slice into the string they
 /// extend, on five receivers -- in place with room, a grown copy, shared, hashed
 /// by a lookup, a table's key -- their non-consuming twins, which write none of

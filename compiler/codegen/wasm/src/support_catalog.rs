@@ -585,6 +585,18 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_is_set", Support::Intrinsic),
     ("nts_is_view_kind", Support::Intrinsic),
     (
+        "nts_json_first_escape",
+        Support::Decline(
+            "the C runtime's JSON escape kernel; this target runs the TypeScript escaper",
+        ),
+    ),
+    (
+        "nts_json_quote",
+        Support::Decline(
+            "the C runtime's JSON escape kernel; this target runs the TypeScript escaper",
+        ),
+    ),
+    (
         "nts_landing_detail",
         Support::Decline("native setjmp landing state"),
     ),
@@ -904,6 +916,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("counted in-place append, made only under reference counting"),
     ),
     (
+        "nts_str_append_json_quoted",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
         "nts_str_append_number",
         Support::Decline("counted in-place append, made only under reference counting"),
     ),
@@ -936,6 +952,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ),
     (
         "nts_str_concat_char_code",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
+        "nts_str_concat_json_quoted",
         Support::Decline("counted in-place append, made only under reference counting"),
     ),
     (

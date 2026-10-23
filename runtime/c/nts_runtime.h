@@ -2139,6 +2139,21 @@ NtsString *nts_str_append_slice(NtsString *a, const NtsString *s, double from,
 NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
                                 double from, double to);
 
+/* 25.5.4.3 `QuoteJSONString`: `s` in double quotes, with Table 78's seven
+ * escapes, `\u00XX` for every other control character and `\uXXXX` for a
+ * surrogate with no partner. `nts_json_first_escape` answers the first unit at
+ * or after `from` that needs an escape, or -1 when none does; `from` is an
+ * index, a whole number from 0 to the length. Both are what
+ * `runtime/web-platform/src/json/text.ts` calls where the target provides them
+ * (`quoteJSONString`, `firstEscapeIndex`), and that file is their
+ * specification. `nts_str_append_json_quoted` appends the quoted form without
+ * making it, by `nts_str_append_*`'s rules, and `nts_str_concat_json_quoted`
+ * is its non-consuming twin. */
+NTS_ALLOCATES NtsString *nts_json_quote(const NtsString *s);
+NTS_READS_ONLY double nts_json_first_escape(const NtsString *s, double from);
+NtsString *nts_str_append_json_quoted(NtsString *a, const NtsString *s);
+NtsString *nts_str_concat_json_quoted(const NtsString *a, const NtsString *s);
+
 /* Frame storage for a string of at most `units` code units.
  *
  * `uint16_t` because a slice of a wide string is wide, and this has to hold the

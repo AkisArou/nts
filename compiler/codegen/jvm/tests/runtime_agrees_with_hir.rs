@@ -428,4 +428,8 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// reference counting, which a host-GC program never has; this lane builds the
 /// same strings in its `StringBuilder`s. 138 with their non-consuming twins
 /// (`nts_str_concat_*`), which `rc` picks where the left side survives.
-const REFUSED_FLOOR: usize = 138;
+///
+/// 139 for `nts_json_first_escape`, the C runtime's JSON escape scan. This lane
+/// does not provide it (`nts_codegen_jvm::provides`), so `text.ts`'s guard
+/// folds false here and its TypeScript scan runs: no call to it ever arrives.
+const REFUSED_FLOOR: usize = 139;

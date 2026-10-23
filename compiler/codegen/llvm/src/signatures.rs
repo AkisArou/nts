@@ -1312,6 +1312,18 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_json_first_escape",
+        returns: "double",
+        params: &["ptr", "double"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_json_quote",
+        returns: "noalias nonnull ptr",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_landing_detail",
         returns: "ptr",
         params: &["ptr"],
@@ -2104,6 +2116,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_str_append_json_quoted",
+        returns: "ptr",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_append_number",
         returns: "ptr",
         params: &["ptr", "double"],
@@ -2173,6 +2191,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_str_concat_char_code",
         returns: "ptr",
         params: &["ptr", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_str_concat_json_quoted",
+        returns: "ptr",
+        params: &["ptr", "ptr"],
         attributes: &[],
     },
     Signature {

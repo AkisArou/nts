@@ -692,6 +692,11 @@ static SIGNATURES: &[Declared] = &[
         Some(HirType::Bool),
     ),
     (
+        "nts_json_first_escape",
+        &[None, Some(HirType::Float { bits: 64 })],
+        Some(HirType::Float { bits: 64 }),
+    ),
+    (
         "nts_live_bytes",
         &[],
         Some(HirType::Int {
@@ -2030,9 +2035,12 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         // `nts_map_next` / `nts_map_key_at` walk they replace never made the
         // table escape.
         "nts_concat"
+        | "nts_json_quote"
+        | "nts_json_first_escape"
         | "nts_str_concat_at"
         | "nts_str_concat_char_at"
         | "nts_str_concat_char_code"
+        | "nts_str_concat_json_quoted"
         | "nts_str_concat_number"
         | "nts_str_concat_slice"
         | "nts_string_eq"
@@ -2045,11 +2053,13 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         | "nts_map_values_into" => Some(&[]),
         // The left is consumed and the result may *be* it, so it is kept; the
         // right is only read. The same for the appends that write a number, a
-        // unit or a slice without making a string of it.
+        // unit, a slice or a string's quoted form without making a string of
+        // it.
         "nts_str_append"
         | "nts_str_append_at"
         | "nts_str_append_char_at"
         | "nts_str_append_char_code"
+        | "nts_str_append_json_quoted"
         | "nts_str_append_number"
         | "nts_str_append_slice" => Some(&[0]),
         // The presence helpers touch one word of the header and keep nothing.
@@ -2182,6 +2192,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_is_promise",
     "nts_is_set",
     "nts_is_view_kind",
+    "nts_json_first_escape",
     "nts_landing_detail",
     "nts_landing_thrown",
     "nts_promise_pair",
