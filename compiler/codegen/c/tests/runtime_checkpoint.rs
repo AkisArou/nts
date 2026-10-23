@@ -643,14 +643,23 @@ fn a_region_gives_back_everything_its_call_made() {
 
 /// JSON's quoted strings against a reference written from `text.ts`, at every
 /// edge of the kernel's 32-, 16- and 8-unit steps, narrow and wide, with
-/// surrogates and drawn strings, then the appends' receivers -- once as built
-/// for the baseline (the word and the unit loop) and, on an x86-64 host, once
-/// for x86-64-v3 (AVX2).
+/// surrogates and drawn strings, then the appends' receivers. On x86-64 the
+/// baseline and AVX2 builds are joined by the word loop without SSE2 and the
+/// scalar fallback selected on big-endian targets.
 #[test]
 fn a_json_string_is_quoted_as_text_ts_quotes_it_by_both_kernels() {
     let mut builds: Vec<&[&str]> = vec![&[]];
     if cfg!(target_arch = "x86_64") {
         builds.push(&["-march=x86-64-v3"]);
+        builds.push(&["-U__SSE2__", "-U__AVX2__"]);
+        // Exercise the endian guard's scalar branch on this host as well:
+        // this selects the loop, without claiming to emulate another ABI.
+        builds.push(&[
+            "-U__SSE2__",
+            "-U__AVX2__",
+            "-U__BYTE_ORDER__",
+            "-D__BYTE_ORDER__=__ORDER_BIG_ENDIAN__",
+        ]);
     }
     for cpu in builds {
         let mut flags = vec!["-DNTS_PROVIDER_RC", "-fsanitize=address,undefined"];
@@ -660,7 +669,7 @@ fn a_json_string_is_quoted_as_text_ts_quotes_it_by_both_kernels() {
             report.contains("json quote checks passed"),
             "{cpu:?}: {report}"
         );
-        assert_eq!(checks(&report), 38, "{cpu:?}: {report}");
+        assert_eq!(checks(&report), 41, "{cpu:?}: {report}");
     }
 }
 

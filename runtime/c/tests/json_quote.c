@@ -14,9 +14,9 @@
  * in place only into a grown string nobody else holds, a copy otherwise, the
  * twin leaving its receiver alone, widening, and a string quoted onto itself.
  *
- * `runtime_checkpoint` runs it twice under ASan and UBSan, built for
- * x86-64-v3 (AVX2) and for the baseline (the word and the unit loop), and
- * both builds must answer every check. */
+ * `runtime_checkpoint` runs it under ASan and UBSan for the baseline and,
+ * on x86-64, for AVX2, the word loop without SSE2, and the scalar fallback
+ * selected by big-endian builds. Every build must answer every check. */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -353,6 +353,64 @@ int main(void) {
                wide ? "wide" : "narrow");
       check(what, neighboured);
     }
+  }
+
+  /* The kernel's step edges by name: 0, 1, 15, 16, 17, 31, 32 and 33 units,
+   * an escape at the first, middle and last unit, narrow and wide, and a lone
+   * surrogate at each end of a wide string. */
+  {
+    static const uint32_t lengths[] = {0, 1, 15, 16, 17, 31, 32, 33};
+    static uint16_t units[33];
+    bool escapes = true;
+    bool surrogates = true;
+    for (size_t l = 0; l < sizeof lengths / sizeof lengths[0]; l++) {
+      const uint32_t length = lengths[l];
+      for (uint32_t i = 0; i < length; i++) {
+        units[i] = (uint16_t)('a' + i % 26u);
+      }
+      escapes = escapes && agrees(units, length, 0) && agrees(units, length, 1);
+      if (length == 0) {
+        continue;
+      }
+      const uint32_t places[] = {0, length / 2u, length - 1u};
+      for (size_t p = 0; p < 3; p++) {
+        const uint16_t kept = units[places[p]];
+        units[places[p]] = '"';
+        escapes =
+            escapes && agrees(units, length, 0) && agrees(units, length, 1);
+        units[places[p]] = 0x01;
+        escapes =
+            escapes && agrees(units, length, 0) && agrees(units, length, 1);
+        units[places[p]] = kept;
+      }
+      units[0] = 0xDC00;
+      surrogates = surrogates && agrees(units, length, 1);
+      units[0] = 'a';
+      units[length - 1u] = 0xD800;
+      surrogates = surrogates && agrees(units, length, 1);
+      units[length - 1u] = (uint16_t)('a' + (length - 1u) % 26u);
+    }
+    check("every step edge, an escape at the first, middle and last unit",
+          escapes);
+    check("a lone surrogate at either end of a wide string at every step edge",
+          surrogates);
+  }
+
+  /* An unescaped string's quote is allocated to fit: the one-pass room for
+   * the worst case is only ever taken past a first escape. */
+  {
+    char clean[41];
+    memset(clean, 'a', 40);
+    clean[40] = 0;
+    NtsString *s = ascii(clean);
+    const size_t before = nts_live_bytes();
+    NtsString *quoted = nts_json_quote(s);
+    const size_t grew = nts_live_bytes() - before;
+    check("an unescaped string's quote is allocated to fit",
+          says(quoted, "\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"") &&
+              grew == ((NTS_STRING_UNITS + 42u + 1u + 15u) & ~(size_t)15u));
+    nts_release(quoted);
+    nts_release(s);
   }
 
   /* A wide unit or a surrogate at each position of a wide string, alone and

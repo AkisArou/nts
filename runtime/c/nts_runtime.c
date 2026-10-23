@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 /* The JSON escape kernel's vectors (`nts_json_scan_narrow`). */
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__SSE2__)
 #include <immintrin.h>
 #endif
 
@@ -4556,9 +4556,10 @@ NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
  *
  * Almost nothing in a document needs any of it, so the work is finding the
  * first unit that does: 32 bytes at a time with AVX2 (x86-64-v3, the default
- * native target), eight at a time in a 64-bit word otherwise (`cpu:
- * "baseline"`, and aarch64 until it has a NEON kernel), and one at a time for
- * a string shorter than eight. A tail shorter than a step is read as the last
+ * native target), 16 with SSE2, eight in a little-endian 64-bit word, and
+ * units otherwise. Narrow scans below 16 remaining units stay inline; the
+ * long scan and the wide scan stay out of line. A tail shorter than a step is
+ * read as the last
  * whole step, overlapping what was already read, with the units before it
  * shifted out of the answer. A wide string's surrogates are found as
  * candidates by the same comparison and settled one by one, against their
@@ -4569,6 +4570,7 @@ NtsString *nts_str_concat_slice(const NtsString *a, const NtsString *s,
  * the classic has-a-zero-byte trick's borrow does -- so the lowest set bit is
  * the first such byte whatever the bytes before it were, which the overlapping
  * last step relies on. */
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 static inline uint64_t nts_json_escapes_in_word(uint64_t word) {
   const uint64_t low = 0x7F7F7F7F7F7F7F7Full;
   const uint64_t high = 0x8080808080808080ull;
@@ -4583,30 +4585,91 @@ static inline uint64_t nts_json_escapes_in_word(uint64_t word) {
   const uint64_t not_backslash = ((backslash & low) + low) | backslash;
   return ~(printable & not_quote & not_backslash) & high;
 }
+#endif
 
-/* The first unit at or after `at` that JSON text escapes in a narrow string's
- * `units`, or `length`. A narrow string holds no surrogate, so every candidate
- * is an answer. */
-static uint32_t nts_json_scan_narrow(const unsigned char *units, uint32_t at,
-                                     uint32_t length) {
+#if defined(__SSE2__)
+/* The bits of a 16-byte window's units JSON text escapes. */
+static inline uint32_t nts_json_escapes_in_16(const unsigned char *at) {
+  const __m128i bytes = _mm_loadu_si128((const __m128i *)(const void *)at);
+  const __m128i hits = _mm_or_si128(
+      _mm_or_si128(_mm_cmpeq_epi8(bytes, _mm_set1_epi8('"')),
+                   _mm_cmpeq_epi8(bytes, _mm_set1_epi8('\\'))),
+      _mm_cmpeq_epi8(_mm_min_epu8(bytes, _mm_set1_epi8(0x1F)), bytes));
+  return (uint32_t)_mm_movemask_epi8(hits);
+}
+#endif
+
+/* The long part of a narrow scan, where at least 16 units remain: 32 bytes a
+ * step with AVX2, then 16 with SSE2 (or eight in a word), the last step
+ * overlapping what was read. Out of line: a key or a short value never comes
+ * here. */
+static NTS_NOINLINE uint32_t nts_json_scan_narrow_long(
+    const unsigned char *units, uint32_t at, uint32_t length) {
 #if defined(__AVX2__)
   const __m256i quote = _mm256_set1_epi8('"');
   const __m256i backslash = _mm256_set1_epi8('\\');
   const __m256i control = _mm256_set1_epi8(0x1F);
-  while (at < length && length >= 32u) {
-    const uint32_t from = length - at < 32u ? length - 32u : at;
+  while (length - at >= 32u) {
     const __m256i bytes =
-        _mm256_loadu_si256((const __m256i *)(const void *)(units + from));
-    /* Below U+0020 where the unsigned minimum with 0x1F is the byte itself. */
+        _mm256_loadu_si256((const __m256i *)(const void *)(units + at));
     const __m256i hits = _mm256_or_si256(
         _mm256_or_si256(_mm256_cmpeq_epi8(bytes, quote),
                         _mm256_cmpeq_epi8(bytes, backslash)),
         _mm256_cmpeq_epi8(_mm256_min_epu8(bytes, control), bytes));
-    const uint32_t mask = (uint32_t)_mm256_movemask_epi8(hits) >> (at - from);
+    const uint32_t mask = (uint32_t)_mm256_movemask_epi8(hits);
     if (mask != 0u) {
       return at + (uint32_t)__builtin_ctz(mask);
     }
-    at = from + 32u;
+    at += 32u;
+  }
+#endif
+#if defined(__SSE2__)
+  while (at < length) {
+    const uint32_t from = length - at < 16u ? length - 16u : at;
+    const uint32_t mask = nts_json_escapes_in_16(units + from) >> (at - from);
+    if (mask != 0u) {
+      return at + (uint32_t)__builtin_ctz(mask);
+    }
+    at = from + 16u;
+  }
+  return length;
+#else
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  while (at < length) {
+    const uint32_t from = length - at < 8u ? length - 8u : at;
+    uint64_t word;
+    memcpy(&word, units + from, sizeof word);
+    const uint64_t mask = nts_json_escapes_in_word(word) >> (8u * (at - from));
+    if (mask != 0u) {
+      return at + (uint32_t)__builtin_ctzll(mask) / 8u;
+    }
+    at = from + 8u;
+  }
+#endif
+  for (; at < length; at++) {
+    if (units[at] < 0x20u || units[at] == '"' || units[at] == '\\') {
+      return at;
+    }
+  }
+  return length;
+#endif
+}
+
+/* The first unit at or after `at` that JSON text escapes in a narrow string's
+ * `units`, or `length`. A narrow string holds no surrogate, so every candidate
+ * is an answer. Inline for fewer than 16 units left: one 16-byte window
+ * where the string has sixteen units, up to two words where it has eight,
+ * else a unit at a time. */
+__attribute__((always_inline)) static inline uint32_t
+nts_json_scan_narrow(const unsigned char *units, uint32_t at, uint32_t length) {
+  if (length - at >= 16u) {
+    return nts_json_scan_narrow_long(units, at, length);
+  }
+#if defined(__SSE2__)
+  if (length >= 16u) {
+    const uint32_t from = length - 16u;
+    const uint32_t mask = nts_json_escapes_in_16(units + from) >> (at - from);
+    return mask != 0u ? at + (uint32_t)__builtin_ctz(mask) : length;
   }
 #endif
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -4671,8 +4734,8 @@ static uint32_t nts_json_candidates_wide(const uint16_t *units, uint32_t at,
 
 /* `nts_json_scan_narrow` for a wide string: its candidates, less each lead
  * whose trail follows it, which is one code point written as it stands. */
-static uint32_t nts_json_scan_wide(const uint16_t *units, uint32_t at,
-                                   uint32_t length) {
+static NTS_NOINLINE uint32_t nts_json_scan_wide(const uint16_t *units,
+                                                uint32_t at, uint32_t length) {
   for (;;) {
     at = nts_json_candidates_wide(units, at, length);
     if (at == length || (units[at] & 0xF800u) != 0xD800u) {
@@ -4688,7 +4751,8 @@ static uint32_t nts_json_scan_wide(const uint16_t *units, uint32_t at,
 
 /* The first unit at or after `at` that JSON text escapes in `s`, or its
  * length. */
-static uint32_t nts_json_scan(const NtsString *s, uint32_t at) {
+__attribute__((always_inline)) static inline uint32_t
+nts_json_scan(const NtsString *s, uint32_t at) {
   if ((s->flags & NTS_TWO_BYTE) != 0) {
     return nts_json_scan_wide(NTS_ELEMENTS(s, const uint16_t), at, s->length);
   }
@@ -4800,8 +4864,8 @@ static inline uint32_t nts_json_put_units(NtsString *out, uint32_t into,
  * `out` may be `s` itself, appended to in place: everything written lands at
  * or past `into`, which is at or past `s`'s length, and everything read is
  * before it. */
-static void nts_json_write(NtsString *out, uint32_t into, const NtsString *s,
-                           uint32_t first) {
+static uint32_t nts_json_write(NtsString *out, uint32_t into,
+                               const NtsString *s, uint32_t first) {
   const uint32_t length = s->length;
   char text[6];
   uint32_t plain = 0;
@@ -4819,6 +4883,30 @@ static void nts_json_write(NtsString *out, uint32_t into, const NtsString *s,
   } else {
     NTS_ELEMENTS(out, unsigned char)[into] = 0;
   }
+  return into;
+}
+
+/* How far past the first escape a string is written in one pass, into room
+ * for the worst case -- six units for each unit left -- rather than counted
+ * first and scanned twice. 64 units: at most 320 units of room a string never
+ * uses, and only one that has an escape; one with none is sized exactly. */
+#define NTS_JSON_ONE_PASS 64u
+
+/* The room `s` quoted needs after `before` units, `first` being its first
+ * escape: exact where nothing or more than `NTS_JSON_ONE_PASS` units follow
+ * it, else the worst case for what does (`nts_json_write` answers the exact
+ * end). Refused past the longest string, as `nts_json_quoted_length` is. */
+static uint32_t nts_json_room(uint32_t before, const NtsString *s,
+                              uint32_t first) {
+  const uint32_t tail = s->length - first;
+  if (tail == 0u || tail > NTS_JSON_ONE_PASS) {
+    return nts_json_quoted_length(before, s, first);
+  }
+  const uint64_t total = (uint64_t)s->length + 2u + 5u * (uint64_t)tail;
+  if ((uint64_t)before + total > (uint64_t)NTS_MAX_LENGTH) {
+    return nts_json_quoted_length(before, s, first);
+  }
+  return (uint32_t)total;
 }
 
 /* `a + quoteJSONString(s)`, by `nts_str_append_*`'s rules: wide where either
@@ -4828,19 +4916,26 @@ __attribute__((always_inline)) static inline NtsString *
 nts_str_add_json_quoted(NtsString *a, const NtsString *s, int consume) {
   const uint32_t first = nts_json_scan(s, 0u);
   const uint32_t at = a->length;
-  const uint32_t length = nts_json_quoted_length(at, s, first);
-  NtsString *out =
-      nts_str_room(a, length, (s->flags & NTS_TWO_BYTE) != 0, consume);
-  nts_json_write(out, at, s, first);
-  out->length = at + length;
+  const int wide = (s->flags & NTS_TWO_BYTE) != 0;
+  uint32_t room = nts_json_room(at, s, first);
+  /* The worst case only where it is written in place anyway: an estimate
+   * must never be what makes the append grow its string. */
+  if (room != s->length + 2u &&
+      !(consume && a->reserved == 1u &&
+        (wide == 0 || (a->flags & NTS_TWO_BYTE) != 0) &&
+        at + room <= nts_str_capacity(a))) {
+    room = nts_json_quoted_length(at, s, first);
+  }
+  NtsString *out = nts_str_room(a, room, wide, consume);
+  out->length = nts_json_write(out, at, s, first);
   return nts_str_written(out, a, consume);
 }
 
 NtsString *nts_json_quote(const NtsString *s) {
   const uint32_t first = nts_json_scan(s, 0u);
-  NtsString *out = nts_str_raw(nts_json_quoted_length(0u, s, first),
-                               (s->flags & NTS_TWO_BYTE) != 0);
-  nts_json_write(out, 0u, s, first);
+  NtsString *out =
+      nts_str_raw(nts_json_room(0u, s, first), (s->flags & NTS_TWO_BYTE) != 0);
+  out->length = nts_json_write(out, 0u, s, first);
   return out;
 }
 
