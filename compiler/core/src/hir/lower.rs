@@ -23238,7 +23238,7 @@ impl<'a> FuncBuilder<'a> {
         {
             let name = &record.name;
             return match self.member_read_from(id) {
-                Some(member) => Nameless::unprovided(format!("`{name}.{member}`")),
+                Some(member) => self.provided_global_member(id, name, &member),
                 None => {
                     Nameless::Unsupported(format!("`{name}` used as a value rather than as a type"))
                 }
@@ -23257,14 +23257,12 @@ impl<'a> FuncBuilder<'a> {
             {
                 return Nameless::Unsupported(why);
             }
-            // A library's namespace -- `Intl`, `WebAssembly` -- is a builtin
-            // no provider here supplies; one the program declares is a
-            // namespace used as a value.
+            // A library's namespace -- `Intl`, `WebAssembly`, and a function
+            // `@types/node` merges one into, `setTimeout` -- is a library
+            // global like any other; one the program declares is a namespace
+            // used as a value.
             if record.declarations.is_empty() {
-                return Nameless::unprovided(match self.member_read_from(id) {
-                    Some(member) => format!("`{}.{member}`", record.name),
-                    None => format!("`{}`", record.name),
-                });
+                return self.library_global(id, &record.name);
             }
             return Nameless::Unsupported(format!("`{}`, a namespace", record.name));
         }
@@ -23289,11 +23287,6 @@ impl<'a> FuncBuilder<'a> {
             // definition here" -- true, and not the reason: `Math` is provided
             // and `random` is the part that is not. It is absent deliberately,
             // being the one member of the family no differential can check.
-            if record.name == "Math"
-                && let Some(member) = self.member_read_from(id)
-            {
-                return Nameless::unprovided(format!("`Math.{member}`"));
-            }
             // **`Date`'s two statics are two different answers**, and the
             // generic line below gave them one. Its instance methods are
             // already told apart by name a few hundred lines down --
@@ -23361,10 +23354,7 @@ impl<'a> FuncBuilder<'a> {
             // refusals that could not be told apart, and they are not one
             // thing: `Object.keys` is a list the compiler is holding and
             // `Object.defineProperty` is a shape it does not have.
-            if let Some(member) = self.member_read_from(id) {
-                return Nameless::unprovided(format!("`{}.{member}`", record.name));
-            }
-            return Nameless::unprovided(format!("`{}`", record.name));
+            return self.library_global(id, &record.name);
         }
         // `resolve` and `reject` are not values. The executor's body is lowered
         // where the promise is built, so a call to one is the settle it stands
@@ -23390,6 +23380,47 @@ impl<'a> FuncBuilder<'a> {
         }
         // Declared in this program, in a scope between here and module scope.
         Nameless::Unsupported(format!("`{}`, a name from an enclosing scope", record.name))
+    }
+
+    /// A library global reaching a refusal, by whether this compiler provides
+    /// it (`builtin::provides_global`): one it does not is NTS1100, member or
+    /// not; one it does was reached in a form its lowering does not take.
+    fn library_global(&self, id: NodeId, name: &str) -> Nameless {
+        // `arguments` is the language's own, which no library declares a
+        // provider for: what has no lowering is the object.
+        if name == "arguments" {
+            return Nameless::Unsupported(match self.member_read_from(id) {
+                Some(member) => format!("`arguments.{member}`, a read of the `arguments` object"),
+                None => "the `arguments` object".to_owned(),
+            });
+        }
+        let provided = super::builtin::provides_global(name);
+        match self.member_read_from(id) {
+            Some(member) if provided => self.provided_global_member(id, name, &member),
+            Some(member) => Nameless::unprovided(format!("`{name}.{member}`")),
+            None if provided => Nameless::Unsupported(format!(
+                "`{name}`, a builtin this compiler provides, read as a value"
+            )),
+            None => Nameless::unprovided(format!("`{name}`")),
+        }
+    }
+
+    /// A member of a library global this compiler provides
+    /// (`builtin::provides_global`), reaching a refusal. Called, it is a
+    /// member with no lowering -- every member that has one is lowered before
+    /// a call falls through to here -- so `Math.acosh(x)` is a builtin not
+    /// provided. Read as a value, the member may well be provided when called
+    /// (`console.log` handed on as a function), and what has no lowering is
+    /// the read.
+    fn provided_global_member(&self, id: NodeId, global: &str, member: &str) -> Nameless {
+        let access = self.node(id).parent;
+        if access.is_some_and(|access| self.is_callee(access)) {
+            Nameless::unprovided(format!("`{global}.{member}`"))
+        } else {
+            Nameless::Unsupported(format!(
+                "`{global}.{member}`, a member of `{global}` read as a value"
+            ))
+        }
     }
 
     /// Whether a declaration sits at module scope.
@@ -67610,6 +67641,14 @@ impl<'a> FuncBuilder<'a> {
             ))
         } else if name == "eval" {
             Nameless::Never(format!("`{name}`"))
+        } else if super::builtin::provides_global(name.split('.').next().unwrap_or(name)) {
+            // Provided, and reached in a form its lowering does not take: a
+            // function read as a value (`cond ? setTimeout : null`), a
+            // property of one (`console.log.name`).
+            Nameless::Unsupported(format!(
+                "`{name}`, a builtin this compiler provides, reached in a form its lowering does \
+                 not take"
+            ))
         } else {
             Nameless::unprovided(format!("`{name}`"))
         }

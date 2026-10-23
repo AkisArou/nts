@@ -108,6 +108,64 @@ pub(super) const OMITTED: &[(&str, &str)] = &[
     ("stack", "a compiled binary keeps no record of its frames"),
 ];
 
+/// The library's globals this compiler provides in some form, by name.
+///
+/// Where a name in this list reaches a refusal, what the program did with it
+/// is what has no lowering -- `console.log` read as a value, `Array` handed on
+/// as one -- and the refusal is NTS1001. A name *not* in it is a builtin no
+/// provider here supplies: NTS1100. A member is told apart by how it is
+/// reached: a *call* of a provided global's member falls through only when
+/// the member itself has no lowering (`Math.acosh(x)`), which is NTS1100 too.
+///
+/// Every name lowering recognises: the conversions and `Symbol`
+/// (`primitive_builtin`), the numeric predicates and `parseInt`/`parseFloat`,
+/// the URI functions and the timers (`lower_provided_builtin`), `Math`,
+/// `Number`'s and `String`'s statics (`intrinsic_of`), `console`
+/// (`console_method`), the classes with a representation (`Date`, `Map`,
+/// `Set`, `Promise`, `Array`, `Object`'s statics, `ArrayBuffer`, `DataView`,
+/// the typed arrays, the errors), and the constants. Builtins stage 2 turns
+/// this into the compiler's provider table, with members.
+const PROVIDED_GLOBALS: &[&str] = &[
+    "Array",
+    "ArrayBuffer",
+    "BigInt",
+    "Boolean",
+    "DataView",
+    "Date",
+    "Infinity",
+    "Map",
+    "Math",
+    "NaN",
+    "Number",
+    "Object",
+    "Promise",
+    "Set",
+    "String",
+    "Symbol",
+    "clearInterval",
+    "clearTimeout",
+    "console",
+    "decodeURI",
+    "decodeURIComponent",
+    "encodeURI",
+    "encodeURIComponent",
+    "isFinite",
+    "isNaN",
+    "parseFloat",
+    "parseInt",
+    "setInterval",
+    "setTimeout",
+    "undefined",
+];
+
+/// Whether `name` is a library global this compiler provides in some form
+/// ([`PROVIDED_GLOBALS`], the errors, the typed arrays).
+pub(super) fn provides_global(name: &str) -> bool {
+    PROVIDED_GLOBALS.binary_search(&name).is_ok()
+        || is_error(name)
+        || typed_array_element(name).is_some()
+}
+
 /// Whether a name is one of the provided error classes.
 pub(super) fn is_error(name: &str) -> bool {
     ERRORS.contains(&name)
@@ -520,4 +578,16 @@ pub fn approximating(program: &super::Program) -> std::collections::HashSet<Stri
         }
     }
     approximate
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_provided_globals_are_sorted_for_their_search() {
+        assert!(
+            super::PROVIDED_GLOBALS
+                .windows(2)
+                .all(|pair| pair[0] < pair[1])
+        );
+    }
 }
