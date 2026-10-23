@@ -188,7 +188,7 @@ export const ASKS = {
   test262: ["valid", "is the test262 pin reachable, the inventory and the features audit current"],
   config: ["valid", "are the nts.config.ts files coherent"],
   "react-sources": ["valid", "do the vendored React sources match their manifest"],
-  "frontend-tsrs": ["valid", "do the native frontend's vendored tsrs sources match their pinned SHA-256 inventory"],
+  "frontend-tsrs": ["valid", "do native sources, attributions, feature-on Clippy and adapter tests pass"],
   primitives: ["valid", "does every name docs/primitives.md cites exist"],
   records: ["hygiene", "is every record number used once"],
   "old-paths": ["hygiene", "does anything sit or point where the corpora used to be"],
@@ -214,6 +214,14 @@ export const RULES = [
   {
     name: "the native TypeScript frontend",
     when: (p) => /^(third_party\/tsrs|compiler\/frontend-tsrs)\//.test(p),
+    steps: ["frontend-tsrs"],
+    arms: [],
+  },
+  {
+    name: "workspace dependency and toolchain inputs",
+    when: (p) => /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(p),
+    // Preserve the full core gate these shared inputs already owed.
+    full: true,
     steps: ["frontend-tsrs"],
     arms: [],
   },

@@ -4,6 +4,7 @@ members = [
     "compiler/diagnostics",
     "compiler/semantic-schema",
     "compiler/frontend-ts",
+    "compiler/frontend-tsrs",
     "compiler/core",
     "compiler/codegen/common",
     "compiler/codegen/c",
@@ -48,6 +49,7 @@ nts-differential = { path = "tooling/differential" }
 nts-surfaces = { path = "tooling/surfaces" }
 nts-diagnostics = { path = "compiler/diagnostics" }
 nts-frontend-ts = { path = "compiler/frontend-ts" }
+nts-frontend-tsrs = { path = "compiler/frontend-tsrs" }
 nts-jvm-emitter = { path = "compiler/jvm-emitter" }
 nts-react = { path = "runtime/react/compiler/nts-react" }
 nts-semantic-schema = { path = "compiler/semantic-schema" }

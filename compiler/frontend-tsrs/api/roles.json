@@ -1,0 +1,3534 @@
+{
+  "upstream": "bb5c6037ad04decdd7c5832997e810000e85943d",
+  "rule": "A role belongs to one distinct field of its native node struct. Missing optional child/list => no edge. Present empty list => list edge with zero elements. Required fields always have edges. All edge order is native visitor order, including the runtime JSDoc name/type-expression order.",
+  "nodes": [
+    {
+      "owner": "QualifiedName",
+      "fields": [
+        {
+          "field": "left",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "QualifiedNameLeft"
+        },
+        {
+          "field": "right",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "QualifiedNameRight"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ComputedPropertyName",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ComputedPropertyNameExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "Decorator",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "DecoratorExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "IfStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "IfStatementExpression"
+        },
+        {
+          "field": "then_statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "IfStatementThenStatement"
+        },
+        {
+          "field": "else_statement",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "IfStatementElseStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "DoStatement",
+      "fields": [
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "DoStatementStatement"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "DoStatementExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "WhileStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "WhileStatementExpression"
+        },
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "WhileStatementStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ForStatement",
+      "fields": [
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ForStatementInitializer"
+        },
+        {
+          "field": "condition",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ForStatementCondition"
+        },
+        {
+          "field": "incrementor",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ForStatementIncrementor"
+        },
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ForStatementStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ForInOrOfStatement",
+      "fields": [
+        {
+          "field": "await_modifier",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ForInOrOfStatementAwaitModifier"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ForInOrOfStatementInitializer"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ForInOrOfStatementExpression"
+        },
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ForInOrOfStatementStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "BreakStatement",
+      "fields": [
+        {
+          "field": "label",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BreakStatementLabel"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ContinueStatement",
+      "fields": [
+        {
+          "field": "label",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ContinueStatementLabel"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ReturnStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ReturnStatementExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "WithStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "WithStatementExpression"
+        },
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "WithStatementStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SwitchStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SwitchStatementExpression"
+        },
+        {
+          "field": "case_block",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SwitchStatementCaseBlock"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "CaseBlock",
+      "fields": [
+        {
+          "field": "clauses",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "CaseBlockClauses"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "CaseOrDefaultClause",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "CaseOrDefaultClauseExpression"
+        },
+        {
+          "field": "statements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "CaseOrDefaultClauseStatements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ThrowStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ThrowStatementExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TryStatement",
+      "fields": [
+        {
+          "field": "try_block",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TryStatementTryBlock"
+        },
+        {
+          "field": "catch_clause",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TryStatementCatchClause"
+        },
+        {
+          "field": "finally_block",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TryStatementFinallyBlock"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "CatchClause",
+      "fields": [
+        {
+          "field": "variable_declaration",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "CatchClauseVariableDeclaration"
+        },
+        {
+          "field": "block",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "CatchClauseBlock"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "LabeledStatement",
+      "fields": [
+        {
+          "field": "label",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "LabeledStatementLabel"
+        },
+        {
+          "field": "statement",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "LabeledStatementStatement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExpressionStatement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ExpressionStatementExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "Block",
+      "fields": [
+        {
+          "field": "statements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "BlockStatements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "VariableStatement",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "VariableStatementModifiers"
+        },
+        {
+          "field": "declaration_list",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "VariableStatementDeclarationList"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "VariableDeclaration",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "VariableDeclarationName"
+        },
+        {
+          "field": "exclamation_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "VariableDeclarationExclamationToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "VariableDeclarationType"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "VariableDeclarationInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "VariableDeclarationList",
+      "fields": [
+        {
+          "field": "declarations",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "VariableDeclarationListDeclarations"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "BindingPattern",
+      "fields": [
+        {
+          "field": "elements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "BindingPatternElements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ParameterDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ParameterDeclarationModifiers"
+        },
+        {
+          "field": "dot_dot_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ParameterDeclarationDotDotDotToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ParameterDeclarationName"
+        },
+        {
+          "field": "question_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ParameterDeclarationQuestionToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ParameterDeclarationType"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ParameterDeclarationInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "BindingElement",
+      "fields": [
+        {
+          "field": "dot_dot_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BindingElementDotDotDotToken"
+        },
+        {
+          "field": "property_name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BindingElementPropertyName"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BindingElementName"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BindingElementInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "MissingDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MissingDeclarationModifiers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "FunctionDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionDeclarationModifiers"
+        },
+        {
+          "field": "asterisk_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionDeclarationAsteriskToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionDeclarationType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionDeclarationFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ClassDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ClassDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassDeclarationTypeParameters"
+        },
+        {
+          "field": "heritage_clauses",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassDeclarationHeritageClauses"
+        },
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ClassDeclarationMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ClassExpression",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassExpressionModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ClassExpressionName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassExpressionTypeParameters"
+        },
+        {
+          "field": "heritage_clauses",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassExpressionHeritageClauses"
+        },
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ClassExpressionMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "HeritageClause",
+      "fields": [
+        {
+          "field": "types",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "HeritageClauseTypes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "InterfaceDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "InterfaceDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "InterfaceDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "InterfaceDeclarationTypeParameters"
+        },
+        {
+          "field": "heritage_clauses",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "InterfaceDeclarationHeritageClauses"
+        },
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "InterfaceDeclarationMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeAliasDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TypeAliasDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeAliasDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TypeAliasDeclarationTypeParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypeAliasDeclarationType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "EnumMember",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "EnumMemberName"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "EnumMemberInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "EnumDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "EnumDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "EnumDeclarationName"
+        },
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "EnumDeclarationMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ModuleBlock",
+      "fields": [
+        {
+          "field": "statements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ModuleBlockStatements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ImportDeclarationModifiers"
+        },
+        {
+          "field": "import_clause",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportDeclarationImportClause"
+        },
+        {
+          "field": "module_specifier",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportDeclarationModuleSpecifier"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportDeclarationAttributes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExternalModuleReference",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ExternalModuleReferenceExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamespaceImport",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NamespaceImportName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamedImports",
+      "fields": [
+        {
+          "field": "elements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "NamedImportsElements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExportAssignment",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ExportAssignmentModifiers"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ExportAssignmentType"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ExportAssignmentExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamespaceExportDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "NamespaceExportDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NamespaceExportDeclarationName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamespaceExport",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NamespaceExportName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamedExports",
+      "fields": [
+        {
+          "field": "elements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "NamedExportsElements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExportSpecifier",
+      "fields": [
+        {
+          "field": "property_name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ExportSpecifierPropertyName"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ExportSpecifierName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "CallSignatureDeclaration",
+      "fields": [
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "CallSignatureDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "CallSignatureDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "CallSignatureDeclarationType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ConstructSignatureDeclaration",
+      "fields": [
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructSignatureDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructSignatureDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ConstructSignatureDeclarationType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ConstructorDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorDeclarationModifiers"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ConstructorDeclarationType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ConstructorDeclarationFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ConstructorDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "GetAccessorDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "GetAccessorDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "GetAccessorDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "GetAccessorDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "GetAccessorDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "GetAccessorDeclarationType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "GetAccessorDeclarationFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "GetAccessorDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SetAccessorDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "SetAccessorDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SetAccessorDeclarationName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "SetAccessorDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "SetAccessorDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "SetAccessorDeclarationType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "SetAccessorDeclarationFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "SetAccessorDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "IndexSignatureDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "IndexSignatureDeclarationModifiers"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "IndexSignatureDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "IndexSignatureDeclarationType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "MethodSignatureDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodSignatureDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "MethodSignatureDeclarationName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodSignatureDeclarationPostfixToken"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodSignatureDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodSignatureDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodSignatureDeclarationType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "MethodDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodDeclarationModifiers"
+        },
+        {
+          "field": "asterisk_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodDeclarationAsteriskToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "MethodDeclarationName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodDeclarationPostfixToken"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodDeclarationTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MethodDeclarationParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodDeclarationType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodDeclarationFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MethodDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PropertySignatureDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "PropertySignatureDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertySignatureDeclarationName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertySignatureDeclarationPostfixToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertySignatureDeclarationType"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertySignatureDeclarationInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PropertyDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "PropertyDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertyDeclarationName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyDeclarationPostfixToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyDeclarationType"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyDeclarationInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ClassStaticBlockDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ClassStaticBlockDeclarationModifiers"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ClassStaticBlockDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "BinaryExpression",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "BinaryExpressionModifiers"
+        },
+        {
+          "field": "left",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "BinaryExpressionLeft"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "BinaryExpressionType"
+        },
+        {
+          "field": "operator_token",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "BinaryExpressionOperatorToken"
+        },
+        {
+          "field": "right",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "BinaryExpressionRight"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PrefixUnaryExpression",
+      "fields": [
+        {
+          "field": "operand",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PrefixUnaryExpressionOperand"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PostfixUnaryExpression",
+      "fields": [
+        {
+          "field": "operand",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PostfixUnaryExpressionOperand"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "YieldExpression",
+      "fields": [
+        {
+          "field": "asterisk_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "YieldExpressionAsteriskToken"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "YieldExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ArrowFunction",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ArrowFunctionModifiers"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ArrowFunctionTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ArrowFunctionParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ArrowFunctionType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ArrowFunctionFullSignature"
+        },
+        {
+          "field": "equals_greater_than_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ArrowFunctionEqualsGreaterThanToken"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ArrowFunctionBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "FunctionExpression",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionExpressionModifiers"
+        },
+        {
+          "field": "asterisk_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionExpressionAsteriskToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionExpressionName"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionExpressionTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionExpressionParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionExpressionType"
+        },
+        {
+          "field": "full_signature",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionExpressionFullSignature"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionExpressionBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "AsExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "AsExpressionExpression"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "AsExpressionType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SatisfiesExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SatisfiesExpressionExpression"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SatisfiesExpressionType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ConditionalExpression",
+      "fields": [
+        {
+          "field": "condition",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalExpressionCondition"
+        },
+        {
+          "field": "question_token",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalExpressionQuestionToken"
+        },
+        {
+          "field": "when_true",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalExpressionWhenTrue"
+        },
+        {
+          "field": "colon_token",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalExpressionColonToken"
+        },
+        {
+          "field": "when_false",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalExpressionWhenFalse"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PropertyAccessExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertyAccessExpressionExpression"
+        },
+        {
+          "field": "question_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyAccessExpressionQuestionDotToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertyAccessExpressionName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ElementAccessExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ElementAccessExpressionExpression"
+        },
+        {
+          "field": "question_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ElementAccessExpressionQuestionDotToken"
+        },
+        {
+          "field": "argument_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ElementAccessExpressionArgumentExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "CallExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "CallExpressionExpression"
+        },
+        {
+          "field": "question_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "CallExpressionQuestionDotToken"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "CallExpressionTypeArguments"
+        },
+        {
+          "field": "arguments",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "CallExpressionArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NewExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NewExpressionExpression"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "NewExpressionTypeArguments"
+        },
+        {
+          "field": "arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "NewExpressionArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "MetaProperty",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "MetaPropertyName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NonNullExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NonNullExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SpreadElement",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SpreadElementExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TemplateExpression",
+      "fields": [
+        {
+          "field": "head",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateExpressionHead"
+        },
+        {
+          "field": "template_spans",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "TemplateExpressionTemplateSpans"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TemplateSpan",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateSpanExpression"
+        },
+        {
+          "field": "literal",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateSpanLiteral"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TaggedTemplateExpression",
+      "fields": [
+        {
+          "field": "tag",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TaggedTemplateExpressionTag"
+        },
+        {
+          "field": "question_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TaggedTemplateExpressionQuestionDotToken"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TaggedTemplateExpressionTypeArguments"
+        },
+        {
+          "field": "template",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TaggedTemplateExpressionTemplate"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ParenthesizedExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ParenthesizedExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ArrayLiteralExpression",
+      "fields": [
+        {
+          "field": "elements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ArrayLiteralExpressionElements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ObjectLiteralExpression",
+      "fields": [
+        {
+          "field": "properties",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ObjectLiteralExpressionProperties"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SpreadAssignment",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SpreadAssignmentExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PropertyAssignment",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "PropertyAssignmentModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertyAssignmentName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyAssignmentPostfixToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "PropertyAssignmentType"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PropertyAssignmentInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ShorthandPropertyAssignment",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ShorthandPropertyAssignmentModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ShorthandPropertyAssignmentName"
+        },
+        {
+          "field": "postfix_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ShorthandPropertyAssignmentPostfixToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ShorthandPropertyAssignmentType"
+        },
+        {
+          "field": "equals_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ShorthandPropertyAssignmentEqualsToken"
+        },
+        {
+          "field": "object_assignment_initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ShorthandPropertyAssignmentObjectAssignmentInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "DeleteExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "DeleteExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeOfExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeOfExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "VoidExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "VoidExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "AwaitExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "AwaitExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeAssertion",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeAssertionType"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeAssertionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "UnionTypeNode",
+      "fields": [
+        {
+          "field": "types",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "UnionTypeNodeTypes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "IntersectionTypeNode",
+      "fields": [
+        {
+          "field": "types",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "IntersectionTypeNodeTypes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ConditionalTypeNode",
+      "fields": [
+        {
+          "field": "check_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalTypeNodeCheckType"
+        },
+        {
+          "field": "extends_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalTypeNodeExtendsType"
+        },
+        {
+          "field": "true_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalTypeNodeTrueType"
+        },
+        {
+          "field": "false_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ConditionalTypeNodeFalseType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeOperatorNode",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeOperatorNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "InferTypeNode",
+      "fields": [
+        {
+          "field": "type_parameter",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "InferTypeNodeTypeParameter"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ArrayTypeNode",
+      "fields": [
+        {
+          "field": "element_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ArrayTypeNodeElementType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "IndexedAccessTypeNode",
+      "fields": [
+        {
+          "field": "object_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "IndexedAccessTypeNodeObjectType"
+        },
+        {
+          "field": "index_type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "IndexedAccessTypeNodeIndexType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeReferenceNode",
+      "fields": [
+        {
+          "field": "type_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeReferenceNodeTypeName"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TypeReferenceNodeTypeArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExpressionWithTypeArguments",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ExpressionWithTypeArgumentsExpression"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ExpressionWithTypeArgumentsTypeArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "LiteralTypeNode",
+      "fields": [
+        {
+          "field": "literal",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "LiteralTypeNodeLiteral"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypePredicateNode",
+      "fields": [
+        {
+          "field": "asserts_modifier",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypePredicateNodeAssertsModifier"
+        },
+        {
+          "field": "parameter_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypePredicateNodeParameterName"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypePredicateNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportAttribute",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportAttributeName"
+        },
+        {
+          "field": "value",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportAttributeValue"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportAttributes",
+      "fields": [
+        {
+          "field": "attributes",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "ImportAttributesAttributes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeQueryNode",
+      "fields": [
+        {
+          "field": "expr_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeQueryNodeExprName"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TypeQueryNodeTypeArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "MappedTypeNode",
+      "fields": [
+        {
+          "field": "readonly_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MappedTypeNodeReadonlyToken"
+        },
+        {
+          "field": "type_parameter",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "MappedTypeNodeTypeParameter"
+        },
+        {
+          "field": "name_type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MappedTypeNodeNameType"
+        },
+        {
+          "field": "question_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MappedTypeNodeQuestionToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "MappedTypeNodeType"
+        },
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "MappedTypeNodeMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeLiteralNode",
+      "fields": [
+        {
+          "field": "members",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "TypeLiteralNodeMembers"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TupleTypeNode",
+      "fields": [
+        {
+          "field": "elements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "TupleTypeNodeElements"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "NamedTupleMember",
+      "fields": [
+        {
+          "field": "dot_dot_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "NamedTupleMemberDotDotDotToken"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NamedTupleMemberName"
+        },
+        {
+          "field": "question_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "NamedTupleMemberQuestionToken"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "NamedTupleMemberType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "OptionalTypeNode",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "OptionalTypeNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "RestTypeNode",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "RestTypeNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ParenthesizedTypeNode",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ParenthesizedTypeNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "FunctionTypeNode",
+      "fields": [
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionTypeNodeTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "FunctionTypeNodeParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "FunctionTypeNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ConstructorTypeNode",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorTypeNodeModifiers"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorTypeNodeTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ConstructorTypeNodeParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ConstructorTypeNodeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TemplateLiteralTypeNode",
+      "fields": [
+        {
+          "field": "head",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateLiteralTypeNodeHead"
+        },
+        {
+          "field": "template_spans",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "TemplateLiteralTypeNodeTemplateSpans"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TemplateLiteralTypeSpan",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateLiteralTypeSpanType"
+        },
+        {
+          "field": "literal",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TemplateLiteralTypeSpanLiteral"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SyntheticExpression",
+      "fields": [
+        {
+          "field": "tuple_name_source",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "SyntheticExpressionTupleNameSource"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "PartiallyEmittedExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "PartiallyEmittedExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxElement",
+      "fields": [
+        {
+          "field": "opening_element",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxElementOpeningElement"
+        },
+        {
+          "field": "children",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JsxElementChildren"
+        },
+        {
+          "field": "closing_element",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxElementClosingElement"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxAttributes",
+      "fields": [
+        {
+          "field": "properties",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JsxAttributesProperties"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxNamespacedName",
+      "fields": [
+        {
+          "field": "namespace",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxNamespacedNameNamespace"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxNamespacedNameName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxOpeningElement",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxOpeningElementTagName"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JsxOpeningElementTypeArguments"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxOpeningElementAttributes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxSelfClosingElement",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxSelfClosingElementTagName"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JsxSelfClosingElementTypeArguments"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxSelfClosingElementAttributes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxFragment",
+      "fields": [
+        {
+          "field": "opening_fragment",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxFragmentOpeningFragment"
+        },
+        {
+          "field": "children",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JsxFragmentChildren"
+        },
+        {
+          "field": "closing_fragment",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxFragmentClosingFragment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxAttribute",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxAttributeName"
+        },
+        {
+          "field": "initializer",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JsxAttributeInitializer"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxSpreadAttribute",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxSpreadAttributeExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxClosingElement",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JsxClosingElementTagName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JsxExpression",
+      "fields": [
+        {
+          "field": "dot_dot_dot_token",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JsxExpressionDotDotDotToken"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JsxExpressionExpression"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SyntaxList",
+      "fields": [
+        {
+          "field": "children",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "SyntaxListChildren"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDoc",
+      "fields": [
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JSDocComment"
+        },
+        {
+          "field": "tags",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocTags"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocTypeExpression",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocTypeExpressionType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocNonNullableType",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocNonNullableTypeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocNullableType",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocNullableTypeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocVariadicType",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocVariadicTypeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocOptionalType",
+      "fields": [
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocOptionalTypeType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocTypeTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocTypeTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocTypeTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocTypeTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocUnknownTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocUnknownTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocUnknownTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocTemplateTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocTemplateTagTagName"
+        },
+        {
+          "field": "constraint",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocTemplateTagConstraint"
+        },
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JSDocTemplateTagTypeParameters"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocTemplateTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocReturnTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocReturnTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocReturnTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocReturnTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocPublicTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocPublicTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocPublicTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocPrivateTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocPrivateTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocPrivateTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocProtectedTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocProtectedTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocProtectedTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocReadonlyTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocReadonlyTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocReadonlyTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocOverrideTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocOverrideTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocOverrideTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocDeprecatedTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocDeprecatedTagTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocDeprecatedTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocSeeTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocSeeTagTagName"
+        },
+        {
+          "field": "name_expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocSeeTagNameExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocSeeTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocImplementsTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocImplementsTagTagName"
+        },
+        {
+          "field": "class_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocImplementsTagClassName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocImplementsTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocAugmentsTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocAugmentsTagTagName"
+        },
+        {
+          "field": "class_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocAugmentsTagClassName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocAugmentsTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocSatisfiesTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocSatisfiesTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocSatisfiesTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocSatisfiesTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocThrowsTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocThrowsTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocThrowsTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocThrowsTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocThisTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocThisTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocThisTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocThisTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocImportTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocImportTagTagName"
+        },
+        {
+          "field": "import_clause",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocImportTagImportClause"
+        },
+        {
+          "field": "module_specifier",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocImportTagModuleSpecifier"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocImportTagAttributes"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocImportTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocCallbackTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocCallbackTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocCallbackTagTypeExpression"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocCallbackTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocCallbackTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocOverloadTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocOverloadTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocOverloadTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocOverloadTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocTypedefTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocTypedefTagTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocTypedefTagTypeExpression"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocTypedefTagName"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocTypedefTagComment"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocSignature",
+      "fields": [
+        {
+          "field": "type_parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocSignatureTypeParameters"
+        },
+        {
+          "field": "parameters",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocSignatureParameters"
+        },
+        {
+          "field": "type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocSignatureType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocNameReference",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocNameReferenceName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ModuleDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ModuleDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ModuleDeclarationName"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ModuleDeclarationAttributes"
+        },
+        {
+          "field": "body",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ModuleDeclarationBody"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportEqualsDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ImportEqualsDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportEqualsDeclarationName"
+        },
+        {
+          "field": "module_reference",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportEqualsDeclarationModuleReference"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ExportDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ExportDeclarationModifiers"
+        },
+        {
+          "field": "export_clause",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ExportDeclarationExportClause"
+        },
+        {
+          "field": "module_specifier",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ExportDeclarationModuleSpecifier"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ExportDeclarationAttributes"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportTypeNode",
+      "fields": [
+        {
+          "field": "argument",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportTypeNodeArgument"
+        },
+        {
+          "field": "attributes",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportTypeNodeAttributes"
+        },
+        {
+          "field": "qualifier",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportTypeNodeQualifier"
+        },
+        {
+          "field": "type_arguments",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "ImportTypeNodeTypeArguments"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportClause",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportClauseName"
+        },
+        {
+          "field": "named_bindings",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportClauseNamedBindings"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "ImportSpecifier",
+      "fields": [
+        {
+          "field": "property_name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "ImportSpecifierPropertyName"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "ImportSpecifierName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocLink",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocLinkName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocLinkPlain",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocLinkPlainName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocLinkCode",
+      "fields": [
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocLinkCodeName"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "TypeParameterDeclaration",
+      "fields": [
+        {
+          "field": "modifiers",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "TypeParameterDeclarationModifiers"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "TypeParameterDeclarationName"
+        },
+        {
+          "field": "constraint",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypeParameterDeclarationConstraint"
+        },
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypeParameterDeclarationExpression"
+        },
+        {
+          "field": "default_type",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "TypeParameterDeclarationDefaultType"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "SyntheticReferenceExpression",
+      "fields": [
+        {
+          "field": "expression",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SyntheticReferenceExpressionExpression"
+        },
+        {
+          "field": "this_arg",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SyntheticReferenceExpressionThisArg"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocTypeLiteral",
+      "fields": [
+        {
+          "field": "jsdoc_property_tags",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "JSDocTypeLiteralJsdocPropertyTags"
+        }
+      ],
+      "order": "listed native visitor order"
+    },
+    {
+      "owner": "JSDocParameterOrPropertyTag",
+      "fields": [
+        {
+          "field": "tag_name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocParameterOrPropertyTagTagName"
+        },
+        {
+          "field": "name",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "JSDocParameterOrPropertyTagName"
+        },
+        {
+          "field": "type_expression",
+          "role": "child",
+          "cardinality": "optional",
+          "variant": "JSDocParameterOrPropertyTagTypeExpression"
+        },
+        {
+          "field": "comment",
+          "role": "list",
+          "cardinality": "optional-list",
+          "variant": "JSDocParameterOrPropertyTagComment"
+        }
+      ],
+      "order": "name/type_expression depend on is_name_first"
+    },
+    {
+      "owner": "SourceFile",
+      "fields": [
+        {
+          "field": "statements",
+          "role": "list",
+          "cardinality": "list",
+          "variant": "SourceFileStatements"
+        },
+        {
+          "field": "end_of_file_token",
+          "role": "child",
+          "cardinality": "one",
+          "variant": "SourceFileEndOfFileToken"
+        }
+      ],
+      "order": "listed native visitor order"
+    }
+  ]
+}

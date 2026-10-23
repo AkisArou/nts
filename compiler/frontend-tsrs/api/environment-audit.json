@@ -1,0 +1,500 @@
+{
+  "upstream": "bb5c6037ad04decdd7c5832997e810000e85943d",
+  "crates": [
+    "tsrs_ast",
+    "tsrs_astnav",
+    "tsrs_binder",
+    "tsrs_checker",
+    "tsrs_compiler",
+    "tsrs_contentmapper",
+    "tsrs_core",
+    "tsrs_declarations",
+    "tsrs_diagnostics",
+    "tsrs_ipc",
+    "tsrs_module",
+    "tsrs_modulespecifiers",
+    "tsrs_parser",
+    "tsrs_printer",
+    "tsrs_pseudochecker",
+    "tsrs_scanner",
+    "tsrs_sourcemap",
+    "tsrs_spanmap",
+    "tsrs_transformers",
+    "tsrs_tsoptions",
+    "tsrs_vfs"
+  ],
+  "reads": [
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/checker.rs",
+      "line": 1819,
+      "keys": [
+        "TSRS_DEEP_NESTED"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/checker_09.rs",
+      "line": 3525,
+      "keys": [
+        "TSRS_LAZY_UNAFFECTED"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/flowmemo.rs",
+      "line": 53,
+      "keys": [
+        "TSRS_FLOW_MEMO"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/flowmemo.rs",
+      "line": 64,
+      "keys": [
+        "TSRS_FLOW_MEMO_BITS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/infermemo.rs",
+      "line": 66,
+      "keys": [
+        "TSRS_INFER_MEMO"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/infermemo.rs",
+      "line": 86,
+      "keys": [
+        "TSRS_INFER_MEMO_STATS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/infermemo.rs",
+      "line": 98,
+      "keys": [
+        "TSRS_INFER_MEMO_MIN_STEPS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/sitecount.rs",
+      "line": 38,
+      "keys": [
+        "TSRS_SITE_COUNTS_TOP"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/unioncache.rs",
+      "line": 50,
+      "keys": [
+        "TSRS_UNION_CACHE"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/unioncache.rs",
+      "line": 63,
+      "keys": [
+        "TSRS_IA_MEMO"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/unioncache.rs",
+      "line": 84,
+      "keys": [
+        "TSRS_UNION_CACHE_STATS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/unioncache.rs",
+      "line": 100,
+      "keys": [
+        "TSRS_UNION_CACHE_BITS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/uniontrace.rs",
+      "line": 33,
+      "keys": [
+        "TSRS_TRACE_UNION_REDUCTION"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/workcensus.rs",
+      "line": 28,
+      "keys": [
+        "TSRS_WORK_CENSUS_SLOW"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/workcensus.rs",
+      "line": 43,
+      "keys": [
+        "TSRS_WORK_CENSUS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_checker/src/workcensus.rs",
+      "line": 649,
+      "keys": [
+        "TSRS_WORK_CENSUS_TOP"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/affinity.rs",
+      "line": 68,
+      "keys": [
+        "TSRS_MODULE_AFFINITY"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/affinity.rs",
+      "line": 77,
+      "keys": [
+        "TSRS_MODULE_AFFINITY_GAMMA"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/affinity.rs",
+      "line": 82,
+      "keys": [
+        "TSRS_MODULE_AFFINITY_PASSES"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 299,
+      "keys": [
+        "TSRS_RELATION_CACHE_LIMIT"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 310,
+      "keys": [
+        "TSRS_LEAVES_FIRST"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 350,
+      "keys": [
+        "TSRS_MAX_MEMORY"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 361,
+      "keys": [
+        "TSRS_RETIRE_MIN"
+      ],
+      "disposition": "ignored; checker recycling is explicitly disabled"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 417,
+      "keys": [
+        "TSRS_FILE_TIMES"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1220,
+      "keys": [
+        "TSRS_CHECKER_ASSIGNMENT"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1237,
+      "keys": [
+        "TSRS_HEAVY_SHARE_DIVISOR"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1488,
+      "keys": [
+        "TSRS_STEAL_STICKY"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1507,
+      "keys": [
+        "TSRS_STEAL_MAX_THIEVES"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1740,
+      "keys": [
+        "TSRS_ASSIGNMENT_DUMP"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1763,
+      "keys": [
+        "TSRS_CHECKER_COST_CACHE"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/checkerpool.rs",
+      "line": 1903,
+      "keys": [
+        "TSRS_CHECKER_ASSIGNMENT"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/emitter.rs",
+      "line": 215,
+      "keys": [
+        "TSRS_EMIT_MEM"
+      ],
+      "disposition": "ignored; adapter never calls native emit"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/fileregions.rs",
+      "line": 107,
+      "keys": [
+        "TSRS_LAZY_DTS"
+      ],
+      "disposition": "ignored; adapter never enables process-wide lazy declaration parsing"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/fileregions.rs",
+      "line": 153,
+      "keys": [
+        "TSRS_LAZY_DTS_SHARED"
+      ],
+      "disposition": "ignored; adapter never enables process-wide lazy declaration parsing"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/fileregions.rs",
+      "line": 267,
+      "keys": [
+        "TSRS_FREE_LEAVES"
+      ],
+      "disposition": "ignored; CLI leaf-settings reader is never called; LeafMode::Off"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/program.rs",
+      "line": 509,
+      "keys": [
+        "RAYON_NUM_THREADS"
+      ],
+      "disposition": "ignored for semantic identity; config/checker count uses its own native pool; Rayon controls only parse/bind workers; child-process test preserves counts 1/4 and facts with value 2"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/sharedgraph.rs",
+      "line": 24,
+      "keys": [
+        "TSRS_SHARED_GRAPH"
+      ],
+      "disposition": "reachable reader; shared-graph feature is not compiled in, so value cannot enable it; captured and noted"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/sharedgraph.rs",
+      "line": 40,
+      "keys": [
+        "TSRS_SHARED_GRAPH_SEED_PERCENT"
+      ],
+      "disposition": "ignored in this build; shared-graph feature is not compiled in; value conservatively fingerprinted"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/sharedgraph.rs",
+      "line": 223,
+      "keys": [
+        "TSRS_DEBUG_REGIONS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/splitcheck.rs",
+      "line": 83,
+      "keys": [
+        "TSRS_SPLIT_FILES"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/splitcheck.rs",
+      "line": 98,
+      "keys": [
+        "TSRS_SPLIT_PIECE_DIVISOR"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_compiler/src/splitcheck.rs",
+      "line": 101,
+      "keys": [
+        "TSRS_SPLIT_MIN_SHARE"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_contentmapper/src/process.rs",
+      "line": 188,
+      "keys": [
+        "PATH"
+      ],
+      "disposition": "ignored; no content-mapper project/process host is installed"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/build.rs",
+      "line": 5,
+      "keys": [
+        "CARGO_FEATURE_PLAIN_PTRS"
+      ],
+      "disposition": "build-only; Cargo feature/target configuration, captured by adapter build identity and native mode constants"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/build.rs",
+      "line": 6,
+      "keys": [
+        "CARGO_CFG_TARGET_FAMILY"
+      ],
+      "disposition": "build-only; Cargo feature/target configuration, captured by adapter build identity and native mode constants"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/allocator.rs",
+      "line": 11,
+      "keys": [
+        "MIMALLOC_ALLOW_THP"
+      ],
+      "disposition": "ignored; optional CLI allocator/THP initializer is never called"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/arena.rs",
+      "line": 680,
+      "keys": [
+        "TSRS_ARENA_POISON"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/compat.rs",
+      "line": 24,
+      "keys": [
+        "TSRS_CHECKER_ASSIGNMENT"
+      ],
+      "disposition": "ignored; adapter pins canonical history through public setter before initialization; no baseline harness is called"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/compat.rs",
+      "line": 46,
+      "keys": [
+        "TSRS_CHECKER_ASSIGNMENT"
+      ],
+      "disposition": "ignored; adapter pins canonical history through public setter before initialization; no baseline harness is called"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/compat.rs",
+      "line": 47,
+      "keys": [
+        "TSRS_HISTORY"
+      ],
+      "disposition": "ignored; adapter pins canonical history through public setter before initialization; no baseline harness is called"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/festats.rs",
+      "line": 72,
+      "keys": [
+        "TSRS_FRONTEND_STATS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/lazymembers.rs",
+      "line": 23,
+      "keys": [
+        "TSRS_LAZY_MEMBERS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/lazymembers.rs",
+      "line": 28,
+      "keys": [
+        "TSRS_LAZY_TUPLES",
+        "TSRS_LAZY_COND_MAPPER",
+        "TSRS_LAZY_PROP_CACHE",
+        "TSRS_LAZY_HAS_PROP",
+        "TSRS_LAZY_UNMATCHED",
+        "TSRS_LAZY_EMPTY",
+        "TSRS_LAZY_INFERENCE_MAPPERS"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/memsplit.rs",
+      "line": 20,
+      "keys": [
+        "TSRS_MEM_SPLIT"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/ptr.rs",
+      "line": 1713,
+      "keys": [
+        "TSRS_CHECK_SHARED"
+      ],
+      "disposition": "reachable; captured in immutable process/cache identity"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_core/src/sharedgraph.rs",
+      "line": 158,
+      "keys": [
+        "TSRS_SHARED_GRAPH_PROTECT"
+      ],
+      "disposition": "ignored in this build; shared-graph feature is not compiled in; value conservatively fingerprinted"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_vfs/src/bundled/bundled.rs",
+      "line": 25,
+      "keys": [
+        "TSRS_LIB_PATH"
+      ],
+      "disposition": "ignored; adapter uses lib_path/explicit override, never default_lib_path"
+    },
+    {
+      "path": "third_party/tsrs/crates/tsrs_vfs/src/osvfs/os.rs",
+      "line": 169,
+      "keys": [
+        "LocalAppData",
+        "HOME",
+        "XDG_CACHE_HOME"
+      ],
+      "disposition": "ignored for native resolution; global typings cache helper is not used (typings_location is empty); excluded because this helper is unused in the native path"
+    }
+  ]
+}

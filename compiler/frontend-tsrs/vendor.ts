@@ -64,6 +64,7 @@ if (!source) {
   if (!check || requested || dryRun) throw new Error("use --source <checkout> --rev <commit>, or --check");
   const commit = verify();
   process.stdout.write(`third_party/tsrs: ${commit}, ${inventory(target).length} files verified\n`);
+  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "licenses.ts"), "--check"], { stdio: "inherit" });
 } else {
   if (!requested) throw new Error("--source needs --rev <commit>; no floating pin is inferred");
   const git = (...argv: string[]) => execFileSync("git", ["-C", source, ...argv], { maxBuffer: 64 << 20 });

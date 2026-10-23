@@ -42,7 +42,7 @@ function owes(path, want, { not = [] } = {}) {
   return got;
 }
 
-test("native frontend and vendor changes select their source-integrity check", () => {
+test("native frontend and vendor changes select feature-on validation", () => {
   for (const path of [
     "third_party/tsrs/crates/tsrs_checker/src/checker.rs",
     "third_party/tsrs/MANIFEST",
@@ -53,8 +53,14 @@ test("native frontend and vendor changes select their source-integrity check", (
   }
 });
 
+test("native dependency and toolchain inputs select feature-on validation", () => {
+  for (const path of ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]) {
+    assert.ok(reach(path).includes("frontend-tsrs"), path);
+  }
+});
+
 test("unrelated source changes do not select native frontend integrity", () => {
-  for (const path of ["tests/programs/hello/src/main.ts", "docs/architecture.md"]) {
+  for (const path of ["tests/programs/hello/src/main.ts", "docs/architecture.md", "compiler/core/src/lower.rs"]) {
     assert.ok(!stepsFor(path).includes("frontend-tsrs"), path);
   }
 });

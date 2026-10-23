@@ -2717,9 +2717,15 @@ react_sources() {
 }
 step "react-sources" react_sources
 
-# The native frontend's upstream crates are verbatim and outside the
-# workspace. Check their complete file inventory and content against the pin.
-step "frontend-tsrs" node compiler/frontend-tsrs/vendor.ts --check
+# Transitional while tsgo is still the default. The switch deletes the tsrs
+# feature and folds these native checks into workspace Clippy and tests.
+# Upstream stays immutable; the safe adapter is checked with the feature on.
+frontend_tsrs() {
+  node compiler/frontend-tsrs/vendor.ts --check &&
+    cargo clippy -p nts-frontend-tsrs --features tsrs --all-targets --jobs 4 -- -D warnings &&
+    cargo test -p nts-frontend-tsrs --features tsrs --no-fail-fast --jobs 4
+}
+step "frontend-tsrs" frontend_tsrs
 
 # The 152 fixtures in `tests/refusals`, which nothing ran.
 #

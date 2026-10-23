@@ -183,12 +183,15 @@ function main(argv: readonly string[]): number {
   };
   const tests = ["test", "--profile", "nts-dev", "--no-fail-fast", ...crates.flatMap((name) => ["-p", name])];
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
+  const nativeFrontend = changed.some((path) => /^(compiler\/frontend-tsrs|third_party\/tsrs)\//.test(path) || /^(Cargo\.(toml|lock)|rust-toolchain\.toml)$/.test(path));
   const going =
     step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
     step("clippy", () => heavy("clippy", "14G", "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&
-    step("tests", () => heavy("the tests", "16G", "cargo", tests, { NTS_TSGO: tsgo }));
+    step("tests", () => heavy("the tests", "16G", "cargo", tests, { NTS_TSGO: tsgo })) &&
+    // Transitional: delete this branch with the feature at the native switch.
+    (!nativeFrontend || step("frontend-tsrs", () => heavy("native frontend checks", "16G", "sh", ["tooling/gate/all.sh", "--call", "frontend-tsrs"], { NTS_TSGO: tsgo })));
 
   if (going && agree) {
     const before = text("node", ["tooling/conformance/pin.ts", base]).trim().split("\n").at(-1) ?? "";
