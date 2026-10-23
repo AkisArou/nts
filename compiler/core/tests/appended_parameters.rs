@@ -4,8 +4,9 @@
 //! every function with node, which ownership does not change. What it cannot
 //! say is which parameters are taken over. Here, on the program prepared
 //! without counting (what reference counting summarizes before it inserts
-//! anything): `add`, `addBoth`, `relay` and `either` take their first
-//! parameter over; `measured`, `looped` and the exported `addExported` do not.
+//! anything): `add`, `addBoth`, `relay`, `either` and `joined` take their first
+//! parameter over; `measured`, `twiceOnAPath`, `looped` and the exported
+//! `addExported` do not.
 //!
 //! Skips only when `tsgo` is not built.
 
@@ -54,13 +55,13 @@ fn a_string_parameter_appended_onto_is_taken_over() {
             .consumes(name)
             .is_some_and(|slots| slots.contains(&0))
     };
-    for name in ["add", "addBoth", "relay", "either"] {
+    for name in ["add", "addBoth", "relay", "either", "joined"] {
         assert!(
             takes_first(name),
             "`{name}` gives its string away and takes it over"
         );
     }
-    for name in ["measured", "looped", "addExported"] {
+    for name in ["measured", "twiceOnAPath", "looped", "addExported"] {
         assert!(!takes_first(name), "`{name}` keeps borrowing its string");
     }
 }

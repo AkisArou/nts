@@ -3237,7 +3237,7 @@ fn appended_on_every_path(
             }
             gives_away &= !super::operands_of_terminator(&block.terminator).contains(&parameter);
         }
-        if gives_away && once_on_every_path(func, &reachable, &reads) {
+        if gives_away && once_on_every_path(func, &reads) {
             slots.push(slot);
         }
     }
@@ -3246,12 +3246,8 @@ fn appended_on_every_path(
 
 /// Whether the blocks `reads` lists -- one entry per read -- are passed
 /// exactly once on every path to a return: no two reads in one block or on one
-/// path, none round a loop, and every reachable return behind one of them.
-fn once_on_every_path(
-    func: &Func,
-    reachable: &rustc_hash::FxHashSet<BlockId>,
-    reads: &[BlockId],
-) -> bool {
+/// path, none round a loop, and no path from the entry to a return around them.
+fn once_on_every_path(func: &Func, reads: &[BlockId]) -> bool {
     let distinct: rustc_hash::FxHashSet<BlockId> = reads.iter().copied().collect();
     if reads.is_empty() || distinct.len() != reads.len() {
         return false;
@@ -3279,23 +3275,24 @@ fn once_on_every_path(
     {
         return false;
     }
-    let idom = super::verify::dominators(func, reachable);
-    let dominated = |under: BlockId| {
-        let mut at = Some(under);
-        while let Some(block) = at {
-            if distinct.contains(&block) {
-                return true;
-            }
-            at = idom[block.0 as usize];
+    // Covering: walked from the entry around the reads, no return is reached.
+    // No one read has to stand in front of each return -- `isFinite(v) ?
+    // String(v) : "null"` appended reads the string once in each arm, and the
+    // arms meet before the one return -- so this is a walk rather than a
+    // dominance test, which refused exactly that shape.
+    let mut seen = rustc_hash::FxHashSet::default();
+    let mut front = vec![BlockId(0)];
+    while let Some(at) = front.pop() {
+        if distinct.contains(&at) || !seen.insert(at) {
+            continue;
         }
-        false
-    };
-    func.blocks.iter().enumerate().all(|(at, block)| {
-        let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
-        !matches!(block.terminator, super::Terminator::Return(_))
-            || !reachable.contains(&here)
-            || dominated(here)
-    })
+        let block = &func.blocks[at.0 as usize];
+        if matches!(block.terminator, super::Terminator::Return(_)) {
+            return false;
+        }
+        front.extend(block.terminator.successors());
+    }
+    true
 }
 
 /// Callees that hand back one of their own parameters.

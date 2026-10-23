@@ -6,9 +6,11 @@
 //
 // Taken over: `add`, `addBoth` (one concatenation chain), `relay` (handed to
 // a slot `add` takes over), `either` (one concatenation on each of two
-// exclusive paths). The one-difference controls keep borrowing: `measured`
-// reads `out` a second time, `looped` hands it round a loop, and
-// `addExported` is called from outside, where no caller hands anything over.
+// exclusive paths) and `joined` (the same, the paths meeting before the
+// return). The one-difference controls keep borrowing: `measured` reads `out`
+// a second time, `twiceOnAPath` appends onto it twice on one path, `looped`
+// hands it round a loop, and `addExported` is called from outside, where no
+// caller hands anything over.
 
 function add(out: string, piece: string): string {
   return out + piece;
@@ -27,6 +29,28 @@ function either(out: string, flag: boolean): string {
     return out + "<";
   }
   return out + ">";
+}
+
+// One append in each arm, the arms meeting before one return: no single
+// append stands in front of the return, and every path still passes one.
+function joined(out: string, flag: boolean): string {
+  let next: string;
+  if (flag) {
+    next = out + "[";
+  } else {
+    next = out + "]";
+  }
+  return next;
+}
+
+// Read twice on one path: an append onto `out`, then on one path a second
+// append onto `out` itself, so no single read is where it is given away.
+function twiceOnAPath(out: string, flag: boolean): string {
+  let next = out + "(";
+  if (flag) {
+    next = out + ")";
+  }
+  return next;
 }
 
 function measured(out: string, piece: string): string {
@@ -60,6 +84,7 @@ export function build(seed: number): number {
     s = addBoth(s, "c", String(i & 7));
     s = relay(s, "|");
     s = either(s, (i & 1) === 0);
+    s = joined(s, (i & 2) === 0);
   }
   return s.length * 1000 + (checksum(s) & 511);
 }
@@ -71,6 +96,7 @@ export function controls(seed: number): number {
     s = measured(s, "m");
     s = looped(s, i & 3);
     s = addExported(s, "e");
+    s = twiceOnAPath(s, (i & 1) === 0);
   }
   return s.length * 1000 + (checksum(s) & 511);
 }
