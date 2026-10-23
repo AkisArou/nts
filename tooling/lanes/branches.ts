@@ -27,7 +27,7 @@ type Worktree = {
   buildOutputs: { status: string; path: string }[];
   snapshotFiles: { tracked: Worktree["tracked"]; untracked: string[] };
   rootModifiedAt: string | null; lastModifiedAt: string | null; recentlyUsed: boolean;
-  target: { path: string; realPath: string | null; bytes: number | null; sharedWith: string[] };
+  target: { path: string; realPath: string | null; bytes: number | null; modifiedAt: string | null; sharedWith: string[] };
   errors: string[]; notes: string[]; proposal: Action;
 };
 
@@ -213,7 +213,7 @@ export function parseWorktrees(raw: string): Worktree[] {
       w = { path: field.slice(9), sha: "", branch: null, detached: false, prunable: null, locked: null,
         active: [], protected: false, protection: null, missing: false, lane: "unknown", dirty: null, tracked: [], untracked: [],
         inputs: [], missingInputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null, recentlyUsed: false,
-        target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, sharedWith: [] }, errors: [], notes: [],
+        target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, modifiedAt: null, sharedWith: [] }, errors: [], notes: [],
         proposal: { action: "NEEDS A PERSON", reason: "Not inspected" } };
       trees.push(w);
     } else if (w) {
@@ -314,7 +314,7 @@ function archiveBasename(path: string): string {
 const retiringActions = new Set(["remove worktree", "snapshot then remove", "prune stale registration"]);
 function retires(w: Worktree): boolean { return retiringActions.has(w.proposal.action); }
 
-function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, owned: ReturnType<typeof toolOwnedTrees>, sizeCache: Map<string, number>): void {
+function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, owned: ReturnType<typeof toolOwnedTrees>, sizeCache: Map<string, number>, targetTimes: Map<string, number>): void {
   w.active = active.get(canonical(w.path)) ?? [];
   const owners = owned.filter(t => canonical(t.path) === canonical(w.path));
   w.protection = owners.length ? "tool-owned tree" : canonical(w.path) === canonical(protectedTree) ? "Shared landing checkout" : laneHome(w.path, home) ? "Lane home / resume point" : null;
@@ -361,8 +361,8 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
     w.buildOutputs = [...w.tracked.filter(e => buildOutput(e.path)), ...w.untracked.filter(buildOutput).map(path => ({ status: "??", path }))];
     const rootDirty = w.snapshotFiles.tracked.length > 0 || w.snapshotFiles.untracked.length > 0;
     w.dirty = rootDirty ? true : complete ? false : null;
-    // Timestamp means the newest visible non-ignored file, root directory or
-    // per-worktree Git HEAD/index. Ignored build products are excluded.
+    // Visible files and per-worktree Git metadata contribute timestamps;
+    // the newest owned-target build timestamp is added by du below.
     const paths = new Set([...git(w.path, ["ls-files", "-z"]).split("\0").filter(Boolean), ...w.untracked]);
     for (const path of paths) if (!inputFor(w.path, path) && existsSync(join(w.path, path))) noteTime(join(w.path, path));
     for (const name of ["HEAD", "index"]) {
@@ -370,7 +370,6 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
       if (existsSync(path)) noteTime(path);
     }
   } catch (e) { if (!w.missing) w.errors.push(String(e)); }
-  w.lastModifiedAt = latest ? new Date(latest).toISOString() : null;
   try {
     let targetExists = true;
     try { lstatSync(w.target.path); } catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") targetExists = false; else throw e; }
@@ -379,15 +378,23 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
       const path = realpathSync(w.target.path);
       w.target.realPath = path;
       if (!sizeCache.has(path)) {
-        const r = spawnSync("du", ["-s", "-B1", "--", path], { encoding: "utf8" });
+        const r = spawnSync("du", ["-s", "-B1", "--time", "--time-style=+%s", "--", path], { encoding: "utf8" });
         if (r.error || r.status !== 0) throw new Error(`du: ${r.error?.message ?? r.stderr.trim()}`);
         const bytes = Number(/^\d+/.exec(r.stdout)?.[0]);
-        if (!Number.isFinite(bytes)) throw new Error(`Invalid du output: ${r.stdout}`);
+        const modified = Number(r.stdout.split("\t")[1]) * 1000;
+        if (!Number.isFinite(bytes) || !Number.isFinite(modified)) throw new Error(`Invalid du output: ${r.stdout}`);
         sizeCache.set(path, bytes);
+        targetTimes.set(path, modified);
       }
       w.target.bytes = sizeCache.get(path)!;
+      const modified = targetTimes.get(path)!;
+      w.target.modifiedAt = new Date(modified).toISOString();
+      // Recent builds count as use, while an external target borrowed from
+      // another tree must not mark all its borrowers as recently used.
+      if (within(canonical(w.path), path)) latest = Math.max(latest, modified);
     }
   } catch (e) { w.errors.push(`target: ${String(e)}`); }
+  w.lastModifiedAt = latest ? new Date(latest).toISOString() : null;
 }
 
 export function branchProposal(b: Branch, trees: Worktree[], protectedRef = "main"): Action {
@@ -431,10 +438,10 @@ export async function inventory(options: Options) {
   const trees = parseWorktrees(git(repo, ["worktree", "list", "--porcelain", "-z"]));
   const active = options.activeTrees ? new Map(options.activeTrees.map(p => [canonical(p), ["Explicit active tree"]])) : defaultActive(home, trees);
   const owned = toolOwnedTrees(repo, home);
-  const sizeCache = new Map<string, number>();
+  const sizeCache = new Map<string, number>(), targetTimes = new Map<string, number>();
   for (const w of trees) {
     w.lane = w.branch ? owner(w.branch, lanes).lane : pathLane(w.path);
-    inspectWorktree(w, active, options.protectedTree ?? dirname(common), home, owned, sizeCache);
+    inspectWorktree(w, active, options.protectedTree ?? dirname(common), home, owned, sizeCache, targetTimes);
     w.recentlyUsed = w.lastModifiedAt !== null && now.getTime() - Date.parse(w.lastModifiedAt) <= 24 * 60 * 60 * 1000;
   }
   for (const w of trees) if (w.target.realPath) w.target.sharedWith = trees.filter(x => x.path !== w.path && x.target.realPath === w.target.realPath).map(x => x.path);
@@ -582,7 +589,7 @@ export async function inventory(options: Options) {
     generatedAt: new Date().toISOString(), startedAt, policyDate: now.toISOString(), repo: canonical(repo), main,
     policy: { source: STATE_SOURCE, cleanupSource: CLEANUP_SOURCE, protectionSource: "MainClaude, Orcode ef53845d-c574-458c-bb14-66425b714ded, 2026-10-23T20:50:43.941Z", laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common), toolOwnedTrees: owned,
       protectedLaneHomes: join(home, "Projects/nts-lanes/*"),
-      timestampDefinition: "Newest mtime of visible tracked/untracked non-ignored files, root directory and per-worktree Git HEAD/index; ignored build products excluded.",
+      timestampDefinition: "Newest mtime of visible tracked/untracked non-ignored files, root directory, per-worktree Git HEAD/index and the tree's own target/ contents (du --time). External borrowed targets and other ignored products are excluded.",
       targetDefinition: "du -s -B1 allocated bytes; target symlink resolved, nested symlinks not followed; shared real paths counted once in total.",
       landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only matches are archived before proposed branch deletion (MainClaude, Orcode 5f16afb4-4064-4d43-bf56-573216406c5e).",
       diffstatDefinition: "Unmatched commits: unique file paths across the series; summed added/deleted lines; binary-file changes counted separately. Merges diff against the first parent; renames count as delete/add.",

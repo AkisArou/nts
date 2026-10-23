@@ -142,7 +142,8 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     // and file mtimes must not accidentally turn those into recent-use tests.
     ageFiles(scratch, new Date("2026-10-15T12:00:00Z"));
     const recentTime = new Date("2026-10-23T19:00:00Z");
-    utimesSync(join(usedToday, "base"), recentTime, recentTime);
+    utimesSync(join(usedToday, "target/payload"), recentTime, recentTime);
+    utimesSync(join(repo, "target/payload"), recentTime, recentTime);
     const beforeRefs = git(["show-ref"]), beforeTrees = git(["worktree", "list", "--porcelain"]);
     const indexes = [repo, dirty, clean, active, linked, lane, checkedRecent, youngActive, usedToday, ...infrastructure.map(t => t.path), ...collisions].map(tree => {
       const path = git(["rev-parse", "--path-format=absolute", "--git-path", "index"], tree);
@@ -179,6 +180,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.deepEqual(branch("tsrs/young-checked").retiringCheckouts, [youngActive]);
     assert.equal(r.worktrees.find(w => w.path === usedToday)!.proposal.action, "keep");
     assert.match(r.worktrees.find(w => w.path === usedToday)!.proposal.reason, /in use/);
+    assert.equal(r.worktrees.find(w => w.path === usedToday)!.lastModifiedAt, recentTime.toISOString(), "Recent build products inside the tree count as use");
     assert.equal(branch("jvm/recent-use").proposal.action, "keep");
     for (const tree of infrastructure) {
       const w = r.worktrees.find(w => w.path === tree.path)!;
