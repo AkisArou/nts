@@ -140,8 +140,10 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
 }
 
 /// The functions worth a variant: those some only-appended call reaches, and
-/// whose returns build into an accumulation or hand on to a function that
-/// does, through the variants that would call them in turn.
+/// whose returns build into an accumulation, hand on to a function that does,
+/// or answer a runtime helper that appends instead (`fused`) -- `return
+/// nts_json_quote(value)`, which the variant's `into + ...` turns into the
+/// helper's append -- through the variants that would call them in turn.
 fn wanted(
     program: &Program,
     answers: &FxHashMap<String, BTreeMap<ValueId, ReturnedString>>,
@@ -159,7 +161,9 @@ fn wanted(
                 ReturnedString::Call(call) => func
                     .and_then(|func| direct_callee(func, *call))
                     .is_some_and(|callee| gains.contains(callee)),
-                ReturnedString::Value(_) => false,
+                ReturnedString::Value(value) => {
+                    func.is_some_and(|func| appends_instead(func, *value))
+                }
             });
             if gain {
                 gains.insert(name.clone());
@@ -202,6 +206,15 @@ fn wanted(
         }
     }
     reached
+}
+
+/// Whether `value` is a runtime helper's answer that a helper could append
+/// instead (`fused`).
+fn appends_instead(func: &Func, value: ValueId) -> bool {
+    matches!(
+        &func.values[value.0 as usize].kind,
+        OpKind::Call { callee: Callee::External(helper), .. } if fused(helper).is_some()
+    )
 }
 
 /// The callee of a direct call, if `value` is one.
@@ -444,8 +457,10 @@ fn send_appends(
 }
 
 /// The runtime helper that appends what `helper` would have answered,
-/// without making it: `out + String(n)` is `nts_str_append_number(out, n)`.
-/// Each takes `out` over (`own::consumes`) and keeps its method's rules.
+/// without making it: `out + String(n)` is `nts_str_append_number(out, n)`,
+/// and `out + quoteJSONString(s)`, where text.ts calls the escape kernel,
+/// `nts_str_append_json_quoted(out, s)`. Each takes `out` over
+/// (`own::consumes`) and keeps its method's rules.
 fn fused(helper: &str) -> Option<&'static str> {
     Some(match helper {
         "nts_number_to_string" => "nts_str_append_number",
@@ -453,6 +468,7 @@ fn fused(helper: &str) -> Option<&'static str> {
         "nts_str_char_at" => "nts_str_append_char_at",
         "nts_string_from_char_code" => "nts_str_append_char_code",
         "nts_str_slice" => "nts_str_append_slice",
+        "nts_json_quote" => "nts_str_append_json_quoted",
         _ => return None,
     })
 }
