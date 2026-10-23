@@ -693,6 +693,12 @@ struct NtsRegion {
   size_t at_allocated;
   size_t at_reclaimed;
   size_t at_bytes;
+  /* Arguments a region object may point at, held until the reset
+   * (`nts_region_keep`): `malloc`'d, because the region's own blocks are what
+   * the reset gives back first. */
+  NtsHeader **kept;
+  uint32_t kept_len;
+  uint32_t kept_cap;
 };
 
 static void nts_region_window_open(NtsRegion *region) {
@@ -787,6 +793,9 @@ NtsRegion *nts_region_open(void) {
   region->allocated = 0;
   region->reclaimed = 0;
   region->bytes = 0;
+  region->kept = NULL;
+  region->kept_len = 0;
+  region->kept_cap = 0;
   if (region->outer) {
     nts_region_window_close(region->outer);
   }
@@ -823,13 +832,21 @@ void nts_region_reset(NtsRegion *region) {
   }
   nts_env->reclaimed += region->allocated - region->reclaimed;
   nts_env->bytes_held -= region->bytes;
-  /* `region` lives in the last block of the chain, given back last. */
+  /* Read before the blocks go: `region` lives in the last one, given back
+   * last. */
+  NtsHeader **kept = region->kept;
+  uint32_t kept_len = region->kept_len;
   NtsRegionBlock *block = region->blocks;
   while (block) {
     NtsRegionBlock *next = block->next;
     nts_region_block_give(block);
     block = next;
   }
+  /* What the region's objects pointed at, given up once nothing does. */
+  for (uint32_t at = 0; at < kept_len; at++) {
+    nts_release(kept[at]);
+  }
+  free((void *)kept);
 }
 
 bool nts_region_owns(const NtsRegion *region, const void *pointer) {
@@ -6404,6 +6421,71 @@ NtsHeader *nts_boxed_new(void *boxed, void (*free)(void *boxed, size_t data),
   box->data = data;
   return (NtsHeader *)box;
 }
+
+/* # A region's handle: what compiled code holds
+ *
+ * A counted box on the heap holding one region, so that reference counting
+ * places the reset: the compiler holds the box wherever something read out of
+ * the call's result is still used (`nts_region_hold`), and the release after
+ * the last hold -- on every path, an exit or a raise included -- is the box's
+ * death, which resets the region. */
+#ifdef NTS_PROVIDER_RC
+static void nts_region_box_free(void *boxed, size_t data) {
+  (void)data;
+  nts_region_reset((NtsRegion *)boxed);
+}
+
+NtsHeader *nts_region_begin(void) {
+  /* Never inside another region's call. The box would be made, and later die,
+   * in that region's accounting window; the compiler opens no region inside a
+   * region's clone, whose allocations go to the outer region already. */
+  if (nts_env->region) {
+    fprintf(stderr, "nts: a region's handle was begun inside another "
+                    "region's call\n");
+    abort();
+  }
+  NtsBoxed *box = (NtsBoxed *)nts_object_new(&nts_desc_boxed);
+  box->boxed = nts_region_open();
+  box->free = nts_region_box_free;
+  box->data = 0;
+  return (NtsHeader *)box;
+}
+
+void nts_region_end_call(NtsHeader *box) {
+  nts_region_suspend((NtsRegion *)((NtsBoxed *)box)->boxed);
+}
+
+void nts_region_keep(NtsHeader *box, NtsHeader *value) {
+  if (!value) {
+    return;
+  }
+  NtsRegion *region = (NtsRegion *)((NtsBoxed *)box)->boxed;
+  if (region->kept_len == region->kept_cap) {
+    uint32_t grown = region->kept_cap ? region->kept_cap * 2u : 4u;
+    NtsHeader **moved = (NtsHeader **)realloc((void *)region->kept,
+                                              grown * sizeof(NtsHeader *));
+    if (!moved) {
+      fprintf(stderr, "nts: out of memory keeping a region's argument\n");
+      abort();
+    }
+    region->kept = moved;
+    region->kept_cap = grown;
+  }
+  nts_retain(value);
+  region->kept[region->kept_len++] = value;
+}
+#else
+NtsHeader *nts_region_begin(void) { return NULL; }
+void nts_region_end_call(NtsHeader *box) { (void)box; }
+void nts_region_keep(NtsHeader *box, NtsHeader *value) {
+  (void)box;
+  (void)value;
+}
+#endif
+
+/* Nothing, and that is the point: a use of the box that the backends render as
+ * nothing, so its release cannot come before it. */
+void nts_region_hold(const NtsHeader *box) { (void)box; }
 
 NtsArray *nts_strings_from_cstrings(const char *const *c, bool required) {
   if (c == NULL) {

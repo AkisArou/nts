@@ -2126,6 +2126,30 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
         attributes: &["noreturn"],
     },
     Signature {
+        name: "nts_region_begin",
+        returns: "ptr",
+        params: &[],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_end_call",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_hold",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_region_keep",
+        returns: "void",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_region_open",
         returns: "ptr",
         params: &[],

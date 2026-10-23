@@ -307,6 +307,36 @@ static void a_reset_keeps_blocks_for_the_next_open(void) {
 
 /* Heap garbage in a cycle, buffered before the open: a collection asked for
  * inside the call waits, and one after it frees the cycle. */
+/* The handle compiled code holds: a counted box whose death is the reset. */
+static void the_handle_resets_its_region_when_it_dies(void) {
+  size_t bytes = nts_live_bytes();
+  size_t count = nts_live_count();
+  /* An argument the call keeps in what it makes, and whose caller lets go of
+   * it before the result is done with. */
+  Node *argument = node(9.0);
+  NtsHeader *box = nts_region_begin();
+  check("the handle is a counted object on the heap",
+        box && box->reserved == 1u);
+  nts_region_keep(box, &argument->header);
+  Node *made = node(1.0);
+  made->a = &argument->header;
+  nts_region_end_call(box);
+  Node *after = node(2.0);
+  check("after the call ends, allocation is the heap's",
+        after->header.reserved == 1u);
+  nts_release(&after->header);
+  nts_release(&argument->header);
+  nts_region_hold(box);
+  check("a kept argument outlives its caller's release until the reset",
+        argument->value == 9.0 && ((Node *)made->a)->value == 9.0);
+  nts_release(box);
+  /* The caller's release left the argument a cycle candidate, which a count
+   * reaching zero does not free until a collection runs. */
+  nts_collect_cycles();
+  check("the handle's death resets the region and gives the argument back",
+        nts_live_count() == count && nts_live_bytes() == bytes);
+}
+
 static void a_collection_waits_for_the_call(void) {
   size_t count = nts_live_count();
   Node *a = node(1.0);
@@ -339,6 +369,7 @@ int main(void) {
   many_blocks_and_a_large_allocation();
   a_reset_keeps_blocks_for_the_next_open();
   a_collection_waits_for_the_call();
+  the_handle_resets_its_region_when_it_dies();
   check("the suite as a whole leaves nothing live",
         nts_live_count() == count && nts_live_bytes() == bytes);
   if (failures) {

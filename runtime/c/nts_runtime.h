@@ -1445,6 +1445,22 @@ void nts_region_reset(NtsRegion *region);
 /* Whether `pointer` is memory `region` handed out. A walk of its blocks: for
  * tests and for `NTS_POISON`'s checks, never on a path that is not one. */
 bool nts_region_owns(const NtsRegion *region, const void *pointer);
+/* What compiled code calls: a region behind a counted handle, so reference
+ * counting places its reset.
+ *
+ *   nts_region_begin      a box on the heap holding a new, active region
+ *   nts_region_end_call   right after the call: `nts_region_suspend`
+ *   nts_region_keep       an argument a region object may point at, held
+ *                         until the reset
+ *   nts_region_hold       a use of the box after each use of something read
+ *                         out of the result; rendered as nothing
+ *
+ * The box's death -- its last release, after its last hold on each path --
+ * resets the region and releases what it keeps. */
+NtsHeader *nts_region_begin(void);
+void nts_region_end_call(NtsHeader *box);
+void nts_region_keep(NtsHeader *box, NtsHeader *value);
+void nts_region_hold(const NtsHeader *box);
 void nts_release(NtsHeader *object);
 NTS_ALLOCATES NtsArray *nts_array_new(const NtsDescriptor *descriptor,
                                       double length);
