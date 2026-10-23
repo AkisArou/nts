@@ -2519,8 +2519,9 @@ pub(super) fn consumes(name: &str) -> Option<usize> {
 
 /// The non-consuming twin of a runtime append that takes its left side over:
 /// `nts_str_concat_number` for `nts_str_append_number`, and so for `_at`,
-/// `_char_at`, `_char_code`, `_slice` and `_json_quoted`. What `rc` calls
-/// where that side survives the call, as `+` stays `nts_concat` where
+/// `_char_at`, `_char_code`, `_slice` and `_json_quoted`, and
+/// `nts_str_concat_grown` for `nts_str_append` itself. What `rc` calls where
+/// that side survives the call, as `+` stays `nts_concat` where
 /// `nts_str_append` would need the left side to die.
 pub(super) fn non_consuming_twin(name: &str) -> Option<&'static str> {
     Some(match name {
@@ -2530,6 +2531,7 @@ pub(super) fn non_consuming_twin(name: &str) -> Option<&'static str> {
         "nts_str_append_char_code" => "nts_str_concat_char_code",
         "nts_str_append_slice" => "nts_str_concat_slice",
         "nts_str_append_json_quoted" => "nts_str_concat_json_quoted",
+        "nts_str_append" => "nts_str_concat_grown",
         _ => return None,
     })
 }

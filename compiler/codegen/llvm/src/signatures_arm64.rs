@@ -2197,6 +2197,12 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_str_concat_grown",
+        returns: "ptr",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_concat_json_quoted",
         returns: "ptr",
         params: &["ptr", "ptr"],

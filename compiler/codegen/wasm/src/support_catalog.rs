@@ -955,6 +955,10 @@ pub(super) const ROWS: &[(&str, Support)] = &[
         Support::Decline("counted in-place append, made only under reference counting"),
     ),
     (
+        "nts_str_concat_grown",
+        Support::Decline("counted in-place append, made only under reference counting"),
+    ),
+    (
         "nts_str_concat_json_quoted",
         Support::Decline("counted in-place append, made only under reference counting"),
     ),

@@ -1,0 +1,14 @@
+ideal 8
+allocated 12
+because Eight iterations, four for each name (`j` alternates with `i`).
+because
+because 8 operations: each iteration's `text` is released where it dies, after
+because its last read (8). The first link is never counted apart from its
+because chain: each append after it takes it over, and the one that outgrows
+because its room gives it back inside the runtime.
+because
+because 12 allocations: "abcde:" is made with room for eight units and its digit
+because and comma fill it, so that chain is one allocation (4); "cdefghijk:" is
+because made with room for sixteen and its tag outgrows it, so that chain is two
+because (8). Made to fit, as `nts_concat` made it, the first chain was two
+because allocations and the second three: 20.

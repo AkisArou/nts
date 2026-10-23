@@ -2116,6 +2116,15 @@ NtsString *nts_concat_into(NtsHeader *into, const NtsString *a,
  * arriving, or out of room: allocate, copy both, release the old one. */
 NtsString *nts_str_append(NtsString *a, const NtsString *b);
 
+/* `a + b` as a fresh string with room: `nts_str_append`'s non-consuming twin,
+ * as `nts_str_concat_number` is `nts_str_append_number`'s. `rc` calls it for
+ * the first link of a chain whose answer only an append that takes it over
+ * reads -- `name + ":"` in `${name}:${id}` -- so the appends after it write
+ * in place. `nts_concat`'s exact-size string made the first of them grow it:
+ * a second allocation, and a second copy of everything before it. Never for
+ * a string kept, returned or read twice, which would keep the room too. */
+NtsString *nts_str_concat_grown(const NtsString *a, const NtsString *b);
+
 /* `a + String(n)`, `a + s[at]`, `a + s.charAt(at)`,
  * `a + String.fromCharCode(code)` and `a + s.slice(from, to)`, appended
  * without making the string on the right. `nts_str_append_*` is

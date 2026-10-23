@@ -238,6 +238,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
     let stores = |callee: &super::Callee| summaries.stores_of(callee);
     let mut live = liveness::analyze_with(func, &stores);
     let map = own::analyze(func, layouts, summaries, &mut live);
+    let grown = super::appended_results::consumed_left_sides(func);
     let arriving = arriving(func);
     let frame_names = frame_names(func, &stores);
     let blocks = std::mem::take(&mut func.blocks);
@@ -262,6 +263,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
             &Settled {
                 map: &map,
                 live: &live,
+                grown: &grown,
             },
             &mut report,
         );
@@ -271,6 +273,7 @@ fn insert_into(func: &mut Func, declared: Declared<'_>, summaries: &own::Summari
             &Settled {
                 map: &map,
                 live: &live,
+                grown: &grown,
             },
             &Block {
                 at,
@@ -523,7 +526,7 @@ fn release_at_last_use(
     ops: &mut Vec<ValueId>,
     report: &mut Report,
 ) -> rustc_hash::FxHashSet<ValueId> {
-    let Settled { map, live } = settled;
+    let Settled { map, live, .. } = settled;
     let at = block.at;
     let proven_null = map.null_in(at);
     let mut pending: rustc_hash::FxHashSet<ValueId> = ordered(func, block.layouts, map, live.available(at))
@@ -871,7 +874,7 @@ fn count_ops(
     report: &mut Report,
 ) -> Counted {
     let layouts = declared.layouts;
-    let Settled { map, live } = settled;
+    let Settled { map, live, .. } = settled;
     let mut ops = Vec::with_capacity(original.len());
     let mut moved = rustc_hash::FxHashSet::default();
     let mut repackaged = rustc_hash::FxHashMap::default();
@@ -917,6 +920,10 @@ fn count_ops(
             ops.push(*value);
             continue;
         }
+
+        // `a + b` whose `a` the arm above did not move: made with room where
+        // only an append that takes it over reads it ([`with_room`]).
+        with_room(func, settled, *value, &kind);
 
         // A helper that takes ownership of an argument is a store with a
         // different spelling, and owes exactly what a store owes: move the
@@ -1103,14 +1110,43 @@ fn count_ops(
     }
 }
 
+/// A concatenation whose `a` is not moved (`count_ops`'s first arm) and whose
+/// answer only an append that takes it over reads: the first link of a chain,
+/// `name + ":"` in `${name}:${id}` (`settled.grown`). Made with room
+/// (`nts_str_concat_grown`, `nts_str_append`'s non-consuming twin), the appends
+/// after it write in place, where `nts_concat`'s exact string made the first of
+/// them grow it: a second allocation and a second copy of everything before
+/// it. Its operands are read as a concatenation reads them, so nothing else
+/// the counting does changes.
+fn with_room(func: &mut Func, settled: &Settled<'_>, value: ValueId, kind: &OpKind) {
+    if let OpKind::Binary {
+        op: super::BinOp::Concat,
+        lhs,
+        rhs,
+    } = kind
+        && settled.grown.contains(&value)
+    {
+        func.values[value.0 as usize].kind = OpKind::Call {
+            callee: super::Callee::External("nts_str_concat_grown".to_owned()),
+            args: vec![*lhs, *rhs],
+            frame: None,
+        };
+    }
+}
+
 /// What one block's counting reads from the rest of the function.
 ///
-/// Two things, and only two: the ownership map, which says what every value
-/// holds, and liveness, which says where a value's range ends. Everything else
-/// this pass used to consult is inside the map.
+/// The ownership map, which says what every value holds; liveness, which says
+/// where a value's range ends; and which concatenations only an append that
+/// takes them over reads ([`appended_results::consumed_left_sides`]), which
+/// are made with room. Everything else this pass used to consult is inside the
+/// map.
+///
+/// [`appended_results::consumed_left_sides`]: super::appended_results::consumed_left_sides
 struct Settled<'a> {
     map: &'a own::Map,
     live: &'a liveness::Liveness,
+    grown: &'a std::collections::BTreeSet<ValueId>,
 }
 
 /// What counting one block produced.
@@ -1196,7 +1232,7 @@ fn dies_here(
     terminator: &super::Terminator,
     given: ValueId,
 ) -> bool {
-    let Settled { map, live } = settled;
+    let Settled { map, live, .. } = settled;
     (own::owned(func, layouts, given) || map.owns(given))
         && !map.borrowed(given)
         && live.dies_in(at, given)

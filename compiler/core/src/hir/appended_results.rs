@@ -128,6 +128,68 @@ pub fn appended_runtime_calls(func: &Func) -> BTreeSet<ValueId> {
         .collect()
 }
 
+/// Concatenations in `func` whose string's one live read is the left side of
+/// an append that takes it over, in the same block: the left side of a further
+/// concatenation, or the first argument of a runtime append
+/// (`nts_str_append_number` and its siblings, [`super::own::non_consuming_twin`]).
+/// `name + ":"` in `${name}:${id}`, and `"{" + parts.join(",")` before `+ "}"`.
+///
+/// Made with room, the appends after it write in place (`rc` calls
+/// `nts_str_concat_grown` for it). A string anything else reads -- kept,
+/// returned, read twice, or read in another block, where a loop could read it
+/// again -- is made to fit, since the room would be kept with it.
+#[must_use]
+pub(super) fn consumed_left_sides(func: &Func) -> BTreeSet<ValueId> {
+    // Each value's live readers: the block, and the reading operation (`None`
+    // for a terminator).
+    let mut readers: BTreeMap<ValueId, Vec<(usize, Option<ValueId>)>> = BTreeMap::new();
+    for (at, block) in func.blocks.iter().enumerate() {
+        for &id in &block.ops {
+            for operand in super::operands_of(&func.value(id).kind) {
+                readers.entry(operand).or_default().push((at, Some(id)));
+            }
+        }
+        for operand in super::operands_of_terminator(&block.terminator) {
+            readers.entry(operand).or_default().push((at, None));
+        }
+    }
+    let takes_over = |reader: ValueId, value: ValueId| match &func.value(reader).kind {
+        OpKind::Binary {
+            op: BinOp::Concat,
+            lhs,
+            rhs,
+        } => *lhs == value && *rhs != value,
+        OpKind::Call {
+            callee: Callee::External(helper),
+            args,
+            ..
+        } => {
+            super::own::non_consuming_twin(helper).is_some()
+                && args.first() == Some(&value)
+                && !args[1..].contains(&value)
+        }
+        _ => false,
+    };
+    func.blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(at, block)| block.ops.iter().map(move |&id| (at, id)))
+        .filter(|&(at, id)| {
+            matches!(
+                func.value(id).kind,
+                OpKind::Binary {
+                    op: BinOp::Concat,
+                    ..
+                }
+            ) && matches!(
+                readers.get(&id).map(Vec::as_slice),
+                Some(&[(block, Some(reader))]) if block == at && takes_over(reader, id)
+            )
+        })
+        .map(|(_, id)| id)
+        .collect()
+}
+
 /// How many live reads each value has, and whether every one is the right
 /// operand of a concatenation.
 fn reads(func: &Func) -> BTreeMap<ValueId, (usize, bool)> {

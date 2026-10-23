@@ -2040,6 +2040,7 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         | "nts_str_concat_at"
         | "nts_str_concat_char_at"
         | "nts_str_concat_char_code"
+        | "nts_str_concat_grown"
         | "nts_str_concat_json_quoted"
         | "nts_str_concat_number"
         | "nts_str_concat_slice"

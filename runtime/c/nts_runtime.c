@@ -3806,47 +3806,6 @@ static inline void nts_str_retire(NtsString *a) {
    * put exactly one of those on every string built in this program. */
 }
 
-__attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
-                                                         const NtsString *b) {
-  const uint32_t at = a->length;
-  const uint32_t total = at + b->length;
-  NtsString *out =
-      nts_str_reserve(a, b->length, (b->flags & NTS_TWO_BYTE) != 0);
-  /* One unit on the right, spelled out rather than handed to a copy.
-   *
-   * `out += c` is the shape a decoder writes, once per code point, and the
-   * right-hand side of it is a string of length one. `memcpy` of one byte is a
-   * call into the C library's vector dispatch, which reads its length, picks a
-   * strategy and moves a byte: on `benches/cases/node-utf8` that was 494,776
-   * calls to `__memcpy_avx_unaligned_erms`, seven per cent of the whole
-   * program, to do 494,776 bytes of work.
-   *
-   * The branch is free where it does not hit -- one compare against a length
-   * already loaded -- and where it does it is a store. */
-  if ((out->flags & NTS_TWO_BYTE) != 0) {
-    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
-    if (b->length == 1u) {
-      units[at] = nts_unit(b, 0);
-    } else {
-      nts_widen(units + at, b);
-    }
-    units[total] = 0;
-  } else {
-    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
-    if (b->length == 1u) {
-      bytes[at] = NTS_ELEMENTS(b, unsigned char)[0];
-    } else {
-      memcpy(bytes + at, NTS_ELEMENTS(b, unsigned char), b->length);
-    }
-    bytes[total] = 0;
-  }
-  out->length = total;
-  if (out != a) {
-    nts_str_retire(a);
-  }
-  return out;
-}
-
 /* Allocate a string of `length` code units, narrow if every unit fits a byte.
  *
  * The two representations are not a detail a caller should reproduce: a slice
@@ -4338,6 +4297,57 @@ nts_str_unchanged(NtsString *a, int consume) {
     return a;
   }
   return nts_str_regrow(a, a->length, (a->flags & NTS_TWO_BYTE) != 0);
+}
+
+/* `a + b`: `b`'s units onto `a`. `b` is read whole before `a` is reserved,
+ * since it may be `a` itself. */
+__attribute__((always_inline)) static inline NtsString *
+nts_str_add_string(NtsString *a, const NtsString *b, int consume) {
+  const uint32_t at = a->length;
+  const uint32_t total = at + b->length;
+  NtsString *out =
+      nts_str_room(a, b->length, (b->flags & NTS_TWO_BYTE) != 0, consume);
+  /* One unit on the right, spelled out rather than handed to a copy.
+   *
+   * `out += c` is the shape a decoder writes, once per code point, and the
+   * right-hand side of it is a string of length one. `memcpy` of one byte is a
+   * call into the C library's vector dispatch, which reads its length, picks a
+   * strategy and moves a byte: on `benches/cases/node-utf8` that was 494,776
+   * calls to `__memcpy_avx_unaligned_erms`, seven per cent of the whole
+   * program, to do 494,776 bytes of work.
+   *
+   * The branch is free where it does not hit -- one compare against a length
+   * already loaded -- and where it does it is a store. */
+  if ((out->flags & NTS_TWO_BYTE) != 0) {
+    uint16_t *units = NTS_ELEMENTS(out, uint16_t);
+    if (b->length == 1u) {
+      units[at] = nts_unit(b, 0);
+    } else {
+      nts_widen(units + at, b);
+    }
+    units[total] = 0;
+  } else {
+    unsigned char *bytes = NTS_ELEMENTS(out, unsigned char);
+    if (b->length == 1u) {
+      bytes[at] = NTS_ELEMENTS(b, unsigned char)[0];
+    } else {
+      memcpy(bytes + at, NTS_ELEMENTS(b, unsigned char), b->length);
+    }
+    bytes[total] = 0;
+  }
+  out->length = total;
+  return nts_str_written(out, a, consume);
+}
+
+__attribute__((always_inline)) NtsString *nts_str_append(NtsString *a,
+                                                         const NtsString *b) {
+  return nts_str_add_string(a, b, 1);
+}
+
+/* A fresh grown string, so the appends after it write in place: the first
+ * link of a chain (`appended_results::consumed_left_sides`). */
+NtsString *nts_str_concat_grown(const NtsString *a, const NtsString *b) {
+  return nts_str_add_string((NtsString *)a, b, 0);
 }
 
 /* One code unit onto `a`. */
