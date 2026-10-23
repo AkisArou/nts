@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, wr
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { inventory, markdown, parseStatus, parseWorktrees } from "./branches.ts";
+import { inventory, markdown, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
 
 test("inventory classifies replays and subjects, protects work, and leaves Git untouched", async () => {
   const parent = join(homedir(), ".cache/nts-scratch/branch-inventory");
@@ -88,9 +88,11 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.equal(branch("wasm/replay").proposal.action, "delete branch");
     assert.equal(branch("wasm/old-patch").stateOfLanding, "UNLANDED", "A patch before the merge-base cannot prove landing");
     assert.equal(branch("wasm/subject").stateOfLanding, "PROBABLY-LANDED");
-    assert.equal(branch("wasm/subject").proposal.action, "NEEDS A PERSON");
+    assert.equal(branch("wasm/subject").proposal.action, "archive then delete");
+    assert.deepEqual(branch("wasm/subject").unmatchedDiffstat, { files: 1, insertions: 1, deletions: 0, binaryFiles: 0 });
     assert.equal(branch("jvm/unlanded").stateOfLanding, "UNLANDED");
     assert.equal(branch("jvm/unlanded").unmatched[0].subject, "unlanded work");
+    assert.deepEqual(branch("jvm/unlanded").unmatched[0].diffstat, { files: 1, insertions: 1, deletions: 0, binaryFiles: 0 });
     assert.equal(branch("jvm/unlanded").proposal.action, "archive then delete");
     assert.equal(branch("jvm/unlanded").proposal.archiveRef, "refs/archive/jvm/jvm/unlanded");
     assert.equal(branch("sdk/old-unlanded").proposal.action, "archive then delete");
@@ -134,4 +136,8 @@ test("NUL parsers preserve unusual filenames and prunable worktrees", () => {
   assert.equal(w.path, "/cache/path\nline");
   assert.equal(w.detached, true);
   assert.match(w.prunable!, /non-existent/);
+  const sha = "a".repeat(40);
+  assert.deepEqual(parseDiffstats(`${sha}\0\n2\t3\tpath\nwith\ttabs\0-\t-\timage\0`).get(sha), {
+    stat: { files: 2, insertions: 2, deletions: 3, binaryFiles: 1 }, paths: ["path\nwith\ttabs", "image"],
+  });
 });

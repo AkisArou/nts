@@ -9,12 +9,13 @@ import { fileURLToPath } from "node:url";
 type LaneState = "ACTIVE" | "PAUSED" | "CLOSED" | "INACTIVE" | "UNKNOWN";
 type Landed = "ANCESTOR" | "LANDED" | "PROBABLY-LANDED" | "UNLANDED" | "UNKNOWN";
 type Action = { action: string; reason: string; archiveRef?: string };
-type Commit = { sha: string; parents: string[]; timestamp: number; date: string; subject: string };
+type Diffstat = { files: number; insertions: number; deletions: number; binaryFiles: number };
+type Commit = { sha: string; parents: string[]; timestamp: number; date: string; subject: string; diffstat?: Diffstat };
 type Ref = { ref: string; sha: string };
 type Lane = { lane: string; state: LaneState; source: string };
 type Branch = Ref & Lane & {
   name: string; date: string; ageDays: number; checkedOut: string[]; stateOfLanding: Landed;
-  mergeBase: string | null; unmatched: Commit[]; errors: string[]; proposal: Action;
+  mergeBase: string | null; unmatched: Commit[]; unmatchedDiffstat: Diffstat | null; errors: string[]; proposal: Action;
 };
 type Worktree = {
   path: string; sha: string; branch: string | null; detached: boolean; prunable: string | null;
@@ -40,9 +41,9 @@ const STATE_SOURCE = "MainClaude / user, Orcode 1c85129a-75a0-46a7-9b9f-ce8f8a83
 const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
 const gitOptions = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 const readCommands = new Set(["rev-parse", "for-each-ref", "log", "merge-base", "worktree", "status", "ls-files", "patch-id"]);
-function git(repo: string, args: string[]): string {
+function git(repo: string, args: string[], input?: string): string {
   if (!readCommands.has(args[0]) || (args[0] === "worktree" && args[1] !== "list")) throw new Error("Non-read-only Git command");
-  const r = spawnSync("git", [...gitOptions, "-C", repo, ...args], { env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+  const r = spawnSync("git", [...gitOptions, "-C", repo, ...args], { env, input, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
   if (r.error || r.status !== 0) throw new Error(`${args[0]}: ${r.error?.message ?? r.stderr.trim()}`);
   return r.stdout;
 }
@@ -66,6 +67,24 @@ function reachable(start: string, graph: Map<string, Commit>): Set<string> {
     stack.push(...c.parents);
   }
   return found;
+}
+
+export function parseDiffstats(raw: string): Map<string, { stat: Diffstat; paths: string[] }> {
+  const result = new Map<string, { stat: Diffstat; paths: string[] }>();
+  let current: { stat: Diffstat; paths: string[] } | undefined;
+  for (const field of raw.split("\0")) {
+    if (/^[a-f0-9]{40}$|^[a-f0-9]{64}$/.test(field.trim())) {
+      current = { stat: { files: 0, insertions: 0, deletions: 0, binaryFiles: 0 }, paths: [] };
+      result.set(field.trim(), current);
+    } else if (field && current) {
+      const row = /^\n?(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(field);
+      if (!row) throw new Error(`Invalid numstat record: ${JSON.stringify(field)}`);
+      current.paths.push(row[3]); current.stat.files++;
+      if (row[1] === "-" || row[2] === "-") current.stat.binaryFiles++;
+      else { current.stat.insertions += Number(row[1]); current.stat.deletions += Number(row[2]); }
+    }
+  }
+  return result;
 }
 
 // Stream patches rather than buffering the repository's entire history.
@@ -209,7 +228,10 @@ export function branchProposal(b: Branch, trees: Worktree[], protectedRef = "mai
   if (b.errors.length || b.stateOfLanding === "UNKNOWN") return { action: "NEEDS A PERSON", reason: b.errors.join("; ") || "Unknown landing state" };
   if (b.checkedOut.length) return { action: "keep", reason: "Checked out; branch deletion requires separate worktree review" };
   if (b.stateOfLanding === "ANCESTOR" || b.stateOfLanding === "LANDED") return { action: "delete branch", reason: "All commits retained on main; no checkout" };
-  if (b.stateOfLanding === "PROBABLY-LANDED") return { action: "NEEDS A PERSON", reason: "Subject matches do not prove patch equivalence" };
+  if (b.stateOfLanding === "PROBABLY-LANDED") return {
+    action: "archive then delete", archiveRef: `refs/archive/${b.lane}/${b.name}`,
+    reason: "Subject-only match may hide a changed body; retain the exact commits in an archive",
+  };
   if (b.ageDays <= 3) return { action: "keep", reason: "Tip is at most three days old" };
   if (b.state === "ACTIVE") return { action: "NEEDS A PERSON", reason: "Active lane's old unlanded branch; agent may still want it" };
   if (["PAUSED", "CLOSED", "INACTIVE"].includes(b.state)) return {
@@ -250,7 +272,7 @@ export async function inventory(options: Options) {
     const b: Branch = { ...r, ...owner(r.ref.slice(11), lanes), name: r.ref.slice(11), date: c?.date ?? "unknown",
       ageDays: c ? (now.getTime() / 1000 - c.timestamp) / 86400 : 0,
       checkedOut: trees.filter(w => w.branch === r.ref.slice(11)).map(w => w.path),
-      stateOfLanding: "UNKNOWN", mergeBase: null, unmatched: [], errors: [], proposal: { action: "NEEDS A PERSON", reason: "Not classified" } };
+      stateOfLanding: "UNKNOWN", mergeBase: null, unmatched: [], unmatchedDiffstat: null, errors: [], proposal: { action: "NEEDS A PERSON", reason: "Not classified" } };
     branches.push(b);
     if (onMain.has(r.sha)) { b.stateOfLanding = "ANCESTOR"; continue; }
     try {
@@ -278,6 +300,26 @@ export async function inventory(options: Options) {
       b.unmatched = unmatched.map(s => graph.get(s)!);
       b.stateOfLanding = unmatched.length === 0 ? "LANDED" : b.unmatched.every(c => subjects.get(b.mergeBase!)!.has(c.subject)) ? "PROBABLY-LANDED" : "UNLANDED";
     }
+  }
+  const unmatchedShas = [...new Set(branches.flatMap(b => b.unmatched.map(c => c.sha)))];
+  let stats = new Map<string, { stat: Diffstat; paths: string[] }>();
+  try {
+    if (unmatchedShas.length) stats = parseDiffstats(git(repo, ["log", "--no-walk=unsorted", "--stdin", "--format=%H", "--numstat", "-z", "--root", "--diff-merges=first-parent", "--no-renames", "--no-ext-diff", "--no-textconv", "--no-color"], unmatchedShas.join("\n") + "\n"));
+    for (const b of branches.filter(b => b.unmatched.length)) {
+      const paths = new Set<string>(), total = { files: 0, insertions: 0, deletions: 0, binaryFiles: 0 };
+      for (const c of b.unmatched) {
+        const found = stats.get(c.sha);
+        if (!found) throw new Error(`No diffstat for ${c.sha}`);
+        c.diffstat = found.stat;
+        found.paths.forEach(p => paths.add(p));
+        total.insertions += found.stat.insertions; total.deletions += found.stat.deletions; total.binaryFiles += found.stat.binaryFiles;
+      }
+      total.files = paths.size; b.unmatchedDiffstat = total;
+    }
+  } catch (e) {
+    for (const b of branches.filter(b => b.unmatched.length)) b.errors.push(`Unmatched diffstat incomplete: ${String(e)}`);
+  }
+  for (const b of branches) {
     b.proposal = branchProposal(b, trees);
     if (b.proposal.archiveRef) {
       const previous = archives.find(a => a.ref === b.proposal.archiveRef);
@@ -312,7 +354,8 @@ export async function inventory(options: Options) {
     policy: { source: STATE_SOURCE, laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common),
       timestampDefinition: "Newest mtime of visible tracked/untracked non-ignored files, root directory and per-worktree Git HEAD/index; ignored build products excluded.",
       targetDefinition: "du -s -B1 allocated bytes; target symlink resolved, nested symlinks not followed; shared real paths counted once in total.",
-      landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only equivalence requires human review.",
+      landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only matches are archived before proposed branch deletion (MainClaude, Orcode 5f16afb4-4064-4d43-bf56-573216406c5e).",
+      diffstatDefinition: "Unmatched commits: unique file paths across the series; summed added/deleted lines; binary-file changes counted separately. Merges diff against the first parent; renames count as delete/add.",
       checkedOutRule: "Checked-out branches are kept; clean inactive worktrees may be proposed for removal only with exact HEAD already retained on main/archive." },
     totals: { branches: branches.length, landed: count(branches.map(b => b.stateOfLanding)), branchActions: count(branches.map(b => b.proposal.action)),
       worktrees: trees.length, dirtyWorktrees: trees.filter(w => w.dirty).length, inaccessibleOrIncompleteWorktrees: trees.filter(w => w.errors.length || w.dirty === null).length,
@@ -328,20 +371,21 @@ export function markdown(report: Awaited<ReturnType<typeof inventory>>): string 
   const cell = (s: unknown) => String(s ?? "—").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll("|", "&#124;").replaceAll("\n", "<br>");
   const table = (headers: string[], rows: unknown[][]) => [headers.join(" | "), headers.map(() => "---").join(" | "), ...rows.map(r => r.map(cell).join(" | "))].join("\n");
   const gib = (bytes: number | null) => bytes === null ? "unknown" : `${(bytes / 2 ** 30).toFixed(3)} GiB`;
+  const diffstat = (d: Diffstat | null | undefined) => d ? `${d.files} files; +${d.insertions}/-${d.deletions}${d.binaryFiles ? `; ${d.binaryFiles} binary changes` : ""}` : "—";
   const lines = ["# Branch and worktree inventory", "", `Snapshot ${report.startedAt} – ${report.generatedAt}; main ${report.main}.`, "",
     "## Totals", "", table(["Item", "Count"], Object.entries(report.totals).map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : v])), "",
     "Proposals only. No Git refs, indexes, worktrees or build outputs are changed by this tool. Approval and cleanup require a separate step.", "",
     `Lane policy: ${report.policy.source}.`, "", table(["Lane / historical prefix", "State", "Since"], Object.entries(report.policy.laneStates).map(([k, v]) => [k, v.state, v.since])), "",
     `Protected checkout: ${report.policy.protectedTree}. Active trees:`, "",
     table(["Path", "Reason"], Object.entries(report.policy.activeTrees).map(([p, why]) => [p, why.join("; ")])), "",
-    report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.checkedOutRule, "",
+    report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.diffstatDefinition, report.policy.checkedOutRule, "",
     ...(report.warnings.length ? ["## Snapshot warnings", "", ...report.warnings.map(w => `- ${w}`), ""] : []),
-    "## Branches", "", table(["Branch", "Lane / state", "Tip / commit date", "Checkout", "Landed state", "Proposed action", "Reason / archive ref"], report.branches.map(b => [b.name, `${b.lane} / ${b.state}`, `${b.sha.slice(0, 12)} / ${b.date}`, b.checkedOut.join("; ") || "none", b.stateOfLanding, b.proposal.action, [b.proposal.reason, b.proposal.archiveRef].filter(Boolean).join("; ")])), "",
+    "## Branches", "", table(["Branch", "Lane / state", "Tip / commit date", "Checkout", "Landed state", "Unmatched diffstat", "Proposed action", "Reason / archive ref"], report.branches.map(b => [b.name, `${b.lane} / ${b.state}`, `${b.sha.slice(0, 12)} / ${b.date}`, b.checkedOut.join("; ") || "none", b.stateOfLanding, diffstat(b.unmatchedDiffstat), b.proposal.action, [b.proposal.reason, b.proposal.archiveRef].filter(Boolean).join("; ")])), "",
     "## Worktrees", "", table(["Path", "Branch / detached HEAD", "Prunable / locked", "Last modified", "Status", "target size", "Proposed action / reason"], report.worktrees.map(w => [w.path, w.branch ?? `detached ${w.sha.slice(0, 12)}`, [w.prunable && `prunable: ${w.prunable}`, w.locked && `locked: ${w.locked}`].filter(Boolean).join("; ") || "no", w.lastModifiedAt, w.dirty === null ? "UNKNOWN" : w.dirty ? "DIRTY" : "clean", `${gib(w.target.bytes)}${w.target.sharedWith.length ? " (shared)" : ""}`, `${w.proposal.action}: ${w.proposal.reason}`])), "",
     "## Archive refs by lane", "", table(["Lane", "Count"], Object.entries(report.totals.archivesByLane)), "",
     "Unknown archive ownership includes legacy flat names with no lanes.json prefix match. Every archive ref is retained; exact names and tips are in JSON.", "",
     "## Unmatched branch commits", ""];
-  for (const b of report.branches.filter(b => b.unmatched.length || b.errors.length)) lines.push(`### ${cell(b.name)} (${b.stateOfLanding})`, "", ...b.errors.map(e => cell(e)), table(["SHA", "Commit date", "Subject"], b.unmatched.map(c => [c.sha, c.date, c.subject])), "");
+  for (const b of report.branches.filter(b => b.unmatched.length || b.errors.length)) lines.push(`### ${cell(b.name)} (${b.stateOfLanding})`, "", ...b.errors.map(e => cell(e)), table(["SHA", "Commit date", "Subject", "Diffstat"], b.unmatched.map(c => [c.sha, c.date, c.subject, diffstat(c.diffstat)])), "");
   lines.push("## Worktree changes and inspection errors", "");
   for (const w of report.worktrees.filter(w => w.tracked.length || w.untracked.length || w.errors.length)) {
     lines.push(`### ${cell(w.path)}`, "", "Tracked changes:", "", w.tracked.length ? table(["Status", "Path", "From"], w.tracked.map(c => [c.status, c.path, c.from])) : "None recorded.", "", "Untracked non-ignored files:", "", w.untracked.length ? table(["Path"], w.untracked.map(p => [p])) : "None recorded.", "", ...w.errors.map(e => `Inspection error: ${cell(e)}`), "");
