@@ -52708,7 +52708,14 @@ impl<'a> FuncBuilder<'a> {
             // Filtering it here refused the same programs one step earlier and
             // called them unrepresentable instead, which cost four functions in
             // the node profile to the cascade that followed.
-            .or_else(|| self.expecting.clone())
+            //
+            // **Except an erased slot, which says nothing about what an array
+            // holds.** An optional property is held erased, so `{ scores: [] }`
+            // for `scores?: number[]` expected `Erased` and was refused as "an
+            // array literal that is not an array"; the property's declared type,
+            // which the contextual type below reads, is the answer, and the
+            // array is erased into the slot as a non-empty literal already is.
+            .or_else(|| self.expecting.clone().filter(|ty| *ty != HirType::Erased))
             // And where nothing is expecting it, what its *position* says --
             // the same question `null` asks, and the same answer. `expecting`
             // is set by whatever is lowering the enclosing expression, which a
