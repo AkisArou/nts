@@ -81,7 +81,7 @@ if (!source) {
   };
   const paths = new Map([...section("workspace.dependencies").matchAll(/^(tsrs_\w+)\s*=\s*\{\s*path\s*=\s*"([^"]+)"/gm)].map((match) => [match[1], match[2]]));
   const crates = new Set<string>();
-  const pending = ["tsrs_project"];
+  const pending = ["tsrs_compiler"];
   while (pending.length) {
     const name = pending.pop()!;
     if (crates.has(name)) continue;
@@ -110,7 +110,7 @@ if (!source) {
   const version = /^version\s*=\s*"([^"]+)"/m.exec(section("workspace.package"))![1];
   const tsCommit = /^commit\s*=\s*"([^"]+)"/m.exec(section("workspace.metadata.typescript"))![1];
   generated("UPSTREAM.json", `${JSON.stringify({ repository: "https://github.com/oxc-project/tsrs", commit, version, typescript_commit: tsCommit, crates: [...crates].sort() }, null, 2)}\n`);
-  generated("UPSTREAM.md", `# tsrs, vendored\n\nThe production dependency closure of tsrs_project from\n[oxc-project/tsrs](https://github.com/oxc-project/tsrs) at\n\`${commit}\` (version ${version}), unmodified, with LICENSE and NOTICE.\nThe generated root Cargo.toml retains upstream package metadata, dependencies\nand lints, over these crates only. nts excludes this standalone workspace\nand consumes its crates by path. UPSTREAM.json records the exact closure.\n\nRe-pin in one command:\n\n    node compiler/frontend-tsrs/vendor.ts --source <checkout> --rev <commit>\n\nThe tool reads immutable git objects; it does not change the source checkout.\nBefore replacing an existing copy it verifies MANIFEST and refuses local edits.\n\n    node compiler/frontend-tsrs/vendor.ts --check\n\nThe gate checks the SHA-256 manifest, including file inventory, without an\nupstream checkout. --source <checkout> --rev <commit> --check additionally\ncompares the copy with the exact upstream objects. Upstream source is never\nformatted or edited as part of an nts change.\n`);
+  generated("UPSTREAM.md", `# tsrs, vendored\n\nThe production dependency closure of tsrs_compiler from\n[oxc-project/tsrs](https://github.com/oxc-project/tsrs) at\n\`${commit}\` (version ${version}), unmodified, with LICENSE and NOTICE.\nThe generated root Cargo.toml retains upstream package metadata, dependencies\nand lints, over these crates only. nts excludes this standalone workspace\nand consumes its crates by path. UPSTREAM.json records the exact closure.\n\nRe-pin in one command:\n\n    node compiler/frontend-tsrs/vendor.ts --source <checkout> --rev <commit>\n\nThe tool reads immutable git objects; it does not change the source checkout.\nBefore replacing an existing copy it verifies MANIFEST and refuses local edits.\n\n    node compiler/frontend-tsrs/vendor.ts --check\n\nThe gate checks the SHA-256 manifest, including file inventory, without an\nupstream checkout. --source <checkout> --rev <commit> --check additionally\ncompares the copy with the exact upstream objects. Upstream source is never\nformatted or edited as part of an nts change.\n`);
   const ordered = [...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
   const text = `${commit}\n${ordered.map(([name, file]) => `${hash(file.bytes)}  ${name}`).join("\n")}\n`;
   if (check) {

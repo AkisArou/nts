@@ -1,6 +1,6 @@
 # tsrs, vendored
 
-The production dependency closure of tsrs_project from
+The production dependency closure of tsrs_compiler from
 [oxc-project/tsrs](https://github.com/oxc-project/tsrs) at
 `bb5c6037ad04decdd7c5832997e810000e85943d` (version 0.19.0), unmodified, with LICENSE and NOTICE.
 The generated root Cargo.toml retains upstream package metadata, dependencies
