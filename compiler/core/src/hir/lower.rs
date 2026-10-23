@@ -71,6 +71,7 @@ impl FuncBuilder<'_> {
             .at_signature
             .append(&mut self.arrivals.at_signature);
         arrivals.conversions.append(&mut self.conversions);
+        arrivals.json_writers.append(&mut self.json_writers);
         arrivals
             .uniform_sites
             .append(&mut self.arrivals.uniform_sites);
@@ -124,6 +125,8 @@ pub struct Arrivals {
     /// Functions bridges call to convert an argument C passes. See
     /// [`Conversion`].
     pub conversions: Vec<Conversion>,
+    /// The writers `JSON.stringify` calls, one per type. See [`json::Writer`].
+    json_writers: Vec<json::Writer>,
     /// Calls through a signature's erased entry, each named by its function
     /// once that function is finished. See [`UniformSite`].
     pub uniform_sites: Vec<UniformSite>,
@@ -5422,7 +5425,10 @@ struct Naming {
     /// structurally, by the same rule this key uses. Keying by the literal's id
     /// finds nothing when the layout is built for the declared type, which is
     /// what happened first: the collector was right and the lookup missed.
-    written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
+    written_order: WrittenOrders,
+    /// The keys a write may add to an object after it was made: see
+    /// [`added_keys`].
+    added_keys: std::rc::Rc<AddedKeys>,
 
     /// Which generator each `function*` is, in source order.
     ///
@@ -5725,6 +5731,181 @@ fn abstract_generator_names(index: usize, kind: GeneratorKind) -> (String, Strin
         GeneratorKind::Async => format!("{class}#step"),
     };
     (class, method)
+}
+
+/// The property names a write may add to an object after it was made.
+///
+/// An object's own keys are in insertion order, so a property a program adds
+/// later -- `o.note = "n"` on an object made without `note` -- comes after
+/// every key already there, wherever the type or the layout puts it. That is
+/// a fact about the program, not the type: a whole-program scan, by name, as
+/// [`presence_keys`] is and for its reason. Over-approximate in the safe
+/// direction: a name written to any object counts for every type holding it.
+///
+/// - `assigned`: a property assigned (`=`, compound, logical), `++`/`--`, a
+///   `for (o.k of ...)` head, a destructuring target, or a source key of
+///   `Object.assign`; a computed key names every property of the receiver's
+///   type.
+/// - `deleted`: a property `delete` removes, which a later write then adds
+///   last even where construction defined it.
+/// - `unknown`: a write whose names nothing here can list --
+///   `Object.defineProperty`, `Reflect.set`, `Object.assign` from a value with
+///   no object type.
+#[derive(Debug, Clone, Default)]
+struct AddedKeys {
+    assigned: rustc_hash::FxHashSet<String>,
+    deleted: rustc_hash::FxHashSet<String>,
+    unknown: bool,
+}
+
+impl AddedKeys {
+    /// The names `target`, written, may add: a property's, an element's, or
+    /// any in a destructuring pattern.
+    fn written_by(&mut self, probe: &FuncBuilder, target: NodeId) {
+        let target = probe.through_parentheses(target);
+        match probe.kind_of(target) {
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION) => {
+                if let Some((_, name)) = probe.member_access(target) {
+                    self.assigned.insert(name);
+                }
+            }
+            Some(syntax::ELEMENT_ACCESS_EXPRESSION) => {
+                let parts = probe.children(target);
+                let [object, key] = parts.as_slice() else {
+                    return;
+                };
+                if let Some(name) = probe.literal_key(*key) {
+                    self.assigned.insert(name);
+                    return;
+                }
+                // A computed key may be any of the receiver's own: every name
+                // its type declares. An array's index is none of them.
+                let properties = probe
+                    .snapshot
+                    .node_types
+                    .get(object)
+                    .and_then(|ty| probe.snapshot.types.get(ty.0 as usize))
+                    .and_then(|record| match &record.kind {
+                        TypeKind::Object { properties } => Some(properties),
+                        _ => None,
+                    });
+                for property in properties.into_iter().flatten() {
+                    self.assigned.insert(property.name.clone());
+                }
+            }
+            // A destructuring pattern, and its parts: `{ k: o.k }`, `{ ...o.rest }`,
+            // `[o.k = 1]`.
+            Some(
+                syntax::OBJECT_LITERAL_EXPRESSION
+                | syntax::ARRAY_LITERAL_EXPRESSION
+                | syntax::PROPERTY_ASSIGNMENT
+                | syntax::SHORTHAND_PROPERTY_ASSIGNMENT
+                | syntax::SPREAD_ASSIGNMENT
+                | syntax::SPREAD_ELEMENT
+                | syntax::BINARY_EXPRESSION,
+            ) => {
+                for part in probe.children(target) {
+                    self.written_by(probe, part);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn added_keys(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> AddedKeys {
+    let mut added = AddedKeys::default();
+    for index in 0..snapshot.nodes.len() {
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let kind = probe.kind_of(id);
+        if !matches!(
+            kind,
+            Some(
+                syntax::BINARY_EXPRESSION
+                    | syntax::POSTFIX_UNARY_EXPRESSION
+                    | syntax::PREFIX_UNARY_EXPRESSION
+                    | syntax::DELETE_EXPRESSION
+                    | syntax::FOR_IN_STATEMENT
+                    | syntax::FOR_OF_STATEMENT
+                    | syntax::CALL_EXPRESSION
+            )
+        ) {
+            continue;
+        }
+        let children = probe.children(id);
+        match kind {
+            Some(syntax::BINARY_EXPRESSION) => {
+                let [target, operator, _] = children.as_slice() else {
+                    continue;
+                };
+                let token = probe.kind_of(*operator).unwrap_or(0);
+                if token == syntax::EQUALS_TOKEN
+                    || compound_operator(token).is_some()
+                    || logical_assignment(token).is_some()
+                {
+                    added.written_by(probe, *target);
+                }
+            }
+            // `o.k++`, and a `for (o.k of ...)` head: the first child is written.
+            Some(
+                syntax::POSTFIX_UNARY_EXPRESSION
+                | syntax::FOR_IN_STATEMENT
+                | syntax::FOR_OF_STATEMENT,
+            ) => {
+                if let Some(target) = children.first() {
+                    added.written_by(probe, *target);
+                }
+            }
+            Some(syntax::PREFIX_UNARY_EXPRESSION) => {
+                let counts = matches!(probe.node(id).data, NodeData::Children { small, .. }
+                    if matches!(small & syntax::prefix_operator::MASK, syntax::prefix_operator::PLUS_PLUS | syntax::prefix_operator::MINUS_MINUS));
+                if counts && let Some(operand) = children.first() {
+                    added.written_by(probe, *operand);
+                }
+            }
+            Some(syntax::DELETE_EXPRESSION) => {
+                let mut deleted = AddedKeys::default();
+                if let Some(operand) = children.first() {
+                    deleted.written_by(probe, *operand);
+                }
+                added.deleted.extend(deleted.assigned);
+            }
+            Some(syntax::CALL_EXPRESSION) => {
+                let [callee, arguments @ ..] = children.as_slice() else {
+                    continue;
+                };
+                let Some((object, member)) = probe.member_access(*callee) else {
+                    continue;
+                };
+                match (probe.node(object).text.as_deref(), member.as_str()) {
+                    (Some("Object"), "assign") => {
+                        for source in arguments.iter().skip(1) {
+                            let properties = probe
+                                .snapshot
+                                .node_types
+                                .get(source)
+                                .and_then(|ty| probe.snapshot.types.get(ty.0 as usize))
+                                .and_then(|record| match &record.kind {
+                                    TypeKind::Object { properties } => Some(properties),
+                                    _ => None,
+                                });
+                            match properties {
+                                Some(properties) => added
+                                    .assigned
+                                    .extend(properties.iter().map(|p| p.name.clone())),
+                                None => added.unknown = true,
+                            }
+                        }
+                    }
+                    (Some("Object"), "defineProperty" | "defineProperties" | "setPrototypeOf")
+                    | (Some("Reflect"), "set" | "defineProperty") => added.unknown = true,
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+    added
 }
 
 /// Every property name an `in` in this program asks about.
@@ -8199,8 +8380,8 @@ fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32
 /// Every object literal's property names, in source order, keyed by the same
 /// names sorted -- the order a *layout* of those fields is laid out in.
 ///
-/// A type written two different ways is dropped: a conflict has no answer and a
-/// guess would be a wrong one.
+/// A type written two different ways is dropped from the agreed orders and kept
+/// as disputed: a conflict has no answer and a guess would be a wrong one.
 ///
 /// **A function rather than a block inside [`naming`], because two places need
 /// it and one of them runs before `Naming` exists.** `collect_module_scope`'s
@@ -8217,10 +8398,7 @@ fn class_token_indices(snapshot: &SemanticSnapshot) -> rustc_hash::FxHashMap<u32
 /// fix is the comment above the probe. Computed twice rather than threaded,
 /// which is what `qualified_names` does three lines above for the same reason
 /// and at the same cost: one pass over the nodes, against a whole lowering.
-fn written_field_orders(
-    snapshot: &SemanticSnapshot,
-    probe: &FuncBuilder,
-) -> rustc_hash::FxHashMap<Vec<String>, Vec<String>> {
+fn written_field_orders(snapshot: &SemanticSnapshot, probe: &FuncBuilder) -> WrittenOrders {
     let mut written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>> =
         rustc_hash::FxHashMap::default();
     let mut conflicting: rustc_hash::FxHashSet<Vec<String>> = rustc_hash::FxHashSet::default();
@@ -8248,7 +8426,23 @@ fn written_field_orders(
             }
         }
     }
-    written_order
+    WrittenOrders {
+        agreed: written_order,
+        disputed: conflicting,
+    }
+}
+
+/// The key orders the program's object literals write, by field-name set
+/// (sorted): [`written_field_orders`]'s answer.
+#[derive(Debug, Clone, Default)]
+struct WrittenOrders {
+    /// The one order every literal of a set writes, which its layout takes.
+    agreed: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
+    /// The sets literals write in more than one order. A layout holds one
+    /// order, so for these no layout order is every object's insertion order,
+    /// and a consumer that writes keys in that order -- `JSON.stringify`'s
+    /// writer -- refuses rather than answer one literal's order for another's.
+    disputed: rustc_hash::FxHashSet<Vec<String>>,
 }
 
 fn naming(
@@ -8293,6 +8487,7 @@ fn naming(
     naming.raising_then = throwing.bodily;
     naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
+    naming.added_keys = std::rc::Rc::new(added_keys(snapshot, &probe));
     naming.generators = generators;
     naming.written_order = written_order;
     naming
@@ -13480,6 +13675,7 @@ fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
     builder.withheld.clone_from(&naming.withheld);
     builder.presence_keys.clone_from(&naming.presence_keys);
     builder.written_order.clone_from(&naming.written_order);
+    builder.added_keys = naming.added_keys.clone();
     builder.class_tokens.clone_from(&naming.class_tokens);
 }
 
@@ -15770,6 +15966,7 @@ fn lower_wanted_closures(
     // rejects a promise with.
     lower_conversions(layout_collector, snapshot, shared, lowered, wanted);
     lower_reject_error(layout_collector, snapshot, shared, lowered, wanted);
+    json::lower_writers(layout_collector, snapshot, shared, lowered, wanted);
 }
 
 /// The `const` aliases a closure's body reads, which both of its builders need.
@@ -21793,7 +21990,10 @@ struct FuncBuilder<'a> {
     presence_keys: rustc_hash::FxHashSet<String>,
     /// The order the program writes each field-name set; see
     /// [`Naming::written_order`], which computes it once for the whole program.
-    written_order: rustc_hash::FxHashMap<Vec<String>, Vec<String>>,
+    written_order: WrittenOrders,
+    /// The keys a write may add to an object after it was made: see
+    /// [`added_keys`].
+    added_keys: std::rc::Rc<AddedKeys>,
     /// The token index of each class used as a value; see
     /// [`Naming::class_tokens`], and its reason for being decided once.
     class_tokens: rustc_hash::FxHashMap<u32, usize>,
@@ -21807,6 +22007,9 @@ struct FuncBuilder<'a> {
     /// Functions this body's bridges call to convert an argument: harvested
     /// into [`Arrivals::conversions`].
     conversions: Vec<Conversion>,
+    /// The `JSON.stringify` writers this body's calls name: harvested into
+    /// [`Arrivals::json_writers`].
+    json_writers: Vec<json::Writer>,
     /// See [`Arrivals`]; drained by [`FuncBuilder::harvest`].
     arrivals: Arrivals,
 }
@@ -21994,9 +22197,11 @@ impl<'a> FuncBuilder<'a> {
             iterators: std::rc::Rc::default(),
             presence_keys: rustc_hash::FxHashSet::default(),
             class_tokens: rustc_hash::FxHashMap::default(),
-            written_order: rustc_hash::FxHashMap::default(),
+            written_order: WrittenOrders::default(),
+            added_keys: std::rc::Rc::default(),
             used_closures: Vec::new(),
             conversions: Vec::new(),
+            json_writers: Vec::new(),
             arrivals: Arrivals::default(),
             substitution: Substitution::default(),
             sources: super::generics::Sources::default(),
@@ -41224,6 +41429,9 @@ impl<'a> FuncBuilder<'a> {
         if let Some(to_stderr) = self.console_method(callee) {
             return Some(self.lower_console(id, arguments, to_stderr));
         }
+        if self.is_json_stringify(callee) {
+            return Some(self.lower_json_stringify(id, arguments));
+        }
         if let Some((intrinsic, builtin)) = self.intrinsic_of(callee) {
             return Some(self.lower_intrinsic(id, intrinsic, builtin, arguments));
         }
@@ -55924,7 +56132,7 @@ impl<'a> FuncBuilder<'a> {
     fn as_the_program_writes_them(&self, mut fields: Vec<Field>) -> Vec<Field> {
         let mut signature: Vec<String> = fields.iter().map(|field| field.name.clone()).collect();
         signature.sort();
-        let Some(written) = self.written_order.get(&signature) else {
+        let Some(written) = self.written_order.agreed.get(&signature) else {
             return fields;
         };
         let mut ordered: Vec<Field> = Vec::with_capacity(fields.len());
@@ -86964,6 +87172,7 @@ mod initialization;
 mod interfaces;
 mod iterator_calls;
 mod iterator_close;
+mod json;
 mod layout_collection;
 mod literal_methods;
 mod native_memory;

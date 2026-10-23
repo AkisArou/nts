@@ -121,7 +121,7 @@ pub(super) const OMITTED: &[(&str, &str)] = &[
 /// (`primitive_builtin`), the numeric predicates and `parseInt`/`parseFloat`,
 /// the URI functions and the timers (`lower_provided_builtin`), `Math`,
 /// `Number`'s and `String`'s statics (`intrinsic_of`), `console`
-/// (`console_method`), the classes with a representation (`Date`, `Map`,
+/// (`console_method`), `JSON.stringify` (`lower/json.rs`), the classes with a representation (`Date`, `Map`,
 /// `Set`, `Promise`, `Array`, `Object`'s statics, `ArrayBuffer`, `DataView`,
 /// the typed arrays, the errors), and the constants. Builtins stage 2 turns
 /// this into the compiler's provider table, with members.
@@ -133,6 +133,7 @@ const PROVIDED_GLOBALS: &[&str] = &[
     "DataView",
     "Date",
     "Infinity",
+    "JSON",
     "Map",
     "Math",
     "NaN",
