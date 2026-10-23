@@ -93,6 +93,7 @@ struct NativeProject {
     program: &'static Program,
     files: Vec<NativeFile>,
     diagnostics: Vec<Diagnostic>,
+    strings: crate::strings::StringPool,
 }
 
 struct NativeFile {
@@ -133,7 +134,10 @@ impl OwnedProgram {
         );
         let config = config.ok_or_else(|| LoadError::Config {
             path: spec.config_path.clone(),
-            messages: diagnostics.iter().map(|d| d.localize()).collect(),
+            messages: diagnostics
+                .iter()
+                .map(|d| crate::strings::display(d.localize().as_bytes()))
+                .collect(),
         })?;
         let mut owned = Self {
             projects: Vec::new(),
@@ -188,6 +192,7 @@ impl OwnedProgram {
                 program,
                 files: Vec::new(),
                 diagnostics: Vec::new(),
+                strings: crate::strings::StringPool::new(region.clone()),
             });
             owned.projects.last_mut().expect("program registered").files = program
                 .source_files()
@@ -234,7 +239,7 @@ impl OwnedProgram {
                 tsrs_diagnostics::Category::Message => DiagnosticCategory::Message,
             },
             code: native.code(),
-            message: native.localize(),
+            message: crate::strings::display(native.localize().as_bytes()),
             chain: native
                 .message_chain()
                 .iter()
@@ -434,6 +439,25 @@ impl fmt::Debug for File<'_> {
 }
 
 impl<'s> File<'s> {
+    pub(crate) fn native_scope(self) -> tsrs_core::arena::RegionScope {
+        self.project.strings.enter()
+    }
+    pub(crate) fn intern_string(self, bytes: &[u8]) -> crate::JsString<'s> {
+        self.project.strings.intern(bytes)
+    }
+    pub(crate) fn native_source(self) -> P<SourceFile> {
+        self.native.source
+    }
+    pub(crate) fn identity(self) -> usize {
+        std::ptr::from_ref(self.native).addr()
+    }
+    pub(crate) fn same_identity(self, other: Self) -> bool {
+        std::ptr::eq(self.native, other.native)
+    }
+    #[must_use]
+    pub fn root(self) -> crate::Node<'s> {
+        crate::Node::new(self.native.source.as_node(), self)
+    }
     #[must_use]
     pub fn path(self) -> &'s Utf8Path {
         Utf8Path::new(self.native.source.file_name())
@@ -466,13 +490,13 @@ impl<'s> File<'s> {
     pub fn span(self, start: BytePos, end: BytePos) -> Utf16Span {
         self.native.index().span(start, end)
     }
-    pub fn imports(self) -> impl Iterator<Item = &'s str> {
+    pub fn imports(self) -> impl Iterator<Item = crate::JsString<'s>> {
         self.native
             .source
             .imports
             .get()
             .iter()
-            .map(|node| node.text())
+            .map(move |node| self.intern_string(node.text().as_bytes()))
     }
 }
 
@@ -603,6 +627,7 @@ mod tests {
                         .find(|f| f.path().ends_with("b.ts"))
                         .expect("importing file")
                         .imports()
+                        .map(|name| name.utf8().expect("UTF8 module path"))
                         .collect::<Vec<_>>(),
                     ["./a"]
                 );

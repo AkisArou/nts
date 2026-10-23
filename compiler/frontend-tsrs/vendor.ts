@@ -65,6 +65,7 @@ if (!source) {
   const commit = verify();
   process.stdout.write(`third_party/tsrs: ${commit}, ${inventory(target).length} files verified\n`);
   if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "licenses.ts"), "--check"], { stdio: "inherit" });
+  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "roles.ts"), "--check"], { stdio: "inherit" });
 } else {
   if (!requested) throw new Error("--source needs --rev <commit>; no floating pin is inferred");
   const git = (...argv: string[]) => execFileSync("git", ["-C", source, ...argv], { maxBuffer: 64 << 20 });
@@ -137,4 +138,7 @@ if (!source) {
   }
   const lines = ordered.filter(([name]) => name.endsWith(".rs")).reduce((sum, [, file]) => sum + file.bytes.toString().split("\n").length - 1, 0);
   process.stdout.write(`${JSON.stringify({ commit, version, typescript_commit: tsCommit, crates: crates.size, files: files.size, rust_lines: lines, manifest_sha256: hash(text), checked: check, dry_run: dryRun })}\n`);
+  // Keep the safe named slots derived from the exact new native visitor.
+  // The normal gate's --check regenerates both files in a scratch directory.
+  if (!flag("--out") && !dryRun) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "roles.ts"), ...(check ? ["--check"] : [])], { stdio: "inherit" });
 }

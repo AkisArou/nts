@@ -58,7 +58,7 @@ impl<'p> File<'p> {
     pub fn is_default_library(self) -> bool;
     pub fn is_external_library(self) -> bool;
     pub fn root(self) -> Node<'p>;
-    pub fn imports(self) -> impl Iterator<Item = &'p str>;
+    pub fn imports(self) -> impl Iterator<Item = JsString<'p>>; // lossless; preflight refuses non-UTF8 filesystem specifiers by name
     pub fn span(self, start: BytePos, end: BytePos) -> Utf16Span;
 }
 pub type NativeKind = u16; // the ONE native->nts mapping belongs to capture
@@ -84,7 +84,8 @@ pub enum Edge<'p> {
     List { role: ListRole, list: List<'p> },
 }
 impl<'p> List<'p> {
-    pub fn span(self) -> Option<Utf16Span>;
+    pub fn span(self) -> Option<Utf16Span>; // native raw start
+    pub fn token_start(self) -> Option<Utf16Pos>; // skips trivia, even if empty
     pub fn iter(self) -> impl ExactSizeIterator<Item = Node<'p>>;
     pub fn has_trailing_comma(self) -> bool;
 }

@@ -5,6 +5,8 @@
 //! Native panics propagate to the caller, with no recovery or partial answer.
 
 #[cfg(feature = "tsrs")]
+mod ast;
+#[cfg(feature = "tsrs")]
 mod environment;
 #[cfg(feature = "tsrs")]
 mod host;
@@ -12,6 +14,10 @@ mod host;
 mod program;
 #[cfg(feature = "tsrs")]
 mod session;
+#[cfg(feature = "tsrs")]
+mod strings;
+#[cfg(feature = "tsrs")]
+pub use ast::*;
 #[cfg(feature = "tsrs")]
 pub use host::{Input, InputKind};
 #[cfg(feature = "tsrs")]
@@ -21,6 +27,8 @@ pub use program::{
 };
 #[cfg(feature = "tsrs")]
 pub use session::*;
+#[cfg(feature = "tsrs")]
+pub use strings::JsString;
 
 mod text;
 pub use text::{BytePos, Utf16Pos, Utf16Span};
