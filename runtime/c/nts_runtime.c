@@ -1201,9 +1201,16 @@ nts_each_erased_slot(NtsHeader *object,
    * test of its own. */
   if (descriptor->kind == NTS_KIND_MAP) {
     NtsMap *map = (NtsMap *)object;
-    for (uint32_t at = 0; at < map->used; at++) {
-      each(&map->keys[at], visit);
-      if (map->values) {
+    /* A column that never held a pointer has nothing to visit: a table of
+     * numbers dies without a walk. map-and-set spent 11% here, in this walk
+     * and `nts_release_foreign`'s, over 256 numbers each. */
+    if (map->holds & NTS_MAP_HOLDS_KEYS) {
+      for (uint32_t at = 0; at < map->used; at++) {
+        each(&map->keys[at], visit);
+      }
+    }
+    if (map->values && (map->holds & NTS_MAP_HOLDS_VALUES)) {
+      for (uint32_t at = 0; at < map->used; at++) {
         each(&map->values[at], visit);
       }
     }
@@ -8414,6 +8421,7 @@ static NtsMap *nts_map_alloc(const NtsDescriptor *descriptor, uint32_t kind,
   map->slots = 0;
   map->kind = kind;
   map->holds_values = holds_values;
+  map->holds = 0;
   map->generation = 0;
   map->index = 0;
   map->keys = 0;
@@ -10088,6 +10096,9 @@ static NtsMap *nts_map_same(NtsMap *map) { return map; }
 static inline __attribute__((always_inline)) void
 nts_map_overwrite(NtsMap *map, int32_t at, NtsValue value) {
   if (map->values) {
+    if (NTS_TAG_IS_POINTER(nts_value_tag(value))) {
+      map->holds |= NTS_MAP_HOLDS_VALUES;
+    }
     nts_value_retain(value);
     nts_value_release(map->values[at]);
     map->values[at] = value;
@@ -10105,6 +10116,11 @@ nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot,
     map->values[map->used] = value;
   }
   map->keys[map->used] = key;
+  map->holds |=
+      (NTS_TAG_IS_POINTER(nts_value_tag(key)) ? NTS_MAP_HOLDS_KEYS : 0u) |
+      (map->values && NTS_TAG_IS_POINTER(nts_value_tag(value))
+           ? NTS_MAP_HOLDS_VALUES
+           : 0u);
   map->hashes[map->used] = NTS_MAP_TAG(hash);
   map->index[slot] = ((uint64_t)NTS_MAP_TAG(hash) << 32) | (map->used + 1u);
   map->used++;

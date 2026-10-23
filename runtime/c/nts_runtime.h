@@ -950,6 +950,13 @@ typedef struct NtsMap {
   uint32_t kind;
   /* A Map does; a Set does not, and pays nothing for the values it has. */
   bool holds_values;
+  /* Whether any key, and any value, this table was ever given is a pointer
+   * -- a managed reference, a handle, a bigint's box: `NTS_MAP_HOLDS_KEYS`
+   * and `NTS_MAP_HOLDS_VALUES`, set as entries are stored and never cleared.
+   * A table of numbers has neither, and its death walks no column: the walk
+   * for references and the walk for handles each skip a column that held
+   * none. In the padding after `holds_values`, beside it. */
+  uint8_t holds;
   /* Moved by every structural write -- a key inserted, a delete, a clear,
    * growth -- and by nothing else: what an entry (`nts_map_entry`) is checked
    * against before the slot it names is trusted. It sits in what was padding
@@ -971,6 +978,9 @@ typedef struct NtsMap {
 /* How to hash and compare this map's keys, decided from the static key type.
  * `ERASED` is the only one that reads a tag, and only a genuinely
  * heterogeneous key type gets it. */
+#define NTS_MAP_HOLDS_KEYS 1u
+#define NTS_MAP_HOLDS_VALUES 2u
+
 #define NTS_KEY_ERASED 0u
 #define NTS_KEY_STRING 1u
 #define NTS_KEY_NUMBER 2u

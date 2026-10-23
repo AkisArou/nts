@@ -615,6 +615,34 @@ int main(void) {
     nts_collect_cycles();
   }
 
+  /* --- what a table holds -------------------------------------------
+   * A table's death walks only a column that was ever given a pointer
+   * (`NtsMap.holds`). A table of numbers holds none; a string key marks the
+   * keys; a reference stored by an overwrite, not an insertion, still marks
+   * the values -- and is given back when the table dies, which the closing
+   * baseline below checks. */
+  {
+    NtsMap *numbers = nts_map_new(NTS_KEY_NUMBER);
+    for (int i = 0; i < 20; i++) {
+      put(numbers, num(i), num(i * 2));
+    }
+    check("a table of numbers holds no pointer", numbers->holds == 0);
+    put(numbers, num(3), str("three"));
+    check("a reference stored over a number marks the values",
+          numbers->holds == NTS_MAP_HOLDS_VALUES);
+    nts_release(&numbers->header);
+
+    NtsMap *words = nts_map_new(NTS_KEY_STRING);
+    put(words, str("w"), num(1));
+    check("a string key marks the keys", words->holds == NTS_MAP_HOLDS_KEYS);
+    nts_release(&words->header);
+
+    NtsMap *set = nts_set_new(NTS_KEY_NUMBER);
+    add(set, num(1));
+    check("a set of numbers holds none either", set->holds == 0);
+    nts_release(&set->header);
+  }
+
   /* Every allocation above is gone, including the three side arrays each
    * table owns -- which is the leak `storage.c` covers for arrays, asked of
    * the type that has three of them. */
