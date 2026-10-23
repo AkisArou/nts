@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, wr
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { inventory, markdown, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
+import { buildOutput, inputFor, inventory, markdown, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
 
 test("inventory classifies replays and subjects, protects work, and leaves Git untouched", async () => {
   const parent = join(homedir(), ".cache/nts-scratch/branch-inventory");
@@ -26,7 +26,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
   try {
     git(["init", "-q", "-b", "main"]);
     mkdirSync(join(repo, "tooling/lanes"), { recursive: true });
-    writeFileSync(join(repo, "tooling/lanes/lanes.json"), JSON.stringify({ lanes: { compiler: { branch: "compiler/" }, wasm: { branch: "wasm/" }, jvm: { branch: "jvm/" } } }));
+    writeFileSync(join(repo, "tooling/lanes/lanes.json"), JSON.stringify({ lanes: { compiler: { branch: "compiler/" }, wasm: { branch: "wasm/" }, jvm: { branch: "jvm/" }, tsrs: { branch: "tsrs/" } } }));
     writeFileSync(join(repo, ".gitignore"), "ignored\ntarget\n");
     writeFileSync(join(repo, "base"), "base\n");
     git(["add", "."]); git(["commit", "-qm", "base"]);
@@ -50,6 +50,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     git(["checkout", "-qb", "jvm/unlanded", base]);
     commit("unlanded", "preserve me\n", "unlanded work");
     git(["branch", "compiler/old-unlanded"]);
+    for (const name of ["archive/compiler-helper/old", "bench/old", "exp/old", "keep/old", "docs/old", "runtime/old", "worktree-agent-old", "tsrs/old"]) git(["branch", name]);
     git(["branch", "sdk/old-unlanded"]);
     git(["branch", "mystery/old-unlanded"]);
     git(["checkout", "-qb", "wasm/recent", base]);
@@ -66,6 +67,8 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     writeFileSync(join(dirty, "base"), "changed\n");
     writeFileSync(join(dirty, "untracked"), "not ignored\n");
     writeFileSync(join(dirty, "ignored"), "ignored\n");
+    mkdirSync(join(dirty, "out")); mkdirSync(join(dirty, "results/benchmarks"), { recursive: true });
+    for (const path of ["artifact.o", "artifact.obj", "out/generated", "results/benchmarks/timing"]) writeFileSync(join(dirty, path), "throwaway\n");
     git(["worktree", "add", "-q", "--detach", clean, base]);
     git(["worktree", "add", "-q", "--detach", active, base]);
     const linked = join(scratch, "linked-submodule");
@@ -73,10 +76,33 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     rmSync(join(linked, "dep"), { recursive: true });
     symlinkSync(repo, join(linked, "dep"));
     writeFileSync(join(linked, "visible-untracked"), "still list this despite the submodule error\n");
+    // These entries are external INPUTS, not uncommitted work. An internal
+    // symlink is still work and must be snapshotted.
+    symlinkSync(repo, join(clean, "node_modules"));
+    mkdirSync(join(clean, "third_party")); symlinkSync(repo, join(clean, "third_party/chromium"));
+    symlinkSync("base", join(dirty, "internal-link"));
+    assert.equal(inputFor(dirty, "internal-link"), null);
+    assert.ok(inputFor(clean, "third_party/chromium/base"));
+    const lane = join(scratch, "Projects/nts-lanes/jvm");
+    mkdirSync(join(scratch, "Projects/nts-lanes"), { recursive: true });
+    git(["worktree", "add", "-q", "-b", "jvm/home", lane, main]);
+    writeFileSync(join(lane, "resume-work"), "keep the paused lane home\n");
+    const stale = join(scratch, "gone");
+    git(["worktree", "add", "-q", "-b", "jvm/stale", stale, base]);
+    rmSync(stale, { recursive: true });
+    const checkedRecent = join(scratch, "checked-recent");
+    git(["worktree", "add", "-q", "-b", "jvm/checked-recent", checkedRecent, "wasm/recent"]);
+    const collisions = [join(scratch, "one/collision"), join(scratch, "two/collision")];
+    for (const tree of collisions) {
+      mkdirSync(join(tree, ".."), { recursive: true });
+      git(["worktree", "add", "-q", "--detach", tree, base]);
+      writeFileSync(join(tree, "base"), `unsaved work from ${tree}\n`);
+    }
     mkdirSync(join(repo, "target")); writeFileSync(join(repo, "target", "payload"), "allocated\n");
+    mkdirSync(join(dirty, "target")); writeFileSync(join(dirty, "target", "payload"), "own target allocation\n");
     symlinkSync(join(repo, "target"), join(clean, "target"));
     const beforeRefs = git(["show-ref"]), beforeTrees = git(["worktree", "list", "--porcelain"]);
-    const indexes = [repo, dirty, clean, active, linked].map(tree => {
+    const indexes = [repo, dirty, clean, active, linked, lane, checkedRecent, ...collisions].map(tree => {
       const path = git(["rev-parse", "--path-format=absolute", "--git-path", "index"], tree);
       return { path, bytes: readFileSync(path), time: statSync(path).mtimeMs };
     });
@@ -96,28 +122,53 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.equal(branch("jvm/unlanded").proposal.action, "archive then delete");
     assert.equal(branch("jvm/unlanded").proposal.archiveRef, "refs/archive/jvm/jvm/unlanded");
     assert.equal(branch("sdk/old-unlanded").proposal.action, "archive then delete");
-    assert.equal(branch("compiler/old-unlanded").proposal.action, "NEEDS A PERSON");
+    assert.equal(branch("compiler/old-unlanded").proposal.action, "archive then delete");
+    for (const name of ["archive/compiler-helper/old", "bench/old", "exp/old", "keep/old", "docs/old", "runtime/old", "worktree-agent-old"]) {
+      assert.equal(branch(name).lane, "compiler"); assert.equal(branch(name).proposal.action, "archive then delete");
+    }
+    assert.equal(branch("tsrs/old").proposal.action, "NEEDS A PERSON");
     assert.equal(branch("mystery/old-unlanded").proposal.action, "NEEDS A PERSON");
     assert.equal(branch("wasm/recent").proposal.action, "keep");
-    assert.equal(branch("compiler/dirty").proposal.action, "NEEDS A PERSON");
+    assert.equal(branch("compiler/dirty").proposal.action, "delete branch");
+    assert.deepEqual(branch("compiler/dirty").effectiveCheckouts, []);
+    assert.deepEqual(branch("compiler/dirty").retiringCheckouts, [dirty]);
+    assert.equal(branch("jvm/checked-recent").proposal.action, "archive then delete");
+    assert.equal(branch("jvm/stale").proposal.action, "delete branch");
+    assert.equal(branch("jvm/home").proposal.action, "keep");
     const dw = r.worktrees.find(w => w.path === dirty)!;
     assert.equal(dw.dirty, true);
-    assert.deepEqual(dw.untracked, ["untracked"]);
+    assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", "untracked"]);
+    assert.equal(dw.buildOutputs.length, 4);
     assert.equal(dw.tracked[0].path, "base");
-    assert.equal(dw.proposal.action, "NEEDS A PERSON");
+    assert.equal(dw.proposal.action, "snapshot then remove");
+    assert.equal(dw.proposal.archiveRef, "refs/archive/compiler/snapshot/dirty");
     assert.equal(r.worktrees.find(w => w.path === clean)!.proposal.action, "remove worktree");
     assert.equal(r.worktrees.find(w => w.path === active)!.proposal.action, "keep");
     const lw = r.worktrees.find(w => w.path === linked)!;
     assert.equal(lw.dirty, true);
     assert.deepEqual(lw.untracked, ["visible-untracked"]);
-    assert.ok(lw.errors.length > 0);
-    assert.equal(lw.proposal.action, "NEEDS A PERSON");
-    assert.equal(r.totals.uniqueTargetPaths, 1);
+    assert.equal(lw.errors.length, 0);
+    assert.equal(lw.inputs[0].path, "dep");
+    assert.equal(lw.proposal.action, "snapshot then remove");
+    const cw = r.worktrees.find(w => w.path === clean)!;
+    assert.equal(cw.dirty, false);
+    assert.equal(cw.inputs.length, 2);
+    assert.equal(r.worktrees.find(w => w.path === lane)!.proposal.action, "keep");
+    assert.equal(r.worktrees.find(w => w.path === lane)!.dirty, true);
+    assert.equal(r.worktrees.find(w => w.path === stale)!.proposal.action, "prune stale registration");
+    for (const tree of collisions) assert.match(r.worktrees.find(w => w.path === tree)!.proposal.reason, /Archive destination collision/);
+    assert.equal(r.totals.uniqueTargetPaths, 2);
     assert.ok(r.totals.uniqueTargetBytes > 0);
     assert.equal(r.worktrees.find(w => w.path === clean)!.target.sharedWith[0], repo);
     assert.equal(r.totals.mainPatchIdPasses, 1);
+    assert.equal(r.summary.reduce((s, row) => s + row.targetFreedBytes, 0), dw.target.bytes, "Only the retiring tree's own target is freed; the target shared with protected main is not freed");
+    assert.ok(dw.target.bytes! > 0);
+    assert.equal(r.totals.missingWorktrees, 1);
+    assert.equal(r.totals.inaccessibleOrIncompleteWorktrees, 0);
     assert.deepEqual(r.warnings, []);
     assert.ok(markdown(r).indexOf("## Totals") < markdown(r).indexOf("## Branches"));
+    assert.ok(markdown(r).indexOf("## Proposed actions") < markdown(r).indexOf("## Really dirty trees"));
+    assert.ok(markdown(r).indexOf("## Really dirty trees") < markdown(r).indexOf("## Ten largest unlanded series"));
     assert.ok(markdown(r).includes("1c85129a-75a0-46a7-9b9f-ce8f8a834ba3"));
     assert.equal(git(["show-ref"]), beforeRefs);
     assert.equal(git(["worktree", "list", "--porcelain"]), beforeTrees);
@@ -140,4 +191,6 @@ test("NUL parsers preserve unusual filenames and prunable worktrees", () => {
   assert.deepEqual(parseDiffstats(`${sha}\0\n2\t3\tpath\nwith\ttabs\0-\t-\timage\0`).get(sha), {
     stat: { files: 2, insertions: 2, deletions: 3, binaryFiles: 1 }, paths: ["path\nwith\ttabs", "image"],
   });
+  for (const path of ["a.o", "nested/a.obj", "out/code.c", "nested/out/code.c", "results/benchmarks/cells.tsv"]) assert.equal(buildOutput(path), true);
+  assert.equal(buildOutput("compiler/outcome.rs"), false);
 });

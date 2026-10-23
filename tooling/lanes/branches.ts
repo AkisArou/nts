@@ -1,9 +1,9 @@
 // Read-only inventory; proposals here never execute cleanup.
 // node tooling/lanes/branches.ts [--repo PATH] [--out PATH]
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 type LaneState = "ACTIVE" | "PAUSED" | "CLOSED" | "INACTIVE" | "UNKNOWN";
@@ -14,16 +14,19 @@ type Commit = { sha: string; parents: string[]; timestamp: number; date: string;
 type Ref = { ref: string; sha: string };
 type Lane = { lane: string; state: LaneState; source: string };
 type Branch = Ref & Lane & {
-  name: string; date: string; ageDays: number; checkedOut: string[]; stateOfLanding: Landed;
+  name: string; date: string; ageDays: number; checkedOut: string[]; effectiveCheckouts: string[]; retiringCheckouts: string[]; stateOfLanding: Landed;
   mergeBase: string | null; unmatched: Commit[]; unmatchedDiffstat: Diffstat | null; errors: string[]; proposal: Action;
 };
 type Worktree = {
   path: string; sha: string; branch: string | null; detached: boolean; prunable: string | null;
-  locked: string | null; active: string[]; protected: boolean; dirty: boolean | null;
+  locked: string | null; active: string[]; protected: boolean; protection: string | null; missing: boolean; lane: string; dirty: boolean | null;
   tracked: { status: string; path: string; from?: string }[]; untracked: string[];
+  inputs: { status: string; path: string; reason: string; link?: string; target?: string }[];
+  buildOutputs: { status: string; path: string }[];
+  snapshotFiles: { tracked: Worktree["tracked"]; untracked: string[] };
   rootModifiedAt: string | null; lastModifiedAt: string | null;
   target: { path: string; realPath: string | null; bytes: number | null; sharedWith: string[] };
-  errors: string[]; proposal: Action;
+  errors: string[]; notes: string[]; proposal: Action;
 };
 
 // MainClaude's user-authorized lane states, 2026-10-23T20:06:40.040Z.
@@ -38,6 +41,7 @@ export const LANE_STATES: Record<string, { state: LaneState; since: string }> = 
   sdk: { state: "INACTIVE", since: "mid-October 2026" }, claude: { state: "INACTIVE", since: "mid-October 2026" },
 };
 const STATE_SOURCE = "MainClaude / user, Orcode 1c85129a-75a0-46a7-9b9f-ce8f8a834ba3, 2026-10-23T20:06:40.040Z";
+const CLEANUP_SOURCE = "MainClaude, compiler lane owner, Orcode 3c2f6032-2f9b-40c4-8a69-d99bca708127, 2026-10-23T20:28:30.278Z";
 const env = { ...process.env, GIT_OPTIONAL_LOCKS: "0", GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" };
 const gitOptions = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false"];
 const readCommands = new Set(["rev-parse", "for-each-ref", "log", "merge-base", "worktree", "status", "ls-files", "patch-id"]);
@@ -53,11 +57,12 @@ function refs(repo: string, prefix: string): Ref[] {
 }
 function owner(name: string, lanes: Record<string, { branch: string }>): Lane {
   const match = Object.entries(lanes).sort((a, b) => b[1].branch.length - a[1].branch.length).find(([, x]) => name.startsWith(x.branch));
-  const lane = match?.[0] ?? (["sdk", "claude"].find(x => name.startsWith(`${x}/`))) ?? "unknown";
-  return { lane, state: LANE_STATES[lane]?.state ?? "UNKNOWN", source: match ? "lanes.json prefix" : lane !== "unknown" ? "dated historical prefix" : "unrecognized prefix" };
+  const compilerAlias = ["archive/compiler-helper/", "bench/", "exp/", "keep/", "docs/", "runtime/"].some(p => name.startsWith(p)) || name.startsWith("worktree-agent-");
+  const lane = match?.[0] ?? (compilerAlias ? "compiler" : undefined) ?? (["sdk", "claude"].find(x => name.startsWith(`${x}/`))) ?? "unknown";
+  return { lane, state: LANE_STATES[lane]?.state ?? "UNKNOWN", source: match ? "lanes.json prefix" : compilerAlias ? "compiler owner's dated prefix mapping" : lane !== "unknown" ? "dated historical prefix" : "unrecognized prefix" };
 }
-function reachable(start: string, graph: Map<string, Commit>): Set<string> {
-  const found = new Set<string>(), stack = [start];
+function reachable(start: string | string[], graph: Map<string, Commit>): Set<string> {
+  const found = new Set<string>(), stack = typeof start === "string" ? [start] : [...start];
   while (stack.length) {
     const sha = stack.pop()!;
     if (found.has(sha)) continue;
@@ -117,8 +122,9 @@ export function parseWorktrees(raw: string): Worktree[] {
   for (const field of raw.split("\0")) {
     if (field.startsWith("worktree ")) {
       w = { path: field.slice(9), sha: "", branch: null, detached: false, prunable: null, locked: null,
-        active: [], protected: false, dirty: null, tracked: [], untracked: [], rootModifiedAt: null, lastModifiedAt: null,
-        target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, sharedWith: [] }, errors: [],
+        active: [], protected: false, protection: null, missing: false, lane: "unknown", dirty: null, tracked: [], untracked: [],
+        inputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null,
+        target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, sharedWith: [] }, errors: [], notes: [],
         proposal: { action: "NEEDS A PERSON", reason: "Not inspected" } };
       trees.push(w);
     } else if (w) {
@@ -168,39 +174,102 @@ function defaultActive(home: string): Map<string, string[]> {
   return active;
 }
 
-function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, sizeCache: Map<string, number>): void {
+function within(root: string, path: string): boolean {
+  const r = relative(resolve(root), resolve(path));
+  return r !== ".." && !r.startsWith(`..${sep}`) && !isAbsolute(r);
+}
+function laneHome(path: string, home: string): boolean {
+  const r = relative(join(home, "Projects/nts-lanes"), resolve(path));
+  return !!r && r !== ".." && !isAbsolute(r) && !r.includes(sep);
+}
+export function inputFor(tree: string, path: string): { reason: string; link?: string; target?: string } | null {
+  if (path === "third_party/typescript-go") return { reason: "Patched TypeScript-Go input gitlink" };
+  const root = canonical(tree);
+  let cursor = resolve(tree);
+  for (const part of path.split("/")) {
+    cursor = join(cursor, part);
+    try {
+      if (lstatSync(cursor).isSymbolicLink()) {
+        const target = canonical(resolve(dirname(cursor), readlinkSync(cursor)));
+        if (!within(root, target)) return { reason: "Symlinked input outside this worktree", link: relative(tree, cursor), target };
+      }
+    } catch (e) {
+      if (["ENOENT", "ENOTDIR"].includes((e as NodeJS.ErrnoException).code ?? "")) break;
+      throw e;
+    }
+  }
+  return null;
+}
+export function buildOutput(path: string): boolean {
+  return /\.(o|obj)$/.test(path) || /(^|\/)out(\/|$)/.test(path) || path.startsWith("results/benchmarks/");
+}
+function pathLane(path: string): string {
+  for (const part of resolve(path).split(sep).reverse()) {
+    if (LANE_STATES[part]) return part;
+    if (part === "compiler-helper") return "compiler";
+    if (part.startsWith("tsrs-")) return "tsrs";
+  }
+  return "unknown";
+}
+function archiveBasename(path: string): string {
+  return basename(path).replace(/[^a-zA-Z0-9_.-]/g, "-").replace(/\.\./g, "-").replace(/^\.+|\.+$/g, "").replace(/\.lock$/, "-lock") || "tree";
+}
+const retiringActions = new Set(["remove worktree", "snapshot then remove", "prune stale registration"]);
+function retires(w: Worktree): boolean { return retiringActions.has(w.proposal.action); }
+
+function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, sizeCache: Map<string, number>): void {
   w.active = active.get(canonical(w.path)) ?? [];
-  w.protected = canonical(w.path) === canonical(protectedTree);
+  w.protection = canonical(w.path) === canonical(protectedTree) ? "Shared landing checkout" : laneHome(w.path, home) ? "Lane home / resume point" : null;
+  w.protected = !!w.protection;
   let latest = 0;
   const noteTime = (path: string) => {
     try { latest = Math.max(latest, lstatSync(path).mtimeMs); }
     catch (e) { w.errors.push(`mtime ${path}: ${String(e)}`); }
   };
   try {
-    w.rootModifiedAt = statSync(w.path).mtime.toISOString();
+    let rootStat;
+    try { rootStat = statSync(w.path); }
+    catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") { w.missing = true; w.notes.push("Worktree directory is gone (ENOENT); branch refs are retained independently."); }
+      throw e;
+    }
+    w.rootModifiedAt = rootStat.mtime.toISOString();
     noteTime(w.path);
     let complete = true, raw: string;
     try { raw = git(w.path, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=none"]); }
     catch (e) {
-      // Some old pin trees symlink a tracked submodule. Git refuses its
-      // normal status; still list root changes, while keeping the inspection
-      // incomplete and requiring a person to review the submodule.
-      w.errors.push(String(e)); complete = false;
-      raw = git(w.path, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=all"]);
+      const failedPath = /expected submodule path '([\s\S]*)' not to be a symbolic link/.exec(String(e))?.[1];
+      const input = failedPath ? inputFor(w.path, failedPath) : null;
+      if (failedPath && input) {
+        w.inputs.push({ status: "gitlink", path: failedPath, ...input });
+        w.notes.push(`Read-only input fallback: ${String(e)}`);
+      } else { w.errors.push(String(e)); complete = false; }
+      raw = git(w.path, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignore-submodules=all", "--", ".", ":(exclude)third_party/typescript-go"]);
     }
     const parsed = parseStatus(raw);
-    Object.assign(w, parsed);
-    const rootDirty = parsed.tracked.length > 0 || parsed.untracked.length > 0;
+    for (const entry of parsed.tracked) {
+      const input = inputFor(w.path, entry.path);
+      if (input && (!entry.from || inputFor(w.path, entry.from))) w.inputs.push({ status: entry.status, path: entry.path, ...input });
+      else w.tracked.push(entry);
+    }
+    for (const path of parsed.untracked) {
+      const input = inputFor(w.path, path);
+      if (input) w.inputs.push({ status: "??", path, ...input }); else w.untracked.push(path);
+    }
+    w.snapshotFiles.tracked = w.tracked.filter(e => !buildOutput(e.path));
+    w.snapshotFiles.untracked = w.untracked.filter(p => !buildOutput(p));
+    w.buildOutputs = [...w.tracked.filter(e => buildOutput(e.path)), ...w.untracked.filter(buildOutput).map(path => ({ status: "??", path }))];
+    const rootDirty = w.snapshotFiles.tracked.length > 0 || w.snapshotFiles.untracked.length > 0;
     w.dirty = rootDirty ? true : complete ? false : null;
     // Timestamp means the newest visible non-ignored file, root directory or
     // per-worktree Git HEAD/index. Ignored build products are excluded.
     const paths = new Set([...git(w.path, ["ls-files", "-z"]).split("\0").filter(Boolean), ...w.untracked]);
-    for (const path of paths) if (existsSync(join(w.path, path))) noteTime(join(w.path, path));
+    for (const path of paths) if (!inputFor(w.path, path) && existsSync(join(w.path, path))) noteTime(join(w.path, path));
     for (const name of ["HEAD", "index"]) {
       const path = git(w.path, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim();
       if (existsSync(path)) noteTime(path);
     }
-  } catch (e) { w.errors.push(String(e)); }
+  } catch (e) { if (!w.missing) w.errors.push(String(e)); }
   w.lastModifiedAt = latest ? new Date(latest).toISOString() : null;
   try {
     let targetExists = true;
@@ -223,16 +292,24 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
 
 export function branchProposal(b: Branch, trees: Worktree[], protectedRef = "main"): Action {
   if (b.name === protectedRef) return { action: "keep", reason: "Protected main branch" };
-  const checked = trees.filter(w => b.checkedOut.includes(w.path));
-  if (checked.some(w => w.dirty || w.errors.length)) return { action: "NEEDS A PERSON", reason: "Checked-out worktree is dirty or inaccessible" };
+  const checked = trees.filter(w => b.checkedOut.includes(w.path) && !retires(w));
+  if (checked.some(w => w.proposal.action === "NEEDS A PERSON")) return { action: "NEEDS A PERSON", reason: "Checkout has an unresolved inspection or archive ambiguity" };
+  if (checked.length) return { action: "keep", reason: "Checked out by a retained tree" };
   if (b.errors.length || b.stateOfLanding === "UNKNOWN") return { action: "NEEDS A PERSON", reason: b.errors.join("; ") || "Unknown landing state" };
-  if (b.checkedOut.length) return { action: "keep", reason: "Checked out; branch deletion requires separate worktree review" };
   if (b.stateOfLanding === "ANCESTOR" || b.stateOfLanding === "LANDED") return { action: "delete branch", reason: "All commits retained on main; no checkout" };
   if (b.stateOfLanding === "PROBABLY-LANDED") return {
     action: "archive then delete", archiveRef: `refs/archive/${b.lane}/${b.name}`,
     reason: "Subject-only match may hide a changed body; retain the exact commits in an archive",
   };
+  if (b.retiringCheckouts.length) return {
+    action: "archive then delete", archiveRef: `refs/archive/${b.lane}/${b.name}`,
+    reason: "Only checkouts are proposed for retirement; preserve unlanded commits before deleting the branch",
+  };
   if (b.ageDays <= 3) return { action: "keep", reason: "Tip is at most three days old" };
+  if (b.lane === "compiler") return {
+    action: "archive then delete", archiveRef: `refs/archive/${b.lane}/${b.name}`,
+    reason: "Compiler owner's decision: archive old unlanded unchecked-out branches, including evidence-only work",
+  };
   if (b.state === "ACTIVE") return { action: "NEEDS A PERSON", reason: "Active lane's old unlanded branch; agent may still want it" };
   if (["PAUSED", "CLOSED", "INACTIVE"].includes(b.state)) return {
     action: "archive then delete", archiveRef: `refs/archive/${b.lane}/${b.name}`,
@@ -253,7 +330,10 @@ export async function inventory(options: Options) {
   const trees = parseWorktrees(git(repo, ["worktree", "list", "--porcelain", "-z"]));
   const active = options.activeTrees ? new Map(options.activeTrees.map(p => [canonical(p), ["Explicit active tree"]])) : defaultActive(home);
   const sizeCache = new Map<string, number>();
-  for (const w of trees) inspectWorktree(w, active, options.protectedTree ?? dirname(common), sizeCache);
+  for (const w of trees) {
+    w.lane = w.branch ? owner(w.branch, lanes).lane : pathLane(w.path);
+    inspectWorktree(w, active, options.protectedTree ?? dirname(common), home, sizeCache);
+  }
   for (const w of trees) if (w.target.realPath) w.target.sharedWith = trees.filter(x => x.path !== w.path && x.target.realPath === w.target.realPath).map(x => x.path);
 
   const graph = new Map<string, Commit>();
@@ -272,6 +352,7 @@ export async function inventory(options: Options) {
     const b: Branch = { ...r, ...owner(r.ref.slice(11), lanes), name: r.ref.slice(11), date: c?.date ?? "unknown",
       ageDays: c ? (now.getTime() / 1000 - c.timestamp) / 86400 : 0,
       checkedOut: trees.filter(w => w.branch === r.ref.slice(11)).map(w => w.path),
+      effectiveCheckouts: [], retiringCheckouts: [],
       stateOfLanding: "UNKNOWN", mergeBase: null, unmatched: [], unmatchedDiffstat: null, errors: [], proposal: { action: "NEEDS A PERSON", reason: "Not classified" } };
     branches.push(b);
     if (onMain.has(r.sha)) { b.stateOfLanding = "ANCESTOR"; continue; }
@@ -319,22 +400,47 @@ export async function inventory(options: Options) {
   } catch (e) {
     for (const b of branches.filter(b => b.unmatched.length)) b.errors.push(`Unmatched diffstat incomplete: ${String(e)}`);
   }
+  const archivedCommits = reachable(archives.map(a => a.sha), graph);
+  for (const w of trees) {
+    if (w.protected) w.proposal = { action: "keep", reason: w.protection! };
+    else if (w.active.length) w.proposal = { action: "keep", reason: w.active.join("; ") };
+    else if (w.locked) w.proposal = { action: "NEEDS A PERSON", reason: `Worktree is locked: ${w.locked}` };
+    else if (w.missing) w.proposal = { action: "prune stale registration", reason: "Directory is gone; prune only the administrative registration, not branch refs" };
+    else if (w.errors.length || w.dirty === null) w.proposal = { action: "NEEDS A PERSON", reason: "Inaccessible or incompletely inspected worktree" };
+    else if (w.dirty) w.proposal = { action: "snapshot then remove", archiveRef: `refs/archive/${w.lane}/snapshot/${archiveBasename(w.path)}`,
+      reason: "Preserve HEAD plus listed tracked/untracked work in a snapshot commit; exclude linked inputs and listed build outputs" };
+    else {
+      w.proposal = { action: "remove worktree", reason: "Clean inactive tree; preserve its HEAD via main, retained/archive refs or the associated branch action" };
+      if (!onMain.has(w.sha) && !archivedCommits.has(w.sha) && !branches.some(b => b.sha === w.sha || ranges.get(b.sha)?.includes(w.sha))) {
+        w.proposal.archiveRef = `refs/archive/${w.lane}/worktree/${archiveBasename(w.path)}-${w.sha.slice(0, 12)}`;
+        w.proposal.reason = "Archive the detached HEAD at the stated ref before removing this clean inactive tree";
+      }
+    }
+  }
+  const destinations = new Map<string, Worktree[]>();
+  for (const w of trees.filter(w => w.proposal.archiveRef)) {
+    const ref = w.proposal.archiveRef!;
+    destinations.set(ref, [...(destinations.get(ref) ?? []), w]);
+  }
+  for (const [ref, candidates] of destinations) {
+    const existing = archives.find(a => a.ref === ref);
+    if ((candidates.length > 1 && (candidates.some(w => w.dirty) || new Set(candidates.map(w => w.sha)).size > 1)) || (existing && (candidates[0].dirty || existing.sha !== candidates[0].sha))) {
+      for (const w of candidates) {
+        w.notes.push(`Requested archive destination ${ref}; choose a distinct ref before cleanup.`);
+        w.proposal = { action: "NEEDS A PERSON", reason: `Archive destination collision: ${ref}` };
+      }
+    }
+  }
   for (const b of branches) {
+    b.retiringCheckouts = trees.filter(w => b.checkedOut.includes(w.path) && retires(w)).map(w => w.path);
+    b.effectiveCheckouts = b.checkedOut.filter(p => !b.retiringCheckouts.includes(p));
     b.proposal = branchProposal(b, trees);
     if (b.proposal.archiveRef) {
       const previous = archives.find(a => a.ref === b.proposal.archiveRef);
       if (previous && previous.sha !== b.sha) b.proposal = { action: "NEEDS A PERSON", reason: "Proposed archive ref already points to a different commit" };
     }
-  }
-  const archivedTips = new Set(archives.map(a => a.sha));
-  for (const w of trees) {
-    if (w.dirty || w.errors.length || w.dirty === null) w.proposal = { action: "NEEDS A PERSON", reason: "Dirty, inaccessible or incompletely inspected worktree" };
-    else if (w.protected) w.proposal = { action: "keep", reason: "Protected shared landing checkout" };
-    else if (w.active.length) w.proposal = { action: "keep", reason: w.active.join("; ") };
-    else if (w.locked) w.proposal = { action: "NEEDS A PERSON", reason: `Worktree is locked: ${w.locked}` };
-    else if (w.detached && (onMain.has(w.sha) || archivedTips.has(w.sha))) w.proposal = { action: "remove worktree", reason: "Clean inactive detached tree; exact HEAD retained on main or in an archive ref" };
-    else if (w.branch && archivedTips.has(w.sha)) w.proposal = { action: "remove worktree", reason: "Clean inactive tree; exact branch tip already archived (branch ref is kept while checked out)" };
-    else w.proposal = { action: "NEEDS A PERSON", reason: "Checkout still retains work whose preservation/removal needs review" };
+    if (b.retiringCheckouts.length) for (const w of trees.filter(w => b.retiringCheckouts.includes(w.path)))
+      w.notes.push(`Associated branch ${b.name}: ${b.proposal.action}${b.proposal.archiveRef ? ` (${b.proposal.archiveRef})` : ""}.`);
   }
   const archiveCounts: Record<string, number> = {};
   const archiveItems = archives.map(r => {
@@ -349,20 +455,42 @@ export async function inventory(options: Options) {
   const endingTrees = parseWorktrees(git(repo, ["worktree", "list", "--porcelain", "-z"]));
   if (JSON.stringify(trees.map(w => [w.path, w.sha, w.branch])) !== JSON.stringify(endingTrees.map(w => [w.path, w.sha, w.branch]))) warnings.push("Worktree registrations/HEADs changed during the inventory; rerun before cleanup.");
   const count = (xs: string[]) => Object.fromEntries([...new Set(xs)].sort().map(k => [k, xs.filter(x => x === k).length]));
+  const summary = [...new Set([...branches.map(b => b.proposal.action), ...trees.map(w => w.proposal.action)])].sort().map(action => ({
+    action, branches: branches.filter(b => b.proposal.action === action).length,
+    worktrees: trees.filter(w => w.proposal.action === action).length, targetFreedBytes: 0,
+  }));
+  for (const [path, bytes] of sizeCache) {
+    const owners = trees.filter(w => w.target.realPath === path);
+    const enclosing = trees.filter(w => retires(w) && within(canonical(w.path), path)).sort((a, b) => b.path.length - a.path.length)[0];
+    if (enclosing && owners.every(retires)) summary.find(s => s.action === enclosing.proposal.action)!.targetFreedBytes += bytes;
+  }
+  const series = new Map<string, { branch: Branch; aliases: string[] }>();
+  for (const b of branches.filter(b => b.stateOfLanding === "UNLANDED" && b.proposal.action === "archive then delete" && b.unmatchedDiffstat)
+    .sort((a, b) => (b.unmatchedDiffstat!.insertions + b.unmatchedDiffstat!.deletions) - (a.unmatchedDiffstat!.insertions + a.unmatchedDiffstat!.deletions))) {
+    const key = b.unmatched.map(c => otherIds.get(c.sha) ?? c.sha).sort().join(" ");
+    if (series.has(key)) series.get(key)!.aliases.push(b.name); else series.set(key, { branch: b, aliases: [] });
+  }
+  const topUnlanded = [...series.values()].slice(0, 10);
   return {
     generatedAt: new Date().toISOString(), startedAt, policyDate: now.toISOString(), repo: canonical(repo), main,
-    policy: { source: STATE_SOURCE, laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common),
+    policy: { source: STATE_SOURCE, cleanupSource: CLEANUP_SOURCE, laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common),
+      protectedLaneHomes: join(home, "Projects/nts-lanes/*"),
       timestampDefinition: "Newest mtime of visible tracked/untracked non-ignored files, root directory and per-worktree Git HEAD/index; ignored build products excluded.",
       targetDefinition: "du -s -B1 allocated bytes; target symlink resolved, nested symlinks not followed; shared real paths counted once in total.",
       landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only matches are archived before proposed branch deletion (MainClaude, Orcode 5f16afb4-4064-4d43-bf56-573216406c5e).",
       diffstatDefinition: "Unmatched commits: unique file paths across the series; summed added/deleted lines; binary-file changes counted separately. Merges diff against the first parent; renames count as delete/add.",
-      checkedOutRule: "Checked-out branches are kept; clean inactive worktrees may be proposed for removal only with exact HEAD already retained on main/archive." },
+      inputDefinition: "Status paths under external symlinks, and the patched third_party/typescript-go gitlink, are INPUTS and do not count as work. Expected linked-submodule errors use the read-only pathspec fallback.",
+      snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, excluding inputs, *.o, *.obj, out/ and results/benchmarks/*; preserve HEAD as the parent. Snapshot refs must not overwrite existing archives.",
+      targetFreedDefinition: "Estimated exclusive target allocation freed if all proposals are approved: real paths counted once, only inside retiring trees, and only when no retained worktree references the target. External/shared targets are excluded.",
+      checkedOutRule: "Lane homes and active trees are kept. Branches checked out only by retiring/pruned trees inherit retirement: landed branches delete, unlanded branches archive then delete. Old unchecked-out compiler branches archive by the compiler owner's decision; tsrs policy is unchanged." },
     totals: { branches: branches.length, landed: count(branches.map(b => b.stateOfLanding)), branchActions: count(branches.map(b => b.proposal.action)),
-      worktrees: trees.length, dirtyWorktrees: trees.filter(w => w.dirty).length, inaccessibleOrIncompleteWorktrees: trees.filter(w => w.errors.length || w.dirty === null).length,
+      worktrees: trees.length, dirtyWorktrees: trees.filter(w => w.dirty).length, inaccessibleOrIncompleteWorktrees: trees.filter(w => !w.missing && (w.errors.length || w.dirty === null)).length,
+      missingWorktrees: trees.filter(w => w.missing).length, worktreesWithInputs: trees.filter(w => w.inputs.length).length,
       worktreeActions: count(trees.map(w => w.proposal.action)), archiveRefs: archives.length, archivesByLane: archiveCounts,
       uniqueTargetBytes: [...sizeCache.values()].reduce((a, b) => a + b, 0), uniqueTargetPaths: sizeCache.size,
       unknownTargetSizes: trees.filter(w => w.target.bytes === null).length,
       mainPatchIdPasses: 1, mainPatchIds: mainIds.size, otherPatchIdCommits: otherIds.size },
+    summary, topUnlanded, reallyDirtyTrees: trees.filter(w => w.dirty).map(w => w.path),
     warnings, branches, worktrees: trees, archives: archiveItems,
   };
 }
@@ -373,22 +501,29 @@ export function markdown(report: Awaited<ReturnType<typeof inventory>>): string 
   const gib = (bytes: number | null) => bytes === null ? "unknown" : `${(bytes / 2 ** 30).toFixed(3)} GiB`;
   const diffstat = (d: Diffstat | null | undefined) => d ? `${d.files} files; +${d.insertions}/-${d.deletions}${d.binaryFiles ? `; ${d.binaryFiles} binary changes` : ""}` : "—";
   const lines = ["# Branch and worktree inventory", "", `Snapshot ${report.startedAt} – ${report.generatedAt}; main ${report.main}.`, "",
-    "## Totals", "", table(["Item", "Count"], Object.entries(report.totals).map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : v])), "",
     "Proposals only. No Git refs, indexes, worktrees or build outputs are changed by this tool. Approval and cleanup require a separate step.", "",
+    "## Proposed actions", "", table(["Action", "Branches", "Worktrees", "GiB of target/ freed (estimate)"], report.summary.map(s => [s.action, s.branches, s.worktrees, (s.targetFreedBytes / 2 ** 30).toFixed(3)])), "",
+    report.policy.targetFreedDefinition, "",
+    "## Really dirty trees", "", report.reallyDirtyTrees.length ? table(["Path", "Tracked work files", "Untracked work files", "Proposed action", "Snapshot ref"], report.worktrees.filter(w => w.dirty).map(w => [w.path, w.snapshotFiles.tracked.length, w.snapshotFiles.untracked.length, w.proposal.action, w.proposal.archiveRef])) : "None.", "",
+    "Full file lists, linked inputs and excluded build outputs appear in the worktree details below.", "",
+    "## Ten largest unlanded series to triage", "", "Ranked by added plus deleted lines among proposed archive candidates. Patch-equivalent aliases are grouped; retained active work stays out of this cleanup shortlist.", "",
+    table(["Branch", "Aliases", "Unmatched commits", "Files", "Lines added", "Lines deleted", "Proposed action"], report.topUnlanded.map(s => [s.branch.name, s.aliases.join("; "), s.branch.unmatched.length, s.branch.unmatchedDiffstat!.files, s.branch.unmatchedDiffstat!.insertions, s.branch.unmatchedDiffstat!.deletions, s.branch.proposal.action])), "",
+    "## Totals", "", table(["Item", "Count"], Object.entries(report.totals).map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : v])), "",
     `Lane policy: ${report.policy.source}.`, "", table(["Lane / historical prefix", "State", "Since"], Object.entries(report.policy.laneStates).map(([k, v]) => [k, v.state, v.since])), "",
+    `Cleanup policy: ${report.policy.cleanupSource}. Protected lane homes: ${report.policy.protectedLaneHomes}.`, "",
     `Protected checkout: ${report.policy.protectedTree}. Active trees:`, "",
     table(["Path", "Reason"], Object.entries(report.policy.activeTrees).map(([p, why]) => [p, why.join("; ")])), "",
-    report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.diffstatDefinition, report.policy.checkedOutRule, "",
+    report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.diffstatDefinition, report.policy.inputDefinition, report.policy.snapshotDefinition, report.policy.checkedOutRule, "",
     ...(report.warnings.length ? ["## Snapshot warnings", "", ...report.warnings.map(w => `- ${w}`), ""] : []),
-    "## Branches", "", table(["Branch", "Lane / state", "Tip / commit date", "Checkout", "Landed state", "Unmatched diffstat", "Proposed action", "Reason / archive ref"], report.branches.map(b => [b.name, `${b.lane} / ${b.state}`, `${b.sha.slice(0, 12)} / ${b.date}`, b.checkedOut.join("; ") || "none", b.stateOfLanding, diffstat(b.unmatchedDiffstat), b.proposal.action, [b.proposal.reason, b.proposal.archiveRef].filter(Boolean).join("; ")])), "",
-    "## Worktrees", "", table(["Path", "Branch / detached HEAD", "Prunable / locked", "Last modified", "Status", "target size", "Proposed action / reason"], report.worktrees.map(w => [w.path, w.branch ?? `detached ${w.sha.slice(0, 12)}`, [w.prunable && `prunable: ${w.prunable}`, w.locked && `locked: ${w.locked}`].filter(Boolean).join("; ") || "no", w.lastModifiedAt, w.dirty === null ? "UNKNOWN" : w.dirty ? "DIRTY" : "clean", `${gib(w.target.bytes)}${w.target.sharedWith.length ? " (shared)" : ""}`, `${w.proposal.action}: ${w.proposal.reason}`])), "",
+    "## Branches", "", table(["Branch", "Lane / state", "Tip / commit date", "Checkout (retiring marked)", "Landed state", "Unmatched diffstat", "Proposed action", "Reason / archive ref"], report.branches.map(b => [b.name, `${b.lane} / ${b.state}`, `${b.sha.slice(0, 12)} / ${b.date}`, b.checkedOut.map(p => p + (b.retiringCheckouts.includes(p) ? " (retiring)" : "")).join("; ") || "none", b.stateOfLanding, diffstat(b.unmatchedDiffstat), b.proposal.action, [b.proposal.reason, b.proposal.archiveRef].filter(Boolean).join("; ")])), "",
+    "## Worktrees", "", table(["Path", "Branch / detached HEAD", "Prunable / locked", "Last modified", "Status / inputs", "target size", "Proposed action / reason / archive"], report.worktrees.map(w => [w.path, w.branch ?? `detached ${w.sha.slice(0, 12)}`, [w.prunable && `prunable: ${w.prunable}`, w.locked && `locked: ${w.locked}`].filter(Boolean).join("; ") || "no", w.lastModifiedAt, `${w.missing ? "MISSING" : w.dirty === null ? "UNKNOWN" : w.dirty ? "DIRTY" : w.buildOutputs.length ? "build outputs only" : "clean"}; ${w.inputs.length} INPUTS`, `${gib(w.target.bytes)}${w.target.sharedWith.length ? " (shared)" : ""}`, `${w.proposal.action}: ${w.proposal.reason}${w.proposal.archiveRef ? `; ${w.proposal.archiveRef}` : ""}`])), "",
     "## Archive refs by lane", "", table(["Lane", "Count"], Object.entries(report.totals.archivesByLane)), "",
     "Unknown archive ownership includes legacy flat names with no lanes.json prefix match. Every archive ref is retained; exact names and tips are in JSON.", "",
     "## Unmatched branch commits", ""];
   for (const b of report.branches.filter(b => b.unmatched.length || b.errors.length)) lines.push(`### ${cell(b.name)} (${b.stateOfLanding})`, "", ...b.errors.map(e => cell(e)), table(["SHA", "Commit date", "Subject", "Diffstat"], b.unmatched.map(c => [c.sha, c.date, c.subject, diffstat(c.diffstat)])), "");
   lines.push("## Worktree changes and inspection errors", "");
-  for (const w of report.worktrees.filter(w => w.tracked.length || w.untracked.length || w.errors.length)) {
-    lines.push(`### ${cell(w.path)}`, "", "Tracked changes:", "", w.tracked.length ? table(["Status", "Path", "From"], w.tracked.map(c => [c.status, c.path, c.from])) : "None recorded.", "", "Untracked non-ignored files:", "", w.untracked.length ? table(["Path"], w.untracked.map(p => [p])) : "None recorded.", "", ...w.errors.map(e => `Inspection error: ${cell(e)}`), "");
+  for (const w of report.worktrees.filter(w => w.tracked.length || w.untracked.length || w.inputs.length || w.errors.length || w.notes.length)) {
+    lines.push(`### ${cell(w.path)}`, "", "Tracked changes:", "", w.tracked.length ? table(["Status", "Path", "From", "Snapshot?"], w.tracked.map(c => [c.status, c.path, c.from, buildOutput(c.path) ? "excluded build output" : "yes"])) : "None recorded.", "", "Untracked non-ignored files:", "", w.untracked.length ? table(["Path", "Snapshot?"], w.untracked.map(p => [p, buildOutput(p) ? "excluded build output" : "yes"])) : "None recorded.", "", "Linked/patched inputs (not work):", "", w.inputs.length ? table(["Status", "Path", "Reason", "Symlink", "Target"], w.inputs.map(i => [i.status, i.path, i.reason, i.link, i.target])) : "None.", "", ...w.notes.map(n => `Note: ${cell(n)}`), ...w.errors.map(e => `Inspection error: ${cell(e)}`), "");
   }
   return lines.join("\n") + "\n";
 }
