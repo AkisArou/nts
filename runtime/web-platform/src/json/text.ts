@@ -25,6 +25,20 @@ const TRAIL_SURROGATE_END = 0xdfff;
 const HEX = "0123456789abcdef";
 
 /**
+ * The runtime's escape kernel, where the target provides it: C and LLVM programs link the C
+ * runtime's (`nts_json_quote`, `nts_json_first_escape` in `runtime/c/nts_runtime.c`), which
+ * finds the first unit needing an escape 32 bytes at a time. Each function below asks
+ * `typeof` first, and the compiler answers it for the backend it prepares
+ * (`compiler/core/src/hir/features.rs`), so the arm a target cannot run is never compiled
+ * there. Node, Bun, the JVM and Wasm answer `"undefined"` and run the TypeScript, which stays
+ * the specification: the kernel is tested against it unit for unit.
+ */
+/** @ntsAbi intrinsic */
+declare function nts_json_quote(value: string): string;
+/** @ntsAbi intrinsic */
+declare function nts_json_first_escape(value: string, from: number): number;
+
+/**
  * Every escape below U+0100, whole, built once.
  *
  * This is the range that matters: 25.5.4.3 sends every control character here, and a control
@@ -95,8 +109,11 @@ function unicodeEscape(unit: number): string {
  * The surrogate arm is why this cannot be a per-unit predicate: a lead followed by a trail is
  * one code point and is emitted as it stands, so deciding whether a lead needs escaping means
  * looking at the unit after it.
+ *
+ * `from` is an index, a whole number from 0 to the length, as every caller passes.
  */
 export function firstEscapeIndex(value: string, from: number): number {
+  if (typeof nts_json_first_escape === "function") return nts_json_first_escape(value, from);
   for (let at = from; at < value.length; at++) {
     const unit = value.charCodeAt(at);
     // The common case is a character that needs nothing.
@@ -132,8 +149,12 @@ export function firstEscapeIndex(value: string, from: number): number {
  *
  * Successive calls resume where the last stopped, so the string is still scanned once end to
  * end however many escapes it contains.
+ *
+ * The kernel is not told `from`. It finds the first escape again at one vector step per 32
+ * bytes, which does not pay for a second entry point and its row in every helper table.
  */
 export function quoteFromIndex(value: string, from: number): string {
+  if (typeof nts_json_quote === "function") return nts_json_quote(value);
   let out = '"';
   let plainFrom = 0;
   let at = from;
@@ -157,6 +178,7 @@ export function quoteFromIndex(value: string, from: number): string {
 }
 
 export function quoteJSONString(value: string): string {
+  if (typeof nts_json_quote === "function") return nts_json_quote(value);
   const first = firstEscapeIndex(value, 0);
   // Nothing needs escaping, which is the common case: most strings in most documents contain
   // nothing Table 78 or 25.5.4.3 has anything to say about.
