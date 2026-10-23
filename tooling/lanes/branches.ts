@@ -314,7 +314,7 @@ function archiveBasename(path: string): string {
 const retiringActions = new Set(["remove worktree", "snapshot then remove", "prune stale registration"]);
 function retires(w: Worktree): boolean { return retiringActions.has(w.proposal.action); }
 
-function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, owned: ReturnType<typeof toolOwnedTrees>, sizeCache: Map<string, number>, targetTimes: Map<string, number>): void {
+export function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, owned: ReturnType<typeof toolOwnedTrees>, sizeCache: Map<string, number>, targetTimes: Map<string, number>, ignoreHeadTimestamp = false): void {
   w.active = active.get(canonical(w.path)) ?? [];
   const owners = owned.filter(t => canonical(t.path) === canonical(w.path));
   w.protection = owners.length ? "tool-owned tree" : canonical(w.path) === canonical(protectedTree) ? "Shared landing checkout" : laneHome(w.path, home) ? "Lane home / resume point" : null;
@@ -366,6 +366,9 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
     const paths = new Set([...git(w.path, ["ls-files", "-z"]).split("\0").filter(Boolean), ...w.untracked]);
     for (const path of paths) if (!inputFor(w.path, path) && existsSync(join(w.path, path))) noteTime(join(w.path, path));
     for (const name of ["HEAD", "index"]) {
+      // Cleanup may detach a retiring HEAD with an atomic ref transaction.
+      // Its own metadata write is not evidence of new user activity.
+      if (name === "HEAD" && ignoreHeadTimestamp) continue;
       const path = git(w.path, ["rev-parse", "--path-format=absolute", "--git-path", name]).trim();
       if (existsSync(path)) noteTime(path);
     }
