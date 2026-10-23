@@ -1,11 +1,26 @@
 // node --test tooling/lanes/branches.test.ts
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { lstatSync, lutimesSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildOutput, inputFor, inventory, markdown, missingInput, parseDiffstats, parseStatus, parseWorktrees } from "./branches.ts";
+import { buildOutput, inputFor, inventory, markdown, missingInput, parseDiffstats, parseStatus, parseWorktrees, toolOwnedTrees } from "./branches.ts";
+
+function infrastructureSources(repo: string): void {
+  for (const directory of ["lanes", "gate", "census", "conformance"]) mkdirSync(join(repo, "tooling", directory), { recursive: true });
+  writeFileSync(join(repo, "tooling/lanes/land.ts"), 'const HOME = process.env.NTS_LAND_HOME ?? homedir();\nconst MAINCTL = join(HOME, ".cache/test-land");\nconst GATE_TREE = join(MAINCTL, "tree");\n');
+  writeFileSync(join(repo, "tooling/gate/pinned.sh"), 'tree=${NTS_GATE_TREE:-$HOME/.cache/test-gate/tree}\n');
+  writeFileSync(join(repo, "tooling/census/full.ts"), 'const HOME = join(homedir(), ".cache/test-full");\nconst env = {\n  NTS_GATE_TREE: join(HOME, "tree"),\n};\n');
+  writeFileSync(join(repo, "tooling/conformance/pin.ts"), 'export const PINS = process.env.NTS_PINS ?? join(homedir(), ".cache/test-pins");\nconst TREE = join(PINS, "tree");\n');
+}
+
+function ageFiles(path: string, date: Date): void {
+  const stat = lstatSync(path);
+  if (stat.isSymbolicLink()) { lutimesSync(path, date, date); return; }
+  if (stat.isDirectory()) for (const name of readdirSync(path)) ageFiles(join(path, name), date);
+  utimesSync(path, date, date);
+}
 
 test("inventory classifies replays and subjects, protects work, and leaves Git untouched", async () => {
   const parent = join(homedir(), ".cache/nts-scratch/branch-inventory");
@@ -26,6 +41,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
   };
   try {
     git(["init", "-q", "-b", "main"]);
+    infrastructureSources(repo);
     mkdirSync(join(repo, "tooling/lanes"), { recursive: true });
     writeFileSync(join(repo, "tooling/lanes/lanes.json"), JSON.stringify({ lanes: { compiler: { branch: "compiler/" }, wasm: { branch: "wasm/" }, jvm: { branch: "jvm/" }, tsrs: { branch: "tsrs/" } } }));
     writeFileSync(join(repo, ".gitignore"), "ignored\ntarget\n");
@@ -103,6 +119,13 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     rmSync(stale, { recursive: true });
     const checkedRecent = join(scratch, "checked-recent");
     git(["worktree", "add", "-q", "-b", "jvm/checked-recent", checkedRecent, "wasm/recent"]);
+    const youngActive = join(scratch, "young-active");
+    git(["worktree", "add", "-q", "-b", "tsrs/young-checked", youngActive, "wasm/recent"]);
+    const usedToday = join(scratch, "used-today");
+    git(["worktree", "add", "-q", "-b", "jvm/recent-use", usedToday, base]);
+    const infrastructure = toolOwnedTrees(repo, scratch, {});
+    for (const tree of infrastructure) git(["worktree", "add", "-q", "--detach", tree.path, base]);
+    writeFileSync(join(infrastructure[0].path, "warm-cache-work"), "tool owns this tree even when dirty\n");
     const collisions = [join(scratch, "one/collision"), join(scratch, "two/collision")];
     for (const tree of collisions) {
       mkdirSync(join(tree, ".."), { recursive: true });
@@ -111,9 +134,17 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     }
     mkdirSync(join(repo, "target")); writeFileSync(join(repo, "target", "payload"), "allocated\n");
     mkdirSync(join(dirty, "target")); writeFileSync(join(dirty, "target", "payload"), "own target allocation\n");
+    for (const tree of [infrastructure[0].path, usedToday]) {
+      mkdirSync(join(tree, "target")); writeFileSync(join(tree, "target", "payload"), "keep warm\n");
+    }
     symlinkSync(join(repo, "target"), join(clean, "target"));
+    // Most fixtures represent old scratch trees. A fresh checkout's index
+    // and file mtimes must not accidentally turn those into recent-use tests.
+    ageFiles(scratch, new Date("2026-10-15T12:00:00Z"));
+    const recentTime = new Date("2026-10-23T19:00:00Z");
+    utimesSync(join(usedToday, "base"), recentTime, recentTime);
     const beforeRefs = git(["show-ref"]), beforeTrees = git(["worktree", "list", "--porcelain"]);
-    const indexes = [repo, dirty, clean, active, linked, lane, checkedRecent, ...collisions].map(tree => {
+    const indexes = [repo, dirty, clean, active, linked, lane, checkedRecent, youngActive, usedToday, ...infrastructure.map(t => t.path), ...collisions].map(tree => {
       const path = git(["rev-parse", "--path-format=absolute", "--git-path", "index"], tree);
       return { path, bytes: readFileSync(path), time: statSync(path).mtimeMs };
     });
@@ -144,6 +175,15 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.deepEqual(branch("compiler/dirty").effectiveCheckouts, []);
     assert.deepEqual(branch("compiler/dirty").retiringCheckouts, [dirty]);
     assert.equal(branch("jvm/checked-recent").proposal.action, "archive then delete");
+    assert.equal(branch("tsrs/young-checked").proposal.action, "keep", "Retiring the only checkout cannot archive a young active-lane branch");
+    assert.deepEqual(branch("tsrs/young-checked").retiringCheckouts, [youngActive]);
+    assert.equal(r.worktrees.find(w => w.path === usedToday)!.proposal.action, "keep");
+    assert.match(r.worktrees.find(w => w.path === usedToday)!.proposal.reason, /in use/);
+    assert.equal(branch("jvm/recent-use").proposal.action, "keep");
+    for (const tree of infrastructure) {
+      const w = r.worktrees.find(w => w.path === tree.path)!;
+      assert.equal(w.proposal.action, "keep"); assert.equal(w.proposal.reason, "tool-owned tree");
+    }
     assert.equal(branch("jvm/stale").proposal.action, "delete branch");
     assert.equal(branch("jvm/home").proposal.action, "keep");
     const dw = r.worktrees.find(w => w.path === dirty)!;
@@ -177,7 +217,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
       return w.proposal.archiveRef;
     });
     assert.equal(new Set(collisionRefs).size, 2);
-    assert.equal(r.totals.uniqueTargetPaths, 2);
+    assert.equal(r.totals.uniqueTargetPaths, 4);
     assert.ok(r.totals.uniqueTargetBytes > 0);
     assert.equal(r.worktrees.find(w => w.path === clean)!.target.sharedWith[0], repo);
     assert.equal(r.totals.mainPatchIdPasses, 1);
@@ -197,6 +237,26 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
       assert.equal(statSync(index.path).mtimeMs, index.time);
     }
   } finally { activeChild?.kill(); rmSync(scratch, { recursive: true, force: true }); }
+});
+
+test("tool-owned paths follow source constants and environment overrides without running the tools", () => {
+  const parent = join(homedir(), ".cache/nts-scratch/branch-inventory");
+  mkdirSync(parent, { recursive: true });
+  const repo = mkdtempSync(join(parent, "paths-test-")), home = join(repo, "home");
+  try {
+    infrastructureSources(repo);
+    const before = toolOwnedTrees(repo, home, {});
+    assert.equal(before.length, 4);
+    const file = join(repo, "tooling/lanes/land.ts");
+    writeFileSync(file, readFileSync(file, "utf8").replace(".cache/test-land", ".cache/moved-land"));
+    const moved = toolOwnedTrees(repo, home, { NTS_PINS: join(home, "custom-pins"), NTS_GATE_TREE: join(home, "custom-gate") });
+    assert.ok(moved.some(t => t.path === join(home, ".cache/moved-land/tree")));
+    assert.ok(!moved.some(t => t.path === join(home, ".cache/test-land/tree")));
+    assert.ok(moved.some(t => t.path === join(home, "custom-pins/tree")));
+    assert.ok(moved.some(t => t.path === join(home, "custom-gate")));
+    writeFileSync(file, 'const GATE_TREE = startLanding();\n');
+    assert.throws(() => toolOwnedTrees(repo, home, {}), /Unsupported path function/);
+  } finally { rmSync(repo, { recursive: true, force: true }); }
 });
 
 test("NUL parsers preserve unusual filenames and prunable worktrees", () => {

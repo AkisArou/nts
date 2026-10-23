@@ -26,7 +26,7 @@ type Worktree = {
   missingInputs: { status: string; path: string }[];
   buildOutputs: { status: string; path: string }[];
   snapshotFiles: { tracked: Worktree["tracked"]; untracked: string[] };
-  rootModifiedAt: string | null; lastModifiedAt: string | null;
+  rootModifiedAt: string | null; lastModifiedAt: string | null; recentlyUsed: boolean;
   target: { path: string; realPath: string | null; bytes: number | null; sharedWith: string[] };
   errors: string[]; notes: string[]; proposal: Action;
 };
@@ -57,6 +57,93 @@ function refs(repo: string, prefix: string): Ref[] {
   return git(repo, ["for-each-ref", "--format=%(refname)%00%(objectname)", prefix]).trimEnd().split("\n")
     .filter(Boolean).map(row => { const [ref, sha] = row.split("\0"); return { ref, sha }; });
 }
+
+// Read the tools' path expressions, never import/execute their CLI bodies.
+// This deliberately small grammar fails closed if a tool changes its syntax.
+function pathExpression(source: string, expression: string, home: string, variables: NodeJS.ProcessEnv): string {
+  const definitions = new Map([...source.matchAll(/^\s*(?:export\s+)?const\s+(\w+)\s*=\s*([^;]+);/gm)].map(m => [m[1], m[2].trim()]));
+  const resolving = new Set<string>();
+  function evaluate(expression: string): string | undefined {
+    let p = 0;
+    const space = () => { while (/\s/.test(expression[p] ?? "") && p < expression.length) p++; };
+    function primary(): string | undefined {
+      space();
+      const rest = expression.slice(p);
+      const literal = /^("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/.exec(rest);
+      if (literal) {
+        p += literal[0].length;
+        if (literal[0][0] === '"') return JSON.parse(literal[0]);
+        const body = literal[0].slice(1, -1);
+        if (body.includes("\\")) throw new Error("Unsupported escaped single-quoted path literal");
+        return body;
+      }
+      const variable = /^process\.env\.([A-Z_0-9]+)/.exec(rest);
+      if (variable) { p += variable[0].length; return variables[variable[1]]; }
+      const name = /^(\w+)/.exec(rest)?.[1];
+      if (!name) throw new Error(`Unsupported path expression near ${rest}`);
+      p += name.length; space();
+      if (expression[p] === "(") {
+        p++; space();
+        if (name === "homedir" && expression[p] === ")") { p++; return home; }
+        if (name !== "join" && name !== "resolve") throw new Error(`Unsupported path function: ${name}`);
+        const args: string[] = [];
+        while (expression[p] !== ")") {
+          const value = expr();
+          if (value === undefined) throw new Error("Undefined path argument");
+          args.push(value); space();
+          if (expression[p] !== ",") break;
+          p++; space();
+        }
+        if (expression[p++] !== ")") throw new Error("Unclosed path expression");
+        return name === "join" ? join(...args) : resolve(...args);
+      }
+      const value = definitions.get(name);
+      if (value === undefined || resolving.has(name)) throw new Error(`Unknown/cyclic path constant: ${name}`);
+      resolving.add(name);
+      try { return evaluate(value); } finally { resolving.delete(name); }
+    }
+    function expr(): string | undefined {
+      let value = primary(); space();
+      while (expression.slice(p, p + 2) === "??") {
+        p += 2; const fallback = primary(); value ??= fallback; space();
+      }
+      return value;
+    }
+    const value = expr(); space();
+    if (p !== expression.length) throw new Error(`Unsupported path expression suffix: ${expression.slice(p)}`);
+    return value;
+  }
+  const value = evaluate(expression);
+  if (!value) throw new Error(`Empty tool path: ${expression}`);
+  return value;
+}
+
+export function toolOwnedTrees(repo: string, home = homedir(), variables: NodeJS.ProcessEnv = process.env) {
+  const result: { tool: string; expression: string; path: string }[] = [];
+  const add = (tool: string, expression: string, path: string) => {
+    const resolved = resolve(repo, path);
+    if (!result.some(r => r.tool === tool && r.path === resolved)) result.push({ tool, expression, path: resolved });
+  };
+  for (const configured of [false, true]) {
+    const vars = configured ? variables : {};
+    for (const [tool, expression] of [["tooling/lanes/land.ts", "GATE_TREE"], ["tooling/conformance/pin.ts", "TREE"]]) {
+      const source = readFileSync(join(repo, tool), "utf8");
+      add(tool, expression, pathExpression(source, expression, home, vars));
+    }
+    const full = "tooling/census/full.ts", source = readFileSync(join(repo, full), "utf8");
+    const expression = /^\s*NTS_GATE_TREE:\s*(.+),\s*$/m.exec(source)?.[1];
+    if (!expression) throw new Error(`Cannot derive tool-owned tree from ${full}`);
+    add(full, `NTS_GATE_TREE: ${expression}`, pathExpression(source, expression, home, vars));
+    const pinned = "tooling/gate/pinned.sh", shell = readFileSync(join(repo, pinned), "utf8");
+    const setting = /^tree=["']?\$\{([A-Z_0-9]+):-([^\n]+)\}["']?\s*$/m.exec(shell);
+    if (!setting) throw new Error(`Cannot derive tool-owned tree from ${pinned}`);
+    const fallback = setting[2].replace(/\$\{HOME\}|\$HOME\b/g, home);
+    if (/[$`]/.test(fallback)) throw new Error(`Unsupported shell path expression in ${pinned}`);
+    add(pinned, setting[0], vars[setting[1]] || fallback);
+  }
+  return result;
+}
+
 function owner(name: string, lanes: Record<string, { branch: string }>): Lane {
   const match = Object.entries(lanes).sort((a, b) => b[1].branch.length - a[1].branch.length).find(([, x]) => name.startsWith(x.branch));
   const compilerAlias = ["archive/compiler-helper/", "bench/", "exp/", "keep/", "docs/", "runtime/"].some(p => name.startsWith(p)) || name.startsWith("worktree-agent-");
@@ -125,7 +212,7 @@ export function parseWorktrees(raw: string): Worktree[] {
     if (field.startsWith("worktree ")) {
       w = { path: field.slice(9), sha: "", branch: null, detached: false, prunable: null, locked: null,
         active: [], protected: false, protection: null, missing: false, lane: "unknown", dirty: null, tracked: [], untracked: [],
-        inputs: [], missingInputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null,
+        inputs: [], missingInputs: [], buildOutputs: [], snapshotFiles: { tracked: [], untracked: [] }, rootModifiedAt: null, lastModifiedAt: null, recentlyUsed: false,
         target: { path: join(field.slice(9), "target"), realPath: null, bytes: null, sharedWith: [] }, errors: [], notes: [],
         proposal: { action: "NEEDS A PERSON", reason: "Not inspected" } };
       trees.push(w);
@@ -154,7 +241,6 @@ export function parseStatus(raw: string): { tracked: Worktree["tracked"]; untrac
   return { tracked, untracked };
 }
 function canonical(path: string): string { try { return realpathSync(path); } catch { return resolve(path); } }
-function live(pid: number): boolean { try { process.kill(pid, 0); return true; } catch { return false; } }
 function defaultActive(home: string, trees: Worktree[]): Map<string, string[]> {
   const active = new Map<string, string[]>();
   const add = (path: string, why: string) => { const p = canonical(path); active.set(p, [...(active.get(p) ?? []), why]); };
@@ -167,12 +253,6 @@ function defaultActive(home: string, trees: Worktree[]): Map<string, string[]> {
       if (typeof q.tree === "string") add(q.tree, "Pending landing queue source");
     }
   } catch { /* No queue is normal outside the coordinator's machine. */ }
-  const ctl = join(home, ".cache/nts-parallel-20261004/mainctl");
-  try {
-    const marker = readFileSync(join(ctl, "GATE-RUNNING"), "utf8");
-    const pid = /\bpid\s+(\d+)/.exec(marker)?.[1];
-    if (pid && live(Number(pid))) add(join(ctl, "gate-tree"), `Live landing marker PID ${pid}`);
-  } catch { /* No marker means no detected landing. */ }
   // A landing's queue entry disappears when the train takes it, but its
   // caller may still be alive in the source tree. Keep all trees with live
   // processes inside them, including these landing sources and probe trees.
@@ -234,9 +314,11 @@ function archiveBasename(path: string): string {
 const retiringActions = new Set(["remove worktree", "snapshot then remove", "prune stale registration"]);
 function retires(w: Worktree): boolean { return retiringActions.has(w.proposal.action); }
 
-function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, sizeCache: Map<string, number>): void {
+function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTree: string, home: string, owned: ReturnType<typeof toolOwnedTrees>, sizeCache: Map<string, number>): void {
   w.active = active.get(canonical(w.path)) ?? [];
-  w.protection = canonical(w.path) === canonical(protectedTree) ? "Shared landing checkout" : laneHome(w.path, home) ? "Lane home / resume point" : null;
+  const owners = owned.filter(t => canonical(t.path) === canonical(w.path));
+  w.protection = owners.length ? "tool-owned tree" : canonical(w.path) === canonical(protectedTree) ? "Shared landing checkout" : laneHome(w.path, home) ? "Lane home / resume point" : null;
+  if (owners.length) w.notes.push(...owners.map(t => `Owned by ${t.tool}, path expression ${t.expression}.`));
   w.protected = !!w.protection;
   let latest = 0;
   const noteTime = (path: string) => {
@@ -310,6 +392,7 @@ function inspectWorktree(w: Worktree, active: Map<string, string[]>, protectedTr
 
 export function branchProposal(b: Branch, trees: Worktree[], protectedRef = "main"): Action {
   if (b.name === protectedRef) return { action: "keep", reason: "Protected main branch" };
+  if (b.state === "ACTIVE" && b.ageDays <= 3) return { action: "keep", reason: "Active lane's branch is at most three days old; checkout retirement cannot override this" };
   const checked = trees.filter(w => b.checkedOut.includes(w.path) && !retires(w));
   if (checked.some(w => w.proposal.action === "NEEDS A PERSON")) return { action: "NEEDS A PERSON", reason: "Checkout has an unresolved inspection or archive ambiguity" };
   if (checked.length) return { action: "keep", reason: "Checked out by a retained tree" };
@@ -347,10 +430,12 @@ export async function inventory(options: Options) {
   const lanes = JSON.parse(readFileSync(laneFile, "utf8")).lanes as Record<string, { branch: string }>;
   const trees = parseWorktrees(git(repo, ["worktree", "list", "--porcelain", "-z"]));
   const active = options.activeTrees ? new Map(options.activeTrees.map(p => [canonical(p), ["Explicit active tree"]])) : defaultActive(home, trees);
+  const owned = toolOwnedTrees(repo, home);
   const sizeCache = new Map<string, number>();
   for (const w of trees) {
     w.lane = w.branch ? owner(w.branch, lanes).lane : pathLane(w.path);
-    inspectWorktree(w, active, options.protectedTree ?? dirname(common), home, sizeCache);
+    inspectWorktree(w, active, options.protectedTree ?? dirname(common), home, owned, sizeCache);
+    w.recentlyUsed = w.lastModifiedAt !== null && now.getTime() - Date.parse(w.lastModifiedAt) <= 24 * 60 * 60 * 1000;
   }
   for (const w of trees) if (w.target.realPath) w.target.sharedWith = trees.filter(x => x.path !== w.path && x.target.realPath === w.target.realPath).map(x => x.path);
 
@@ -422,6 +507,7 @@ export async function inventory(options: Options) {
   for (const w of trees) {
     if (w.protected) w.proposal = { action: "keep", reason: w.protection! };
     else if (w.active.length) w.proposal = { action: "keep", reason: w.active.join("; ") };
+    else if (w.recentlyUsed) w.proposal = { action: "keep", reason: "in use: lastModifiedAt is within 24 hours" };
     else if (w.locked) w.proposal = { action: "NEEDS A PERSON", reason: `Worktree is locked: ${w.locked}` };
     else if (w.missing) w.proposal = { action: "prune stale registration", reason: "Directory is gone; prune only the administrative registration, not branch refs" };
     else if (w.errors.length || w.dirty === null) w.proposal = { action: "NEEDS A PERSON", reason: "Inaccessible or incompletely inspected worktree" };
@@ -494,7 +580,7 @@ export async function inventory(options: Options) {
   const topUnlanded = [...series.values()].slice(0, 10);
   return {
     generatedAt: new Date().toISOString(), startedAt, policyDate: now.toISOString(), repo: canonical(repo), main,
-    policy: { source: STATE_SOURCE, cleanupSource: CLEANUP_SOURCE, laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common),
+    policy: { source: STATE_SOURCE, cleanupSource: CLEANUP_SOURCE, protectionSource: "MainClaude, Orcode ef53845d-c574-458c-bb14-66425b714ded, 2026-10-23T20:50:43.941Z", laneStates: LANE_STATES, activeTrees: Object.fromEntries(active), protectedTree: options.protectedTree ?? dirname(common), toolOwnedTrees: owned,
       protectedLaneHomes: join(home, "Projects/nts-lanes/*"),
       timestampDefinition: "Newest mtime of visible tracked/untracked non-ignored files, root directory and per-worktree Git HEAD/index; ignored build products excluded.",
       targetDefinition: "du -s -B1 allocated bytes; target symlink resolved, nested symlinks not followed; shared real paths counted once in total.",
@@ -503,10 +589,10 @@ export async function inventory(options: Options) {
       inputDefinition: "Status paths under external symlinks, and the patched third_party/typescript-go gitlink, are INPUTS and do not count as work. Pure deletions under third_party/ are MISSING INPUTS, retained in HEAD (MainClaude, Orcode 5183622e-e243-43e9-ad34-c16ababacade). Other deletions and nonlinked additions/modifications remain work. Expected linked-submodule errors use the read-only pathspec fallback.",
       snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, excluding linked/missing inputs, *.o, *.obj, target/, out/ and results/benchmarks/*; preserve HEAD as the parent. Colliding snapshot basenames get a stable path-hash suffix, approved in Orcode 5183622e; no existing archive is overwritten.",
       targetFreedDefinition: "Estimated exclusive target allocation freed if all proposals are approved: real paths counted once, only inside retiring trees, and only when no retained worktree references the target. External/shared targets are excluded.",
-      checkedOutRule: "Lane homes and active trees are kept. Branches checked out only by retiring/pruned trees inherit retirement: landed branches delete, unlanded branches archive then delete. Old unchecked-out compiler branches archive by the compiler owner's decision; tsrs policy is unchanged." },
+      checkedOutRule: "Lane homes, tool-owned infrastructure, active processes and trees used within 24 hours are kept. An ACTIVE lane's branch at most three days old is kept regardless of checkout retirement. Other branches checked out only by retiring/pruned trees inherit retirement: landed branches delete, unlanded branches archive then delete. Old unchecked-out compiler branches archive by the compiler owner's decision; tsrs policy is unchanged." },
     totals: { branches: branches.length, landed: count(branches.map(b => b.stateOfLanding)), branchActions: count(branches.map(b => b.proposal.action)),
       worktrees: trees.length, dirtyWorktrees: trees.filter(w => w.dirty).length, inaccessibleOrIncompleteWorktrees: trees.filter(w => !w.missing && (w.errors.length || w.dirty === null)).length,
-      missingWorktrees: trees.filter(w => w.missing).length, worktreesWithInputs: trees.filter(w => w.inputs.length).length,
+      missingWorktrees: trees.filter(w => w.missing).length, recentlyUsedWorktrees: trees.filter(w => w.recentlyUsed).length, toolOwnedWorktrees: trees.filter(w => w.protection === "tool-owned tree").length, worktreesWithInputs: trees.filter(w => w.inputs.length).length,
       worktreesWithMissingInputs: trees.filter(w => w.missingInputs.length).length,
       worktreeActions: count(trees.map(w => w.proposal.action)), archiveRefs: archives.length, archivesByLane: archiveCounts,
       uniqueTargetBytes: [...sizeCache.values()].reduce((a, b) => a + b, 0), uniqueTargetPaths: sizeCache.size,
@@ -533,6 +619,8 @@ export function markdown(report: Awaited<ReturnType<typeof inventory>>): string 
     "## Totals", "", table(["Item", "Count"], Object.entries(report.totals).map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : v])), "",
     `Lane policy: ${report.policy.source}.`, "", table(["Lane / historical prefix", "State", "Since"], Object.entries(report.policy.laneStates).map(([k, v]) => [k, v.state, v.since])), "",
     `Cleanup policy: ${report.policy.cleanupSource}. Protected lane homes: ${report.policy.protectedLaneHomes}.`, "",
+    `Infrastructure and recent-use protection: ${report.policy.protectionSource}.`, "",
+    table(["Owning tool", "Path expression", "Protected tree"], report.policy.toolOwnedTrees.map(t => [t.tool, t.expression, t.path])), "",
     `Protected checkout: ${report.policy.protectedTree}. Active trees:`, "",
     table(["Path", "Reason"], Object.entries(report.policy.activeTrees).map(([p, why]) => [p, why.join("; ")])), "",
     report.policy.timestampDefinition, report.policy.targetDefinition, report.policy.landingDefinition, report.policy.diffstatDefinition, report.policy.inputDefinition, report.policy.snapshotDefinition, report.policy.checkedOutRule, "",
