@@ -162,7 +162,7 @@ impl OwnedProgram {
             None,
             None,
         );
-        let mut roots = config.file_names().to_vec();
+        let mut roots = validated_roots(&config, spec)?;
         for root in &spec.roots {
             let root = tspath::get_normalized_absolute_path(root.as_str(), options.cwd.as_str());
             if !roots.contains(&root) {
@@ -240,7 +240,7 @@ impl OwnedProgram {
             })
         });
         Diagnostic {
-            path: file.map(|f| f.file_name().into()),
+            path: file.map(|f| crate::host::native_path(f.file_name()).to_owned()),
             span,
             category: match native.category() {
                 tsrs_diagnostics::Category::Warning => DiagnosticCategory::Warning,
@@ -289,6 +289,29 @@ impl OwnedProgram {
         diagnostics.dedup();
         diagnostics
     }
+}
+
+fn validated_roots(
+    config: &ParsedCommandLine,
+    spec: &ProjectSpec,
+) -> Result<Vec<String>, LoadError> {
+    // JSON strings may contain unpaired surrogates. The public root-path
+    // contract is UTF-8, so refuse before copying native WTF-8 into a String.
+    config
+        .file_names()
+        .iter()
+        .map(|root| {
+            std::str::from_utf8(root.as_bytes())
+                .map(str::to_owned)
+                .map_err(|_| LoadError::Config {
+                    path: spec.config_path.clone(),
+                    messages: vec![format!(
+                        "configured root has no UTF-8 filesystem path: {}",
+                        crate::strings::display(root.as_bytes())
+                    )],
+                })
+        })
+        .collect()
 }
 
 fn pin_settings(config: P<ParsedCommandLine>, options: &SessionOptions) -> P<ParsedCommandLine> {
@@ -406,11 +429,11 @@ impl<'s> Project<'s> {
     }
     #[must_use]
     pub fn config_path(self) -> &'s Utf8Path {
-        Utf8Path::new(self.native.program.command_line().get().config_name())
+        crate::host::native_path(self.native.program.command_line().get().config_name())
     }
     #[must_use]
     pub fn cwd(self) -> &'s Utf8Path {
-        Utf8Path::new(self.native.program.get_current_directory())
+        crate::host::native_path(self.native.program.get_current_directory())
     }
     pub fn root_paths(self) -> impl ExactSizeIterator<Item = &'s Utf8Path> {
         self.native
@@ -419,7 +442,7 @@ impl<'s> Project<'s> {
             .get()
             .file_names()
             .iter()
-            .map(Utf8Path::new)
+            .map(|path| crate::host::native_path(path))
     }
     #[must_use]
     pub fn checker_count(self) -> usize {
@@ -450,7 +473,7 @@ impl fmt::Debug for File<'_> {
 
 impl<'s> File<'s> {
     pub(crate) fn program_path(self) -> &'s Utf8Path {
-        Utf8Path::new(self.project.program.command_line().get().config_name())
+        crate::host::native_path(self.project.program.command_line().get().config_name())
     }
     pub(crate) fn program_identity(self) -> usize {
         std::ptr::from_ref(self.project).addr()
@@ -507,11 +530,12 @@ impl<'s> File<'s> {
     }
     #[must_use]
     pub fn path(self) -> &'s Utf8Path {
-        Utf8Path::new(self.native.source.file_name())
+        crate::host::native_path(self.native.source.file_name())
     }
     #[must_use]
     pub fn text(self) -> &'s str {
-        self.native.source.text()
+        std::str::from_utf8(self.native.source.text().as_bytes())
+            .expect("source text supplied by UTF-8 host")
     }
     #[must_use]
     pub fn content_digest(self) -> u128 {
@@ -657,7 +681,8 @@ mod tests {
                     checked
                         .inputs()
                         .iter()
-                        .any(|i| i.kind == crate::InputKind::File && i.path.ends_with("a.ts"))
+                        .any(|i| i.kind == crate::InputKind::File
+                            && i.path.utf8().is_some_and(|p| p.ends_with("a.ts")))
                 );
                 let project = checked.projects().next().expect("project");
                 assert!(

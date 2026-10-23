@@ -21,7 +21,7 @@ mod strings;
 #[cfg(feature = "tsrs")]
 pub use ast::*;
 #[cfg(feature = "tsrs")]
-pub use host::{Input, InputKind};
+pub use host::{Input, InputKind, InputPath};
 #[cfg(feature = "tsrs")]
 pub use program::{
     Checked, Diagnostic, DiagnosticCategory, File, LoadError, Project, ProjectSemantics,

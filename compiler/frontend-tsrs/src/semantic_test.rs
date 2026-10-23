@@ -577,3 +577,130 @@ fn semantic_views_release_with_each_revision_and_session() {
         assert!(source(checked).module_symbol().is_none());
     });
 }
+
+#[test]
+fn unrepresentable_module_paths_never_become_public_invalid_utf8() {
+    fn capture(escaped: &str) -> Vec<Input> {
+        run(options(1), |session| {
+            let checked = session
+                .open(spec(&format!(
+                    "import {{ value }} from './{escaped}'; export {{ value }};"
+                )))
+                .expect("project");
+            assert!(checked.diagnostics().iter().any(|d| d.code == 2307));
+            checked.inputs()
+        })
+    }
+    let invalid = capture(r"\ud800");
+    let control = capture(r"\ufffd");
+    assert!(control.iter().all(|i| i.path.utf8().is_some()));
+    assert!(
+        control
+            .iter()
+            .any(|i| i.path.utf8().is_some_and(|p| p.as_str().contains('�')))
+    );
+    let absent: Vec<_> = invalid.iter().filter(|i| i.path.utf8().is_none()).collect();
+    assert_ne!(absent, [] as [&Input; 0]);
+    for input in absent {
+        assert!(input.path.utf16().contains(&0xd800));
+        assert_eq!(input.fingerprint, input.kind.absent_fingerprint());
+        assert!(input.path.to_string().contains("\\uD800"));
+    }
+    assert!(
+        invalid
+            .iter()
+            .filter_map(|i| i.path.utf8())
+            .all(|p| std::str::from_utf8(p.as_str().as_bytes()).is_ok())
+    );
+}
+
+#[test]
+fn unrepresentable_config_roots_are_a_named_load_error() {
+    run(options(1), |session| {
+        let mut project = spec("");
+        project.overlays.insert(
+            "tsconfig.json".into(),
+            r#"{"compilerOptions":{"noLib":true},"files":["\ud800.ts"]}"#.to_owned(),
+        );
+        let error = session
+            .open(project)
+            .expect_err("non-Unicode root cannot name a UTF-8 file");
+        assert!(error.to_string().contains("no UTF-8 filesystem path"));
+        assert!(error.to_string().contains("uD800"));
+        let mut control = spec("");
+        control.overlays.insert(
+            "tsconfig.json".into(),
+            r#"{"compilerOptions":{"noLib":true},"files":["\ufffd.ts"]}"#.to_owned(),
+        );
+        control
+            .overlays
+            .insert("�.ts".into(), "export const value = 1;".to_owned());
+        let checked = session
+            .open(control)
+            .expect("Unicode replacement is a real filename");
+        let project = checked.projects().next().expect("program");
+        assert!(project.root_paths().all(|p| p.as_str().ends_with("�.ts")));
+        assert!(project.files().all(|f| f.path().as_str().ends_with("�.ts")));
+    });
+}
+
+#[test]
+fn every_host_observation_rejects_non_unicode_before_the_filesystem() {
+    use tsrs_vfs::FS;
+    run(options(1), |session| {
+        let checked = session
+            .open(spec(r#"import "./\ud800";"#))
+            .expect("project");
+        let file = source(checked);
+        let raw = file.native_source().imports.get()[0].text();
+        let host =
+            crate::host::Host::new("/__nts_semantic_test__", &std::collections::BTreeMap::new());
+        assert!(!host.file_exists(raw));
+        assert!(host.read_file(raw).is_none());
+        assert!(!host.directory_exists(raw));
+        let entries = host.get_accessible_entries(raw);
+        assert!(entries.files.is_empty() && entries.directories.is_empty());
+        assert!(host.stat(raw).is_none());
+        assert_eq!(host.realpath(raw), "");
+        let inputs = host.inputs();
+        assert_eq!(inputs.len(), 6);
+        for input in inputs {
+            assert_eq!(
+                input.path.utf16().as_ref(),
+                "./".encode_utf16().chain([0xd800]).collect::<Vec<_>>()
+            );
+            assert!(input.path.utf8().is_none());
+            assert_eq!(input.fingerprint, input.kind.absent_fingerprint());
+        }
+    });
+}
+
+#[test]
+fn a_surrogate_pair_module_name_resolves_to_a_real_unicode_file() {
+    run(options(1), |session| {
+        let mut project = spec(r"export { value } from './\ud83d\ude00';");
+        project
+            .overlays
+            .insert("😀.ts".into(), "export const value = 1;".to_owned());
+        let checked = session.open(project).expect("project");
+        assert!(
+            checked.diagnostics().is_empty(),
+            "{:?}",
+            checked.diagnostics()
+        );
+        assert!(
+            checked
+                .projects()
+                .next()
+                .expect("program")
+                .files()
+                .any(|f| f.path().ends_with("😀.ts"))
+        );
+        assert!(
+            checked
+                .inputs()
+                .iter()
+                .all(|input| input.path.utf8().is_some())
+        );
+    });
+}

@@ -25,7 +25,7 @@ impl<'p> JsString<'p> {
     }
 }
 
-fn decode(bytes: &[u8]) -> Vec<u16> {
+pub(crate) fn decode(bytes: &[u8]) -> Vec<u16> {
     let mut remaining = bytes;
     let mut units = Vec::new();
     while !remaining.is_empty() {
