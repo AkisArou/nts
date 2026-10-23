@@ -6,6 +6,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic as NativeDiagnostic, SourceFile};
 use tsrs_compiler::{Context, Program, ProgramOptions, ProgramRegions};
 use tsrs_core::{P, Tristate, arena::Region, tspath};
@@ -92,6 +93,7 @@ pub struct ProjectSemantics {
 struct NativeProject {
     program: &'static Program,
     files: Vec<NativeFile>,
+    file_index: FxHashMap<P<SourceFile>, usize>,
     diagnostics: Vec<Diagnostic>,
     strings: crate::strings::StringPool,
 }
@@ -191,6 +193,7 @@ impl OwnedProgram {
             owned.projects.push(NativeProject {
                 program,
                 files: Vec::new(),
+                file_index: FxHashMap::default(),
                 diagnostics: Vec::new(),
                 strings: crate::strings::StringPool::new(region.clone()),
             });
@@ -202,6 +205,13 @@ impl OwnedProgram {
                     source,
                     utf16: OnceCell::new(),
                 })
+                .collect();
+            let project = owned.projects.last_mut().expect("program registered");
+            project.file_index = project
+                .files
+                .iter()
+                .enumerate()
+                .map(|(index, file)| (file.source, index))
                 .collect();
         }
         // Finish all pool work before exposing any capture view. Later semantic
@@ -362,7 +372,7 @@ impl<'s> Checked<'s> {
     }
 }
 
-/// A program constructed from a native config, including referenced projects.
+/// The requested native config's program, including imported reference sources.
 #[derive(Clone, Copy)]
 pub struct Project<'s> {
     native: &'s NativeProject,
@@ -439,6 +449,43 @@ impl fmt::Debug for File<'_> {
 }
 
 impl<'s> File<'s> {
+    pub(crate) fn program_path(self) -> &'s Utf8Path {
+        Utf8Path::new(self.project.program.command_line().get().config_name())
+    }
+    pub(crate) fn program_identity(self) -> usize {
+        std::ptr::from_ref(self.project).addr()
+    }
+    pub(crate) fn same_program(self, other: Self) -> bool {
+        std::ptr::eq(self.project, other.project)
+    }
+    pub(crate) fn assert_same_program(self, other: Self) {
+        assert!(
+            self.same_program(other),
+            "native semantic views belong to different programs: {} and {}",
+            self.program_path(),
+            other.program_path()
+        );
+    }
+    /// Every question acquires the same persistent first checker. No guard
+    /// survives this call, and all pool diagnostics have already finished.
+    pub(crate) fn with_checker<R>(
+        self,
+        question: impl FnOnce(&mut tsrs_compiler::Checker) -> R,
+    ) -> R {
+        let mut checker = self.project.program.get_type_checker(&Context::default());
+        question(&mut checker)
+    }
+    pub(crate) fn node_view(self, native: P<tsrs_ast::Node>) -> Option<crate::Node<'s>> {
+        let source = tsrs_ast::get_source_file_of_node(native)?;
+        let index = *self.project.file_index.get(&source)?;
+        Some(crate::Node::new(
+            native,
+            Self {
+                native: &self.project.files[index],
+                project: self.project,
+            },
+        ))
+    }
     pub(crate) fn native_scope(self) -> tsrs_core::arena::RegionScope {
         self.project.strings.enter()
     }

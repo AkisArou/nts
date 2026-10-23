@@ -1,6 +1,7 @@
 # Native semantic services proposal
 
-For review before implementation. All `Symbol`, `Type` and `Signature` views
+Reviewed service surface, implemented in `src/semantic.rs` and
+`src/semantic_graph.rs`. All `Symbol`, `Type` and `Signature` views
 are Copy/Eq/Hash, neither Send nor Sync, and borrow the same checked revision
 as Node. A declaration is a Node, including uncaptured library declarations;
 the source path is always available through its File. No arena/checker handle
@@ -146,15 +147,20 @@ pub enum Constant<'p> { Number(f64), String(JsString<'p>) }
 
 Option means semantic absence/non-applicability, never a panic fallback or
 missing transport answer. Native number constants retain NaN and infinities.
+`Type::reference` checks the native semantic reference flag before reading a
+target: native interface/tuple storage sharing a reference layout does not
+make every such type a semantic reference.
 The existing owned Diagnostic and Input records finish phase 8; rewrites use
 Session::revise and never retain views into the previous program. Graph
 budgets, library classification, inherited-property policy, binding rules,
 constant-folding selection and snapshot IDs remain builder policy.
 
-The first implementation group after AST is the small complete smoke path:
+The first implementation group after AST was the small complete smoke path:
 node/file symbol, symbol identity/declarations/exports, node/symbol type,
 primitive/literal classification, and call-signature parameters/return.
-More complex structured graphs follow as separately tested method groups.
+Structured graph methods are covered by inline projects at one and four
+checkers. Borrowed views cannot be Send or used after `revise`, as compile-fail
+documentation tests also check.
 
 ## Coverage of the 42 approved reads
 
@@ -162,7 +168,7 @@ More complex structured graphs follow as separately tested method groups.
 | --- | --- | --- |
 | 1 (1) | Resolved compiler options, project/config identity and current directory, explicit root files, source files in the program, and filesystem case sensitivity. | Project::{semantics,config_path,cwd,root_paths,files}; Checked::case_sensitivity. Checker-only options stay native; runtime fields are effective ProjectSemantics. |
 | 2 (1) | Per-file normalized path, declaration-file status, default-library status and external-library status. These decide which ASTs nts captures; they do not replace declaration-source identity for symbols outside that set. | File::{path,is_declaration,is_default_library,is_external_library}. Inclusion is builder policy. |
-| 3 (1) | The program's parse/configuration/options/syntactic/semantic diagnostics, including diagnostics for ordinary JavaScript that are ECMAScript early errors. | Checked::diagnostics, completed before capture; includes unfiltered native unchecked-JS early-error facts. Selection/refusals are builder policy. |
+| 3 (1) | The program's parse/configuration/options/syntactic/semantic diagnostics, including diagnostics for ordinary JavaScript that are ECMAScript early errors. | Project::diagnostics (requested config scope) and Checked::diagnostics, completed before capture; includes unfiltered native unchecked-JS early-error facts. Selection/refusals are builder policy. |
 | 4 (1) | Source contents plus added/generated root files and rewritten source contents. Revisions must recheck the affected program and expose the resulting files and diagnostics. | File::text, Session::{open,revise}, ProjectSpec roots/overlays and SourceChanges. |
 | 5 (1) | Each source's actual imported module specifiers, including re-exports, import types and literal import calls. Generated-source preflight consumes this semantic list. | File::imports. |
 | 6 (1) | Package manifests and nts surface declarations used for source inclusion and surface validation; these filesystem reads remain nts policy and must be tracked as inputs. | Builder filesystem/surface policy; native host answers in Checked::inputs. |

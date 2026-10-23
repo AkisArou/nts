@@ -13,6 +13,8 @@ mod host;
 #[cfg(feature = "tsrs")]
 mod program;
 #[cfg(feature = "tsrs")]
+mod semantic;
+#[cfg(feature = "tsrs")]
 mod session;
 #[cfg(feature = "tsrs")]
 mod strings;
@@ -25,6 +27,8 @@ pub use program::{
     Checked, Diagnostic, DiagnosticCategory, File, LoadError, Project, ProjectSemantics,
     ProjectSpec, SourceChanges,
 };
+#[cfg(feature = "tsrs")]
+pub use semantic::*;
 #[cfg(feature = "tsrs")]
 pub use session::*;
 #[cfg(feature = "tsrs")]
