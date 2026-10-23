@@ -114,7 +114,8 @@ static void everything_comes_from_the_active_region(void) {
   NtsString *joined = nts_concat(text("call "), text("region"));
   NtsMap *map = nts_map_new(NTS_KEY_NUMBER);
   for (int i = 0; i < 100; i++) {
-    nts_map_set(map, nts_value_of_number(i), nts_value_of_number(i * 2));
+    nts_map_set(map, nts_value_of_number(i), nts_value_of_number(i * 2),
+                map->kind);
   }
   NtsBuffer *buffer = nts_buffer_new(64);
   nts_region_suspend(region);
@@ -133,8 +134,8 @@ static void everything_comes_from_the_active_region(void) {
         nts_region_owns(region, joined) && joined->length == 11);
   check("a map rehashed past its first table is the region's, table and all",
         nts_region_owns(region, map) && nts_region_owns(region, map->keys) &&
-            nts_value_number(nts_map_get(map, nts_value_of_number(99))) ==
-                198.0);
+            nts_value_number(
+                nts_map_get(map, nts_value_of_number(99), map->kind)) == 198.0);
   {
     bool zero = buffer && nts_region_owns(region, buffer) &&
                 nts_region_owns(region, buffer->bytes);

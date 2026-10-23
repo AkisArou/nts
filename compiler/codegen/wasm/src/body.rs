@@ -970,6 +970,10 @@ impl<'b, 'p> Body<'b, 'p> {
         } else if let Some(helper) = crate::values::external(name) {
             crate::values::call(self, result, helper, args)?;
         } else if let Some(op) = crate::collections::external(name) {
+            // Without the key kind a keyed call names for the C runtime: this
+            // backend's collection is built from the table's type, and it
+            // declines the conversion that would let a call's differ.
+            let args = nts_core::hir::tables::operands(name, args);
             crate::collections::call(self, result, op, args)?;
         } else if let Some(op) = crate::promises::external(name) {
             crate::promises::call(self, result, op, args)?;

@@ -69,8 +69,8 @@ static void representation_survives_a_retain(void) {
  * clearing after the first element and adding `3` must yield `[1, 3]`. */
 static void a_cursor_survives_a_clear(void) {
   NtsMap *set = nts_set_new(NTS_KEY_NUMBER);
-  nts_set_add(set, nts_value_of_number(1));
-  nts_set_add(set, nts_value_of_number(2));
+  nts_set_add(set, nts_value_of_number(1), set->kind);
+  nts_set_add(set, nts_value_of_number(2), set->kind);
 
   int32_t first = nts_map_next(set, 0);
   NtsValue seen = nts_map_key_at(set, first);
@@ -78,7 +78,7 @@ static void a_cursor_survives_a_clear(void) {
   nts_value_release(seen);
 
   nts_map_clear(set);
-  nts_set_add(set, nts_value_of_number(3));
+  nts_set_add(set, nts_value_of_number(3), set->kind);
 
   int32_t second = nts_map_next(set, first + 1);
   ok("an entry appended after a clear is reachable", second >= 0);
@@ -99,7 +99,7 @@ static void a_clear_empties_the_slots_it_keeps(void) {
   const uint16_t units[] = {'x'};
   NtsString *s = nts_str_alloc(units, 1);
   NtsMap *map = nts_map_new(NTS_KEY_NUMBER);
-  nts_map_set(map, nts_value_of_number(1), string_value(s));
+  nts_map_set(map, nts_value_of_number(1), string_value(s), map->kind);
   ok("the map holds the value", s->reserved == 2);
 
   nts_map_clear(map);
@@ -133,11 +133,11 @@ static void two_owned_reads_take_two_credits(void) {
   NtsString *s = nts_str_alloc(units, 1);
   NtsMap *map = nts_map_new(NTS_KEY_NUMBER);
   NtsValue key = nts_value_of_number(7);
-  nts_map_set(map, key, string_value(s));
+  nts_map_set(map, key, string_value(s), map->kind);
   ok("the map holds the value", s->reserved == 2);
 
-  NtsValue a = nts_map_get(map, key);
-  NtsValue b = nts_map_get(map, key);
+  NtsValue a = nts_map_get(map, key, map->kind);
+  NtsValue b = nts_map_get(map, key, map->kind);
   ok("both reads find it", nts_value_reference(a) == (NtsHeader *)s &&
                                nts_value_reference(b) == (NtsHeader *)s);
   ok("and both took a credit", s->reserved == 4);

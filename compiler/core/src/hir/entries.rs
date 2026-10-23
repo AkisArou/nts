@@ -41,11 +41,12 @@ use rustc_hash::FxHashSet;
 
 use super::{BlockId, Callee, Func, HirType, OpKind, Program, ValueId};
 
-/// The lookup that answers an entry: `(table, key) -> u64`.
+/// The lookup that answers an entry: `(table, key, kind) -> u64`, the kind
+/// the key was written against as every keyed call has (`hir::tables`).
 pub const ENTRY: &str = "nts_map_entry";
-/// `get` through an entry: `(table, entry, key) -> erased`.
+/// `get` through an entry: `(table, entry, key, kind) -> erased`.
 pub const ENTRY_GET: &str = "nts_map_entry_get";
-/// `set` through an entry: `(table, entry, key, value)`, answering what
+/// `set` through an entry: `(table, entry, key, value, kind)`, answering what
 /// `nts_map_set` answers.
 pub const ENTRY_SET: &str = "nts_map_entry_set";
 
@@ -68,6 +69,9 @@ struct Access {
     at: At,
     table: ValueId,
     key: ValueId,
+    /// The key kind the call was written against (`hir::tables`), which the
+    /// entry calls it becomes are told too.
+    kind: ValueId,
 }
 
 /// The external a call names, and its arguments.
@@ -160,17 +164,19 @@ fn accesses(func: &Func) -> (Vec<Access>, Vec<Access>) {
                 index,
             };
             match external(func, op) {
-                Some(("nts_map_get", [table, key])) => gets.push(Access {
+                Some(("nts_map_get", [table, key, kind])) => gets.push(Access {
                     op,
                     at,
                     table: *table,
                     key: *key,
+                    kind: *kind,
                 }),
-                Some(("nts_map_set", [table, key, _])) => sets.push(Access {
+                Some(("nts_map_set", [table, key, _, kind])) => sets.push(Access {
                     op,
                     at,
                     table: *table,
                     key: *key,
+                    kind: *kind,
                 }),
                 _ => {}
             }
@@ -193,7 +199,7 @@ fn rewrite(func: &mut Func, gets: &[Access], sets: &[Access], pairs: &[(usize, u
         func.values.push(super::Op {
             kind: OpKind::Call {
                 callee: Callee::External(ENTRY.to_owned()),
-                args: vec![get.table, get.key],
+                args: vec![get.table, get.key, get.kind],
                 frame: None,
             },
             ty: ENTRY_TYPE,
@@ -216,7 +222,7 @@ fn rewrite(func: &mut Func, gets: &[Access], sets: &[Access], pairs: &[(usize, u
         if let Some(entry) = entries[g] {
             func.values[get.op.0 as usize].kind = OpKind::Call {
                 callee: Callee::External(ENTRY_GET.to_owned()),
-                args: vec![get.table, entry, get.key],
+                args: vec![get.table, entry, get.key, get.kind],
                 frame: None,
             };
         }
@@ -227,12 +233,12 @@ fn rewrite(func: &mut Func, gets: &[Access], sets: &[Access], pairs: &[(usize, u
             continue;
         };
         let value = match external(func, set.op) {
-            Some((_, [_, _, value])) => *value,
+            Some((_, [_, _, value, _])) => *value,
             _ => continue,
         };
         func.values[set.op.0 as usize].kind = OpKind::Call {
             callee: Callee::External(ENTRY_SET.to_owned()),
-            args: vec![set.table, entry, set.key, value],
+            args: vec![set.table, entry, set.key, value, set.kind],
             frame: None,
         };
     }

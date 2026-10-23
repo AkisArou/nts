@@ -9560,7 +9560,7 @@ NtsSymbol *nts_symbol_for(NtsString *key) {
     nts_env->permanent++;
   }
   NtsValue slot = nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING);
-  NtsValue found = nts_map_get(nts_env->symbol_registry, slot);
+  NtsValue found = nts_map_get(nts_env->symbol_registry, slot, NTS_KEY_STRING);
   if (nts_value_tag(found) == NTS_TAG_SYMBOL) {
     /* Owned already: `nts_map_get` retains what it hands back, which is this
      * file's convention throughout -- `nts_map_key_at` and `nts_map_value_at`
@@ -9577,7 +9577,8 @@ NtsSymbol *nts_symbol_for(NtsString *key) {
   size_t before = nts_live_count();
   NtsSymbol *symbol = nts_symbol_new(key);
   nts_map_set(nts_env->symbol_registry, slot,
-              nts_value_of_reference((NtsHeader *)symbol, NTS_TAG_SYMBOL));
+              nts_value_of_reference((NtsHeader *)symbol, NTS_TAG_SYMBOL),
+              NTS_KEY_STRING);
   /* Whatever that took: the symbol, the key the registry now holds, and the
    * table's block the first time it grows. Measured rather than enumerated,
    * because enumerating it would be a second copy of the map's own growth rule
@@ -9707,12 +9708,6 @@ NtsMap *nts_table_new(double kind) {
  * symbol-keyed-map a cycle a lookup. */
 #define NTS_MAP_TAG(hash) ((hash) | 0x80000000u)
 
-static inline
-    __attribute__((always_inline)) uint32_t nts_map_hash(const NtsMap *map,
-                                                         NtsValue key) {
-  return nts_hash_key(key, map->kind);
-}
-
 /* Whether `key` is of the sort the table's kind hashes and compares.
  *
  * The kind is chosen at the constructor from the table's static key type
@@ -9789,8 +9784,9 @@ static size_t nts_map_block_bytes(uint32_t capacity, uint32_t slots,
  * `insert_at` receives the slot a fresh key would take: the first DELETED slot
  * on the chain if there was one, so that deleting and reinserting does not
  * make the table grow, and the terminating EMPTY otherwise. */
-static inline __attribute__((always_inline)) int32_t nts_map_find(
-    const NtsMap *map, NtsValue key, uint32_t hash, uint32_t *insert_at) {
+static inline __attribute__((always_inline)) int32_t
+nts_map_find(const NtsMap *map, NtsValue key, uint32_t hash,
+             uint32_t *insert_at, uint32_t kind) {
   /* An empty table, which has no index yet.
    *
    * No small-table scan: one was tried, below eight entries as the JVM's
@@ -9823,7 +9819,7 @@ static inline __attribute__((always_inline)) int32_t nts_map_find(
     } else if ((uint32_t)(entry >> 32) == NTS_MAP_TAG(hash)) {
       /* Only a key of the same hash is loaded at all. */
       uint32_t at = (uint32_t)entry - 1u;
-      if (nts_key_eq(map->keys[at], key, map->kind)) {
+      if (nts_key_eq(map->keys[at], key, kind)) {
         if (insert_at) {
           *insert_at = slot;
         }
@@ -10003,12 +9999,21 @@ static void nts_map_reindex(NtsMap *map) {
  * `benches/cases/map-and-set` walked down as each went in: 6.82us with none of
  * them, 6.12 with `get` and `has`, 5.53 with `set`, 5.35 with `add`. That is
  * 1.35x bun to 1.01x, and 0.72x `std::unordered_map` to 0.56x. */
-__attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
-                                                    NtsValue key) {
-  if (!nts_map_fits(map, key)) {
-    return nts_value_of_undefined();
-  }
-  int32_t at = nts_map_find(map, key, nts_map_hash(map, key), 0);
+/* # Two halves to every keyed call
+ *
+ * A call whose kind is the table's has its static type's promise that the key
+ * fits, and runs the `_as` body with that kind: a constant once inlined, so
+ * what is left is one compare of `map->kind` and the one hash and comparison
+ * the kind names. A call whose kind is not -- a view widened the key type --
+ * takes the `_unpromised` half, out of line: it asks the key
+ * (`nts_map_fits`), and runs the same body with the table's own kind.
+ *
+ * Measured before it was built, with each benchmark's kind forced constant in
+ * the runtime: map-and-set 0.90x, the word counts 0.89-0.95x, str-map-keys
+ * 0.89x, symbol-keyed-map 0.94x (C and LLVM, 2026-10-23). */
+static inline __attribute__((always_inline)) NtsValue
+nts_map_get_as(const NtsMap *map, NtsValue key, uint32_t kind) {
+  int32_t at = nts_map_find(map, key, nts_hash_key(key, kind), 0, kind);
   if (at < 0 || !map->values) {
     return nts_value_of_undefined();
   }
@@ -10016,10 +10021,36 @@ __attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
   return map->values[at];
 }
 
-__attribute__((always_inline)) bool nts_map_has(const NtsMap *map,
+static NTS_NOINLINE NtsValue nts_map_get_unpromised(const NtsMap *map,
+                                                    NtsValue key) {
+  if (!nts_map_fits(map, key)) {
+    return nts_value_of_undefined();
+  }
+  return nts_map_get_as(map, key, map->kind);
+}
+
+__attribute__((always_inline)) NtsValue nts_map_get(const NtsMap *map,
+                                                    NtsValue key,
+                                                    uint32_t kind) {
+  if (__builtin_expect(map->kind != kind, 0)) {
+    return nts_map_get_unpromised(map, key);
+  }
+  return nts_map_get_as(map, key, kind);
+}
+
+static NTS_NOINLINE bool nts_map_has_unpromised(const NtsMap *map,
                                                 NtsValue key) {
   return nts_map_fits(map, key) &&
-         nts_map_find(map, key, nts_map_hash(map, key), 0) >= 0;
+         nts_map_find(map, key, nts_hash_key(key, map->kind), 0, map->kind) >=
+             0;
+}
+
+__attribute__((always_inline)) bool nts_map_has(const NtsMap *map, NtsValue key,
+                                                uint32_t kind) {
+  if (__builtin_expect(map->kind != kind, 0)) {
+    return nts_map_has_unpromised(map, key);
+  }
+  return nts_map_find(map, key, nts_hash_key(key, kind), 0, kind) >= 0;
 }
 
 /* `map.set(k, v)` / `set.add(v)`, returning the collection, which is what both
@@ -10081,25 +10112,46 @@ nts_map_insert_at(NtsMap *map, NtsValue key, NtsValue value, uint32_t slot,
   map->generation++;
 }
 
-__attribute__((always_inline)) NtsMap *nts_map_set(NtsMap *map, NtsValue key,
-                                                   NtsValue value) {
-  key = nts_map_normalize(key);
-  if (!nts_map_fits(map, key)) {
-    nts_map_widen(map);
-  }
-  uint32_t hash = nts_map_hash(map, key);
+/* A key a table of `kind` stores: -0 as +0, which only a number can be. */
+static inline __attribute__((always_inline)) NtsValue
+nts_map_stored(NtsValue key, uint32_t kind) {
+  return kind == NTS_KEY_NUMBER || kind == NTS_KEY_ERASED
+             ? nts_map_normalize(key)
+             : key;
+}
+
+static inline __attribute__((always_inline)) NtsMap *
+nts_map_set_as(NtsMap *map, NtsValue key, NtsValue value, uint32_t kind) {
+  key = nts_map_stored(key, kind);
+  uint32_t hash = nts_hash_key(key, kind);
   uint32_t slot = 0;
-  int32_t at = nts_map_find(map, key, hash, &slot);
+  int32_t at = nts_map_find(map, key, hash, &slot, kind);
   if (at >= 0) {
     nts_map_overwrite(map, at, value);
     return nts_map_same(map);
   }
   if (map->used == map->capacity) {
     nts_map_rehash(map);
-    nts_map_find(map, key, hash, &slot);
+    nts_map_find(map, key, hash, &slot, kind);
   }
   nts_map_insert_at(map, key, value, slot, hash);
   return nts_map_same(map);
+}
+
+static NTS_NOINLINE NtsMap *nts_map_set_unpromised(NtsMap *map, NtsValue key,
+                                                   NtsValue value) {
+  if (!nts_map_fits(map, key)) {
+    nts_map_widen(map);
+  }
+  return nts_map_set_as(map, key, value, map->kind);
+}
+
+__attribute__((always_inline)) NtsMap *
+nts_map_set(NtsMap *map, NtsValue key, NtsValue value, uint32_t kind) {
+  if (__builtin_expect(map->kind != kind, 0)) {
+    return nts_map_set_unpromised(map, key, value);
+  }
+  return nts_map_set_as(map, key, value, kind);
 }
 
 /* The entry `nts_map_entry` answers: the generation it was taken at, and a
@@ -10118,15 +10170,16 @@ static inline bool nts_map_entry_current(const NtsMap *map, uint64_t entry) {
 }
 
 __attribute__((always_inline)) uint64_t nts_map_entry(const NtsMap *map,
-                                                      NtsValue key) {
-  /* A key that does not fit names no slot: past the index, which no entry is
-   * current at, so the read and the write through it take `nts_map_get` and
-   * `nts_map_set`, which answer it. */
-  if (!nts_map_fits(map, key)) {
+                                                      NtsValue key,
+                                                      uint32_t kind) {
+  /* Without the promise, no slot: past the index, which no entry is current
+   * at, and the read and the write through it take their own unpromised
+   * halves, which ask the key. */
+  if (__builtin_expect(map->kind != kind, 0)) {
     return nts_map_entry_of(map, map->slots);
   }
   uint32_t slot = 0;
-  nts_map_find(map, key, nts_map_hash(map, key), &slot);
+  nts_map_find(map, key, nts_hash_key(key, kind), &slot, kind);
   return nts_map_entry_of(map, slot);
 }
 
@@ -10135,9 +10188,13 @@ __attribute__((always_inline)) uint64_t nts_map_entry(const NtsMap *map,
  * structural write changes the index, and every one moves the generation. */
 __attribute__((always_inline)) NtsValue nts_map_entry_get(const NtsMap *map,
                                                           uint64_t entry,
-                                                          NtsValue key) {
+                                                          NtsValue key,
+                                                          uint32_t kind) {
+  if (__builtin_expect(map->kind != kind, 0)) {
+    return nts_map_get_unpromised(map, key);
+  }
   if (!nts_map_entry_current(map, entry)) {
-    return nts_map_get(map, key);
+    return nts_map_get_as(map, key, kind);
   }
   uint64_t held = map->index[(uint32_t)entry];
   if (held == NTS_MAP_EMPTY || held == NTS_MAP_DELETED || !map->values) {
@@ -10152,9 +10209,13 @@ __attribute__((always_inline)) NtsValue nts_map_entry_get(const NtsMap *map,
  * key stored at the slot the lookup found, with no second hash or probe. A
  * stale entry, or a table that must grow first, takes `nts_map_set` itself. */
 __attribute__((always_inline)) NtsMap *
-nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value) {
+nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value,
+                  uint32_t kind) {
+  if (__builtin_expect(map->kind != kind, 0)) {
+    return nts_map_set_unpromised(map, key, value);
+  }
   if (!nts_map_entry_current(map, entry)) {
-    return nts_map_set(map, key, value);
+    return nts_map_set_as(map, key, value, kind);
   }
   uint32_t slot = (uint32_t)entry;
   uint64_t held = map->index[slot];
@@ -10163,22 +10224,25 @@ nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key, NtsValue value) {
     return nts_map_same(map);
   }
   if (map->used == map->capacity) {
-    return nts_map_set(map, key, value);
+    return nts_map_set_as(map, key, value, kind);
   }
   /* A fresh key, so its hash is taken again: the entry has room for the slot
    * and not for it, and the insertion is the rarer half of an update. */
-  key = nts_map_normalize(key);
-  nts_map_insert_at(map, key, value, slot, nts_map_hash(map, key));
+  key = nts_map_stored(key, kind);
+  nts_map_insert_at(map, key, value, slot, nts_hash_key(key, kind));
   return nts_map_same(map);
 }
 
-bool nts_map_delete(NtsMap *map, NtsValue key) {
-  if (!nts_map_fits(map, key)) {
-    return false;
+bool nts_map_delete(NtsMap *map, NtsValue key, uint32_t kind) {
+  if (map->kind != kind) {
+    if (!nts_map_fits(map, key)) {
+      return false;
+    }
+    kind = map->kind;
   }
-  uint32_t hash = nts_map_hash(map, key);
+  uint32_t hash = nts_hash_key(key, kind);
   uint32_t slot = 0;
-  int32_t at = nts_map_find(map, key, hash, &slot);
+  int32_t at = nts_map_find(map, key, hash, &slot, kind);
   if (at < 0) {
     return false;
   }
@@ -10234,8 +10298,9 @@ void nts_map_clear(NtsMap *map) {
   map->generation++;
 }
 
-__attribute__((always_inline)) NtsMap *nts_set_add(NtsMap *map, NtsValue key) {
-  return nts_map_set(map, key, nts_value_of_undefined());
+__attribute__((always_inline)) NtsMap *nts_set_add(NtsMap *map, NtsValue key,
+                                                   uint32_t kind) {
+  return nts_map_set(map, key, nts_value_of_undefined(), kind);
 }
 
 /* Walking a table, and walking text.
@@ -10319,19 +10384,23 @@ NtsMap *nts_map_copy(const NtsMap *map) {
   /* The source's type with its contents: a table's copy is a table. */
   NtsMap *out =
       nts_map_alloc(map->header.descriptor, map->kind, map->holds_values);
+  /* Every key fits the kind the source was built with -- a table holds only
+   * keys that do -- and the copy is built with the same one. */
   for (int32_t at = nts_map_next(map, 0); at >= 0;
        at = nts_map_next(map, at + 1)) {
     nts_map_set(out, nts_map_key_borrowed(map, at),
-                nts_map_value_borrowed(map, at));
+                nts_map_value_borrowed(map, at), map->kind);
   }
   return out;
 }
 
 NtsMap *nts_map_extend(NtsMap *target, const NtsMap *source) {
+  /* The source's kind is what its keys are known to fit; a target built for
+   * another asks each of them. */
   for (int32_t at = nts_map_next(source, 0); at >= 0;
        at = nts_map_next(source, at + 1)) {
     nts_map_set(target, nts_map_key_borrowed(source, at),
-                nts_map_value_borrowed(source, at));
+                nts_map_value_borrowed(source, at), source->kind);
   }
   return target;
 }

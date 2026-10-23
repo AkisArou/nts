@@ -1545,13 +1545,13 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature {
         name: "nts_map_delete",
         returns: "zeroext i1",
-        params: &["ptr", "ptr align 8 dead_on_return"],
+        params: &["ptr", "ptr align 8 dead_on_return", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry",
         returns: "i64",
-        params: &["ptr", "ptr align 8 dead_on_return"],
+        params: &["ptr", "ptr align 8 dead_on_return", "i32"],
         attributes: &[],
     },
     Signature {
@@ -1562,6 +1562,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "ptr",
             "i64",
             "ptr align 8 dead_on_return",
+            "i32",
         ],
         attributes: &[],
     },
@@ -1573,6 +1574,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "i64",
             "ptr align 8 dead_on_return",
             "ptr align 8 dead_on_return",
+            "i32",
         ],
         attributes: &[],
     },
@@ -1589,13 +1591,14 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "ptr dead_on_unwind writable sret({ i32, i64 }) align 8",
             "ptr",
             "ptr align 8 dead_on_return",
+            "i32",
         ],
         attributes: &[],
     },
     Signature {
         name: "nts_map_has",
         returns: "zeroext i1",
-        params: &["ptr readonly", "ptr align 8 dead_on_return"],
+        params: &["ptr readonly", "ptr align 8 dead_on_return", "i32"],
         attributes: &["nounwind", "willreturn", "memory(read, argmem: readwrite)"],
     },
     Signature {
@@ -1639,6 +1642,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
             "ptr",
             "ptr align 8 dead_on_return",
             "ptr align 8 dead_on_return",
+            "i32",
         ],
         attributes: &[],
     },
@@ -2261,7 +2265,7 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
     Signature {
         name: "nts_set_add",
         returns: "ptr",
-        params: &["ptr", "ptr align 8 dead_on_return"],
+        params: &["ptr", "ptr align 8 dead_on_return", "i32"],
         attributes: &[],
     },
     Signature {

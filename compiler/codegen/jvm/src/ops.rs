@@ -7321,6 +7321,11 @@ impl Emitter<'_> {
             }
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                // A keyed table call's last argument is the key kind it was
+                // written against, which the C runtime is told. `NtsTable`
+                // chooses its columns from the table's type and erases itself
+                // when a key does not fit (`eraseKeys`), so it is not told.
+                let args = nts_core::hir::tables::operands(name, args);
                 self.assignable_container_arguments(name, args, result)?;
                 // The presence bits are a *field* on this lane, not a header
                 // word, so these four are emitted rather than called: a method

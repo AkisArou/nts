@@ -58,6 +58,7 @@ pub mod obligations;
 pub mod presence;
 mod small_dispatch;
 pub mod suspend;
+pub mod tables;
 pub mod tags;
 pub mod templates;
 pub mod unerase;

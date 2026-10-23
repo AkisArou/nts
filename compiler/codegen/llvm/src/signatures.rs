@@ -1368,25 +1368,25 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_map_delete",
         returns: "zeroext i1",
-        params: &["ptr", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry",
         returns: "i64",
-        params: &["ptr", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry_get",
         returns: "{ i32, i64 }",
-        params: &["ptr", "i64", "i32", "i64"],
+        params: &["ptr", "i64", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry_set",
         returns: "ptr",
-        params: &["ptr", "i64", "i32", "i64", "i32", "i64"],
+        params: &["ptr", "i64", "i32", "i64", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
@@ -1398,13 +1398,13 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_map_get",
         returns: "{ i32, i64 }",
-        params: &["ptr", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_has",
         returns: "zeroext i1",
-        params: &["ptr", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -1440,7 +1440,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_map_set",
         returns: "ptr",
-        params: &["ptr", "i32", "i64", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {
@@ -2052,7 +2052,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_set_add",
         returns: "ptr",
-        params: &["ptr", "i32", "i64"],
+        params: &["ptr", "i32", "i64", "i32"],
         attributes: &[],
     },
     Signature {

@@ -116,9 +116,9 @@ static void receivers(const char *name, Append append, const char *tail) {
 
   NtsMap *table = nts_map_new(NTS_KEY_STRING);
   NtsString *key = exact("abc");
-  nts_map_set(table, as_key(key), nts_value_of_number(1));
+  nts_map_set(table, as_key(key), nts_value_of_number(1), table->kind);
   NtsString *probe = grown("abc");
-  bool found = nts_map_has(table, as_key(probe));
+  bool found = nts_map_has(table, as_key(probe), table->kind);
   NtsString *after_hash = append(probe);
   snprintf(what, sizeof what,
            "%s: a string a lookup hashed is copied, not written under its hash",
@@ -128,13 +128,13 @@ static void receivers(const char *name, Append append, const char *tail) {
 
   NtsString *held_key = grown("abc");
   NtsMap *keyed = nts_map_new(NTS_KEY_STRING);
-  nts_map_set(keyed, as_key(held_key), nts_value_of_number(2));
+  nts_map_set(keyed, as_key(held_key), nts_value_of_number(2), keyed->kind);
   NtsString *from_key = append(held_key);
   NtsString *again = exact("abc");
   snprintf(what, sizeof what,
            "%s: a table's key is copied and the key is still found", name);
   check(what, from_key != held_key && says(from_key, expected) &&
-                  nts_map_has(keyed, as_key(again)));
+                  nts_map_has(keyed, as_key(again), keyed->kind));
   nts_release(from_key);
   nts_release(again);
   nts_release(key);

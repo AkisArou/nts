@@ -213,7 +213,8 @@ fn operate(
         }
         _ => action.result(),
     };
-    let call = builder.runtime_call(action.helper(), args, returns, origin.clone());
+    let table_ty = builder.values[table.0 as usize].ty.clone();
+    let call = builder.keyed_call(action.helper(), &table_ty, args, returns, origin.clone());
     match action {
         Action::Set(_) => builder.push(OpKind::ConstUndefined, HirType::Erased, origin),
         // Ordinary property deletion succeeds even if the property was absent.

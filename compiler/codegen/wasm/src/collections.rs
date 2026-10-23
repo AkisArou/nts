@@ -472,7 +472,7 @@ pub(crate) fn typed_gets(
             continue;
         };
         let ((Some(Op::Get), [map, _]) | (Some(Op::EntryGet), [map, _, _])) =
-            (external(name), args.as_slice())
+            (external(name), nts_core::hir::tables::operands(name, args))
         else {
             continue;
         };

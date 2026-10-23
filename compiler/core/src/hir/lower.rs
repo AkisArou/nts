@@ -19165,7 +19165,7 @@ fn admits_absence(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
 /// pointer is `undefined` -- says nothing a string hash can read: C and LLVM
 /// hashed the null pointer as a string and faulted, and Wasm, which builds its
 /// collection from this type, declined every key that was not a string. Held
-/// erased, a key carries its tag, `key_kind_of` answers `ERASED` for it, and
+/// erased, a key carries its tag, `tables::key_kind` answers `ERASED` for it, and
 /// every backend's table compares by that tag.
 fn table_key_within(
     snapshot: &SemanticSnapshot,
@@ -19288,35 +19288,6 @@ fn named_or(snapshot: &SemanticSnapshot, record: &TypeRecord, fallback: &str) ->
             || fallback.to_owned(),
             |declared| format!("`{}`", declared.name),
         )
-}
-
-/// Whether a pointer is to an Objective-C object the program counts.
-fn is_objc_object(pointee: &super::native::Pointee) -> bool {
-    matches!(pointee.viewed(), super::native::Pointee::Opaque(handle) if handle.family == super::native::Family::Objc)
-}
-
-/// Which hash and comparison a table of these keys is built with.
-///
-/// The whole of what a `Map`'s key type costs at run time: a `Map<string, V>`
-/// gets the string hash and compares with `nts_string_eq`, and its probe loop
-/// never reads a tag. Only a key type that is genuinely several things gets
-/// `ERASED`, which is the one that dispatches.
-///
-/// These are `NTS_KEY_*` in the runtime header; the two are a pair and neither
-/// is meaningful alone.
-fn key_kind_of(key: &HirType) -> u32 {
-    match key {
-        HirType::Managed(ManagedType::String) => 1,
-        // An Objective-C object, in its box: `-hash` and `-isEqual:`.
-        HirType::NativePointer(pointee) if is_objc_object(pointee) => 4,
-        HirType::Float { .. } | HirType::Int { .. } => 2,
-        // Every other managed value is a pointer, and identity is what
-        // JavaScript compares objects by, so one entry serves them all.
-        HirType::Managed(_) => 3,
-        // A boolean key is rare enough not to be worth a hash of its own, and
-        // an erased one has to read its tag by definition.
-        _ => 0,
-    }
 }
 
 /// A collection nothing in the program chose the contents of: every type
@@ -19802,7 +19773,7 @@ fn representation_within(
         // its family's box, and hashed and compared by the object's own
         // `-hash` and `-isEqual:` (`NTS_KEY_OBJC`), not by the box's identity.
         HirType::Managed(ManagedType::Set(element)) => match element.as_ref() {
-            HirType::NativePointer(pointee) => is_objc_object(pointee),
+            HirType::NativePointer(pointee) => super::tables::is_objc_object(pointee),
             _ => true,
         },
         // A map's *value* may be a counted foreign object -- Swift's
@@ -40448,7 +40419,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let origin = self.origin(id);
         let kind = self.push(
-            OpKind::ConstFloat(f64::from(key_kind_of(key))),
+            OpKind::ConstFloat(f64::from(super::tables::key_kind(key))),
             HirType::NUMBER,
             origin.clone(),
         );
@@ -52795,6 +52766,7 @@ impl<'a> FuncBuilder<'a> {
             .first()
             .filter(|first| self.kind_of(**first) == Some(syntax::SPREAD_ASSIGNMENT))
             .copied();
+        let table_ty = ty.clone();
         let table = if let Some(spread) = leading_spread {
             {
                 let Some(source) = self.children(spread).first().copied() else {
@@ -52825,7 +52797,7 @@ impl<'a> FuncBuilder<'a> {
             }
         } else {
             let kind = self.push(
-                OpKind::ConstFloat(f64::from(key_kind_of(key))),
+                OpKind::ConstFloat(f64::from(super::tables::key_kind(key))),
                 HirType::NUMBER,
                 origin.clone(),
             );
@@ -52853,12 +52825,10 @@ impl<'a> FuncBuilder<'a> {
                 ));
             }
             let (key, value) = self.table_property(property, &origin)?;
-            self.push(
-                OpKind::Call {
-                    callee: Callee::External("nts_map_set".to_owned()),
-                    args: vec![table, key, value],
-                    frame: None,
-                },
+            self.keyed_call(
+                "nts_map_set",
+                &table_ty,
+                vec![table, key, value],
                 HirType::Void,
                 origin.clone(),
             );
@@ -71022,7 +70992,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Array(element_ty.clone())),
         )?;
         let kind = self.push(
-            OpKind::ConstFloat(f64::from(key_kind_of(&element_ty))),
+            OpKind::ConstFloat(f64::from(super::tables::key_kind(&element_ty))),
             HirType::NUMBER,
             origin.clone(),
         );
@@ -71065,7 +71035,13 @@ impl<'a> FuncBuilder<'a> {
         );
         // An `NSSet` holds no `nil`.
         let key = self.erased(item, Absent::Impossible, &origin);
-        self.runtime_call("nts_set_add", vec![set, key], ty, origin.clone());
+        self.keyed_call(
+            "nts_set_add",
+            &ty.clone(),
+            vec![set, key],
+            ty,
+            origin.clone(),
+        );
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
         let next = self.push(
             OpKind::Binary {
@@ -71170,7 +71146,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         let kind = self.push(
-            OpKind::ConstFloat(f64::from(key_kind_of(&key_ty))),
+            OpKind::ConstFloat(f64::from(super::tables::key_kind(&key_ty))),
             HirType::NUMBER,
             origin.clone(),
         );
@@ -71229,7 +71205,13 @@ impl<'a> FuncBuilder<'a> {
         // An `NSDictionary` holds no `nil`, as a key or as a value.
         let key = self.erased(key, Absent::Impossible, &origin);
         let entry = self.erased(entry, Absent::Impossible, &origin);
-        self.runtime_call("nts_map_set", vec![map, key, entry], ty, origin.clone());
+        self.keyed_call(
+            "nts_map_set",
+            &ty.clone(),
+            vec![map, key, entry],
+            ty,
+            origin.clone(),
+        );
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
         let next = self.push(
             OpKind::Binary {
@@ -77804,6 +77786,28 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    /// A call to a helper that takes a key ([`super::tables::KEYED`]), told
+    /// the kind of key the call was written against -- `table`'s, the type it
+    /// was resolved on -- as its last argument. Fixed here, where the type is
+    /// the call's own, and never derived later from the table operand, which
+    /// inlining can retype (`hir::tables`).
+    fn keyed_call(
+        &mut self,
+        name: &str,
+        table: &HirType,
+        mut args: Vec<ValueId>,
+        ty: HirType,
+        origin: Origin,
+    ) -> ValueId {
+        let kind = self.push(
+            OpKind::ConstInt(i128::from(super::tables::key_kind_of_table(table))),
+            super::tables::KIND_TYPE,
+            origin.clone(),
+        );
+        args.push(kind);
+        self.runtime_call(name, args, ty, origin)
+    }
+
     /// ECMAScript's exponentiation, which `**`, `**=` and `Math.pow` all spell.
     ///
     /// A call rather than an operation, because it is **not** C's `pow`: the
@@ -79953,7 +79957,7 @@ impl<'a> FuncBuilder<'a> {
         let contents = self.arguments_of(id).first().copied();
         let origin = self.origin(id);
         let kind = self.push(
-            OpKind::ConstFloat(f64::from(key_kind_of(key))),
+            OpKind::ConstFloat(f64::from(super::tables::key_kind(key))),
             HirType::NUMBER,
             origin.clone(),
         );
@@ -80205,15 +80209,8 @@ impl<'a> FuncBuilder<'a> {
         } else {
             "nts_set_add"
         };
-        self.push(
-            OpKind::Call {
-                callee: Callee::External(helper.to_owned()),
-                args,
-                frame: None,
-            },
-            HirType::Void,
-            origin.clone(),
-        );
+        let table_ty = self.values[table.0 as usize].ty.clone();
+        self.keyed_call(helper, &table_ty, args, HirType::Void, origin.clone());
         let one = self.push(OpKind::ConstFloat(1.0), HirType::NUMBER, origin.clone());
         let next = self.push(
             OpKind::Binary {
@@ -80300,15 +80297,11 @@ impl<'a> FuncBuilder<'a> {
             let value = self.lower_expression(*argument)?;
             args.push(self.erased_from(value, *argument, &origin));
         }
-        let call = self.push(
-            OpKind::Call {
-                callee: Callee::External(helper.to_owned()),
-                args,
-                frame: None,
-            },
-            ty,
-            origin,
-        );
+        let call = if super::tables::kind_at(helper).is_some() {
+            self.keyed_call(helper, table, args, ty, origin)
+        } else {
+            self.runtime_call(helper, args, ty, origin)
+        };
         // A `get` whose result the checker has already narrowed -- through an
         // assertion, or a guard -- unerases here rather than staying erased for
         // the rest of the function.

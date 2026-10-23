@@ -53,22 +53,23 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
          nts_value_to_number_explicit(a) == (double)n);
 
   NtsMap *map = nts_map_new(NTS_KEY_ERASED);
-  nts_map_set(map, a, nts_value_of_number(11));
-  nts_map_set(map, b, nts_value_of_number(22));
+  nts_map_set(map, a, nts_value_of_number(11), map->kind);
+  nts_map_set(map, b, nts_value_of_number(22), map->kind);
   expect("Map coalesces equal integer keys", map->header.length == 1);
-  expect("Map finds separately boxed key", nts_map_has(map, b));
-  NtsValue found = nts_map_get(map, b);
+  expect("Map finds separately boxed key", nts_map_has(map, b, map->kind));
+  NtsValue found = nts_map_get(map, b, map->kind);
   expect("Map replacement follows value equality",
          nts_value_tag(found) == NTS_TAG_NUMBER &&
              nts_value_number(found) == 22);
   nts_value_release(found);
-  nts_map_set(map, nts_value_of_number((double)n), nts_value_of_number(33));
+  nts_map_set(map, nts_value_of_number((double)n), nts_value_of_number(33),
+              map->kind);
   expect("number and bigint remain different keys", map->header.length == 2);
   nts_release((NtsHeader *)map);
 
   NtsMap *set = nts_set_new(NTS_KEY_ERASED);
-  nts_set_add(set, a);
-  nts_set_add(set, b);
+  nts_set_add(set, a, set->kind);
+  nts_set_add(set, b, set->kind);
   expect("Set coalesces equal integer keys", set->header.length == 1);
   nts_release((NtsHeader *)set);
 
@@ -146,10 +147,10 @@ int main(void) {
   NtsValue high = bigint(((__int128)1 << 64) + 7);
   expect("equality reads the high word", !nts_value_strict_eq(low, high));
   NtsMap *map = nts_map_new(NTS_KEY_ERASED);
-  nts_map_set(map, low, nts_value_of_number(1));
-  nts_map_set(map, high, nts_value_of_number(2));
+  nts_map_set(map, low, nts_value_of_number(1), map->kind);
+  nts_map_set(map, high, nts_value_of_number(2), map->kind);
   expect("different high words remain different keys", map->header.length == 2);
-  NtsValue found = nts_map_get(map, high);
+  NtsValue found = nts_map_get(map, high, map->kind);
   expect("high word key is retrievable", nts_value_number(found) == 2);
   nts_value_release(found);
   nts_release((NtsHeader *)map);

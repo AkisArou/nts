@@ -707,10 +707,16 @@ static SIGNATURES: &[Declared] = &[
             signed: false,
         }),
     ),
-    ("nts_map_delete", &[None, None], Some(HirType::Bool)),
+    // The keyed helpers end with the key kind the call was written against
+    // (`hir::tables`).
+    (
+        "nts_map_delete",
+        &[None, None, Some(super::tables::KIND_TYPE)],
+        Some(HirType::Bool),
+    ),
     (
         "nts_map_entry",
-        &[None, None],
+        &[None, None, Some(super::tables::KIND_TYPE)],
         Some(HirType::Int {
             bits: 64,
             signed: false,
@@ -725,6 +731,7 @@ static SIGNATURES: &[Declared] = &[
                 signed: false,
             }),
             None,
+            Some(super::tables::KIND_TYPE),
         ],
         None,
     ),
@@ -738,10 +745,20 @@ static SIGNATURES: &[Declared] = &[
             }),
             None,
             None,
+            Some(super::tables::KIND_TYPE),
         ],
         None,
     ),
-    ("nts_map_has", &[None, None], Some(HirType::Bool)),
+    (
+        "nts_map_get",
+        &[None, None, Some(super::tables::KIND_TYPE)],
+        None,
+    ),
+    (
+        "nts_map_has",
+        &[None, None, Some(super::tables::KIND_TYPE)],
+        Some(HirType::Bool),
+    ),
     (
         "nts_map_key_at",
         &[
@@ -767,6 +784,11 @@ static SIGNATURES: &[Declared] = &[
             bits: 32,
             signed: true,
         }),
+    ),
+    (
+        "nts_map_set",
+        &[None, None, None, Some(super::tables::KIND_TYPE)],
+        None,
     ),
     (
         "nts_map_value_at",
@@ -1116,6 +1138,11 @@ static SIGNATURES: &[Declared] = &[
         "nts_round_fn",
         &[Some(HirType::Float { bits: 64 })],
         Some(HirType::Float { bits: 64 }),
+    ),
+    (
+        "nts_set_add",
+        &[None, None, Some(super::tables::KIND_TYPE)],
+        None,
     ),
     ("nts_set_new", &[Some(HirType::Float { bits: 64 })], None),
     (

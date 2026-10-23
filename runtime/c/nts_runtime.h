@@ -1834,7 +1834,20 @@ NTS_ALLOCATES NtsMap *nts_set_new(double kind);
 /* A table, which is a map's storage under a type of its own: see
  * `nts_desc_table`. */
 NTS_ALLOCATES NtsMap *nts_table_new(double kind);
-/* Not `NTS_READS_ONLY`, and the three below are not either.
+/* # The kind a keyed call names
+ *
+ * Every helper here that takes a key ends with `kind`, one of `NTS_KEY_*`: the
+ * kind of key the call was written against, which the compiler fixed from the
+ * call's own static type (`hir::tables`). It is a promise about the key -- a
+ * `NTS_KEY_STRING` call's key is a string -- so where it equals the table's
+ * own kind the call hashes and compares with it as a constant, which after
+ * inlining leaves no dispatch on the kind and no tag read. Where it does not,
+ * a view widened the key type (`Map<string, number>` as `Map<unknown,
+ * unknown>`), and the call asks the key whether it fits the table
+ * (`nts_map_fits`), widening the table on a write. A caller that cannot
+ * promise anything passes `NTS_KEY_ERASED`.
+ *
+ * Not `NTS_READS_ONLY`, and the three below are not either.
  *
  * Each of them calls `nts_value_retain` on what it returns, so a reference
  * comes back *owned*. `pure` promises the call can be elided when its result is
@@ -1845,11 +1858,11 @@ NTS_ALLOCATES NtsMap *nts_table_new(double kind);
  * count is a memory effect.
  *
  * `has` and `next` stay read-only, because they genuinely are. */
-NtsValue nts_map_get(const NtsMap *map, NtsValue key);
-NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key);
+NtsValue nts_map_get(const NtsMap *map, NtsValue key, uint32_t kind);
+NTS_READS_ONLY bool nts_map_has(const NtsMap *map, NtsValue key, uint32_t kind);
 /* Returns the collection, which is what `set` and `add` evaluate to. */
-NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value);
-NtsMap *nts_set_add(NtsMap *map, NtsValue key);
+NtsMap *nts_map_set(NtsMap *map, NtsValue key, NtsValue value, uint32_t kind);
+NtsMap *nts_set_add(NtsMap *map, NtsValue key, uint32_t kind);
 /* A key read and then written, looked up once (`hir::entries`).
  *
  * `nts_map_entry` hashes the key and probes, and answers an entry: the table's
@@ -1864,11 +1877,12 @@ NtsMap *nts_set_add(NtsMap *map, NtsValue key);
  * this key: the compiler pairs the three only on one table value and one key
  * value, with nothing between them that writes. Not read-only: the entry is a
  * reading of the table's shape, which the next insertion changes. */
-uint64_t nts_map_entry(const NtsMap *map, NtsValue key);
-NtsValue nts_map_entry_get(const NtsMap *map, uint64_t entry, NtsValue key);
+uint64_t nts_map_entry(const NtsMap *map, NtsValue key, uint32_t kind);
+NtsValue nts_map_entry_get(const NtsMap *map, uint64_t entry, NtsValue key,
+                           uint32_t kind);
 NtsMap *nts_map_entry_set(NtsMap *map, uint64_t entry, NtsValue key,
-                          NtsValue value);
-bool nts_map_delete(NtsMap *map, NtsValue key);
+                          NtsValue value, uint32_t kind);
+bool nts_map_delete(NtsMap *map, NtsValue key, uint32_t kind);
 void nts_map_clear(NtsMap *map);
 
 /* Walking a table: a cursor, not an iterator object.

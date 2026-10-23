@@ -70,10 +70,16 @@ static NtsValue num(double d) { return nts_value_of_number(d); }
  * trips through `nts_release` -- an eighth of the benchmark -- for a table that
  * was never going anywhere. */
 static void put(NtsMap *m, NtsValue key, NtsValue value) {
-  nts_map_set(m, key, value);
+  nts_map_set(m, key, value, m->kind);
 }
 
-static void add(NtsMap *m, NtsValue key) { nts_set_add(m, key); }
+static void add(NtsMap *m, NtsValue key) { nts_set_add(m, key, m->kind); }
+
+/* A `set` through a view that promises nothing about the key, as a
+ * `Map<unknown, unknown>` parameter's does. */
+static void put_wide(NtsMap *m, NtsValue key, NtsValue value) {
+  nts_map_set(m, key, value, NTS_KEY_ERASED);
+}
 
 /* The insertion order of the live keys, as a comma-joined ASCII string, so it
  * can be compared against what `[...m.keys()].join(",")` printed. */
@@ -110,8 +116,8 @@ int main(void) {
       put(m, str(keys[i]), num(i));
     }
     check("size counts what was inserted", m->header.length == 5);
-    nts_map_delete(m, str("b"));
-    nts_map_delete(m, str("d"));
+    nts_map_delete(m, str("b"), m->kind);
+    nts_map_delete(m, str("d"), m->kind);
     check("size falls with deletion", m->header.length == 3);
     put(m, str("b"), num(9));
     put(m, str("f"), num(10));
@@ -122,8 +128,8 @@ int main(void) {
           strcmp(order, "a,c,e,b,f") == 0);
     check("size after delete and reinsert", m->header.length == 5);
     check("a reinserted key reads back",
-          nts_value_number(nts_map_get(m, str("b"))) == 9.0);
-    check("a deleted key is gone", !nts_map_has(m, str("d")));
+          nts_value_number(nts_map_get(m, str("b"), m->kind)) == 9.0);
+    check("a deleted key is gone", !nts_map_has(m, str("d"), m->kind));
     nts_release(&m->header);
   }
 
@@ -136,14 +142,14 @@ int main(void) {
     put(m, num(0.0 / 0.0), num(1));
     put(m, num(-0.0), num(2));
     check("NaN is a key and finds itself",
-          nts_value_number(nts_map_get(m, num(0.0 / 0.0))) == 1.0);
+          nts_value_number(nts_map_get(m, num(0.0 / 0.0), m->kind)) == 1.0);
     check("-0 and +0 are one key",
-          nts_value_number(nts_map_get(m, num(0.0))) == 2.0);
+          nts_value_number(nts_map_get(m, num(0.0), m->kind)) == 2.0);
     check("and count as one entry", m->header.length == 2);
 
     put(m, num(0.0), num(3));
     check("setting through the other zero replaces the value",
-          nts_value_number(nts_map_get(m, num(-0.0))) == 3.0);
+          nts_value_number(nts_map_get(m, num(-0.0), m->kind)) == 3.0);
     check("and does not add an entry", m->header.length == 2);
     /* The stored key is +0, not the -0 that created the entry. */
     bool positive = false;
@@ -166,8 +172,8 @@ int main(void) {
         keep(nts_concat((const NtsString *)nts_value_reference(str("a")),
                         (const NtsString *)nts_value_reference(str("b"))));
     check("a concatenation finds the key it equals",
-          nts_value_number(nts_map_get(m, joined)) == 1.0);
-    check("a different string does not", !nts_map_has(m, str("ac")));
+          nts_value_number(nts_map_get(m, joined, m->kind)) == 1.0);
+    check("a different string does not", !nts_map_has(m, str("ac"), m->kind));
     nts_release(&m->header);
   }
 
@@ -189,8 +195,8 @@ int main(void) {
                        (const NtsString *)nts_value_reference(str("b")));
     check("a grown string finds the key it equals",
           nts_value_number(nts_map_get(
-              m, nts_value_of_reference((NtsHeader *)k, NTS_TAG_STRING))) ==
-              1.0);
+              m, nts_value_of_reference((NtsHeader *)k, NTS_TAG_STRING),
+              m->kind)) == 1.0);
     check("and is settled by being hashed: its hash kept, its room given up",
           (k->flags & NTS_HASHED) != 0 && (k->flags & NTS_GROWN) == 0);
     NtsString *grown =
@@ -200,7 +206,7 @@ int main(void) {
     check("so appending to it makes a new string, not a write into it",
           grown != k);
     check("which finds the key its new text equals",
-          nts_value_number(nts_map_get(m, keep(grown))) == 2.0);
+          nts_value_number(nts_map_get(m, keep(grown), m->kind)) == 2.0);
     nts_release(&m->header);
   }
 
@@ -210,19 +216,20 @@ int main(void) {
   {
     NtsMap *m = nts_map_new(NTS_KEY_ERASED);
     put(m, nts_value_of_undefined(), nts_value_of_undefined());
-    check("undefined is a key", nts_map_has(m, nts_value_of_undefined()));
+    check("undefined is a key",
+          nts_map_has(m, nts_value_of_undefined(), m->kind));
     check("and counts", m->header.length == 1);
     check("get cannot tell it from absent, and neither can node's",
-          nts_value_tag(nts_map_get(m, nts_value_of_undefined())) ==
+          nts_value_tag(nts_map_get(m, nts_value_of_undefined(), m->kind)) ==
               NTS_TAG_UNDEFINED);
-    check("an absent key is still absent", !nts_map_has(m, num(1)));
+    check("an absent key is still absent", !nts_map_has(m, num(1), m->kind));
     /* A heterogeneous table: the number 3 and the string "3" are two keys. */
     put(m, num(3), num(100));
     put(m, str("3"), num(200));
     check("a number and its spelling are different keys",
           m->header.length == 3 &&
-              nts_value_number(nts_map_get(m, num(3))) == 100.0 &&
-              nts_value_number(nts_map_get(m, str("3"))) == 200.0);
+              nts_value_number(nts_map_get(m, num(3), m->kind)) == 100.0 &&
+              nts_value_number(nts_map_get(m, str("3"), m->kind)) == 200.0);
     nts_release(&m->header);
   }
 
@@ -241,8 +248,10 @@ int main(void) {
                                      nts_value_number(s->keys[1]) == 1.0 &&
                                      nts_value_number(s->keys[2]) == 2.0);
     check("a set stores no values at all", s->values == 0);
-    check("delete reports whether it removed", nts_map_delete(s, num(3)));
-    check("and reports false the second time", !nts_map_delete(s, num(3)));
+    check("delete reports whether it removed",
+          nts_map_delete(s, num(3), s->kind));
+    check("and reports false the second time",
+          !nts_map_delete(s, num(3), s->kind));
     check("size after delete", s->header.length == 2);
     nts_release(&s->header);
   }
@@ -261,7 +270,7 @@ int main(void) {
     for (int i = 0; i < 1000; i++) {
       if (nts_value_number(m->keys[i]) != (double)i)
         ordered = false;
-      if (nts_value_number(nts_map_get(m, num(i))) != (double)(i * 2))
+      if (nts_value_number(nts_map_get(m, num(i), m->kind)) != (double)(i * 2))
         found = false;
     }
     check("every one reads back", found);
@@ -270,7 +279,7 @@ int main(void) {
     /* Deleting most of them and reinserting must not grow without bound:
      * the compaction on rehash is what reclaims the holes. */
     for (int i = 0; i < 900; i++) {
-      nts_map_delete(m, num(i));
+      nts_map_delete(m, num(i), m->kind);
     }
     check("size after deleting 900", m->header.length == 100);
     for (int i = 0; i < 900; i++) {
@@ -291,7 +300,8 @@ int main(void) {
     check("a map retains its key and its value",
           shared->reserved == before + 2);
     nts_map_delete(m,
-                   nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING));
+                   nts_value_of_reference((NtsHeader *)shared, NTS_TAG_STRING),
+                   m->kind);
     check("and releases both on delete", shared->reserved == before);
     nts_release(&m->header);
     nts_release(shared);
@@ -332,7 +342,7 @@ int main(void) {
         nts_value_of_reference((NtsHeader *)value, NTS_TAG_STRING));
     check("a stored value is the table's", value->reserved == before + 1);
 
-    NtsValue got = nts_map_get(m, str("r"));
+    NtsValue got = nts_map_get(m, str("r"), m->kind);
     check("and `get` hands out one of the caller's",
           value->reserved == before + 2);
     nts_release(nts_value_reference(got));
@@ -342,13 +352,14 @@ int main(void) {
     nts_release(nts_value_reference(walked));
 
     check("an absent key hands back nothing to give up",
-          nts_value_tag(nts_map_get(m, str("nope"))) == NTS_TAG_UNDEFINED);
+          nts_value_tag(nts_map_get(m, str("nope"), m->kind)) ==
+              NTS_TAG_UNDEFINED);
 
     /* And `set` returns the table borrowed: the same pointer, and not a count
      * more than the caller walked in with. `reserved == 2` here for as long as
      * the result was owned, and the test asserting it is how the convention
      * stays honest -- change one end and this says so. */
-    NtsMap *again = nts_map_set(m, str("s"), nts_value_of_number(1));
+    NtsMap *again = nts_map_set(m, str("s"), nts_value_of_number(1), m->kind);
     check("`set` hands back the table borrowed",
           again == m && m->header.reserved == 1);
 
@@ -370,9 +381,9 @@ int main(void) {
     for (int i = 1; i <= 5; i++) {
       put(m, num(i), num(i * 10));
     }
-    nts_map_delete(m, num(1));
-    nts_map_delete(m, num(5));
-    nts_map_delete(m, num(3));
+    nts_map_delete(m, num(1), m->kind);
+    nts_map_delete(m, num(5), m->kind);
+    nts_map_delete(m, num(3), m->kind);
     put(m, num(2), num(21));
     put(m, num(1), num(11));
     NtsArray *keys = nts_array_of_numbers((double)m->header.length);
@@ -394,7 +405,7 @@ int main(void) {
     add(s, num(7));
     add(s, num(8));
     add(s, num(9));
-    nts_map_delete(s, num(8));
+    nts_map_delete(s, num(8), s->kind);
     NtsArray *members = nts_array_of_numbers((double)s->header.length);
     nts_map_values_into(s, members);
     check("a set's values are its keys",
@@ -438,51 +449,53 @@ int main(void) {
   {
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
     put(m, str("k"), num(1));
-    uint64_t hit = nts_map_entry(m, str("k"));
+    uint64_t hit = nts_map_entry(m, str("k"), m->kind);
     check("a current entry reads what `get` reads",
-          nts_value_number(nts_map_entry_get(m, hit, str("k"))) == 1.0);
-    uint64_t miss = nts_map_entry(m, str("fresh"));
+          nts_value_number(nts_map_entry_get(m, hit, str("k"), m->kind)) ==
+              1.0);
+    uint64_t miss = nts_map_entry(m, str("fresh"), m->kind);
     for (int i = 0; i < 40; i++) {
       char name[8];
       snprintf(name, sizeof name, "x%d", i);
       put(m, str(name), num(i));
     }
-    nts_map_entry_set(m, hit, str("k"), num(2));
+    nts_map_entry_set(m, hit, str("k"), num(2), m->kind);
     check("an entry taken before the table grew still sets its own key",
-          nts_value_number(nts_map_get(m, str("k"))) == 2.0 &&
+          nts_value_number(nts_map_get(m, str("k"), m->kind)) == 2.0 &&
               m->header.length == 41);
-    nts_map_entry_set(m, miss, str("fresh"), num(3));
+    nts_map_entry_set(m, miss, str("fresh"), num(3), m->kind);
     check("a stale entry for an absent key inserts as `set` does",
-          nts_value_number(nts_map_get(m, str("fresh"))) == 3.0 &&
+          nts_value_number(nts_map_get(m, str("fresh"), m->kind)) == 3.0 &&
               m->header.length == 42);
     check("a stale entry reads as `get` does",
-          nts_value_number(nts_map_entry_get(m, hit, str("k"))) == 2.0);
+          nts_value_number(nts_map_entry_get(m, hit, str("k"), m->kind)) ==
+              2.0);
 
-    uint64_t absent = nts_map_entry(m, str("new"));
+    uint64_t absent = nts_map_entry(m, str("new"), m->kind);
     check("a current entry for an absent key reads undefined",
-          nts_value_tag(nts_map_entry_get(m, absent, str("new"))) ==
+          nts_value_tag(nts_map_entry_get(m, absent, str("new"), m->kind)) ==
               NTS_TAG_UNDEFINED);
-    nts_map_entry_set(m, absent, str("new"), num(4));
+    nts_map_entry_set(m, absent, str("new"), num(4), m->kind);
     check("and its set stores the key at the slot the lookup found",
-          nts_value_number(nts_map_get(m, str("new"))) == 4.0 &&
+          nts_value_number(nts_map_get(m, str("new"), m->kind)) == 4.0 &&
               m->header.length == 43);
 
-    uint64_t gone = nts_map_entry(m, str("k"));
-    nts_map_delete(m, str("k"));
-    nts_map_entry_set(m, gone, str("k"), num(6));
+    uint64_t gone = nts_map_entry(m, str("k"), m->kind);
+    nts_map_delete(m, str("k"), m->kind);
+    nts_map_entry_set(m, gone, str("k"), num(6), m->kind);
     check("a delete between moves the generation, and the set reinserts",
-          nts_value_number(nts_map_get(m, str("k"))) == 6.0 &&
+          nts_value_number(nts_map_get(m, str("k"), m->kind)) == 6.0 &&
               m->header.length == 43);
 
     /* node: const e = new Map(); e.set("a", 5)  =>  e.get("a") 5 */
     NtsMap *empty = nts_map_new(NTS_KEY_STRING);
-    uint64_t none = nts_map_entry(empty, str("a"));
+    uint64_t none = nts_map_entry(empty, str("a"), empty->kind);
     check("an empty table's entry names no slot and reads undefined",
-          nts_value_tag(nts_map_entry_get(empty, none, str("a"))) ==
-              NTS_TAG_UNDEFINED);
-    nts_map_entry_set(empty, none, str("a"), num(5));
+          nts_value_tag(nts_map_entry_get(empty, none, str("a"),
+                                          empty->kind)) == NTS_TAG_UNDEFINED);
+    nts_map_entry_set(empty, none, str("a"), num(5), empty->kind);
     check("and its set grows the table as `set` does",
-          nts_value_number(nts_map_get(empty, str("a"))) == 5.0 &&
+          nts_value_number(nts_map_get(empty, str("a"), empty->kind)) == 5.0 &&
               empty->header.length == 1);
     nts_release(&empty->header);
     nts_release(&m->header);
@@ -495,31 +508,37 @@ int main(void) {
    *   m.get(1) undefined; m.has(1) false; m.delete(1) false
    *   m.set(1, "one"); m.set("k", 2); m.set(-0, 3)
    *   => size 4, keys a,1,k,0 (Object.is(keys[3], -0) false);
-   *      m.get("a") 1, m.get(1) "one", m.get(0) 3, m.get("1") undefined    */
+   *      m.get("a") 1, m.get(1) "one", m.get(0) 3, m.get("1") undefined
+   * Each call passes the kind its view would: `NTS_KEY_ERASED` through the
+   * wide one, the key type's own through the typed one -- which, once the
+   * table is widened, is a call whose kind is no longer the table's.       */
   {
     NtsMap *m = nts_map_new(NTS_KEY_STRING);
     put(m, str("a"), num(1));
     check("a number is absent from a string table",
-          nts_value_tag(nts_map_get(m, num(1))) == NTS_TAG_UNDEFINED &&
-              !nts_map_has(m, num(1)) && !nts_map_delete(m, num(1)));
-    uint64_t entry = nts_map_entry(m, num(1));
+          nts_value_tag(nts_map_get(m, num(1), NTS_KEY_ERASED)) ==
+                  NTS_TAG_UNDEFINED &&
+              !nts_map_has(m, num(1), NTS_KEY_ERASED) &&
+              !nts_map_delete(m, num(1), NTS_KEY_ERASED));
+    uint64_t entry = nts_map_entry(m, num(1), NTS_KEY_ERASED);
     check("its entry names no slot, and reads undefined",
-          nts_value_tag(nts_map_entry_get(m, entry, num(1))) ==
+          nts_value_tag(nts_map_entry_get(m, entry, num(1), NTS_KEY_ERASED)) ==
               NTS_TAG_UNDEFINED);
     check("asking leaves the table as it was",
           m->kind == NTS_KEY_STRING && m->header.length == 1);
-    put(m, num(1), str("one"));
-    put(m, str("k"), num(2));
-    put(m, num(-0.0), num(3));
+    put_wide(m, num(1), str("one"));
+    put_wide(m, str("k"), num(2));
+    put_wide(m, num(-0.0), num(3));
     check("writing one widens the table",
           m->kind == NTS_KEY_ERASED && m->header.length == 4);
-    NtsValue one = nts_map_get(m, num(1));
-    check("and every key is found by its own sort",
-          nts_value_number(nts_map_get(m, str("a"))) == 1.0 &&
-              nts_value_tag(one) == NTS_TAG_STRING &&
-              nts_value_number(nts_map_get(m, str("k"))) == 2.0 &&
-              nts_value_number(nts_map_get(m, num(0.0))) == 3.0 &&
-              !nts_map_has(m, str("1")));
+    NtsValue one = nts_map_get(m, num(1), NTS_KEY_ERASED);
+    check(
+        "and every key is found by its own sort",
+        nts_value_number(nts_map_get(m, str("a"), NTS_KEY_STRING)) == 1.0 &&
+            nts_value_tag(one) == NTS_TAG_STRING &&
+            nts_value_number(nts_map_get(m, str("k"), NTS_KEY_STRING)) == 2.0 &&
+            nts_value_number(nts_map_get(m, num(0.0), NTS_KEY_ERASED)) == 3.0 &&
+            !nts_map_has(m, str("1"), NTS_KEY_STRING));
     nts_value_release(one);
     check("in the order it arrived, -0 stored as +0",
           nts_value_tag(m->keys[0]) == NTS_TAG_STRING &&
@@ -528,11 +547,13 @@ int main(void) {
               nts_value_tag(m->keys[3]) == NTS_TAG_NUMBER &&
               !signbit(nts_value_number(m->keys[3])));
     for (int i = 0; i < 40; i++) {
-      put(m, num(100 + i), num(i));
+      put_wide(m, num(100 + i), num(i));
     }
-    bool all = nts_value_number(nts_map_get(m, str("a"))) == 1.0;
+    bool all =
+        nts_value_number(nts_map_get(m, str("a"), NTS_KEY_STRING)) == 1.0;
     for (int i = 0; i < 40; i++) {
-      all = all && nts_value_number(nts_map_get(m, num(100 + i))) == i;
+      all = all &&
+            nts_value_number(nts_map_get(m, num(100 + i), NTS_KEY_ERASED)) == i;
     }
     check("a widened table grows and still finds every key",
           all && m->header.length == 44);
@@ -542,12 +563,13 @@ int main(void) {
      *       t.set(5, 6) through an update  =>  t.get(5) 6, size 1 */
     NtsMap *t = nts_map_new(NTS_KEY_STRING);
     put(t, str("x"), num(0));
-    uint64_t misfit = nts_map_entry(t, num(5));
-    nts_map_entry_set(t, misfit, num(5), num(6));
+    uint64_t misfit = nts_map_entry(t, num(5), NTS_KEY_ERASED);
+    nts_map_entry_set(t, misfit, num(5), num(6), NTS_KEY_ERASED);
     check("a write through a misfit's entry widens as `set` does",
           t->kind == NTS_KEY_ERASED &&
-              nts_value_number(nts_map_get(t, num(5))) == 6.0 &&
-              nts_value_number(nts_map_get(t, str("x"))) == 0.0 &&
+              nts_value_number(nts_map_get(t, num(5), NTS_KEY_ERASED)) == 6.0 &&
+              nts_value_number(nts_map_get(t, str("x"), NTS_KEY_STRING)) ==
+                  0.0 &&
               t->header.length == 2);
     nts_release(&t->header);
 
@@ -556,12 +578,14 @@ int main(void) {
      *       n.get("1") "s", size 2 */
     NtsMap *n = nts_map_new(NTS_KEY_NUMBER);
     put(n, num(1), num(10));
-    check("a string is absent from a number table", !nts_map_has(n, str("1")));
-    put(n, str("1"), num(20));
-    check("and 1 and \"1\" stay two keys once it is widened",
-          n->kind == NTS_KEY_ERASED && n->header.length == 2 &&
-              nts_value_number(nts_map_get(n, num(1))) == 10.0 &&
-              nts_value_number(nts_map_get(n, str("1"))) == 20.0);
+    check("a string is absent from a number table",
+          !nts_map_has(n, str("1"), NTS_KEY_ERASED));
+    put_wide(n, str("1"), num(20));
+    check(
+        "and 1 and \"1\" stay two keys once it is widened",
+        n->kind == NTS_KEY_ERASED && n->header.length == 2 &&
+            nts_value_number(nts_map_get(n, num(1), NTS_KEY_NUMBER)) == 10.0 &&
+            nts_value_number(nts_map_get(n, str("1"), NTS_KEY_ERASED)) == 20.0);
     nts_release(&n->header);
 
     /* node: const o = {}; const r = new Map([[o, 1]]) as Map<unknown,
@@ -573,15 +597,17 @@ int main(void) {
     put(r, o, num(1));
     check("a closure's tag fits an object table as an object's does",
           nts_value_number(nts_map_get(
-              r, nts_value_of_reference(&object->header, NTS_TAG_FUNCTION))) ==
-              1.0);
+              r, nts_value_of_reference(&object->header, NTS_TAG_FUNCTION),
+              r->kind)) == 1.0);
     check("a string is absent from an object table",
-          nts_value_tag(nts_map_get(r, str("o"))) == NTS_TAG_UNDEFINED);
-    put(r, str("o"), num(2));
+          nts_value_tag(nts_map_get(r, str("o"), NTS_KEY_ERASED)) ==
+              NTS_TAG_UNDEFINED);
+    put_wide(r, str("o"), num(2));
     check("and both are found once it is widened",
           r->kind == NTS_KEY_ERASED &&
-              nts_value_number(nts_map_get(r, o)) == 1.0 &&
-              nts_value_number(nts_map_get(r, str("o"))) == 2.0);
+              nts_value_number(nts_map_get(r, o, NTS_KEY_REFERENCE)) == 1.0 &&
+              nts_value_number(nts_map_get(r, str("o"), NTS_KEY_ERASED)) ==
+                  2.0);
     nts_release(&r->header);
     nts_release(&object->header);
     /* The key table was buffered as a possible cycle root when `r` gave it

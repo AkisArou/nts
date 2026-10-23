@@ -203,7 +203,7 @@ int main(void) {
   NtsMap *map = nts_map_new(0.0);
   NtsString *key = nts_string_from_utf8("k", 1);
   nts_map_set(map, nts_value_of_reference((NtsHeader *)key, NTS_TAG_STRING),
-              held);
+              held, map->kind);
   int before = released;
   nts_release((NtsHeader *)both);
   nts_release((NtsHeader *)xs);

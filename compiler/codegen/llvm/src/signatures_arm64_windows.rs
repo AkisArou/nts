@@ -1516,25 +1516,25 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
     Signature {
         name: "nts_map_delete",
         returns: "i1",
-        params: &["ptr", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry",
         returns: "i64",
-        params: &["ptr", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry_get",
         returns: "[2 x i64]",
-        params: &["ptr", "i64", "[2 x i64]"],
+        params: &["ptr", "i64", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_entry_set",
         returns: "ptr",
-        params: &["ptr", "i64", "[2 x i64]", "[2 x i64]"],
+        params: &["ptr", "i64", "[2 x i64]", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
@@ -1546,13 +1546,13 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
     Signature {
         name: "nts_map_get",
         returns: "[2 x i64]",
-        params: &["ptr", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
         name: "nts_map_has",
         returns: "i1",
-        params: &["ptr", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "i32"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -1588,7 +1588,7 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
     Signature {
         name: "nts_map_set",
         returns: "ptr",
-        params: &["ptr", "[2 x i64]", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {
@@ -2200,7 +2200,7 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
     Signature {
         name: "nts_set_add",
         returns: "ptr",
-        params: &["ptr", "[2 x i64]"],
+        params: &["ptr", "[2 x i64]", "i32"],
         attributes: &[],
     },
     Signature {

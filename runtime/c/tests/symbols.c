@@ -110,31 +110,37 @@ static void a_symbol_keyed_map(void) {
   NtsSymbol *two = nts_symbol_new(text("two"));
 
   NtsMap *by_reference = nts_map_new(3.0 /* NTS_KEY_REFERENCE */);
-  nts_map_set(by_reference, symbol_value(one), nts_value_of_number(1));
-  nts_map_set(by_reference, symbol_value(two), nts_value_of_number(2));
+  nts_map_set(by_reference, symbol_value(one), nts_value_of_number(1),
+              by_reference->kind);
+  nts_map_set(by_reference, symbol_value(two), nts_value_of_number(2),
+              by_reference->kind);
   ok("two symbols are two keys", by_reference->header.length == 2);
   ok("and each finds its own value",
-     nts_value_number(nts_map_get(by_reference, symbol_value(one))) == 1);
-  nts_map_set(by_reference, symbol_value(one), nts_value_of_number(9));
+     nts_value_number(nts_map_get(by_reference, symbol_value(one),
+                                  by_reference->kind)) == 1);
+  nts_map_set(by_reference, symbol_value(one), nts_value_of_number(9),
+              by_reference->kind);
   ok("and storing again replaces rather than adds",
      by_reference->header.length == 2 &&
-         nts_value_number(nts_map_get(by_reference, symbol_value(one))) == 9);
+         nts_value_number(nts_map_get(by_reference, symbol_value(one),
+                                      by_reference->kind)) == 9);
 
   /* The mixed key, which is the one the profile is waiting on. A string and a
    * symbol in one map must not collide and must not be confused. */
   NtsMap *mixed = nts_map_new(0.0 /* NTS_KEY_ERASED */);
   NtsValue as_text =
       nts_value_of_reference((NtsHeader *)text("one"), NTS_TAG_STRING);
-  nts_map_set(mixed, symbol_value(one), nts_value_of_number(10));
-  nts_map_set(mixed, as_text, nts_value_of_number(20));
+  nts_map_set(mixed, symbol_value(one), nts_value_of_number(10), mixed->kind);
+  nts_map_set(mixed, as_text, nts_value_of_number(20), mixed->kind);
   ok("a symbol and a string of the same description are two keys",
      mixed->header.length == 2);
   ok("the symbol keeps its own value",
-     nts_value_number(nts_map_get(mixed, symbol_value(one))) == 10);
+     nts_value_number(nts_map_get(mixed, symbol_value(one), mixed->kind)) ==
+         10);
   ok("and the string keeps its own",
-     nts_value_number(nts_map_get(mixed, as_text)) == 20);
+     nts_value_number(nts_map_get(mixed, as_text, mixed->kind)) == 20);
   ok("a symbol nothing stored is absent",
-     !nts_map_has(mixed, symbol_value(two)));
+     !nts_map_has(mixed, symbol_value(two), mixed->kind));
 
   /* **Two symbols with the same description are two keys.**
    *
@@ -153,19 +159,23 @@ static void a_symbol_keyed_map(void) {
   NtsSymbol *twin_a = nts_symbol_new(text("twin"));
   NtsSymbol *twin_b = nts_symbol_new(text("twin"));
   NtsMap *twins = nts_map_new(0.0 /* NTS_KEY_ERASED */);
-  nts_map_set(twins, symbol_value(twin_a), nts_value_of_number(1));
-  nts_map_set(twins, symbol_value(twin_b), nts_value_of_number(2));
+  nts_map_set(twins, symbol_value(twin_a), nts_value_of_number(1), twins->kind);
+  nts_map_set(twins, symbol_value(twin_b), nts_value_of_number(2), twins->kind);
   ok("two symbols of one description are two map keys",
      twins->header.length == 2);
   ok("and each keeps its own value",
-     nts_value_number(nts_map_get(twins, symbol_value(twin_a))) == 1 &&
-         nts_value_number(nts_map_get(twins, symbol_value(twin_b))) == 2);
+     nts_value_number(nts_map_get(twins, symbol_value(twin_a), twins->kind)) ==
+             1 &&
+         nts_value_number(
+             nts_map_get(twins, symbol_value(twin_b), twins->kind)) == 2);
 
   /* The same through the homogeneous key kind, which takes a different branch
    * of `nts_key_eq` entirely. */
   NtsMap *twins_by_reference = nts_map_new(3.0 /* NTS_KEY_REFERENCE */);
-  nts_map_set(twins_by_reference, symbol_value(twin_a), nts_value_of_number(1));
-  nts_map_set(twins_by_reference, symbol_value(twin_b), nts_value_of_number(2));
+  nts_map_set(twins_by_reference, symbol_value(twin_a), nts_value_of_number(1),
+              twins_by_reference->kind);
+  nts_map_set(twins_by_reference, symbol_value(twin_b), nts_value_of_number(2),
+              twins_by_reference->kind);
   ok("and by the reference key kind too",
      twins_by_reference->header.length == 2);
 }
