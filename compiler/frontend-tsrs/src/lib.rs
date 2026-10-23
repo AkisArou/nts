@@ -29,7 +29,7 @@ pub use phase::{CapturePhase, SyntaxPhase, ViewPhase};
 #[cfg(feature = "tsrs")]
 pub use program::{
     Checked, Diagnostic, DiagnosticCategory, File, Finished, LoadError, Project, ProjectSemantics,
-    ProjectSpec, SourceChanges,
+    ProjectSpec, ResolvedImport, SourceChanges,
 };
 #[cfg(feature = "tsrs")]
 pub use semantic::*;

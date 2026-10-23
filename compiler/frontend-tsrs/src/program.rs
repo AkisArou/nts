@@ -514,6 +514,20 @@ impl<'s, S: ViewPhase> Project<'s, S> {
     }
 }
 
+/// A native import resolution in this source file's import order.
+///
+/// nts-deps derives package name/directory from the last `node_modules`
+/// component of `resolved_path`, and declaration status from its extension
+/// (`.d.ts`, `.d.mts`, `.d.cts`); those are not separate checker facts.
+#[derive(Debug, Clone, Copy)]
+pub struct ResolvedImport<'p> {
+    pub specifier: crate::JsString<'p>,
+    /// The checker's chosen physical source or declaration path; None if unresolved.
+    pub resolved_path: Option<&'p Utf8Path>,
+    /// Only the version recorded in the native `PackageId`; no manifest fallback.
+    pub package_version: Option<crate::JsString<'p>>,
+}
+
 /// One native source file. Its text and UTF-16 index belong to this revision.
 #[derive(Clone, Copy)]
 pub struct File<'s, S: ViewPhase = CapturePhase> {
@@ -607,6 +621,26 @@ impl<'s, S: ViewPhase> File<'s, S> {
             .get()
             .iter()
             .map(move |node| self.intern_string(node.text().as_bytes()))
+    }
+    /// The same native resolutions used to build the program, without a new lookup.
+    /// Available during capture and after diagnostics; checker state is untouched.
+    pub fn resolved_imports(self) -> impl ExactSizeIterator<Item = ResolvedImport<'s>> {
+        self.native.source.imports.get().iter().map(move |node| {
+            let resolved = self
+                .project
+                .program
+                .get_resolved_module_from_module_specifier(self.native.source, *node)
+                .filter(|module| module.is_resolved());
+            ResolvedImport {
+                specifier: self.intern_string(node.text().as_bytes()),
+                resolved_path: resolved
+                    .map(|module| crate::host::native_path(module.resolved_file_name)),
+                package_version: resolved.and_then(|module| {
+                    (!module.package_id.name.is_empty())
+                        .then(|| self.intern_string(module.package_id.version.as_bytes()))
+                }),
+            }
+        })
     }
 }
 
@@ -1013,3 +1047,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "resolution_test.rs"]
+mod resolution_tests;

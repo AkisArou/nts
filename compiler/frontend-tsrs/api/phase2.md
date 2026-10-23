@@ -72,8 +72,14 @@ impl<'p, S: ViewPhase> File<'p, S> {
     pub fn is_default_library(self) -> bool;
     pub fn is_external_library(self) -> bool;
     pub fn root(self) -> Node<'p, S>;
+    pub fn resolved_imports(self) -> impl ExactSizeIterator<Item = ResolvedImport<'p>>; // same native resolution cache in both phases
     pub fn imports(self) -> impl Iterator<Item = JsString<'p>>; // lossless; preflight refuses non-UTF8 filesystem specifiers by name
     pub fn span(self, start: BytePos, end: BytePos) -> Utf16Span;
+}
+pub struct ResolvedImport<'p> {
+    pub specifier: JsString<'p>,
+    pub resolved_path: Option<&'p Utf8Path>, // None when unresolved
+    pub package_version: Option<JsString<'p>>, // native PackageId only
 }
 pub type NativeKind = u16; // the ONE native->nts mapping belongs to capture
 pub struct BytePos(pub u32);
