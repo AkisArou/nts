@@ -91,7 +91,11 @@ function addsWide(s: Set<unknown>): string {
 // Read through the wide view: a typed read of "two" from a `Set<number>`
 // is TypeScript's own unsoundness, which no table can answer with a number.
 function valuesWide(s: Set<unknown>): string {
-  return [...s].map((value) => String(value)).join(",");
+  const parts: string[] = [];
+  for (const value of s) {
+    parts.push(String(value));
+  }
+  return parts.join(",");
 }
 
 export function sets(): string {
