@@ -87,6 +87,14 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
             let variant = variant(func, &answers[name], &wanted, &names);
             trial.funcs.push(variant);
         }
+        // The calls first, then the question: whether a variant takes its
+        // string over is asked of its callers as well (`own`), and these are
+        // they.
+        let sent: usize = trial
+            .funcs
+            .iter_mut()
+            .map(|func| send_appends(func, &wanted, &names))
+            .sum();
         let summaries = super::own::summarize(&trial, &trial.layouts);
         let refused: Vec<String> = wanted
             .iter()
@@ -104,11 +112,7 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
             .cloned()
             .collect();
         if refused.is_empty() {
-            let rewritten = trial
-                .funcs
-                .iter_mut()
-                .map(|func| send_appends(func, &wanted, &names))
-                .sum();
+            let rewritten = sent;
             // An original every caller now reaches through its variant is
             // called by nothing, and C refuses an uncalled static function
             // under `-Werror` (`unicodeEscape` in `json-serialize`).
@@ -395,7 +399,8 @@ fn send_appends(
         let Some((block, appended, lhs)) = appending(func, call) else {
             continue;
         };
-        if !defined_before(func, lhs, call) {
+        if !defined_before(func, lhs, call) || !gives_itself_away(func, block, call, appended, lhs)
+        {
             continue;
         }
         let OpKind::Call { args, frame, .. } = func.values[call.0 as usize].kind.clone() else {
@@ -419,6 +424,37 @@ fn send_appends(
         rewritten += 1;
     }
     rewritten
+}
+
+/// Whether the left side of the concatenation `appended`, onto which `call`'s
+/// answer is appended, is a string its function gives away there: one it made
+/// (or a literal), read by nothing between the call and the concatenation and
+/// by nothing after. Sent to a variant, it is handed over at the call; a left
+/// side that survives would have the variant borrow its string and copy all of
+/// it at the first append, so such a call keeps calling the original. A
+/// parameter is left out, since which ones are taken over is not known here.
+fn gives_itself_away(
+    func: &Func,
+    block: usize,
+    call: ValueId,
+    appended: ValueId,
+    lhs: ValueId,
+) -> bool {
+    let ops = &func.blocks[block].ops;
+    let position = |wanted: ValueId| ops.iter().position(|op| *op == wanted);
+    let (Some(at_call), Some(at_concat)) = (position(call), position(appended)) else {
+        return false;
+    };
+    if at_call > at_concat
+        || ops[at_call + 1..at_concat]
+            .iter()
+            .any(|op| super::operands_of(&func.values[op.0 as usize].kind).contains(&lhs))
+    {
+        return false;
+    }
+    let live = super::liveness::analyze(func);
+    super::own::dies_at(func, &live, block, at_concat, lhs)
+        && super::own::fresh(func, lhs, &FxHashMap::default(), &mut FxHashSet::default())
 }
 
 /// The concatenation that appends `call`'s answer: its block, itself, and

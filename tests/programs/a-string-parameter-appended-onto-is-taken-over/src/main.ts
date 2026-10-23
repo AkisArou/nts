@@ -142,10 +142,17 @@ export function throwing(seed: number): number {
   return s.length * 10000 + t.length * 100 + caught;
 }
 
-// The caller keeps reading its string after handing it over: it must hold a
-// reference of its own, and the append must copy rather than write into it.
+// A caller that keeps reading its string after the call: handing it over
+// would take a retain, the count would be two, and the append would copy
+// anyway. So `addKept`, whose only caller keeps its argument, keeps
+// borrowing: one such caller leaves a parameter borrowed for all of them,
+// which is why it is not `add`.
+function addKept(out: string, piece: string): string {
+  return out + piece;
+}
+
 export function keptByTheCaller(seed: number): number {
   const base = "base" + String(seed & 7);
-  const longer = add(base, "+tail");
+  const longer = addKept(base, "+tail");
   return base.length * 100 + longer.length + (checksum(base) & 7);
 }

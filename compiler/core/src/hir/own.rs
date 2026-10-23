@@ -3134,18 +3134,24 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
 /// The rule, per parameter ([`appended_on_every_path`]): a counted string read
 /// only as the left operand of a concatenation, or as an argument in a slot
 /// its direct callee takes over, exactly once on every path to a return and
-/// never round a loop. The second form is what chains a builder that hands its
-/// accumulation on, and it is why this is a fixpoint: a slot is taken over
-/// only once a callee's has been, so a cycle of functions handing a string
-/// round with nothing appending it takes none, and the iteration ends because
-/// each round only adds slots. `lent` functions keep borrowing, as they do for
-/// stores: a caller that cannot see which body it calls cannot hand over.
+/// never round a loop. The second form is what chains a
+/// builder that hands its accumulation on, and it is why this is a fixpoint: a
+/// slot is taken over only once a callee's has been, so a cycle of functions
+/// handing a string round with nothing appending it takes none, and the
+/// iteration ends because each round only adds slots. `lent` functions keep
+/// borrowing, as they do for stores: a caller that cannot see which body it
+/// calls cannot hand over.
+///
+/// Then the callers have their say ([`handed_by_every_caller`]): a slot stays
+/// taken over only where every direct caller hands it a string it gives away
+/// at the call.
 fn appended_parameters(
     program: &Program,
     layouts: &[Layout],
     lent: &rustc_hash::FxHashSet<&str>,
-    mut consumes: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+    stored: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
 ) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>> {
+    let mut consumes = stored.clone();
     loop {
         let mut added = Vec::new();
         for func in program
@@ -3162,9 +3168,28 @@ fn appended_parameters(
             changed |= consumes.entry(name).or_default().insert(slot);
         }
         if !changed {
-            return consumes;
+            break;
         }
     }
+    let mut appended: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>> =
+        rustc_hash::FxHashMap::default();
+    for (name, slots) in &consumes {
+        let kept = stored.get(name);
+        let extra: rustc_hash::FxHashSet<u32> = slots
+            .iter()
+            .copied()
+            .filter(|slot| !kept.is_some_and(|kept| kept.contains(slot)))
+            .collect();
+        if !extra.is_empty() {
+            appended.insert(name.clone(), extra);
+        }
+    }
+    let appended = handed_by_every_caller(program, &stored, appended);
+    let mut consumes = stored;
+    for (name, slots) in appended {
+        consumes.entry(name).or_default().extend(slots);
+    }
+    consumes
 }
 
 /// The string parameters of `func` it gives away on every path, given what
@@ -3176,72 +3201,240 @@ fn appended_on_every_path(
 ) -> Vec<u32> {
     let taken = consumes.get(&func.name);
     let reachable = super::verify::reachable_blocks(func);
-    let mut slots = Vec::new();
-    for (slot, parameter) in func
-        .parameter_values()
+    string_parameters(func, layouts)
+        .into_iter()
+        .filter(|(slot, _)| !taken.is_some_and(|taken| taken.contains(slot)))
+        .filter(|(_, parameter)| gives_away(func, &reachable, *parameter, consumes))
+        .map(|(slot, _)| slot)
+        .collect()
+}
+
+/// Each counted string parameter of `func`, by slot.
+fn string_parameters(func: &Func, layouts: &[Layout]) -> Vec<(u32, ValueId)> {
+    func.parameter_values()
         .unwrap_or_default()
         .into_iter()
         .enumerate()
         .filter_map(|(slot, parameter)| Some((u32::try_from(slot).ok()?, parameter?)))
-    {
-        if taken.is_some_and(|taken| taken.contains(&slot))
-            || func.values[parameter.0 as usize].ty != super::HirType::Managed(ManagedType::String)
-            || !counted(func, layouts, parameter)
-        {
+        .filter(|(_, parameter)| {
+            func.values[parameter.0 as usize].ty == super::HirType::Managed(ManagedType::String)
+                && counted(func, layouts, *parameter)
+        })
+        .collect()
+}
+
+/// Whether `func` gives `parameter` away exactly once on every path to a
+/// return, never round a loop, given what its callees take over.
+fn gives_away(
+    func: &Func,
+    reachable: &rustc_hash::FxHashSet<BlockId>,
+    parameter: ValueId,
+    consumes: &rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+) -> bool {
+    // Where it is read, each read one that gives it away.
+    let mut reads: Vec<BlockId> = Vec::new();
+    for (at, block) in func.blocks.iter().enumerate() {
+        let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        if !reachable.contains(&here) {
             continue;
         }
-        // Where it is read, each read one that gives it away.
-        let mut reads: Vec<BlockId> = Vec::new();
-        let mut gives_away = true;
-        for (at, block) in func.blocks.iter().enumerate() {
-            let here = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
-            if !reachable.contains(&here) {
+        for value in &block.ops {
+            let kind = &func.values[value.0 as usize].kind;
+            let uses = super::operands_of(kind)
+                .iter()
+                .filter(|operand| **operand == parameter)
+                .count();
+            if uses == 0 {
                 continue;
             }
-            for value in &block.ops {
-                let kind = &func.values[value.0 as usize].kind;
-                let uses = super::operands_of(kind)
-                    .iter()
-                    .filter(|operand| **operand == parameter)
-                    .count();
-                if uses == 0 {
-                    continue;
+            let handed = match kind {
+                OpKind::Binary {
+                    op: super::BinOp::Concat,
+                    lhs,
+                    rhs,
+                } => *lhs == parameter && *rhs != parameter,
+                OpKind::Call {
+                    callee: super::Callee::Direct(callee),
+                    args,
+                    ..
+                } => {
+                    uses == 1
+                        && args
+                            .iter()
+                            .position(|arg| *arg == parameter)
+                            .is_some_and(|at| {
+                                u32::try_from(at).is_ok_and(|at| {
+                                    consumes
+                                        .get(callee)
+                                        .is_some_and(|slots| slots.contains(&at))
+                                })
+                            })
                 }
-                let handed = match kind {
-                    OpKind::Binary {
-                        op: super::BinOp::Concat,
-                        lhs,
-                        rhs,
-                    } => *lhs == parameter && *rhs != parameter,
-                    OpKind::Call {
+                _ => false,
+            };
+            if !handed {
+                return false;
+            }
+            reads.push(here);
+        }
+        if super::operands_of_terminator(&block.terminator).contains(&parameter) {
+            return false;
+        }
+    }
+    once_on_every_path(func, &reads)
+}
+
+/// Of the slots [`appended_parameters`] found, the ones every direct caller
+/// hands a string to that it gives away at the call: a greatest fixpoint,
+/// dropping a slot where some caller keeps its argument and every slot whose
+/// body relied on one dropped.
+///
+/// A caller that keeps its string -- reads it after the call, or holds it
+/// only because a container or its own caller does -- has to retain it to hand
+/// it over, so the count is two and the callee can never write in place: it
+/// copies and gives the extra reference back, a retain and a release for
+/// nothing. tests/memory/a-string-taken-over-by-a-call-that-throws paid 12 of
+/// them, one a call. So one keeping caller leaves the parameter borrowed for
+/// every caller; a borrowing copy of the function per such caller would keep
+/// both, and is left until a row shows a function called both ways.
+fn handed_by_every_caller(
+    program: &Program,
+    stored: &rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+    mut appended: rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+) -> rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>> {
+    let mut lives: rustc_hash::FxHashMap<usize, liveness::Liveness> =
+        rustc_hash::FxHashMap::default();
+    loop {
+        let mut consumes = stored.clone();
+        for (name, slots) in &appended {
+            consumes
+                .entry(name.clone())
+                .or_default()
+                .extend(slots.iter().copied());
+        }
+        let mut dropped: Vec<(String, u32)> = Vec::new();
+        for func in &program.funcs {
+            let Some(slots) = appended.get(&func.name) else {
+                continue;
+            };
+            let parameters = func.parameter_values().unwrap_or_default();
+            let reachable = super::verify::reachable_blocks(func);
+            for &slot in slots {
+                let given = parameters
+                    .get(slot as usize)
+                    .copied()
+                    .flatten()
+                    .is_some_and(|parameter| gives_away(func, &reachable, parameter, &consumes));
+                if !given {
+                    dropped.push((func.name.clone(), slot));
+                }
+            }
+        }
+        for (at, func) in program.funcs.iter().enumerate() {
+            // A region's clone counts nothing and hands nothing over
+            // (`regions::is_clone`): what it passes is the region's.
+            let clone = super::regions::is_clone(&func.name);
+            for (index, block) in func.blocks.iter().enumerate() {
+                for (position, value) in block.ops.iter().enumerate() {
+                    let OpKind::Call {
                         callee: super::Callee::Direct(callee),
                         args,
                         ..
-                    } => {
-                        uses == 1
-                            && args
-                                .iter()
-                                .position(|arg| *arg == parameter)
-                                .is_some_and(|at| {
-                                    u32::try_from(at).is_ok_and(|at| {
-                                        consumes
-                                            .get(callee)
-                                            .is_some_and(|slots| slots.contains(&at))
-                                    })
-                                })
+                    } = &func.values[value.0 as usize].kind
+                    else {
+                        continue;
+                    };
+                    let Some(slots) = appended.get(callee) else {
+                        continue;
+                    };
+                    for &slot in slots {
+                        let Some(&argument) = args.get(slot as usize) else {
+                            continue;
+                        };
+                        let live = lives.entry(at).or_insert_with(|| liveness::analyze(func));
+                        let handed = !clone
+                            && args.iter().filter(|arg| **arg == argument).count() == 1
+                            && dies_at(func, live, index, position, argument)
+                            && fresh(
+                                func,
+                                argument,
+                                &consumes,
+                                &mut rustc_hash::FxHashSet::default(),
+                            );
+                        if !handed {
+                            dropped.push((callee.clone(), slot));
+                        }
                     }
-                    _ => false,
-                };
-                gives_away &= handed;
-                reads.push(here);
+                }
             }
-            gives_away &= !super::operands_of_terminator(&block.terminator).contains(&parameter);
         }
-        if gives_away && once_on_every_path(func, &reads) {
-            slots.push(slot);
+        if dropped.is_empty() {
+            return appended;
         }
+        for (name, slot) in dropped {
+            if let Some(slots) = appended.get_mut(&name) {
+                slots.remove(&slot);
+            }
+        }
+        appended.retain(|_, slots| !slots.is_empty());
     }
-    slots
+}
+
+/// Whether nothing reads `value` after the op at `position` in block `index`:
+/// not a later op there, not its terminator, and not a successor.
+pub(super) fn dies_at(
+    func: &Func,
+    live: &liveness::Liveness,
+    index: usize,
+    position: usize,
+    value: ValueId,
+) -> bool {
+    let block = &func.blocks[index];
+    !block.ops[position + 1..]
+        .iter()
+        .any(|op| super::operands_of(&func.values[op.0 as usize].kind).contains(&value))
+        && !super::operands_of_terminator(&block.terminator).contains(&value)
+        && !live
+            .live_out(BlockId(u32::try_from(index).unwrap_or(u32::MAX)))
+            .contains(&value)
+}
+
+/// Whether a caller holds a reference of its own to `value` that nobody else
+/// does: one it made (a call's answer, a concatenation, an allocation), a
+/// literal (which has no count to give), a parameter it takes over itself, or
+/// a block parameter every edge brings one of those to. A load is held by its
+/// container as well, so handing it over takes a retain.
+pub(super) fn fresh(
+    func: &Func,
+    value: ValueId,
+    consumes: &rustc_hash::FxHashMap<String, rustc_hash::FxHashSet<u32>>,
+    seen: &mut rustc_hash::FxHashSet<ValueId>,
+) -> bool {
+    let kind = &func.values[value.0 as usize].kind;
+    match kind {
+        OpKind::Param(slot) => consumes
+            .get(&func.name)
+            .is_some_and(|slots| slots.contains(slot)),
+        OpKind::ConstString(_) | OpKind::ConstTemplate { .. } => true,
+        OpKind::BlockParam(slot) => {
+            if !seen.insert(value) {
+                return true;
+            }
+            let Some(block) = func
+                .blocks
+                .iter()
+                .position(|block| block.params.contains(&value))
+            else {
+                return false;
+            };
+            arriving_on(func, block, *slot as usize).is_some_and(|arriving| {
+                arriving
+                    .into_iter()
+                    .all(|argument| fresh(func, argument, consumes, seen))
+            })
+        }
+        _ => produces_owned(kind),
+    }
 }
 
 /// Whether the blocks `reads` lists -- one entry per read -- are passed

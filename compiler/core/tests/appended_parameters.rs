@@ -5,8 +5,8 @@
 //! say is which parameters are taken over. Here, on the program prepared
 //! without counting (what reference counting summarizes before it inserts
 //! anything): `add`, `addBoth`, `relay`, `either` and `joined` take their first
-//! parameter over; `measured`, `twiceOnAPath`, `looped` and the exported
-//! `addExported` do not.
+//! parameter over; `measured`, `twiceOnAPath`, `looped`, the exported
+//! `addExported` and `addKept`, whose caller keeps its argument, do not.
 //!
 //! Skips only when `tsgo` is not built.
 
@@ -61,7 +61,13 @@ fn a_string_parameter_appended_onto_is_taken_over() {
             "`{name}` gives its string away and takes it over"
         );
     }
-    for name in ["measured", "twiceOnAPath", "looped", "addExported"] {
+    for name in [
+        "measured",
+        "twiceOnAPath",
+        "looped",
+        "addExported",
+        "addKept",
+    ] {
         assert!(!takes_first(name), "`{name}` keeps borrowing its string");
     }
 }
