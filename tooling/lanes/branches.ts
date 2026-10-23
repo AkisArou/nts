@@ -1,11 +1,13 @@
 // Read-only inventory; proposals here never execute cleanup.
 // node tooling/lanes/branches.ts [--repo PATH] [--out PATH]
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyHistory } from "./history.ts";
+import { requireArchiveCoverage } from "./archive.ts";
 
 type LaneState = "ACTIVE" | "PAUSED" | "CLOSED" | "INACTIVE" | "UNKNOWN";
 type Landed = "ANCESTOR" | "LANDED" | "PROBABLY-LANDED" | "UNLANDED" | "UNKNOWN";
@@ -179,30 +181,6 @@ export function parseDiffstats(raw: string): Map<string, { stat: Diffstat; paths
     }
   }
   return result;
-}
-
-// Stream patches rather than buffering the repository's entire history.
-// The main history enters this pipeline exactly once per inventory.
-async function patchIds(repo: string, revisions: string[], stdin = false): Promise<Map<string, string>> {
-  const args = [...gitOptions, "-C", repo, "log", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color",
-    "--format=commit %H", "-p", "--binary", "--root", "--diff-merges=off", ...(stdin ? ["--no-walk=unsorted", "--stdin"] : revisions)];
-  const source = spawn("git", args, { env, stdio: ["pipe", "pipe", "pipe"] });
-  const sink = spawn("git", [...gitOptions, "-C", repo, "patch-id", "--stable"], { env, stdio: ["pipe", "pipe", "pipe"] });
-  const errors: string[] = [];
-  source.stderr.on("data", b => errors.push(String(b)));
-  sink.stderr.on("data", b => errors.push(String(b)));
-  let output = "";
-  sink.stdout.on("data", b => { output += b; });
-  source.stdout.pipe(sink.stdin);
-  // An early child failure must be reported, rather than an unhandled EPIPE.
-  source.stdin.on("error", e => errors.push(String(e)));
-  sink.stdin.on("error", e => errors.push(String(e)));
-  const done = (child: ReturnType<typeof spawn>) => new Promise<number | null>((ok, fail) => { child.on("error", fail); child.on("close", ok); });
-  const completed = Promise.all([done(source), done(sink)]);
-  source.stdin.end(stdin ? revisions.join("\n") + "\n" : undefined);
-  const codes = await completed;
-  if (codes.some(code => code !== 0) || errors.length) throw new Error(`patch-id failed (${codes}): ${errors.join("")}`);
-  return new Map(output.trim().split("\n").filter(Boolean).map(row => { const [id, sha] = row.split(/\s+/); return [sha, id]; }));
 }
 
 export function parseWorktrees(raw: string): Worktree[] {
@@ -402,6 +380,7 @@ export function inspectWorktree(w: Worktree, active: Map<string, string[]>, prot
 
 export function branchProposal(b: Branch, trees: Worktree[], protectedRef = "main"): Action {
   if (b.name === protectedRef) return { action: "keep", reason: "Protected main branch" };
+  if (["ANCESTOR", "LANDED"].includes(b.stateOfLanding) && trees.some(w => b.checkedOut.includes(w.path) && !retires(w))) return { action: "keep", reason: "landed, still checked out" };
   if (b.state === "ACTIVE" && b.ageDays <= 3) return { action: "keep", reason: "Active lane's branch is at most three days old; checkout retirement cannot override this" };
   const checked = trees.filter(w => b.checkedOut.includes(w.path) && !retires(w));
   if (checked.some(w => w.proposal.action === "NEEDS A PERSON")) return { action: "NEEDS A PERSON", reason: "Checkout has an unresolved inspection or archive ambiguity" };
@@ -435,6 +414,7 @@ export async function inventory(options: Options) {
   const startedAt = new Date().toISOString(), warnings: string[] = [];
   const main = git(repo, ["rev-parse", "refs/heads/main"]).trim();
   const heads = refs(repo, "refs/heads/"), archives = refs(repo, "refs/archive/");
+  const archiveRegistry = requireArchiveCoverage(archives.map(r => r.ref), join(repo, "tooling/lanes/archive.tsv"));
   const common = git(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
   const laneFile = join(repo, "tooling/lanes/lanes.json");
   const lanes = JSON.parse(readFileSync(laneFile, "utf8")).lanes as Record<string, { branch: string }>;
@@ -449,52 +429,15 @@ export async function inventory(options: Options) {
   }
   for (const w of trees) if (w.target.realPath) w.target.sharedWith = trees.filter(x => x.path !== w.path && x.target.realPath === w.target.realPath).map(x => x.path);
 
-  const graph = new Map<string, Commit>();
-  const fields = git(repo, ["log", "--all", ...trees.map(w => w.sha).filter(Boolean), "--format=%H%x00%P%x00%ct%x00%cI%x00%s", "-z"]).split("\0");
-  for (let i = 0; i + 4 < fields.length; i += 5) {
-    const [sha, parents, timestamp, date, subject] = fields.slice(i, i + 5);
-    graph.set(sha, { sha, parents: parents ? parents.split(" ") : [], timestamp: Number(timestamp), date, subject });
-  }
-  const onMain = reachable(main, graph), mainIds = await patchIds(repo, [main]);
-  const idsOnMain = new Map<string, string[]>();
-  for (const [sha, id] of mainIds) idsOnMain.set(id, [...(idsOnMain.get(id) ?? []), sha]);
-  const ranges = new Map<string, string[]>(), excluded = new Map<string, Set<string>>(), needed = new Set<string>();
-  const branches: Branch[] = [];
-  for (const r of heads) {
+  const { graph, onMain, mainIds, otherIds, ranges, classified } = await classifyHistory(repo, main, heads, trees.map(w => w.sha));
+  const branches: Branch[] = heads.map(r => {
     const c = graph.get(r.sha)!;
-    const b: Branch = { ...r, ...owner(r.ref.slice(11), lanes), name: r.ref.slice(11), date: c?.date ?? "unknown",
-      ageDays: c ? (now.getTime() / 1000 - c.timestamp) / 86400 : 0,
+    return { ...r, ...owner(r.ref.slice(11), lanes), ...classified.get(r.ref)!, name: r.ref.slice(11), date: c.date,
+      ageDays: (now.getTime() / 1000 - c.timestamp) / 86400,
       checkedOut: trees.filter(w => w.branch === r.ref.slice(11)).map(w => w.path),
-      effectiveCheckouts: [], retiringCheckouts: [],
-      stateOfLanding: "UNKNOWN", mergeBase: null, unmatched: [], unmatchedDiffstat: null, errors: [], proposal: { action: "NEEDS A PERSON", reason: "Not classified" } };
-    branches.push(b);
-    if (onMain.has(r.sha)) { b.stateOfLanding = "ANCESTOR"; continue; }
-    try {
-      const bases = git(repo, ["merge-base", "--all", main, r.sha]).trim().split("\n").filter(Boolean);
-      if (bases.length !== 1) throw new Error(`Expected one merge-base, found ${bases.length}`);
-      b.mergeBase = bases[0];
-      if (!excluded.has(bases[0])) excluded.set(bases[0], reachable(bases[0], graph));
-      if (!ranges.has(r.sha)) ranges.set(r.sha, [...reachable(r.sha, graph)].filter(sha => !excluded.get(bases[0])!.has(sha)));
-      for (const sha of ranges.get(r.sha)!) if (!onMain.has(sha)) needed.add(sha);
-    } catch (e) { b.errors.push(String(e)); }
-  }
-  const otherIds = needed.size ? await patchIds(repo, [...needed], true) : new Map<string, string>();
-  const subjects = new Map<string, Set<string>>();
-  for (const b of branches) {
-    if (b.mergeBase && !b.errors.length) {
-      const before = excluded.get(b.mergeBase)!;
-      if (!subjects.has(b.mergeBase)) subjects.set(b.mergeBase, new Set([...onMain].filter(s => !before.has(s)).map(s => graph.get(s)!.subject)));
-      const unmatched = ranges.get(b.sha)!.filter(sha => {
-        // Identical commits need no patch comparison; empty and merge commits
-        // without a patch ID remain unmatched unless identical on main.
-        if (onMain.has(sha) && !before.has(sha)) return false;
-        const id = otherIds.get(sha);
-        return !id || !(idsOnMain.get(id) ?? []).some(s => !before.has(s));
-      });
-      b.unmatched = unmatched.map(s => graph.get(s)!);
-      b.stateOfLanding = unmatched.length === 0 ? "LANDED" : b.unmatched.every(c => subjects.get(b.mergeBase!)!.has(c.subject)) ? "PROBABLY-LANDED" : "UNLANDED";
-    }
-  }
+      effectiveCheckouts: [], retiringCheckouts: [], unmatchedDiffstat: null,
+      proposal: { action: "NEEDS A PERSON", reason: "Not classified" } };
+  });
   const unmatchedShas = [...new Set(branches.flatMap(b => b.unmatched.map(c => c.sha)))];
   let stats = new Map<string, { stat: Diffstat; paths: string[] }>();
   try {
@@ -565,7 +508,7 @@ export async function inventory(options: Options) {
     // Legacy flat apple-foo / wasm-foo archive names are not prefix matches.
     // Keep their provenance unknown rather than quietly inventing ownership.
     archiveCounts[lane.lane] = (archiveCounts[lane.lane] ?? 0) + 1;
-    return { ...r, ...lane, proposal: { action: "keep", reason: "Archive refs preserve history; no cleanup proposed" } };
+    return { ...r, ...lane, registry: archiveRegistry.find(a => a.ref === r.ref)!, proposal: { action: "keep", reason: "Archive refs preserve history; no cleanup proposed" } };
   });
   const sameRefs = (a: Ref[], b: Ref[]) => JSON.stringify(a) === JSON.stringify(b);
   if (!sameRefs(heads, refs(repo, "refs/heads/")) || !sameRefs(archives, refs(repo, "refs/archive/"))) warnings.push("Refs changed during the inventory; rerun before any cleanup approval.");

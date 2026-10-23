@@ -16,6 +16,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { branchHealth, healthLines } from "./health.ts";
+import { upkeepStatus } from "./topics.ts";
 
 type Lane = { session: string; branch: string; owns: string[] };
 type Row = {
@@ -101,12 +103,14 @@ function marker(): string | null {
   return existsSync(file) ? readFileSync(file, "utf8").trim() || "(empty)" : null;
 }
 
-function status(json: boolean): void {
+async function status(json: boolean): Promise<void> {
   const rows = worktrees().map(({ path, branch }) => row(path, branch));
   rows.sort((a, b) => a.lane.localeCompare(b.lane) || a.path.localeCompare(b.path));
   const main = git(["log", "-1", "--format=%h %s (%cr)", "main"], root);
+  const health = await branchHealth(root, fileURLToPath(new URL("./archive.tsv", import.meta.url)));
+  const upkeep = upkeepStatus(join(homedir(), ".cache/nts-land/upkeep.jsonl"));
   if (json) {
-    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), queue: queue(), trees: rows }, null, 2));
+    console.log(JSON.stringify({ main, gate: marker(), landing: landing(), queue: queue(), trees: rows, health, upkeep }, null, 2));
     return;
   }
   console.log(`main: ${main}`);
@@ -125,6 +129,13 @@ function status(json: boolean): void {
   const cells = rows.map((r) => [r.lane, r.branch, `+${r.ahead}`, `-${r.behind}`, r.dirty ? String(r.dirty) : "", r.ageDays >= 0 ? `${r.ageDays}d` : "?", r.path, r.lastCommit]);
   const width = head.map((h, i) => Math.max(h.length, ...cells.map((c) => c[i].length)));
   for (const line of [head, ...cells]) console.log(line.map((c, i) => (i === line.length - 1 ? c : c.padEnd(width[i]))).join("  "));
+  console.log("\n" + healthLines(health).join("\n"));
+  if (upkeep.recordedTopics) {
+    const finished = new Set(["deleted", "already gone"]);
+    const visible = [...upkeep.latest.filter(e => !finished.has(e.status)), ...upkeep.latest.filter(e => finished.has(e.status)).slice(0, 20)];
+    console.log(`\nlanding topic upkeep: ${upkeep.recordedTopics} recorded topics; ${visible.length} latest outcomes shown`);
+    for (const e of visible) console.log(`  ${e.item.replace("refs/heads/", "")}  ${e.status}${e.reason ? `: ${e.reason}` : ""}`);
+  }
 }
 
 /**
@@ -166,7 +177,7 @@ function start(name: string | undefined, topic: string | undefined): void {
 
 const [command, ...rest] = process.argv.slice(2);
 try {
-  if (command === "status") status(rest.includes("--json"));
+  if (command === "status") await status(rest.includes("--json"));
   else if (command === "start") start(rest[0], rest[1]);
   else throw new Error("usage: node tooling/lanes/lane.ts status [--json] | start <lane> <topic>");
 } catch (e) {

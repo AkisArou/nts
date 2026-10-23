@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { inventory } from "./branches.ts";
 import { cleanup, type Event } from "./cleanup.ts";
+import { ARCHIVE_HEADER } from "./archive.ts";
 
 function age(path: string, date: Date): void {
   const stat = lstatSync(path);
@@ -33,6 +34,7 @@ async function fixture() {
   git(["config", "user.name", "cleanup-test"]); git(["config", "user.email", "test@example.invalid"]);
   for (const dir of ["lanes", "gate", "census", "conformance"]) mkdirSync(join(repo, "tooling", dir), { recursive: true });
   writeFileSync(join(repo, "tooling/lanes/lanes.json"), JSON.stringify({ lanes: { compiler: { branch: "compiler/" }, jvm: { branch: "jvm/" }, tsrs: { branch: "tsrs/" } } }));
+  writeFileSync(join(repo, "tooling/lanes/archive.tsv"), ARCHIVE_HEADER + "\n");
   writeFileSync(join(repo, "tooling/lanes/land.ts"), 'const HOME = process.env.NTS_LAND_HOME ?? homedir();\nconst MAINCTL = join(HOME, ".cache/test-land");\nconst GATE_TREE = join(MAINCTL, "tree");\n');
   writeFileSync(join(repo, "tooling/gate/pinned.sh"), 'tree=${NTS_GATE_TREE:-$HOME/.cache/test-gate/tree}\n');
   writeFileSync(join(repo, "tooling/census/full.ts"), 'const HOME = join(homedir(), ".cache/test-full");\nconst env = {\n NTS_GATE_TREE: join(HOME, "tree"),\n};\n');
@@ -165,6 +167,10 @@ test("only exact SSH daemon names exempt EACCES; unreadable node and readable ac
       const result = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: denied, logPath: join(f.root, `${comm}-denied.jsonl`) });
       assert.ok(result.skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
     }
+    writeFileSync(join(pid, "comm"), "sshd\n");
+    const forbidden = () => { const error = new Error("Operation not permitted") as NodeJS.ErrnoException; error.code = "EPERM"; throw error; };
+    const deniedSsh = cleanup({ reportPath: report.path, repo: f.repo, home: f.root, procRoot: f.procRoot, readCwd: forbidden, logPath: join(f.root, "ssh-eperm.jsonl") });
+    assert.ok(deniedSsh.skipped.some(i => i.item === path && /Cannot inspect own-user PID 123/.test(i.reason!)));
     writeFileSync(join(pid, "comm"), "systemd\n");
     const command = "/usr/lib/systemd/systemd\0--user\0";
     writeFileSync(join(pid, "cmdline"), command);

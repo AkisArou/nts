@@ -46,6 +46,8 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
+import { retireLanding, type Submission } from "./retire.ts";
+import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 
 // NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
 // repository and a stand-in gate.
@@ -63,7 +65,10 @@ const GATE_TARGET = join(MAINCTL, "gate-target");
 const ACCEPT_SKIP = ["on-device"];
 
 type Lane = { owns: string[]; owns_globs?: string[]; not_run?: string };
-const LANES: Record<string, Lane> = JSON.parse(readFileSync(new URL("./lanes.json", import.meta.url), "utf8")).lanes;
+const laneConfig = JSON.parse(readFileSync(new URL("./lanes.json", import.meta.url), "utf8"));
+const LANES: Record<string, Lane> = laneConfig.lanes;
+const policyUnrun: string[] = laneConfig.platforms_unrun_ok ?? [];
+if (!Array.isArray(policyUnrun) || policyUnrun.some(name => typeof name !== "string" || !LANES[name])) throw new Error("Invalid platforms_unrun_ok lane setting");
 
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
@@ -315,7 +320,7 @@ function lockHolder(): number | null {
   const inode = statSync(LOCK).ino;
   for (const line of readFileSync("/proc/locks", "utf8").split("\n")) {
     const f = line.trim().split(/\s+/);
-    if (f[1] !== "FLOCK" || f[1] === "->") continue;
+    if (f[1] !== "FLOCK") continue;
     if (Number(f[5]?.split(":")[2]) === inode) return Number(f[4]);
   }
   return null;
@@ -335,7 +340,7 @@ function isAncestor(pid: number): boolean {
  * Join the queue and hold the landing lock for the rest of this process:
  * re-run under flock, telling the locked process which queue entry is its.
  */
-function underTheLock(sha: string, tree: string): void {
+async function underTheLock(sha: string, tree: string): Promise<void> {
   if (process.env.NTS_LAND_LOCKED === "1") return;
   // **Run bare.** A wrapper that takes this lock and then runs land.ts holds
   // it while land.ts waits for it: every lane's landing stopped for most of
@@ -345,6 +350,9 @@ function underTheLock(sha: string, tree: string): void {
     fail(`process ${holder}, which started this one, holds the landing lock: run land.ts bare, it takes the lock itself`);
   }
   mkdirSync(dirname(LOCK), { recursive: true });
+  const checkedOut = spawnSync("git", ["symbolic-ref", "--quiet", "HEAD"], { cwd: tree, encoding: "utf8" });
+  const fullBranch = checkedOut.status === 0 ? checkedOut.stdout.trim() : "";
+  const submission: Submission = { sha, tree, branch: fullBranch.startsWith("refs/heads/") ? fullBranch.slice(11) : null };
   const id = enqueue(sha, tree);
   const held = spawnSync("flock", ["-n", LOCK, "true"]);
   if (held.status !== 0) say("another landing holds the lock; waiting (whoever holds it next gates every landing queued)");
@@ -356,6 +364,20 @@ function underTheLock(sha: string, tree: string): void {
     stdio: "inherit",
     env: { ...process.env, NTS_LAND_LOCKED: "1", NTS_LAND_ENTRY: id },
   });
+  // The child and its flock wrapper have exited. Each originating process
+  // retires only its own submission; the shared gate tree remains warm.
+  if (r.status === 0 && resultOf(id)?.state === "landed") {
+    try {
+      const upkeepLog = join(STATE, "upkeep.jsonl");
+      const record = (event: TopicEvent) => {
+        appendFileSync(join(STATE, "upkeep.jsonl"), JSON.stringify({ at: new Date().toISOString(), entry: id, ...event }) + "\n");
+        say(`upkeep ${event.status} ${event.operation} ${event.item}${event.reason ? `: ${event.reason}` : ""}`);
+      };
+      if (submission.branch) record({ operation: "landed-submission", item: `refs/heads/${submission.branch}`, status: "recorded", sha, tree });
+      await retireLanding(sharedCheckout(), submission, { home: HOME, retireTopic: false, onEvent: record });
+      await revisitLandedTopics(sharedCheckout(), recordedTopics(upkeepLog), record);
+    } catch (e) { say(`upkeep incomplete; landing remains successful: ${String(e)}`); }
+  }
   rmSync(join(QUEUE, `${id}.json`), { force: true });
   process.exit(r.status ?? 1);
 }
@@ -472,8 +494,9 @@ function gate(root: string, base: string, landing: string, members: string[]): G
       return { ok: false, run, state: "red", message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || summary.verdict}; see ${run}` };
     }
     const touched = git(["diff", "--name-only", base, landing], root).split("\n").filter(Boolean);
-    const notRun = unrun(summary.steps ?? [], touched).filter(
-      (line) => !acceptUnrun.includes(line.slice(0, line.indexOf(":"))),
+    const platformLines = unrun(summary.steps ?? [], touched);
+    const notRun = platformLines.filter(
+      (line) => !acceptUnrun.includes(line.slice(0, line.indexOf(":"))) && !policyUnrun.includes(line.slice(0, line.indexOf(":"))),
     );
     if (notRun.length > 0) {
       return {
@@ -486,7 +509,9 @@ function gate(root: string, base: string, landing: string, members: string[]): G
     const named = String(summary.identities?.commit ?? "");
     if (named.length < 7 || !landing.startsWith(named)) return { ok: false, run, state: "red", message: `the summary names ${named || "no commit"}, not ${short}` };
     const accepted = acceptUnrun.length > 0 ? `; accepted unrun: ${acceptUnrun.join(", ")} -- ${because}` : "";
-    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}` };
+    const byPolicy = [...new Set(platformLines.map(line => line.slice(0, line.indexOf(":"))).filter(name => policyUnrun.includes(name)))];
+    const policyNote = byPolicy.length ? `; unrun accepted by ${laneConfig.platforms_unrun_ok_policy ?? "lanes.json policy"}: ${byPolicy.join(", ")}` : "";
+    return { ok: true, run, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}${policyNote}` };
   } finally {
     if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
   }
@@ -586,7 +611,7 @@ function refreshPackages(root: string, base: string, tip: string): string {
   return `; the lockfile changed and \`pnpm install --frozen-lockfile\` failed in ${root} (${why}): run it there`;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   if (!target) fail("which commit? `node tooling/lanes/land.ts <commit> [--dry-run]`");
   const root = sharedCheckout();
   const sha = git(["rev-parse", "--verify", `${target}^{commit}`]);
@@ -610,7 +635,7 @@ function main(): void {
     return;
   }
 
-  underTheLock(sha, tree);
+  await underTheLock(sha, tree);
   // Under the lock. A process started with the lock already held has no entry
   // yet: it queues itself here, with this process as the one to answer.
   const id = process.env.NTS_LAND_ENTRY ?? enqueue(sha, tree);
@@ -630,7 +655,7 @@ function main(): void {
 }
 
 try {
-  main();
+  await main();
 } catch (e) {
   if (!(e instanceof Refused)) throw e;
   console.error(`land: ${e.message}`);

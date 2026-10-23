@@ -15,6 +15,13 @@ the rules every session follows every time are in `AGENTS.md`.
 | The gate's tree | one, shared, used only through `land` |
 | Archived branches and worktree heads | `refs/archive/…` (`git for-each-ref refs/archive`) |
 
+Every archive ref has a row in `tooling/lanes/archive.tsv`: its lane, what it
+holds, why it is parked and what resuming needs. Use `unknown` where the
+history does not say. Record new archives in a reviewed registry update;
+`branches.ts` refuses missing rows and rows whose refs no longer exist.
+`lane status` and every full run show uncatalogued archives and branches
+older than three days whose changes are not proved on main.
+
 The shared checkout supplies what no commit carries: the corpora in
 `third_party/*` and immutable frontend builds in `target/tsgo.d/`. A tree's
 `target/tsgo` links its own gitlink and ordered carried patch contents. Its
@@ -82,6 +89,25 @@ lock of your own). It:
    next, down to the landing that is red on its own: that one is refused, the
    rest land;
 6. records the run as a git note on the tip (`git notes --ref=land show <commit>`).
+
+After success, the originating process removes its own submission tree under
+`~/.cache/nts-scratch/` only if its HEAD and checkout branch are unchanged, it has no work, and
+no other process has its cwd there. Lane homes and tool-owned build caches
+stay. It deletes the topic ref with a compare-and-swap only after every
+commit is proved on main by ancestry or stable patch IDs, and only when no
+worktree checks it out. A checked-out topic stays attached; the inventory
+labels it `landed, still checked out`. Subject-only matches never qualify.
+The upkeep decisions are logged in `~/.cache/nts-land/upkeep.jsonl`.
+Each successful landing revisits only topic refs that this tool previously
+recorded as successfully landed. It classifies their current tips, keeps
+any new unlanded work, and CAS-deletes a proved tip only once every checkout
+has gone. `lane status` shows those revisit outcomes. Branches never submitted
+to `land` are outside this automatic cleanup.
+
+The user policy dated 2026-10-23 allows Apple and Windows platform SKIPs
+through `lanes.json`'s `platforms_unrun_ok` list. The landing note records
+when that policy accepted an unrun platform; other platform refusals and
+the explicit `--accept-unrun=… --because=…` override keep their usual rules.
 
 Your landing's own process prints what became of it when its turn comes,
 whoever gated it. So queue a change as soon as it is ready: a gate costs the

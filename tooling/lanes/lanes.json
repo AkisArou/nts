@@ -1,5 +1,7 @@
 {
-  "//": "Who works on what. One entry per lane: the session that owns it, the paths it owns, and its branch prefix. A path belongs to the lane whose entry names it most specifically (a file beats its directory). Edit your own lane's entry; ask before editing another's. A path no entry names is shared: announce an edit to it before making it. A platform lane whose programs run on a VM says, in `not_run`, which log lines mean they did not run; `land` refuses a change to its paths when the gate printed one.",
+  "//": "Who works on what. One entry per lane: the session that owns it, the paths it owns, and its branch prefix. A path belongs to the lane whose entry names it most specifically (a file beats its directory). Edit your own lane's entry; ask before editing another's. A path no entry names is shared: announce an edit to it before making it. A platform lane whose programs run on a VM says, in `not_run`, which log lines mean they did not run; `land` refuses a change to its paths when the gate printed one, unless platforms_unrun_ok records the user policy for that lane.",
+  "platforms_unrun_ok": ["apple", "windows"],
+  "platforms_unrun_ok_policy": "user policy 2026-10-23",
   "lanes": {
     "compiler": {
       "session": "MainClaude",

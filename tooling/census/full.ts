@@ -26,10 +26,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { WIDE } from "../gate/owed.mjs";
+import { branchHealth, healthLines } from "../lanes/health.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");
 const git = (args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
+console.log(healthLines(await branchHealth(ROOT)).join("\n"));
 
 const asked = process.argv[2] ?? "main";
 const resolved = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${asked}^{commit}`], { cwd: ROOT, encoding: "utf8" });

@@ -6,10 +6,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { buildOutput, inputFor, inventory, markdown, missingInput, parseDiffstats, parseStatus, parseWorktrees, toolOwnedTrees } from "./branches.ts";
+import { ARCHIVE_HEADER } from "./archive.ts";
 
 function infrastructureSources(repo: string): void {
   for (const directory of ["lanes", "gate", "census", "conformance"]) mkdirSync(join(repo, "tooling", directory), { recursive: true });
   writeFileSync(join(repo, "tooling/lanes/land.ts"), 'const HOME = process.env.NTS_LAND_HOME ?? homedir();\nconst MAINCTL = join(HOME, ".cache/test-land");\nconst GATE_TREE = join(MAINCTL, "tree");\n');
+  writeFileSync(join(repo, "tooling/lanes/archive.tsv"), ARCHIVE_HEADER + "\n");
   writeFileSync(join(repo, "tooling/gate/pinned.sh"), 'tree=${NTS_GATE_TREE:-$HOME/.cache/test-gate/tree}\n');
   writeFileSync(join(repo, "tooling/census/full.ts"), 'const HOME = join(homedir(), ".cache/test-full");\nconst env = {\n  NTS_GATE_TREE: join(HOME, "tree"),\n};\n');
   writeFileSync(join(repo, "tooling/conformance/pin.ts"), 'export const PINS = process.env.NTS_PINS ?? join(homedir(), ".cache/test-pins");\nconst TREE = join(PINS, "tree");\n');
@@ -80,6 +82,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     git(["checkout", "-q", "main"]);
     const main = git(["rev-parse", "HEAD"]);
     git(["update-ref", "refs/archive/jvm/saved", main]); // Test setup only.
+    writeFileSync(join(repo, "tooling/lanes/archive.tsv"), ARCHIVE_HEADER + "\nrefs/archive/jvm/saved\tjvm\tfixture\tfixture\tunknown\n");
     writeFileSync(join(repo, ".gitmodules"), '[submodule "dep"]\npath = dep\nurl = ./unused\n');
     git(["add", ".gitmodules"]); git(["update-index", "--add", "--cacheinfo", `160000,${base},dep`]);
     git(["commit", "-qm", "submodule fixture"]);
@@ -188,6 +191,7 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     }
     assert.equal(branch("jvm/stale").proposal.action, "delete branch");
     assert.equal(branch("jvm/home").proposal.action, "keep");
+    assert.equal(branch("jvm/home").proposal.reason, "landed, still checked out");
     const dw = r.worktrees.find(w => w.path === dirty)!;
     assert.equal(dw.dirty, true);
     assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", "third_party/added", "untracked"]);

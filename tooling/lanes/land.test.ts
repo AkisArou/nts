@@ -40,6 +40,7 @@ verdict=green step=PASS
 if [ -e "$NTS_GATE_TREE/RED" ]; then verdict=red step=FAIL; fi
 # A platform whose programs never ran, as interop's log says it.
 echo "  windows-hello    skipped: SKIP windows-x86_64 (hello): not run" > "$NTS_GATE_RUN_DIR/interop.log"
+echo "  apple-hello      skipped: SKIP macos (hello): not run" >> "$NTS_GATE_RUN_DIR/interop.log"
 printf '{"verdict":"%s","started":"t","wall_s":1,"steps":[{"name":"fake","verdict":"%s","log":"%s"}],"identities":{"commit":"%s"}}' \\
   "$verdict" "$step" "$NTS_GATE_RUN_DIR/interop.log" "$sha" > "$NTS_GATE_RUN_DIR/summary.json"
 `;
@@ -90,7 +91,10 @@ function run(s: Scratch, cwd: string, args: string[]): string {
 
 /** A lane's tree on its own branch from main, with one commit writing `files`. */
 function lane(s: Scratch, name: string, files: Record<string, string>): string {
-  const tree = join(s.root, "..", name);
+  // These model persistent agent homes: successful landings must leave their
+  // checked-out branches attached for the next commit.
+  const tree = join(s.home, "Projects/nts-lanes", name);
+  mkdirSync(dirname(tree), { recursive: true });
   run(s, s.root, ["worktree", "add", "-q", "-b", name, tree, "main"]);
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
@@ -287,7 +291,7 @@ test("a landing that conflicts with one ahead of it is refused, and the train go
   assert.equal(rc.status, 0, rc.out);
   assert.equal(rb.status, 1, rb.out);
   assert.match(rb.out, /does not replay onto main \(\w+\) or the 1 landing\(s\) ahead of it/);
-  assert.equal(readFileSync(join(s.root, "..", "a", "shared.txt"), "utf8"), "from a\n");
+  assert.equal(readFileSync(join(a, "shared.txt"), "utf8"), "from a\n");
   assert.equal(run(s, s.root, ["show", "main:shared.txt"]), "from a");
   assert.equal(gates(s), 1);
 });
@@ -379,7 +383,7 @@ test("commits that landed as replayed copies are not replayed again", async () =
   assert.equal(run(s, s.root, ["show", "main:subject.txt"]), "one, revised");
 });
 
-test("a platform that never ran refuses what runs there, not its tests or documents", async () => {
+test("the dated platform policy accepts Windows SKIPs without a per-landing flag, and records it", async () => {
   // The Windows lane's paths, with no Windows reachable (the stand-in's log).
   const s = scratch();
   const test = lane(s, "test", { "compiler/codegen/c/tests/com.rs": "// a host test\n", "docs/windows-lane-goal.md": "notes\n" });
@@ -387,6 +391,47 @@ test("a platform that never ran refuses what runs there, not its tests or docume
   assert.equal(rt.status, 0, rt.out);
   const runtime = lane(s, "runtime", { "runtime/winrt/x.c": "/* runs on Windows */\n" });
   const [rr] = await landTogether(s, [runtime]);
-  assert.equal(rr.status, 1, rr.out);
-  assert.match(rr.out, /a platform this range touches never ran it/);
+  assert.equal(rr.status, 0, rr.out);
+  assert.match(run(s, s.root, ["notes", "--ref=land", "show", "main"]), /unrun accepted by user policy 2026-10-23: windows/);
+  const apple = lane(s, "apple-runtime", { "runtime/objc/x.c": "/* runs on Apple */\n" });
+  const [ra] = await landTogether(s, [apple]);
+  assert.equal(ra.status, 0, ra.out);
+  assert.match(run(s, s.root, ["notes", "--ref=land", "show", "main"]), /unrun accepted by user policy 2026-10-23: apple/);
+});
+
+test("the originating process retires only its own clean scratch submission after landing", async () => {
+  const s = scratch();
+  const home = lane(s, "compiler/scratch", { "landed.txt": "landed\n" });
+  run(s, s.root, ["tag", "compiler/scratch", "main"]); // An ambiguous short name is not a branch identity.
+  const disposable = join(s.home, ".cache/nts-scratch/compiler/submission"); mkdirSync(dirname(disposable), { recursive: true }); run(s, s.root, ["worktree", "move", home, disposable]);
+  const r = await land(s, disposable).done;
+  assert.equal(r.status, 0, r.out); assert.equal(existsSync(disposable), false);
+  assert.equal(run(s, s.root, ["for-each-ref", "refs/heads/compiler/scratch"]), "");
+  assert.ok(run(s, s.root, ["for-each-ref", "refs/tags/compiler/scratch"]));
+  assert.ok(existsSync(join(s.home, ".cache/nts-parallel-20261004/mainctl/gate-tree")), "the gate cache remains");
+  assert.match(readFileSync(join(s.home, ".cache/nts-land/upkeep.jsonl"), "utf8"), /"operation":"delete-landed-topic"/);
+});
+
+test("a later landing revisits a recorded topic after its lane home switches away, leaving unsent branches alone", async () => {
+  const s = scratch();
+  const tree = lane(s, "compiler/first", { "first.txt": "first\n" });
+  const first = await land(s, tree).done; assert.equal(first.status, 0, first.out);
+  assert.equal(run(s, tree, ["symbolic-ref", "--short", "HEAD"]), "compiler/first");
+  run(s, tree, ["switch", "-qc", "compiler/next", "main"]);
+  writeFileSync(join(tree, "next.txt"), "next\n"); run(s, tree, ["add", "next.txt"]); run(s, tree, ["commit", "-qm", "next"]);
+  run(s, s.root, ["branch", "compiler/never-submitted", "main"]);
+  const second = await land(s, tree).done; assert.equal(second.status, 0, second.out);
+  assert.equal(run(s, s.root, ["for-each-ref", "refs/heads/compiler/first"]), "");
+  assert.ok(run(s, s.root, ["for-each-ref", "refs/heads/compiler/never-submitted"]));
+  assert.equal(run(s, tree, ["symbolic-ref", "--short", "HEAD"]), "compiler/next");
+});
+
+test("an upkeep logging failure cannot turn a successful landing red", async () => {
+  const s = scratch();
+  const tree = lane(s, "logging", { "landed.txt": "landed\n" });
+  mkdirSync(join(s.home, ".cache/nts-land/upkeep.jsonl"), { recursive: true });
+  const r = await land(s, tree).done;
+  assert.equal(r.status, 0, r.out); assert.ok(onMain(s, "landed.txt"));
+  assert.match(r.out, /upkeep incomplete; landing remains successful/);
+  assert.equal(run(s, tree, ["symbolic-ref", "--short", "HEAD"]), "logging");
 });
