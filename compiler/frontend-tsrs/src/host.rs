@@ -183,6 +183,40 @@ impl Host {
             })
             .collect()
     }
+
+    /// Replay through the original method, including exactly its encoding.
+    pub(crate) fn replay(&self, input: &Input) -> u128 {
+        let Some(path) = input.path.utf8() else {
+            return input.kind.absent_fingerprint();
+        };
+        let path = path.as_str();
+        match input.kind {
+            InputKind::File => {
+                let _ = self.read_file(path);
+            }
+            InputKind::FileExists => {
+                let _ = self.file_exists(path);
+            }
+            InputKind::DirectoryExists => {
+                let _ = self.directory_exists(path);
+            }
+            InputKind::DirectoryEntries => {
+                let _ = self.get_accessible_entries(path);
+            }
+            InputKind::Metadata => {
+                let _ = self.stat(path);
+            }
+            InputKind::RealPath => {
+                let _ = self.realpath(path);
+            }
+        }
+        self.inputs
+            .lock()
+            .expect("input observations lock poisoned")
+            .get(&(input.kind, InputPath::Utf8(self.key(path).into())))
+            .copied()
+            .expect("every host method records its answer")
+    }
 }
 
 impl tsrs_tsoptions::ParseConfigHost for Host {

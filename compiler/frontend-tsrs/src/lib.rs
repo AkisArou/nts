@@ -7,6 +7,8 @@
 #[cfg(feature = "tsrs")]
 mod ast;
 #[cfg(feature = "tsrs")]
+mod cache_replay;
+#[cfg(feature = "tsrs")]
 mod environment;
 #[cfg(feature = "tsrs")]
 mod host;
@@ -22,6 +24,8 @@ mod session;
 mod strings;
 #[cfg(feature = "tsrs")]
 pub use ast::*;
+#[cfg(feature = "tsrs")]
+pub use cache_replay::{InputChanged, InputObservation};
 #[cfg(feature = "tsrs")]
 pub use host::{Input, InputKind, InputPath};
 #[cfg(feature = "tsrs")]
