@@ -1,6 +1,6 @@
 //! Structured type facts; graph budgets and traversal remain capture policy.
 
-use super::{Declaration, JsString, Symbol, Type};
+use super::{Declaration, JsString, Symbol, SymbolName, Type};
 use tsrs_checker::{ObjectFlags, TypeData, TypeFlags};
 
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ pub struct Substitution<'p> {
 #[derive(Debug, Clone)]
 pub struct Property<'p> {
     pub symbol: Symbol<'p>,
-    pub name: JsString<'p>,
+    pub name: SymbolName<'p>,
     pub ty: Type<'p>,
     pub optional: bool,
     pub readonly: bool,
@@ -239,7 +239,7 @@ impl<'p> Type<'p> {
                     .any(|d| d.attributes().modifiers.readonly);
                 Property {
                     symbol,
-                    name: symbol.name(),
+                    name: symbol.name_in(super::names::NameTable::Member),
                     ty: symbol.ty(),
                     optional: classification.optional,
                     readonly: symbol.readonly(),

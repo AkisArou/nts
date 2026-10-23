@@ -26,6 +26,10 @@ mod tests;
 mod graph;
 pub use graph::*;
 
+#[path = "symbol_name.rs"]
+mod names;
+pub use names::{InternalName, SymbolName};
+
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -137,9 +141,8 @@ impl<'p> Symbol<'p> {
         Self { native, file }
     }
     #[must_use]
-    pub fn name(self) -> JsString<'p> {
-        let text = self.file.with_checker(|_| self.native.name());
-        self.file.intern_string(text.as_bytes())
+    pub fn name(self) -> SymbolName<'p> {
+        self.name_in(names::NameTable::Automatic)
     }
     #[must_use]
     pub fn classification(self) -> SymbolClassification {
@@ -186,12 +189,23 @@ impl<'p> Symbol<'p> {
             return Vec::new();
         }
         self.file
-            .with_checker(|c| c.get_exports_of_module_exported(self.native))
+            .with_checker(|c| {
+                let mut exports = c.get_exports_of_module_exported(self.native);
+                if let Some(assignment) = self.native.exports().and_then(|table| {
+                    table
+                        .get()
+                        .get(tsrs_ast::INTERNAL_SYMBOL_NAME_EXPORT_EQUALS)
+                }) && !exports.contains(&assignment)
+                {
+                    exports.push(assignment);
+                }
+                exports
+            })
             .into_iter()
             .map(|native| {
                 let symbol = Self::new(native, self.file);
                 Export {
-                    name: symbol.name(),
+                    name: symbol.name_in(names::NameTable::Export),
                     symbol,
                 }
             })
@@ -260,7 +274,7 @@ pub struct SymbolClassification {
 }
 #[derive(Debug, Clone, Copy)]
 pub struct Export<'p> {
-    pub name: JsString<'p>,
+    pub name: SymbolName<'p>,
     pub symbol: Symbol<'p>,
 }
 
@@ -447,7 +461,7 @@ pub enum SignatureKind {
 #[derive(Debug, Clone)]
 pub struct Parameter<'p> {
     pub symbol: Symbol<'p>,
-    pub name: JsString<'p>,
+    pub name: SymbolName<'p>,
     pub ty: Type<'p>,
     pub declarations: Vec<Declaration<'p>>,
     pub optional: bool,
@@ -558,7 +572,11 @@ impl<'p> Signature<'p> {
     pub fn this_parameter(self) -> Option<Parameter<'p>> {
         self.file
             .with_checker(|_| self.native.this_parameter())
-            .map(|native| self.parameter(native, false, false))
+            .map(|native| {
+                let mut parameter = self.parameter(native, false, false);
+                parameter.name = parameter.symbol.name_in(names::NameTable::ThisParameter);
+                parameter
+            })
     }
 }
 

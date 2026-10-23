@@ -4,6 +4,26 @@ use std::num::NonZeroU16;
 
 use crate::*;
 
+fn plain(name: SymbolName<'_>) -> &str {
+    let SymbolName::Plain(text) = name else {
+        panic!("expected ordinary name, got {name:?}");
+    };
+    text.utf8().expect("Unicode user name")
+}
+
+fn private_symbol(class: Node<'_>) -> Symbol<'_> {
+    class
+        .list(ListRole::ClassDeclarationMembers)
+        .expect("class members")
+        .iter()
+        .next()
+        .expect("field")
+        .child(ChildRole::PropertyDeclarationName)
+        .expect("private name")
+        .symbol()
+        .expect("private symbol")
+}
+
 fn options(count: u16) -> SessionOptions {
     let mut options = SessionOptions::new("/__nts_semantic_test__");
     options.checker_count = NonZeroU16::new(count);
@@ -82,11 +102,11 @@ fn function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checke
                     .assignable_to(signature.return_type())
             );
             (
-                symbol.name().utf8().expect("Unicode name").to_owned(),
+                plain(symbol.name()).to_owned(),
                 signature.return_type().kind(),
                 exports
                     .into_iter()
-                    .map(|e| e.name.utf8().expect("Unicode export").to_owned())
+                    .map(|e| plain(e.name).to_owned())
                     .collect(),
                 checked.diagnostics(),
             )
@@ -168,10 +188,7 @@ fn parameters_keep_defaults_rest_this_and_generic_types() {
             .signatures(SignatureKind::Call)[0];
         let parameters = signature.parameters();
         assert_eq!(
-            parameters
-                .iter()
-                .map(|p| p.name.utf8().expect("name"))
-                .collect::<Vec<_>>(),
+            parameters.iter().map(|p| plain(p.name)).collect::<Vec<_>>(),
             ["first", "defaulted", "optional", "rest"]
         );
         assert!(!parameters[0].optional);
@@ -184,7 +201,7 @@ fn parameters_keep_defaults_rest_this_and_generic_types() {
         assert_eq!(parameters[0].ty, signature.return_type());
         assert_eq!(signature.type_parameters(), vec![parameters[0].ty]);
         let this = signature.this_parameter().expect("explicit this");
-        assert_eq!(this.name.utf8(), Some("this"));
+        assert_eq!(this.name, SymbolName::Internal(InternalName::This));
         assert_eq!(this.declarations.len(), 1);
     });
 }
@@ -211,7 +228,7 @@ export const enum Values { Number = 3, Text = "\ud800", Infinity = 1 / 0, NotNum
         let exported = |name: &str| {
             exports
                 .iter()
-                .find(|e| e.name.utf8() == Some(name))
+                .find(|e| matches!(e.name, SymbolName::Plain(text) if text.utf8() == Some(name)))
                 .expect("export")
                 .symbol
         };
@@ -331,7 +348,7 @@ fn structured_graph_preserves_instantiation_order_members_and_absence() {
         let symbol = |name: &str| {
             exports
                 .iter()
-                .find(|e| e.name.utf8() == Some(name))
+                .find(|e| matches!(e.name, SymbolName::Plain(text) if text.utf8() == Some(name)))
                 .expect("export")
                 .symbol
         };
@@ -382,10 +399,7 @@ fn structured_graph_preserves_instantiation_order_members_and_absence() {
         assert_eq!(ty("Box").bases(), vec![ty("Root")]);
         let properties = ty("Ref").properties();
         assert_eq!(
-            properties
-                .iter()
-                .map(|p| p.name.utf8().expect("name"))
-                .collect::<Vec<_>>(),
+            properties.iter().map(|p| plain(p.name)).collect::<Vec<_>>(),
             ["value", "optional", "method", "accessor", "base"]
         );
         assert!(properties[0].readonly && properties[0].declared_readonly);
@@ -415,7 +429,7 @@ fn generic_conditional_index_template_and_substitution_facts_are_native() {
         let symbol = |name: &str| {
             exports
                 .iter()
-                .find(|e| e.name.utf8() == Some(name))
+                .find(|e| matches!(e.name, SymbolName::Plain(text) if text.utf8() == Some(name)))
                 .expect("export")
                 .symbol
         };
@@ -451,10 +465,7 @@ fn generic_conditional_index_template_and_substitution_facts_are_native() {
             .substitution()
             .expect("narrowed generic substitution");
         assert_eq!(substitution.base.kind(), TypeKind::TypeParameter);
-        assert_eq!(
-            substitution.constraint.properties()[0].name.utf8(),
-            Some("value")
-        );
+        assert_eq!(plain(substitution.constraint.properties()[0].name), "value");
         assert_eq!(symbol("unique").ty().kind(), TypeKind::UniqueSymbol);
         assert_eq!(symbol("ordinary").ty().kind(), TypeKind::Symbol);
     });
@@ -518,13 +529,8 @@ export const date = new Date();
                         assert_eq!(declaration.native.kind(), tsrs_ast::Kind::Constructor);
                         assert_eq!(signature.parameters()[0].ty.kind(), TypeKind::Number);
                         assert_eq!(
-                            signature
-                                .return_type()
-                                .symbol()
-                                .expect("Maker")
-                                .name()
-                                .utf8(),
-                            Some("Maker")
+                            plain(signature.return_type().symbol().expect("Maker").name()),
+                            "Maker"
                         );
                     }
                 }
@@ -703,4 +709,174 @@ fn a_surrogate_pair_module_name_resolves_to_a_real_unicode_file() {
                 .all(|input| input.path.utf8().is_some())
         );
     });
+}
+
+#[test]
+fn private_names_keep_written_spelling_and_distinct_class_identity() {
+    run(options(1), |session| {
+        let checked = session.open(spec("export class A { #count = 1; } export class B { #count = 2; } export const ___three = 3;")).expect("project");
+        let file = source(checked);
+        let declarations = statements(file);
+        let first = private_symbol(declarations[0]);
+        let second = private_symbol(declarations[1]);
+        assert_ne!(first, second);
+        assert!(matches!(first.name(), SymbolName::Private(name) if name.utf8() == Some("#count")));
+        assert!(
+            matches!(second.name(), SymbolName::Private(name) if name.utf8() == Some("#count"))
+        );
+        let exported = file.module_symbol().expect("module").exports();
+        assert!(exported.iter().any(
+            |entry| matches!(entry.name, SymbolName::Plain(name) if name.utf8() == Some("___three"))
+        ));
+        let written = declarations[0]
+            .child(ChildRole::ClassDeclarationName)
+            .expect("class")
+            .symbol()
+            .expect("class symbol")
+            .declared_type()
+            .expect("class type")
+            .properties();
+        assert!(
+            matches!(written[0].name, SymbolName::Private(name) if name.utf8() == Some("#count"))
+        );
+    });
+}
+
+#[test]
+fn special_export_names_are_semantic_while_member_names_are_plain() {
+    for text in [
+        "const value = 1; export default value;",
+        "const value = 1; export { value as default };",
+        "const value = 1; export = value;",
+    ] {
+        run(options(1), |session| {
+            let checked = session.open(spec(text)).expect("project");
+            let exports = source(checked).module_symbol().expect("module").exports();
+            let expected = if text.contains("export =") {
+                InternalName::ExportEquals
+            } else {
+                InternalName::Default
+            };
+            assert!(
+                exports
+                    .iter()
+                    .any(|entry| entry.name == SymbolName::Internal(expected)),
+                "{exports:?}"
+            );
+            assert!(
+                exports
+                    .iter()
+                    .any(|entry| entry.symbol.name() == SymbolName::Internal(expected)),
+                "{exports:?}"
+            );
+        });
+    }
+    run(options(1), |session| {
+        let checked = session
+            .open(spec(
+                "export const object = { default: 1, 'module.exports': 2, 'export=': 3, this: 4 };",
+            ))
+            .expect("project");
+        let properties = source(checked).module_symbol().expect("module").exports()[0]
+            .symbol
+            .ty()
+            .properties();
+        assert_eq!(
+            properties
+                .iter()
+                .map(|property| plain(property.name))
+                .collect::<Vec<_>>(),
+            ["default", "module.exports", "export=", "this"]
+        );
+        assert!(
+            properties
+                .iter()
+                .all(|property| matches!(property.symbol.name(), SymbolName::Plain(_)))
+        );
+    });
+}
+
+#[test]
+fn commonjs_exports_use_the_native_export_table() {
+    run(options(1), |session| {
+        let mut project = spec("");
+        project.overlays.insert("tsconfig.json".into(), r#"{"compilerOptions":{"allowJs":true,"checkJs":true,"noLib":true,"module":"CommonJS"},"files":["main.js"]}"#.to_owned());
+        project.overlays.insert(
+            "main.js".into(),
+            "module.exports = { default: 1, 'module.exports': 2 };".to_owned(),
+        );
+        let checked = session.open(project).expect("JS program");
+        let file = checked
+            .projects()
+            .next()
+            .expect("program")
+            .files()
+            .find(|f| f.path().ends_with("main.js"))
+            .expect("JS file");
+        let exports = file.module_symbol().expect("CommonJS module").exports();
+        assert!(
+            exports
+                .iter()
+                .any(|entry| entry.name == SymbolName::Internal(InternalName::ExportEquals)),
+            "{exports:?}"
+        );
+    });
+}
+
+#[test]
+fn symbol_keyed_properties_preserve_the_unique_key_type_and_declaration() {
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session.open(spec("export const key: unique symbol = Symbol('key'); export interface Keys { [key]: number; [Symbol.iterator](): Iterator<number>; }")).expect("project");
+            let file = source(checked);
+            let declarations = statements(file);
+            let key = file
+                .module_symbol()
+                .expect("module")
+                .exports()
+                .into_iter()
+                .find(|e| matches!(e.name, SymbolName::Plain(name) if name.utf8() == Some("key")))
+                .expect("key export")
+                .symbol
+                .ty();
+            let interface = declarations[1]
+                .child(ChildRole::InterfaceDeclarationName)
+                .expect("interface name")
+                .symbol()
+                .expect("interface symbol")
+                .declared_type()
+                .expect("interface type");
+            let keys: Vec<_> = interface
+                .properties()
+                .into_iter()
+                .map(|property| {
+                    let SymbolName::Keyed(key) = property.name else {
+                        panic!("expected unique-symbol key, got {:?}", property.name);
+                    };
+                    assert_eq!(key.kind(), TypeKind::UniqueSymbol);
+                    key
+                })
+                .collect();
+            assert_eq!(keys.len(), 2);
+            assert!(keys.contains(&key));
+            let iterator = keys
+                .into_iter()
+                .find(|ty| *ty != key)
+                .expect("well-known key");
+            let symbol = iterator.symbol().expect("key declaration symbol");
+            assert_eq!(plain(symbol.name()), "iterator");
+            let declaration = symbol
+                .declarations()
+                .next()
+                .expect("library property declaration");
+            assert!(declaration.source_file().is_default_library());
+            let parent = declaration.parent().expect("SymbolConstructor interface");
+            assert_eq!(
+                parent
+                    .child(ChildRole::InterfaceDeclarationName)
+                    .and_then(Node::name_text),
+                Some("SymbolConstructor")
+            );
+        });
+    }
 }

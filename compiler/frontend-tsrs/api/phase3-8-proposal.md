@@ -38,6 +38,15 @@ impl<'p> JsString<'p> {
     pub fn utf8(self) -> Option<&'p str>; // None exactly for lone surrogates
 }
 
+pub enum SymbolName<'p> {
+    Plain(JsString<'p>), // user spelling, including leading underscores
+    Private(JsString<'p>), // written #name; identity belongs to Symbol
+    Internal(InternalName<'p>), // generated native constants + Other(JsString)
+    Keyed(Type<'p>), // exactly UniqueSymbol, declaration through Type::symbol
+}
+// InternalName is generated from api/internal-names.json. The four ordinary
+// spellings default/export=/this/module.exports use checker-table context.
+
 impl<'p> Node<'p> {
     pub fn symbol(self) -> Option<Symbol<'p>>;
     pub fn ty(self) -> Type<'p>;
@@ -49,7 +58,7 @@ impl<'p> File<'p> {
     pub fn module_symbol(self) -> Option<Symbol<'p>>; // a script has none
 }
 impl<'p> Symbol<'p> {
-    pub fn name(self) -> JsString<'p>;
+    pub fn name(self) -> SymbolName<'p>;
     pub fn classification(self) -> SymbolClassification;
     pub fn declarations(self) -> impl ExactSizeIterator<Item = Declaration<'p>>;
     pub fn alias_target(self) -> Option<Symbol<'p>>; // final target; non-alias None
@@ -66,7 +75,7 @@ pub struct SymbolClassification {
     pub variable: bool, pub function: bool, pub class: bool,
     pub interface: bool, pub type_alias: bool, pub enum_: bool, pub property: bool,
 }
-pub struct Export<'p> { pub name: JsString<'p>, pub symbol: Symbol<'p> }
+pub struct Export<'p> { pub name: SymbolName<'p>, pub symbol: Symbol<'p> }
 
 impl<'p> Type<'p> {
     pub fn kind(self) -> TypeKind;
@@ -112,7 +121,7 @@ pub struct IndexedAccess<'p> { pub object: Type<'p>, pub index: Type<'p> }
 pub struct Template<'p> { pub texts: Vec<JsString<'p>>, pub types: Vec<Type<'p>> }
 pub struct Substitution<'p> { pub base: Type<'p>, pub constraint: Type<'p> }
 pub struct Property<'p> {
-    pub symbol: Symbol<'p>, pub name: JsString<'p>, pub ty: Type<'p>,
+    pub symbol: Symbol<'p>, pub name: SymbolName<'p>, pub ty: Type<'p>,
     pub optional: bool, pub readonly: bool, pub declared_readonly: bool,
     pub kind: PropertyKind, pub declarations: Vec<Declaration<'p>>,
 }
@@ -131,7 +140,7 @@ impl<'p> Signature<'p> {
     pub fn predicate(self) -> Option<TypePredicate<'p>>;
 }
 pub struct Parameter<'p> {
-    pub symbol: Symbol<'p>, pub name: JsString<'p>, pub ty: Type<'p>,
+    pub symbol: Symbol<'p>, pub name: SymbolName<'p>, pub ty: Type<'p>,
     pub declarations: Vec<Declaration<'p>>, pub optional: bool,
     pub has_initializer: bool, pub rest: bool,
 }

@@ -1,0 +1,102 @@
+[
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_CALL",
+    "variant": "Call",
+    "value": "\\u{7f}call"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_CONSTRUCTOR",
+    "variant": "Constructor",
+    "value": "\\u{7f}constructor"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_NEW",
+    "variant": "New",
+    "value": "\\u{7f}new"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_INDEX",
+    "variant": "Index",
+    "value": "\\u{7f}index"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_EXPORT_STAR",
+    "variant": "ExportStar",
+    "value": "\\u{7f}export"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_GLOBAL",
+    "variant": "Global",
+    "value": "\\u{7f}global"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_MISSING",
+    "variant": "Missing",
+    "value": "\\u{7f}missing"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_TYPE",
+    "variant": "Type",
+    "value": "\\u{7f}type"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_OBJECT",
+    "variant": "Object",
+    "value": "\\u{7f}object"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_JSX_ATTRIBUTES",
+    "variant": "JSXAttributes",
+    "value": "\\u{7f}jsxAttributes"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_CLASS",
+    "variant": "Class",
+    "value": "\\u{7f}class"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_FUNCTION",
+    "variant": "Function",
+    "value": "\\u{7f}function"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_COMPUTED",
+    "variant": "Computed",
+    "value": "\\u{7f}computed"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_ASSIGNMENT_DECLARATION",
+    "variant": "AssignmentDeclaration",
+    "value": "\\u{7f}assignment"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_INSTANTIATION_EXPRESSION",
+    "variant": "InstantiationExpression",
+    "value": "\\u{7f}instantiationExpression"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_IMPORT_ATTRIBUTES",
+    "variant": "ImportAttributes",
+    "value": "\\u{7f}importAttributes"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_EXPORT_EQUALS",
+    "variant": "ExportEquals",
+    "value": "export="
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_DEFAULT",
+    "variant": "Default",
+    "value": "default"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_THIS",
+    "variant": "This",
+    "value": "this"
+  },
+  {
+    "constant": "INTERNAL_SYMBOL_NAME_MODULE_EXPORTS",
+    "variant": "ModuleExports",
+    "value": "module.exports"
+  }
+]
