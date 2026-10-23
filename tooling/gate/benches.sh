@@ -41,7 +41,16 @@ nts=${NTS_BIN:-$root/target/release/nts}
 # The flags `nts-bench` compiles with, minus the ones that need a link step.
 # `-Werror` is the point: a warning in generated code is a bug in the emitter,
 # and the benchmark already treats it as one.
-CFLAGS="-O2 -Wall -Wextra -Werror -std=c11"
+#
+# **Counted, because the benchmark is.** Every row counts references since
+# 2026-10-22, as a shipped program does, and this step emitted without `--rc`:
+# so it compiled a program `nts-bench` never builds, and twice a counted-only
+# warning passed it -- stage B's unused variant (2026-10-22) and an original
+# every call of which a call region served, `unused function
+# 'ascendingByIndex'` in three JSON rows (2026-10-23). Uncounted C is the
+# `examples` and `c-compiles` steps' to check. The JVM is its host's heap and
+# takes no `--rc`.
+CFLAGS="-O2 -Wall -Wextra -Werror -std=c11 -DNTS_PROVIDER_RC"
 
 # **Two compilers, because the two checks below want different things.** `cc`
 # compiles generated C and honours `CC` like everything else in this tree.
@@ -75,7 +84,7 @@ for case in benchmarks/cases/*/; do
     printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["%s/%s"] }\n' \
       "$root" "$root" "$case" > "$project"
   fi
-  if ! "$nts" emit-c "$project" --out "$out" >"$work/log" 2>&1; then
+  if ! "$nts" emit-c "$project" --out "$out" --rc >"$work/log" 2>&1; then
     printf '  %-22s emit-c refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1
@@ -97,7 +106,7 @@ for case in benchmarks/cases/*/; do
     continue
   fi
 
-  if ! "$nts" emit-llvm "$project" >"$out/program.ll" 2>"$work/log"; then
+  if ! "$nts" emit-llvm "$project" --rc >"$out/program.ll" 2>"$work/log"; then
     printf '  %-22s emit-llvm refused\n' "$name"
     [ -n "$only" ] && cat "$work/log"
     fail=1
@@ -169,4 +178,4 @@ if [ "$count" -eq 0 ]; then
   printf '  passing. `benchmarks/cases/*/case.ts` is what it looks for.\n'
   exit 1
 fi
-echo "  $count benchmark case(s) compile, all three backends"
+echo "  $count benchmark case(s) compile, all three backends (C and LLVM counted)"
