@@ -29,6 +29,8 @@ use std::fmt::Write as _;
 use nts_core::hir::native::{Family, FnPointer, PROGRAM_GTYPE, Type};
 use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, TemplateText};
 
+use super::c_string;
+
 use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
@@ -874,26 +876,6 @@ fn registrations(class: &ForeignClass) -> String {
             signal.kinds
         );
     }
-    out
-}
-
-/// A C string literal: the signal names a program declares are TypeScript
-/// property names, which may hold anything a C literal must escape.
-fn c_string(text: &str) -> String {
-    let mut out = String::from("\"");
-    for byte in text.bytes() {
-        match byte {
-            b'"' | b'\\' => {
-                out.push('\\');
-                out.push(char::from(byte));
-            }
-            b' '..=b'~' => out.push(char::from(byte)),
-            _ => {
-                let _ = write!(out, "\\{byte:03o}");
-            }
-        }
-    }
-    out.push('"');
     out
 }
 

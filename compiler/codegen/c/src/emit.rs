@@ -2646,6 +2646,49 @@ fn c_member_at(layout: &nts_core::hir::Layout, at: usize) -> String {
     }
 }
 
+/// A `_Static_assert` message holding `text`. The message is an *unevaluated*
+/// string literal, where C forbids a numeric escape, so it cannot be
+/// [`c_string`]'s: `"` and `\` take their simple escapes, a control character
+/// becomes `?`, and everything else -- a name outside ASCII among it -- is
+/// written as itself, in the UTF-8 the source already is.
+fn c_message(text: &str) -> String {
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '"' | '\\' => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if c.is_control() => out.push('?'),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A C string literal holding `text`: TypeScript names (a signal's, a
+/// property's) may hold anything a C literal must escape, `"` and `\` among
+/// them.
+fn c_string(text: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::from("\"");
+    for byte in text.bytes() {
+        match byte {
+            b'"' | b'\\' => {
+                out.push('\\');
+                out.push(char::from(byte));
+            }
+            b' '..=b'~' => out.push(char::from(byte)),
+            _ => {
+                let _ = write!(out, "\\{byte:03o}");
+            }
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// A property name as a C identifier, for any name a JavaScript object can have.
 ///
 /// `c_member` handles the punctuation this compiler puts in a name itself. What
@@ -3309,9 +3352,9 @@ fn emit_object_types(
                 writer.line(
                     origin,
                     format!(
-                        "_Static_assert(offsetof({name}, {}) == {offset}u, \"{name}.{} is not where nts computed\");",
+                        "_Static_assert(offsetof({name}, {}) == {offset}u, {});",
                         c_member_at(layout, at),
-                        field.name
+                        c_message(&format!("{name}.{} is not where nts computed", field.name))
                     ),
                 );
             }
