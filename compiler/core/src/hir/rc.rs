@@ -934,11 +934,14 @@ fn count_ops(
                 // was stored. A call cannot: `new Node(i)` hands `node` to a
                 // constructor that keeps it, and the very next line reads
                 // `node.next` ([`dies_here`]).
+                //
+                // A runtime append whose left side survives it calls its
+                // non-consuming twin instead ([`twin_instead`]).
                 if dies_here(func, layouts, settled, at, later, terminator, given)
                     && moved.insert(given)
                 {
                     report.moves += 1;
-                } else {
+                } else if !twin_instead(func, *value, given) {
                     retain(func, &mut ops, given, report);
                 }
             }
@@ -1137,6 +1140,37 @@ fn another_name_for(kind: &OpKind) -> Option<ValueId> {
         } if own::runtime_hands_back(name) => args.first().copied(),
         _ => None,
     }
+}
+
+/// Rename a runtime append whose left side survives it -- read again, or not
+/// this function's to give -- to its non-consuming twin
+/// (`own::non_consuming_twin`), where the handover would otherwise retain it,
+/// and say whether it did. As `+` stays `nts_concat` where `nts_str_append`
+/// would need the left side to die: a rename, so nothing is retained, nothing
+/// handed over, no live range moves, and the string that survives is never
+/// written.
+fn twin_instead(func: &mut Func, value: ValueId, given: ValueId) -> bool {
+    let OpKind::Call {
+        callee: super::Callee::External(name),
+        args,
+        frame,
+    } = &func.values[value.0 as usize].kind
+    else {
+        return false;
+    };
+    let Some(twin) = own::non_consuming_twin(name) else {
+        return false;
+    };
+    if args.first() != Some(&given) {
+        return false;
+    }
+    let (args, frame) = (args.clone(), *frame);
+    func.values[value.0 as usize].kind = OpKind::Call {
+        callee: super::Callee::External(twin.to_owned()),
+        args,
+        frame,
+    };
+    true
 }
 
 /// Whether the reference `given` holds can be handed on by the operation that

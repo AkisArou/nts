@@ -2508,6 +2508,22 @@ pub(super) fn consumes(name: &str) -> Option<usize> {
     }
 }
 
+/// The non-consuming twin of a runtime append that takes its left side over:
+/// `nts_str_concat_number` for `nts_str_append_number`, and so for `_at`,
+/// `_char_at`, `_char_code` and `_slice`. What `rc` calls where that side
+/// survives the call, as `+` stays `nts_concat` where `nts_str_append` would
+/// need the left side to die.
+pub(super) fn non_consuming_twin(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "nts_str_append_number" => "nts_str_concat_number",
+        "nts_str_append_at" => "nts_str_concat_at",
+        "nts_str_append_char_at" => "nts_str_concat_char_at",
+        "nts_str_append_char_code" => "nts_str_concat_char_code",
+        "nts_str_append_slice" => "nts_str_concat_slice",
+        _ => return None,
+    })
+}
+
 /// Name the element a load or store is aimed at.
 fn element(func: &Func, array: ValueId, index: ValueId) -> Slot {
     match slot_of(func, index) {
@@ -3133,8 +3149,9 @@ fn consuming(func: &Func, layouts: &[Layout]) -> rustc_hash::FxHashSet<u32> {
 ///
 /// The rule, per parameter ([`appended_on_every_path`]): a counted string read
 /// only as the left operand of a concatenation, or as an argument in a slot
-/// its direct callee takes over, exactly once on every path to a return and
-/// never round a loop. The second form is what chains a
+/// its callee takes over -- a direct callee's by this fixpoint, a runtime
+/// helper's by its declared contract ([`consumes`]) -- exactly once on every
+/// path to a return and never round a loop. The second form is what chains a
 /// builder that hands its accumulation on, and it is why this is a fixpoint: a
 /// slot is taken over only once a callee's has been, so a cycle of functions
 /// handing a string round with nothing appending it takes none, and the
@@ -3269,6 +3286,19 @@ fn gives_away(
                                         .is_some_and(|slots| slots.contains(&at))
                                 })
                             })
+                }
+                // A runtime helper's slot, by its declared contract
+                // ([`consumes`], the one table): `out + String(n)` sent to
+                // `nts_str_append_number(out, n)` gives `out` away as the
+                // concatenation did.
+                OpKind::Call {
+                    callee: super::Callee::External(helper),
+                    args,
+                    ..
+                } => {
+                    uses == 1
+                        && self::consumes(helper).and_then(|slot| args.get(slot))
+                            == Some(&parameter)
                 }
                 _ => false,
             };

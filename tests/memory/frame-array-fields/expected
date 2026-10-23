@@ -1,8 +1,13 @@
 ideal 12
-allocated 7
+allocated 6
 because The two frame-local Named objects are stored in a live array and read
 because by a map loop in later blocks. Their strings must survive those reads.
 because The two strings take a reference in the mapped array; the containers,
 because source fields, joined result and expected string give all counts back.
-because The measured work takes two retains and ten releases, with seven heap
-because allocations and no allocation for either Named. Live objects stay flat.
+because The measured work takes two retains and ten releases, with six heap
+because allocations and no allocation for either Named: the two names, the two
+because arrays, the joined result, and the expected string, which
+because `"p" + n + ",q" + n` builds in one -- the number written into a grown copy
+because of the literal (`nts_str_append_number`), the rest appended in place.
+because Before the appends that write a number without making its string it
+because took two. Live objects stay flat.

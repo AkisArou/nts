@@ -23,6 +23,12 @@
 //! - Each call whose answer is only appended -- `lhs + f(args)` -- becomes
 //!   `f#into(args, lhs)`, at the call's own position, so nothing it evaluates
 //!   moves past anything else.
+//! - Each runtime helper's answer only appended -- `lhs + String(n)`,
+//!   `lhs + s[i]`, `lhs + s.charAt(i)`, `lhs + String.fromCharCode(c)`,
+//!   `lhs + s.slice(a, b)` -- becomes the helper that appends it without
+//!   making it (`nts_str_append_number` and its siblings), where the call
+//!   stands. In a variant too, so `numberText#into` writes the number into
+//!   its caller's string.
 //!
 //! # Under counting only
 //!
@@ -47,7 +53,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::appended_results::{ReturnedString, appended_calls, returned_strings};
+use super::appended_results::{
+    ReturnedString, appended_calls, appended_runtime_calls, returned_strings,
+};
 use super::{
     BinOp, Block, Callee, Func, HirType, ManagedType, Op, OpKind, Param, ParamShape, Program,
     Provider, Terminator, ValueId, reachable::Roots,
@@ -76,9 +84,6 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
     // longer exists; so build, ask, drop and build again until nothing drops.
     // Each round removes a function, so it ends.
     loop {
-        if wanted.is_empty() {
-            return 0;
-        }
         let mut trial = program.clone();
         for name in &wanted {
             let Some(func) = trial.funcs.iter().find(|func| func.name == *name) else {
@@ -86,6 +91,14 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
             };
             let variant = variant(func, &answers[name], &wanted, &names);
             trial.funcs.push(variant);
+        }
+        // The runtime helpers' appends, in the variants as everywhere else: a
+        // variant's first append may become one, and whether it takes its
+        // string over is asked of what it will be.
+        let fused: usize = trial.funcs.iter_mut().map(send_helper_appends).sum();
+        if wanted.is_empty() {
+            *program = trial;
+            return fused;
         }
         // The calls first, then the question: whether a variant takes its
         // string over is asked of its callers as well (`own`), and these are
@@ -112,7 +125,7 @@ pub(super) fn pass(program: &mut Program, provider: Provider, roots: Roots<'_>) 
             .cloned()
             .collect();
         if refused.is_empty() {
-            let rewritten = sent;
+            let rewritten = fused + sent;
             // An original every caller now reaches through its variant is
             // called by nothing, and C refuses an uncalled static function
             // under `-Werror` (`unicodeEscape` in `json-serialize`).
@@ -253,7 +266,11 @@ fn variant(
                         continue;
                     }
                     match variant.values[member.0 as usize].kind.clone() {
-                        OpKind::ConstString(_) => append_after(&mut variant, member, into),
+                        OpKind::ConstString(_)
+                        | OpKind::Call {
+                            callee: Callee::External(_),
+                            ..
+                        } => append_after(&mut variant, member, into),
                         OpKind::Call {
                             callee: Callee::Direct(callee),
                             args,
@@ -412,6 +429,64 @@ fn send_appends(
             callee: Callee::Direct(names[&callee].clone()),
             args,
             frame,
+        };
+        let rename = |value: ValueId| if value == appended { call } else { value };
+        for block in &mut func.blocks {
+            for &op in &block.ops {
+                super::simplify::substitute(&mut func.values[op.0 as usize].kind, rename);
+            }
+            super::simplify::substitute_terminator(&mut block.terminator, rename);
+        }
+        func.blocks[block].ops.retain(|op| *op != appended);
+        rewritten += 1;
+    }
+    rewritten
+}
+
+/// The runtime helper that appends what `helper` would have answered,
+/// without making it: `out + String(n)` is `nts_str_append_number(out, n)`.
+/// Each takes `out` over (`own::consumes`) and keeps its method's rules.
+fn fused(helper: &str) -> Option<&'static str> {
+    Some(match helper {
+        "nts_number_to_string" => "nts_str_append_number",
+        "nts_str_at" => "nts_str_append_at",
+        "nts_str_char_at" => "nts_str_append_char_at",
+        "nts_string_from_char_code" => "nts_str_append_char_code",
+        "nts_str_slice" => "nts_str_append_slice",
+        _ => return None,
+    })
+}
+
+/// Send each runtime-helper call in `func` whose answer is only appended to
+/// the helper that appends it: `lhs + nts_number_to_string(n)` becomes
+/// `nts_str_append_number(lhs, n)` where the call stands, and the
+/// concatenation goes.
+fn send_helper_appends(func: &mut Func) -> usize {
+    let mut rewritten = 0;
+    for call in appended_runtime_calls(func) {
+        let OpKind::Call {
+            callee: Callee::External(helper),
+            args,
+            ..
+        } = func.values[call.0 as usize].kind.clone()
+        else {
+            continue;
+        };
+        let Some(writer) = fused(&helper) else {
+            continue;
+        };
+        let Some((block, appended, lhs)) = appending(func, call) else {
+            continue;
+        };
+        if !defined_before(func, lhs, call) {
+            continue;
+        }
+        let mut arguments = vec![lhs];
+        arguments.extend(args);
+        func.values[call.0 as usize].kind = OpKind::Call {
+            callee: Callee::External(writer.to_owned()),
+            args: arguments,
+            frame: None,
         };
         let rename = |value: ValueId| if value == appended { call } else { value };
         for block in &mut func.blocks {

@@ -1,0 +1,26 @@
+ideal 47
+allocated 27
+because Twelve iterations, three of them raising (n = -1 at i = 3, 7, 11). Both
+because functions append with `out + String(n)`, which is
+because `nts_str_append_number(out, n)` where `out` is given away and its
+because non-consuming twin `nts_str_concat_number` where it survives.
+because
+because `throwsFirst`, 22 operations: its raise path returns before the append,
+because so `throwsFirst@raises` keeps borrowing `out` and calls the twin, which
+because takes nothing and gives nothing back. Each of the nine that return
+because releases the `s` it replaces (9), each raise costs its Error four -- the
+because message stored into it, the raising call's empty result, the error taken
+because from the raise slot, and its message given back with it (12) -- and `s`
+because goes at the end (1).
+because
+because `appendsFirst`, 25 operations: its append is on every path, so its body
+because would give `out` away, but its one caller reads `t` after a throw and so
+because keeps it: handing it over would take a retain for an append that would
+because copy anyway, so `appendsFirst@raises` keeps borrowing and calls the twin
+because too. Each return releases the `t` it replaces (9); each raise gives back
+because the string the helper made (3), and its Error's four (12); `t` goes at
+because the end (1).
+because
+because 27 allocations: each call that reaches its append copies -- the twin,
+because `throwsFirst`'s nine and `appendsFirst`'s twelve, since it appends before
+because it tests -- and six Errors.
