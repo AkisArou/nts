@@ -238,10 +238,10 @@ reformatted() {
 # pushed past clippy's 100 lines carries `#[expect(clippy::too_many_lines)]`,
 # which goes unfulfilled -- and so red -- the day it is split.
 rust_formatted() {
-  out=$(cargo fmt --all --check 2>&1) && return 0
+  out=$(cargo fmt --check 2>&1) && return 0
   echo "  not formatted:"
   echo "$out" | sed -n -E "s#^Diff in $PWD/(.*):[0-9]+:\$#    \\1#p" | sort -u
-  echo "  run: cargo fmt --all"
+  echo "  run: cargo fmt"
   return 1
 }
 
@@ -2716,6 +2716,10 @@ react_sources() {
     node runtime/react/tools/gen-jsx-entities.ts --check
 }
 step "react-sources" react_sources
+
+# The native frontend's upstream crates are verbatim and outside the
+# workspace. Check their complete file inventory and content against the pin.
+step "frontend-tsrs" node compiler/frontend-tsrs/vendor.ts --check
 
 # The 152 fixtures in `tests/refusals`, which nothing ran.
 #

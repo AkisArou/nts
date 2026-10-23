@@ -21,9 +21,9 @@ members = [
     "tooling/suite",
     "runtime/react/compiler/nts-react",
 ]
-# The React Compiler's crates, vendored verbatim: their own workspace, used by
-# path (see third_party/react-compiler/UPSTREAM.md).
-exclude = ["third_party/react-compiler"]
+# Vendored crates retain their own workspaces and are consumed by path.
+# See each dependency's UPSTREAM.md for its pin and source manifest.
+exclude = ["third_party/react-compiler", "third_party/tsrs"]
 
 [workspace.package]
 version = "0.0.0"

@@ -150,6 +150,7 @@ const STEPS = [
   { name: "example-refusals", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, treeOnly: true, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
+  { name: "frontend-tsrs", slots: 1, treeOnly: true, mem: 0.1, doc: "vendored tsrs sources match the pinned SHA-256 inventory" },
   { name: "profile", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "runtime/node emits without a panic, under the refusal ceiling" },
   { name: "sweep", slots: 1, mem: 1, nts: true, fe: true, doc: "the value-kind cross-product agrees on C" },
   { name: "llvm", elastic: true, slots: 8, min: 2, mem: 6, nts: true, fe: true, doc: "every example agrees with node on LLVM" },

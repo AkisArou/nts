@@ -79,7 +79,7 @@ against a pin). They take minutes, and they caught seventeen regressions that
 fixtures, examples and blockers did not.
 
 Before you land, run the gate's own commands, not look-alikes:
-`cargo fmt --all`; `cargo clippy --workspace --all-targets -- -D warnings`;
+`cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`;
 `cargo test --no-fail-fast` over every crate you touched *and the backend
 crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_TSGO=$PWD/target/tsgo`
 set; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file

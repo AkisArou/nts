@@ -42,6 +42,23 @@ function owes(path, want, { not = [] } = {}) {
   return got;
 }
 
+test("native frontend and vendor changes select their source-integrity check", () => {
+  for (const path of [
+    "third_party/tsrs/crates/tsrs_checker/src/checker.rs",
+    "third_party/tsrs/MANIFEST",
+    "compiler/frontend-tsrs/src/lib.rs",
+    "compiler/frontend-tsrs/vendor.ts",
+  ]) {
+    owes(path, ["frontend-tsrs"]);
+  }
+});
+
+test("unrelated source changes do not select native frontend integrity", () => {
+  for (const path of ["tests/programs/hello/src/main.ts", "docs/architecture.md"]) {
+    assert.ok(!stepsFor(path).includes("frontend-tsrs"), path);
+  }
+});
+
 test("a representation fact is checked wherever the program it describes can change", () => {
   // What `expect-ir` reads: core's preparation, the frontend's snapshot, the
   // CLI that checks it, and the sources that state the facts.

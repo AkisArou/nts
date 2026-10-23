@@ -20,7 +20,7 @@
 //
 // # What it runs, in order, stopping at the first red
 //
-// 1. `cargo fmt --all --check`, and `clang-format --dry-run -Werror` on any
+// 1. `cargo fmt --check`, and `clang-format --dry-run -Werror` on any
 //    runtime C the change edited.
 // 2. `cargo clippy --workspace --all-targets -- -D warnings`.
 // 3. `cargo test --profile nts-dev --no-fail-fast` over the touched crates
@@ -184,7 +184,7 @@ function main(argv: readonly string[]): number {
   const tests = ["test", "--profile", "nts-dev", "--no-fail-fast", ...crates.flatMap((name) => ["-p", name])];
   const runtimeC = formattedRuntimeC(changed).filter((path) => existsSync(join(ROOT, path)));
   const going =
-    step("fmt", () => run("cargo", ["fmt", "--all", "--check"])) &&
+    step("fmt", () => run("cargo", ["fmt", "--check"])) &&
     (runtimeC.length === 0 ||
       step("clang-format", () => run("clang-format", ["--style=file", "--dry-run", "-Werror", ...runtimeC]))) &&
     step("clippy", () => heavy("clippy", "14G", "cargo", ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"])) &&

@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/oxc-project/tsrs",
+  "commit": "bb5c6037ad04decdd7c5832997e810000e85943d",
+  "version": "0.19.0",
+  "typescript_commit": "3e9236361fa97a9e6c685f4833ac457ae2d8c50a",
+  "crates": [
+    "tsrs_ast",
+    "tsrs_astnav",
+    "tsrs_binder",
+    "tsrs_checker",
+    "tsrs_compiler",
+    "tsrs_contentmapper",
+    "tsrs_core",
+    "tsrs_declarations",
+    "tsrs_diagnostics",
+    "tsrs_ipc",
+    "tsrs_ls",
+    "tsrs_lsproto",
+    "tsrs_module",
+    "tsrs_modulespecifiers",
+    "tsrs_parser",
+    "tsrs_printer",
+    "tsrs_project",
+    "tsrs_projectutil",
+    "tsrs_pseudochecker",
+    "tsrs_scanner",
+    "tsrs_sourcemap",
+    "tsrs_spanmap",
+    "tsrs_transformers",
+    "tsrs_tsoptions",
+    "tsrs_vfs"
+  ]
+}
