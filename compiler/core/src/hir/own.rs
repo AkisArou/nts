@@ -1276,10 +1276,18 @@ fn slot_survives(
             // `borrows_safely` applies block by block; the container's life is
             // `anchored`'s question, already answered. An element borrow it
             // can end -- such a helper may release the elements it replaces.
+            // One that stores nothing and releases nothing ends neither: a
+            // table read with a key read out of an array (`counts[words[i]]`)
+            // took a retain and a release of the key per lookup, a fifth of
+            // `record-word-counts`.
             OpKind::Call {
                 callee: super::Callee::External(name),
                 ..
-            } => !settled && (from_field.is_none() || !super::keeps_field_borrows(name)),
+            } => {
+                !settled
+                    && !super::runtime::stores_nothing(name)
+                    && (from_field.is_none() || !super::keeps_field_borrows(name))
+            }
             OpKind::Call { .. } => !settled,
             OpKind::FieldSet { object, field, .. } => match (ours, from_field) {
                 // An element borrow is never a field, and a field slot is named.
@@ -3849,10 +3857,17 @@ fn borrows_safely(
             // program code, so it cannot overwrite a field, and it cannot give
             // up a parameter, which the caller holds. `app.rows.splice(i, 1)`
             // borrows `app.rows` across the call -- see `keeps_field_borrows`.
+            //
+            // And a helper that stores nothing and releases nothing
+            // (`runtime::stores_nothing`) cannot overwrite any slot or give up
+            // any reference, so nothing borrowed can end in it.
             OpKind::Call {
                 callee: super::Callee::External(name),
                 ..
-            } => !(super::keeps_field_borrows(name) && parameter_field(func, value)),
+            } => {
+                !(super::runtime::stores_nothing(name)
+                    || (super::keeps_field_borrows(name) && parameter_field(func, value)))
+            }
             OpKind::Call { .. } => true,
             // A store *into* this value cannot invalidate it. It overwrites a
             // slot inside the container and leaves the reference that names the

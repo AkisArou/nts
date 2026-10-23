@@ -2230,10 +2230,21 @@ pub fn reads_only(name: &str) -> bool {
 pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
     "nts_array_at_ref",
     // Table reads retain the returned tagged value, which can hold a reference,
-    // and neither store into a container nor run the program's code.
+    // and neither store into a container nor run the program's code. A keyed
+    // read whose kind is not the table's asks the key and widens nothing: only
+    // a write widens (`nts_map_set_unpromised`).
+    "nts_map_entry_get",
+    "nts_map_get",
     "nts_map_key_at",
     "nts_map_value_at",
 ];
+
+/// Helpers that store nothing and retain nothing, and are still not
+/// [`READS_ONLY`]. `nts_map_entry` answers a number -- the table's generation
+/// and a slot -- which is a reading of the table's shape: the header keeps it
+/// off `NTS_READS_ONLY` so that two of them are never taken for one. A borrow
+/// survives it as it survives any read.
+pub const READS_A_SHAPE: &[&str] = &["nts_map_entry"];
 
 /// Whether a call overwrites no program storage a borrow depends on.
 ///
@@ -2246,6 +2257,7 @@ pub const RETAINS_ONLY_ITS_RESULT: &[&str] = &[
 pub fn stores_nothing(name: &str) -> bool {
     reads_only(name)
         || RETAINS_ONLY_ITS_RESULT.contains(&name)
+        || READS_A_SHAPE.contains(&name)
         || REGION_CALLS.contains(&name)
         || name == "nts_refused"
 }
