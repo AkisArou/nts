@@ -45,3 +45,18 @@ pub use strings::JsString;
 
 mod text;
 pub use text::{BytePos, Utf16Pos, Utf16Span};
+
+/// Exact upstream versions pinned in the vendored provenance inventory.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VersionInfo {
+    pub tsrs_version: &'static str,
+    pub tsrs_commit: &'static str,
+    pub typescript_commit: &'static str,
+}
+
+/// Checker and TypeScript identities, generated from `third_party/tsrs/UPSTREAM.json`.
+pub const VERSION: VersionInfo = VersionInfo {
+    tsrs_version: env!("NTS_TSRS_VERSION"),
+    tsrs_commit: env!("NTS_TSRS_COMMIT"),
+    typescript_commit: env!("NTS_TYPESCRIPT_COMMIT"),
+};

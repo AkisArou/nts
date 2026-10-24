@@ -43,6 +43,25 @@ fn main() {
         "cargo:rustc-env=NTS_TSRS_ADAPTER_HASH={:032x}",
         hash.digest128()
     );
+    let upstream = root.join("third_party/tsrs/UPSTREAM.json");
+    println!("cargo:rerun-if-changed={}", upstream.display());
+    let upstream: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(upstream).expect("vendor provenance"))
+            .expect("vendor provenance JSON");
+    for (field, variable) in [
+        ("version", "NTS_TSRS_VERSION"),
+        ("commit", "NTS_TSRS_COMMIT"),
+        ("typescript_commit", "NTS_TYPESCRIPT_COMMIT"),
+    ] {
+        let value = upstream[field].as_str().expect("vendor version field");
+        assert!(
+            value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-'),
+            "invalid vendor version field {field}"
+        );
+        println!("cargo:rustc-env={variable}={value}");
+    }
     let manifest = root.join("third_party/tsrs/MANIFEST");
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!(

@@ -28,6 +28,7 @@ tsrs_tsoptions = { path = "../../third_party/tsrs/crates/tsrs_tsoptions", option
 tsrs_vfs = { path = "../../third_party/tsrs/crates/tsrs_vfs", optional = true }
 
 [build-dependencies]
+serde_json.workspace = true
 xxhash-rust.workspace = true
 
 # Owning tsrs programs requires their documented unsafe freeing operation.

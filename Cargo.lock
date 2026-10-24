@@ -535,6 +535,7 @@ dependencies = [
  "camino",
  "nts-semantic-schema",
  "rustc-hash",
+ "serde_json",
  "thiserror",
  "tsrs_ast",
  "tsrs_checker",
