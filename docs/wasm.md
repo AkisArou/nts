@@ -74,11 +74,18 @@ interfaces and lossless UTF-16-code-unit interfaces. See the
 
 ### Compiler ownership and replacement direction
 
-The intended managed-Wasm pipeline is:
+The production compiler boundary is **direct Binaryen IR**, rather than an
+encoded Wasm module that Binaryen must parse again. The intended pipeline is:
 
 ```text
-shared prepared HIR -> GC-aware Wasm lowering -> Binaryen optimization/emission
+shared prepared HIR -> GC-aware lowering to Binaryen IR
+                    -> Binaryen optimization and binary writing -> .wasm
 ```
+
+Running `wasm-opt` on the current emitter's output is a temporary integration
+and differential-measurement tool, not a second permanent production pipeline.
+This is an ownership/interface decision, not a claim that direct IR is
+automatically faster than Binaryen reading equivalent Wasm.
 
 Keep language semantics, numeric facts, aliases, exceptions and reusable
 primitive algorithms in the shared compiler. The Wasm lowering still owns the
@@ -88,6 +95,29 @@ maintaining a parallel general optimizer and encoder inside nts.
 [Binaryen](https://github.com/WebAssembly/binaryen) provides the relevant GC and
 reference IR and Wasm optimization machinery; it does not provide TypeScript
 semantics.
+
+Lowering must respect the tree representation. Every expression node has one
+parent; materialize reused HIR values where necessary and build distinct
+local-get nodes for their uses. Do not share mutable expression nodes or
+duplicate effectful evaluation. Preserve evaluation order and exception
+behavior. Keep semantic class identity separate from structurally canonicalized
+GC types.
+
+Pin Binaryen and isolate its binding in a small adapter. Check the entire needed
+API surface, including recursive GC types, typed calls, final exceptions and
+source locations: the presence of an optimizer feature does not guarantee that
+every language binding exposes its constructors. For example, the
+[version 130 C API](https://github.com/WebAssembly/binaryen/blob/version_130/src/binaryen-c.h)
+has GC/type-builder operations but lacks constructors for `try_table` and
+`throw_ref`; choose a reviewed pin or provide the missing bridge without changing
+exception semantics.
+
+Internal `stringref` and Binaryen intrinsics are compiler representations, not
+new engine requirements. Use them only with an explicit profile-specific
+lowering/finalization plan. Lower required intrinsics before shipping and reject
+unexpected `binaryen-intrinsics` imports in the final artifact. Effect-free call
+annotations require proven effects, not an assumption about ordinary TS or DOM
+calls. Retain independent Wasm validation and explicit target features.
 
 The current direct emitter is a temporary implementation and differential
 oracle, not an architecture constraint. Replace or delete its parts when the
