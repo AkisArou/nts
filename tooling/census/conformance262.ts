@@ -109,18 +109,18 @@
 // at a lowering or backend refusal the checker had kept out of sight.
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { selectTypescript } from "./suites/typescript.ts";
 import { frontendFor, provenanceOf } from "../conformance/pin.ts";
-import { Admission, createFeed } from "../gate/admission.ts";
+import { memoryRun } from "./worker-memory.ts";
+import { runMemoryWorkers } from "./worker-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -226,8 +226,9 @@ process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
 process.env.NTS_SNAPSHOT_CACHE = join(SCRATCH, "snapshots");
 mkdirSync(process.env.NTS_SNAPSHOT_CACHE, { recursive: true });
-// Per-case address-space cap; `attempt262.ts`'s `capped` carries why it exists
-// and why 6 GB. `NTS_CENSUS_MEMORY_CAP_KB=0` removes it.
+// Executed programs retain the address-space cap. Compiler processes use a
+// resident worker cap under the aggregate run slice; no compiler RLIMIT_AS.
+// Zero disables the program/individual cap, while the aggregate stays bounded.
 const MEMORY_CAP_KB = Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000);
 // Runtime objects compiled once and kept across runs; `attempt262.ts`'s
 // `withCachedObjects` says why this is the same program and how it is keyed.
@@ -494,51 +495,23 @@ async function runAll(all) {
   // holding the feed holds the run case by case: below 12 GB no worker gets a
   // new case, the ones running finish on their own timeout, and the feed
   // resumes at 14 GB (`tooling/gate/admission.ts`).
-  const queue = createFeed(paths, new Admission({ report: (message) => process.stderr.write(`  ${message}\n`) }));
-  const worker = (index) =>
-    new Promise((resolve, reject) => {
-      const child = spawn(
-        process.execPath,
-        [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
-        { stdio: ["pipe", "pipe", "inherit"] },
-      );
-      let exited = false;
-      child.on("exit", () => {
-        exited = true;
-      });
-      const feed = () =>
-        queue.feed({
-          write: (path) => child.stdin.write(`${path}\n`),
-          end: () => child.stdin.end(),
-          exited: () => exited,
-        });
-      createInterface({ input: child.stdout }).on("line", (line) => {
-        const row = JSON.parse(line);
-        results.set(row.path, row);
-        if (rowsFile) appendFileSync(rowsFile, `${line}\n`);
-        done += 1;
-        if (done % 500 === 0) {
-          const rate = done / ((Date.now() - started) / 1000);
-          lowestAvailableGb = Math.min(lowestAvailableGb, machineState().available_gb);
-          process.stderr.write(`  ${done}/${paths.length} attempted (${rate.toFixed(1)}/s)\n`);
-        }
-        feed();
-      });
-      child.on("error", reject);
-      // **A killed task looks like a finished one** unless it is said out loud:
-      // the kill notice is out of band, and a reader of a partial log sees
-      // whatever the partial says. A worker ended by a signal is reported as that,
-      // with the checkpoint to resume from, and the run exits 2 -- never a verdict.
-      child.on("exit", (code, signal) => {
-        if (code === 0) return resolve();
-        const how = signal ? `was killed by ${signal}${signal === "SIGKILL" ? " (the OOM killer, or a session reaping it)" : ""}` : `exited ${code}`;
-        reject(new Error(`worker ${index} ${how}`));
-      });
-      feed();
-    });
   if (paths.length > 0) {
     try {
-      await Promise.all(Array.from({ length: Math.min(jobs, paths.length) }, (_, index) => worker(index)));
+      await runMemoryWorkers({
+        paths, jobs, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024,
+        args: (index) => [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
+        report: (message) => process.stderr.write(`  ${message}\n`),
+        onRow: (row) => {
+          results.set(row.path, row);
+          if (rowsFile) appendFileSync(rowsFile, `${JSON.stringify(row)}\n`);
+          done += 1;
+          if (done % 500 === 0) {
+            const rate = done / ((Date.now() - started) / 1000);
+            lowestAvailableGb = Math.min(lowestAvailableGb, machineState().available_gb);
+            process.stderr.write(`  ${done}/${paths.length} attempted (${rate.toFixed(1)}/s)\n`);
+          }
+        },
+      });
     } catch (error) {
       cannotMeasure(
         `${error.message}; ${done} of ${paths.length} case(s) had come back` +
@@ -601,7 +574,9 @@ function classify(row) {
     case "crash":
       return { outcome: "no-verdict", cause: `crash (${row.why})${row.first ? `: ${row.first}` : ""}` };
     case "memory-cap":
-      return { outcome: "no-verdict", cause: `exceeded the ${MEMORY_CAP_KB / 1e6} GB address-space cap (${row.why})` };
+      return { outcome: "no-verdict", cause: row.residentWorkerBytes
+        ? `resident memory cap (worker ${(row.residentWorkerBytes / 2 ** 30).toFixed(2)} GiB, run ${(row.residentRunBytes / 2 ** 30).toFixed(2)} GiB; ${row.why})`
+        : `exceeded the ${MEMORY_CAP_KB / 1e6} GB address-space cap (${row.why})` };
     case "invalid-hir":
       return { outcome: "no-verdict", cause: `invalid HIR: ${row.first}` };
     case "frontend-crash":

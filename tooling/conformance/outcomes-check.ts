@@ -128,6 +128,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
+import { compileSync, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -151,6 +152,7 @@ if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
   process.exit(2);
 }
+serialRun(TOOLS);
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
 mkdirSync(SCRATCH, { recursive: true });
 process.env.TMPDIR = join(SCRATCH, "tmp");
@@ -178,12 +180,13 @@ const rootLine = (d) => `${d.code} ${d.raw}`;
 /** Everything the build run observed, reduced to one category and one detail. */
 function runBuild(dir, options = { rc: false, address: false }) {
   const out = join(dir, "out");
-  const emit = spawnSync("sh", capped(TOOLS, NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main", ...(options.rc ? ["--rc"] : [])]), {
+  const emit = compileSync(TOOLS, NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main", ...(options.rc ? ["--rc"] : [])], {
     encoding: "utf8",
     timeout: 180_000,
     maxBuffer: 64 * 1024 * 1024,
     env: env(),
   });
+  if (emit.memoryKilled) return { category: "not-measured", nts: "the resident memory cap" };
   const said = `${emit.stdout ?? ""}${emit.stderr ?? ""}`;
   if (emit.error || emit.signal) return { category: "not-measured", nts: `emit-c ${emit.signal ?? emit.error?.message}` };
   const invalid = /^invalid HIR: (.*)$/m.exec(said);
@@ -342,16 +345,17 @@ function runCheck(dir, backend, options) {
   // The check builds its program under AddressSanitizer and runs it without an
   // address-space cap, which the sanitizer's shadow memory cannot start under
   // (`address_sanitized` in tooling/differential). A cap on `nts` would be
-  // inherited by that program, so `nts` runs uncapped too, as build mode runs
+  // inherited by that program, so `nts` has no address-space cap, as build mode runs
   // its sanitized executable.
   if (options.address) rest.NTS_SANITIZE = "address";
   const tools = options.address ? { ...TOOLS, memoryCapKb: 0 } : TOOLS;
-  const ran = spawnSync("sh", capped(tools, NTS, ["check", dir]), {
+  const ran = compileSync(tools, NTS, ["check", dir], {
     encoding: "utf8",
     timeout: 300_000,
     maxBuffer: 64 * 1024 * 1024,
     env: backend === null ? rest : { ...rest, NTS_BACKEND: backend },
   });
+  if (ran.memoryKilled) return { category: "not-measured", nts: "the resident memory cap" };
   const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
   // The CLI says a decline as "17 case(s) the compiled program declined -- …",
   // count first: matched by its words, not by a line start, or it drops out

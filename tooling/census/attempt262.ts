@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from "./project.ts";
 import { jvmRun } from "../jvm/launch.ts";
+import { compileSync } from "./worker-memory.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -238,6 +239,9 @@ export function withCachedObjects(printed, out, tools) {
 }
 
 /**
+ * Applied only to the EXECUTED program. Compiler emission uses resident
+ * scopes through compileSync: compressed native pointers reserve 32 GiB.
+ *
  * `sh -c 'ulimit -c 0; ulimit -v <cap>; exec "$0" "$@"'` -- the argv that runs
  * `command` with no core file and under an address-space cap, or with no cap
  * when `tools.memoryCapKb` is unset.
@@ -464,13 +468,14 @@ export function attempt(dir, body, tools, origin?) {
   // in it, so the arm that would have fired never ran. `refused()` is that arm.
   const backend = BACKENDS[tools.backend ?? "c"];
   if (!backend) return { bucket: "infrastructure-error", why: `no backend \`${tools.backend}\`` };
-  const emit = spawnSync("sh", capped(tools, nts, backend.emit(join(project, "tsconfig.json"), out)), {
+  const emit = compileSync(tools, nts, backend.emit(join(project, "tsconfig.json"), out), {
     encoding: "utf8",
     timeout: 120_000,
     maxBuffer: 64 * 1024 * 1024,
     env: environment({ snapshotCache: !tools.fresh }),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (emit.memoryKilled) return { bucket: "memory-cap", why: "emit resident scope", residentWorkerBytes: emit.residentLimitBytes, residentRunBytes: emit.residentRunBytes };
   const stdout = emit.stdout ?? "";
   const diagnostics = `${stdout}${emit.stderr ?? ""}`;
   if (emit.error || emit.status !== 0) {

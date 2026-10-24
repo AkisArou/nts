@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 import { BACKENDS, attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
 import { frontendFor } from "../conformance/pin.ts";
+import { serialRun } from "./worker-memory.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -90,6 +91,7 @@ function cannotMeasure(why) {
 
 if (!existsSync(NTS)) cannotMeasure(`no compiler at ${NTS}; set NTS_BIN`);
 if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bootstrap.sh clones it");
+serialRun({ memoryCapKb: Number(process.env.NTS_CENSUS_MEMORY_CAP_KB ?? 6_000_000) });
 
 // Copied, and every `attempt` runs the copy: a run measures one binary even
 // though `target/release/nts` is the path everyone builds into. `pinCompiler`

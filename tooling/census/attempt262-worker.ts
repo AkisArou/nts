@@ -21,6 +21,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 
 import { attempt } from "./attempt262.ts";
+import { inResidentWorker } from "./worker-memory.ts";
 import { workspace } from "./project.ts";
 import { oracle } from "./suites/typescript.ts";
 
@@ -34,6 +35,7 @@ const tools = {
   fresh: fresh === "fresh",
   language: language === "ts" ? ("ts" as const) : ("js" as const),
 };
+if (!inResidentWorker()) throw new Error("resident cap: census worker was started without its bounded scope");
 const dir = workspace(scratch, tools.language);
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });

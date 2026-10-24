@@ -388,6 +388,9 @@ function stepEnv(step, slots) {
   delete e.NTS_GATE_TOKENS;
   delete e.NTS_GATE_TOKEN_HELD;
   e.NTS_GATE_STEP = step.name;
+  // Resident worker scopes are siblings of the land unit, so their run slice
+  // needs this step's own reserved budget as an enforced aggregate ceiling.
+  e.NTS_GATE_STEP_MEMORY_BYTES = String(Math.floor(step.mem * 2 ** 30));
   if (step.elastic && tokenAddr) e.NTS_GATE_TOKENS = tokenAddr;
   else e.NTS_GATE_TOKEN_HELD = "1";
   const s = String(slots);
