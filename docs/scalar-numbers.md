@@ -269,7 +269,8 @@ through the gate on its own.
   `gtk-journal`'s `get_n_items() - 1` and `list-model`'s
   `remove(row.get_index())`), or a **fact the engine lacks**.
 
-**Step 0 results (2026-10-08).** `nts facts --crossings`, over 648 projects
+**Step 0 results (2026-10-08).** The crossings report (now
+`nts facts --obligations`; the earlier flag was `--crossings`), over 648 projects
 (every example, `runtime/node`, the Chromium lane), judged by local facts only
 (Q2). Counted once per source location:
 

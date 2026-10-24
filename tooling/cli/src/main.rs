@@ -6,6 +6,7 @@
 //! precisely, and that promise starts here.
 
 mod apple_surface;
+mod arguments;
 mod bind;
 mod bind_gir;
 mod bind_header;
@@ -37,31 +38,6 @@ use nts_core::reachability;
 use nts_diagnostics::SourceLocations;
 use nts_frontend_ts::{SemanticSource, TsgoApi, tsgo, tsgo::decompose::Budget};
 use nts_semantic_schema::SCHEMA_VERSION;
-
-/// The tsconfig a subcommand was pointed at: the first positional argument, or
-/// the one in the working directory.
-/// Flags that take a value, so that the value is not mistaken for the project.
-///
-/// `nts emit-jvm --out /tmp/x proj/tsconfig.json` used to compile `/tmp/x`:
-/// the scan below took the first argument not starting with `--`, and that is
-/// the *out directory*. tsgo answered with an empty snapshot, the backend
-/// emitted a class containing nothing but its constructor, and the command
-/// printed "wrote 1 class(es)" and exited zero. An hour went into looking for
-/// the emitter bug that had lost every method.
-/// Flags whose *value* is not the project path.
-///
-/// `--entry` and `--product` were missing, so `nts emit-c --entry published
-/// proj` took `published` as the tsconfig and failed with "`published` is not a
-/// tsconfig" -- flag order deciding whether a command works, which is the shape
-/// the comment in `named_project` records twice already.
-const TAKES_A_VALUE: [&str; 6] = [
-    "--out",
-    "--entry",
-    "--product",
-    "--os",
-    "--host",
-    "--backends",
-];
 
 /// The tsconfig a command was pointed at, *and* its dependencies acquired.
 ///
@@ -200,7 +176,7 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
             skip_next = false;
             continue;
         }
-        if TAKES_A_VALUE.contains(&arg.as_str()) {
+        if arguments::takes_value(arg) {
             skip_next = true;
             continue;
         }
@@ -208,26 +184,6 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
             found = Some(Utf8PathBuf::from(arg));
             break;
         }
-    }
-    // Everything after the positional was never examined, because the loop
-    // above **breaks** at it. So `nts emit-jvm proj -o /tmp/x` took `proj`,
-    // ignored `-o /tmp/x` entirely, wrote to the default location and exited
-    // zero -- and the reader concluded the backend had emitted nothing, from an
-    // empty directory it had named itself.
-    //
-    // The same shape as the bug the comment on `TAKES_A_VALUE` records, which
-    // cost an hour: an argument silently not doing anything looks exactly like
-    // the thing it was meant to configure being broken.
-    //
-    // Only single-dash arguments are rejected here, and that is deliberate:
-    // this CLI defines no short flags but `-h`, so anything else with one dash
-    // is a mistake, while an unknown `--flag` may be one a subcommand reads for
-    // itself. Narrow enough to be certain, which is the half that matters.
-    if let Some(bad) = rest
-        .iter()
-        .find(|arg| arg.starts_with('-') && !arg.starts_with("--") && arg.as_str() != "-h")
-    {
-        bail!("`{bad}` is not an option this command takes; did you mean `--out`?");
     }
     let named_one = found.is_some();
     let path = found.unwrap_or_else(|| Utf8PathBuf::from("tsconfig.json"));
@@ -756,20 +712,20 @@ fn binary_identity() {
 /// as the project path and reported that there is no config beside it -- and
 /// that is the spelling a person reaches for *after* they know the command
 /// exists, so it is the more likely of the two to be typed.
-fn arguments() -> Option<Vec<String>> {
+fn arguments() -> Result<Option<Vec<String>>> {
     let given: Vec<String> = std::env::args().skip(1).collect();
-    if given.iter().any(|arg| arg == "--help" || arg == "-h") {
+    if arguments::validate(&given).map_err(anyhow::Error::msg)? {
         usage();
-        return None;
+        return Ok(None);
     }
-    Some(given)
+    Ok(Some(given))
 }
 
 // A dispatch table, one arm per command: it grows by one line a command, and
 // the usage test reads its arms as written, so it is not folded to fit.
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
-    let Some(given) = arguments() else {
+    let Some(given) = arguments()? else {
         return Ok(());
     };
     let mut args = given.into_iter();
