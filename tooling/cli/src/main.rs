@@ -5266,6 +5266,13 @@ fn package_macos_app(
     std::fs::create_dir_all(&binaries).with_context(|| format!("creating {binaries}"))?;
     std::fs::copy(executable, binaries.join(name))
         .with_context(|| format!("copying {executable} into {bundle}"))?;
+    copy_bundle(
+        &executable
+            .parent()
+            .unwrap_or_else(|| Utf8Path::new("."))
+            .join("notices"),
+        &bundle.join("Contents/Resources/notices"),
+    )?;
     // The dynamic frameworks it loads, where an application keeps them.
     for framework in frameworks {
         copy_bundle(
@@ -5352,6 +5359,13 @@ fn package_ios_app(
     std::fs::create_dir_all(&bundle).with_context(|| format!("creating {bundle}"))?;
     std::fs::copy(executable, bundle.join(name))
         .with_context(|| format!("copying {executable} into {bundle}"))?;
+    copy_bundle(
+        &executable
+            .parent()
+            .unwrap_or_else(|| Utf8Path::new("."))
+            .join("notices"),
+        &bundle.join("notices"),
+    )?;
     for framework in frameworks {
         copy_bundle(
             framework,
@@ -9344,6 +9358,12 @@ fn write_c_output(
     // `support_files` is the one list, so that the several places which build a
     // program agree about it rather than each remembering.
     let support = emitted.support_files();
+    // A reused output directory must not retain notices for a component this
+    // program no longer links (for example after removing Unicode helpers).
+    let notices = out.join("notices");
+    if notices.exists() {
+        std::fs::remove_dir_all(&notices).with_context(|| format!("removing {notices}"))?;
+    }
     for file in &support {
         file.write(out.as_std_path())?;
     }
@@ -9572,5 +9592,45 @@ mod header_spelling_tests {
             "\"digest.h\""
         );
         assert_eq!(named("src", "include/digest.h"), "\"../include/digest.h\"");
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod runtime_notice_tests {
+    use super::{package_ios_app, package_macos_app};
+    use camino::Utf8PathBuf;
+
+    #[test]
+    fn application_bundles_carry_the_selected_runtime_notices() {
+        let directory =
+            Utf8PathBuf::from_path_buf(crate::bind_scratch::directory("program-notices").unwrap())
+                .unwrap();
+        let executable = directory.join("example");
+        std::fs::write(&executable, "fixture executable").unwrap();
+        let relative = "component/LICENSE";
+        let notices = directory.join("notices");
+        std::fs::create_dir_all(notices.join("component")).unwrap();
+        std::fs::write(notices.join(relative), "full component license\n").unwrap();
+        let product = serde_json::from_value(serde_json::json!({
+            "kind": "application", "entry": "main.ts", "id": "org.nts.example"
+        }))
+        .unwrap();
+        let target = serde_json::from_value(serde_json::json!({
+            "id": "macos", "os": "macos", "backend": "c"
+        }))
+        .unwrap();
+        let bundle = package_macos_app("example", &product, &executable, &target, &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(bundle.join("Contents/Resources/notices").join(relative))
+                .unwrap(),
+            "full component license\n"
+        );
+        let bundle = package_ios_app("example", &product, &executable, &target, &[]).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(bundle.join("notices").join(relative)).unwrap(),
+            "full component license\n"
+        );
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

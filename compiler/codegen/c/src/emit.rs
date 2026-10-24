@@ -24,6 +24,7 @@ use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::Origin;
 
 mod header;
+mod notices;
 
 /// The C runtime, as source.
 ///
@@ -300,37 +301,11 @@ const WINRT_HELPERS: [&str; 18] = [
     "NTS_TAG_HANDLE_COM",
 ];
 
-/// Every file a program needs beside `program.c`, given whether it converts case.
+/// Sources and full notices for exactly the runtime components this program links.
+/// Unicode sources and their notices are selected together when it converts case.
 #[must_use]
 pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
-    let one = |name, contents, compiled| Support {
-        name,
-        contents,
-        compiled,
-    };
-    let mut files = vec![
-        one(RUNTIME_HEADER_NAME, RUNTIME_HEADER, false),
-        // `nts_runtime.c` includes `zmij/zmij.c` and `ffc/ffc.h`, so these
-        // travel with it always -- `String(x)` and `Number(s)` are in nearly
-        // every program.
-        one(ZMIJ_HEADER_NAME, ZMIJ_HEADER, false),
-        one(ZMIJ_SOURCE_NAME, ZMIJ_SOURCE, false),
-        one(FFC_HEADER_NAME, FFC_HEADER, false),
-        // `nts_runtime.h` includes it, so it travels with every program.
-        one(STRING_VIEW_HEADER_NAME, STRING_VIEW_HEADER, false),
-        one(RUNTIME_SOURCE_NAME, RUNTIME_SOURCE, true),
-    ];
-    if needs_unicode {
-        files.extend([
-            one(UNICODE_HEADER_NAME, UNICODE_HEADER, false),
-            one(CUTILS_HEADER_NAME, CUTILS_HEADER, false),
-            one(LIBUNICODE_HEADER_NAME, LIBUNICODE_HEADER, false),
-            one(LIBUNICODE_TABLE_NAME, LIBUNICODE_TABLE, false),
-            one(LIBUNICODE_SOURCE_NAME, LIBUNICODE_SOURCE, false),
-            one(UNICODE_SOURCE_NAME, UNICODE_SOURCE, true),
-        ]);
-    }
-    files
+    notices::support_files(needs_unicode)
 }
 
 /// The `main` of a standalone program.

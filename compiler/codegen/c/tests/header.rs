@@ -588,3 +588,56 @@ int main(void) {
         true,
     );
 }
+
+#[test]
+fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
+    let Some(tsgo) = toolchain() else { return };
+    for (name, source, unicode) in [
+        (
+            "notices-number",
+            "export function value(): number { return 1; }",
+            false,
+        ),
+        (
+            "notices-unicode",
+            "export function value(s: string): string { return s.toLowerCase(); }",
+            true,
+        ),
+    ] {
+        let (dir, emitted) = emit(&tsgo, name, source);
+        assert_eq!(emitted.needs_unicode(), unicode);
+        for notice in [
+            "nts-runtime/LICENSE",
+            "nts-runtime/NOTICE",
+            "zmij/LICENSE",
+            "ffc/LICENSE-APACHE",
+            "ffc/LICENSE-MIT",
+            "ffc/LICENSE-BOOST",
+        ] {
+            assert!(
+                dir.join("notices").join(notice).is_file(),
+                "missing {notice}"
+            );
+        }
+        for notice in ["quickjs/LICENSE", "unicode-data/LICENSE"] {
+            assert_eq!(
+                dir.join("notices").join(notice).is_file(),
+                unicode,
+                "{notice}"
+            );
+        }
+        assert!(
+            emitted
+                .support_files()
+                .iter()
+                .filter(|file| file.name.starts_with("notices/"))
+                .all(|file| !file.compiled)
+        );
+        if unicode {
+            let text = std::fs::read_to_string(dir.join("notices/unicode-data/LICENSE")).unwrap();
+            assert!(text.starts_with("UNICODE LICENSE V3\n"));
+            assert!(text.contains("Copyright © 1991-2026 Unicode, Inc."));
+            assert!(text.ends_with("authorization of the copyright holder.\n"));
+        }
+    }
+}
