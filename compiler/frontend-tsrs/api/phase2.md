@@ -51,10 +51,12 @@ impl Finished<'_> {
     pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>>;
     pub fn case_sensitivity(&self) -> CaseSensitivity;
     pub fn diagnostics(&self) -> Vec<Diagnostic>;
+    pub fn plain_js_unfiltered(&self) -> Vec<Diagnostic>; // separate raw plain-JS facts, consumer applies allowlist
     pub fn inputs(&self) -> Vec<Input>; // includes diagnostic reads
 }
 impl Project<'_, SyntaxPhase> {
     pub fn diagnostics(self) -> Vec<Diagnostic>; // this requested program only
+    pub fn plain_js_unfiltered(self) -> Vec<Diagnostic>; // raw native plain-JS bind/check facts; consumer applies allowlist
 }
 impl<'p, S: ViewPhase> Project<'p, S> {
     pub fn config_path(self) -> &'p Utf8Path;

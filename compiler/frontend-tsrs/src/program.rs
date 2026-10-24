@@ -117,6 +117,7 @@ pub(crate) struct OwnedProgram {
     host: Arc<Host>,
     config_diagnostics: Vec<P<NativeDiagnostic>>,
     diagnostics: OnceCell<Vec<Diagnostic>>,
+    plain_js_unfiltered: OnceCell<Vec<Diagnostic>>,
     // The outer region owns configs and lazy work on the capture thread. The
     // loader has per-worker scratch regions, avoiding a cross-thread owner lock.
     region: Region,
@@ -148,6 +149,7 @@ impl OwnedProgram {
             host,
             config_diagnostics: diagnostics,
             diagnostics: OnceCell::new(),
+            plain_js_unfiltered: OnceCell::new(),
             region: region.clone(),
             _loader_regions: Arc::clone(&loader_regions),
         };
@@ -224,6 +226,8 @@ impl OwnedProgram {
     fn finish(&self) {
         let _scope = self.region.enter();
         self.diagnostics.get_or_init(|| self.collect_diagnostics());
+        self.plain_js_unfiltered
+            .get_or_init(|| self.collect_plain_js_unfiltered());
     }
 
     fn diagnostic(&self, native: P<NativeDiagnostic>) -> Diagnostic {
@@ -275,20 +279,32 @@ impl OwnedProgram {
             native.extend(program.get_config_file_parsing_diagnostics());
             native.extend(program.get_program_diagnostics());
             native.extend(program.get_syntactic_diagnostics(&ctx, None));
-            native.extend(program.get_bind_diagnostics(&ctx, None));
             native.extend(program.get_semantic_diagnostics(&ctx, None));
             native.extend(program.get_global_diagnostics(&ctx));
-            // Ordinary JS still has ECMAScript early errors. Expose the native
-            // checker's unfiltered facts; selecting nts refusals is builder policy.
+        }
+        let mut diagnostics: Vec<_> = native.into_iter().map(|d| self.diagnostic(d)).collect();
+        diagnostics.extend(crate::environment::initialize().notes());
+        diagnostics.sort();
+        diagnostics.dedup();
+        diagnostics
+    }
+
+    fn collect_plain_js_unfiltered(&self) -> Vec<Diagnostic> {
+        let ctx = Context::default();
+        let mut native = Vec::new();
+        for project in &self.projects {
+            let program = project.program;
             for &file in program.source_files() {
-                if tsrs_ast::is_source_file_js(file) {
+                if tsrs_ast::is_plain_js_file(Some(file), program.options().check_js)
+                    && !program.skip_type_checking(file, false)
+                {
                     let mut checker = program.get_type_checker_for_file(&ctx, file);
+                    native.extend_from_slice(file.bind_diagnostics());
                     native.extend(checker.get_diagnostics_exported(&ctx, file));
                 }
             }
         }
         let mut diagnostics: Vec<_> = native.into_iter().map(|d| self.diagnostic(d)).collect();
-        diagnostics.extend(crate::environment::initialize().notes());
         diagnostics.sort();
         diagnostics.dedup();
         diagnostics
@@ -441,6 +457,16 @@ impl Finished<'_> {
             .expect("Finished ran diagnostics")
             .clone()
     }
+    /// Raw bind/check facts only for native plain JS, before its error filter.
+    /// The consumer applies its own allowlist; this is not a program error list.
+    #[must_use]
+    pub fn plain_js_unfiltered(&self) -> Vec<Diagnostic> {
+        self.owner
+            .plain_js_unfiltered
+            .get()
+            .expect("Finished collected plain-JS facts")
+            .clone()
+    }
 }
 
 /// The requested native config's program, including imported reference sources.
@@ -467,6 +493,16 @@ impl Project<'_, SyntaxPhase> {
             .diagnostics
             .get()
             .expect("Finished ran diagnostics")
+            .clone()
+    }
+    /// Raw bind/check facts only for native plain JS, before its error filter.
+    /// The consumer applies its own allowlist; this is not a program error list.
+    #[must_use]
+    pub fn plain_js_unfiltered(self) -> Vec<Diagnostic> {
+        self.owner
+            .plain_js_unfiltered
+            .get()
+            .expect("Finished collected plain-JS facts")
             .clone()
     }
 }
@@ -884,7 +920,7 @@ mod tests {
                 "let duplicate; let duplicate;".to_owned(),
             );
             let checked = session.open(spec).expect("JavaScript config").finish();
-            assert!(checked.diagnostics().iter().any(|d| d.code == 2451));
+            assert!(checked.plain_js_unfiltered().iter().any(|d| d.code == 2451));
         });
     }
 
@@ -1051,3 +1087,7 @@ mod tests {
 #[cfg(test)]
 #[path = "resolution_test.rs"]
 mod resolution_tests;
+
+#[cfg(test)]
+#[path = "diagnostics_test.rs"]
+mod diagnostic_tests;
