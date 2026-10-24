@@ -89,6 +89,8 @@ pub(crate) enum Op {
     IsMap,
     /// `value instanceof Set` of an open value.
     IsSet,
+    /// Record membership: -1 for another receiver, otherwise absence/presence.
+    Membership,
 }
 
 #[cfg(test)]
@@ -98,7 +100,7 @@ impl Op {
     pub(crate) const fn inline(self) -> bool {
         matches!(
             self,
-            Self::New | Self::KeyAt | Self::ValueAt | Self::IsMap | Self::IsSet
+            Self::New | Self::KeyAt | Self::ValueAt | Self::IsMap | Self::IsSet | Self::Membership
         )
     }
 }
@@ -144,6 +146,7 @@ pub(crate) enum KeyHelper {
 pub(crate) fn external(name: &str) -> Option<Op> {
     Some(match name {
         "nts_map_new" | "nts_set_new" | "nts_table_new" => Op::New,
+        "nts_table_membership" => Op::Membership,
         "nts_map_get" => Op::Get,
         "nts_map_has" => Op::Has,
         "nts_map_set" => Op::Set,
@@ -242,8 +245,10 @@ pub(crate) fn call(
     op: Op,
     args: &[ValueId],
 ) -> Result<(), Failure> {
-    if matches!(op, Op::IsMap | Op::IsSet) {
-        return is_kind(b, result, op == Op::IsMap, args);
+    match op {
+        Op::IsMap | Op::IsSet => return is_kind(b, result, op == Op::IsMap, args),
+        Op::Membership => return record_membership(b, result, args),
+        _ => {}
     }
     let subject = if op == Op::New {
         result
@@ -254,7 +259,7 @@ pub(crate) fn call(
     };
     let c = b.types().collection(b.ty(subject))?.clone();
     let arity = match op {
-        Op::New | Op::Clear | Op::Copy | Op::KeysStr | Op::IsMap | Op::IsSet => 1,
+        Op::New | Op::Clear | Op::Copy | Op::KeysStr | Op::IsMap | Op::IsSet | Op::Membership => 1,
         Op::Get
         | Op::Has
         | Op::Add
@@ -316,7 +321,7 @@ pub(crate) fn call(
                 b.load(subject)?;
             }
         }
-        Op::IsMap | Op::IsSet => {
+        Op::IsMap | Op::IsSet | Op::Membership => {
             return Err(Failure::Invariant("a collection test routed".into()));
         }
         Op::KeysStr => {
@@ -369,6 +374,54 @@ fn is_kind(
         b.instructions(&[I::RefTestNonNull(HeapType::Concrete(wrapper)), I::I32Or]);
     }
     numeric::convert(b, &HirType::Bool, &b.ty(result).clone())
+}
+
+/// Test each actual record storage before using its ordinary lookup. The
+/// values may be erased, numeric or boolean; membership reads only the keys.
+fn record_membership(
+    b: &mut Body<'_, '_>,
+    result: ValueId,
+    args: &[ValueId],
+) -> Result<(), Failure> {
+    let &[receiver, key] = args else {
+        return Err("record membership arity mismatch".into());
+    };
+    if b.ty(receiver) != &HirType::Erased || b.ty(key) != &HirType::Erased {
+        return Err("record membership requires an erased receiver and key".into());
+    }
+    let mut records: Vec<_> = b
+        .types()
+        .collections
+        .values()
+        .filter(|c| c.table)
+        .cloned()
+        .collect();
+    records.sort_unstable_by_key(|c| c.wrapper);
+    records.dedup_by_key(|c| c.wrapper);
+    b.instruction(&I::Block(BlockType::Result(ValType::I32)));
+    for c in records {
+        b.load(receiver)?;
+        b.instruction(&I::RefTestNonNull(HeapType::Concrete(c.wrapper)));
+        b.instruction(&I::If(BlockType::Empty));
+        b.load(receiver)?;
+        b.instruction(&I::RefCastNonNull(HeapType::Concrete(c.wrapper)));
+        key_operand(b, &c, key)?;
+        strings::constant(b, &b.func.name.clone());
+        let lookup = callee(b.m, &c, Helper::Has)?;
+        b.call(lookup);
+        b.instruction(&I::Br(1));
+        b.instruction(&I::End);
+    }
+    b.instruction(&I::I32Const(-1));
+    b.instruction(&I::End);
+    numeric::convert(
+        b,
+        &HirType::Int {
+            bits: 32,
+            signed: true,
+        },
+        &b.ty(result).clone(),
+    )
 }
 
 /// A call that reads or writes one key's entry.

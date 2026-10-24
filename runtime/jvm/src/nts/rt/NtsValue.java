@@ -849,6 +849,17 @@ public final class NtsValue {
         return ref instanceof NtsMap && !(ref instanceof NtsDictionary);
     }
 
+    /**
+     * Record-key membership on an open receiver: -1 for another kind, otherwise
+     * the existing dictionary lookup's 0 or 1. Presence includes an undefined
+     * value, and never reads a possibly unboxed value column.
+     */
+    public static int tableMembership(NtsValue receiver, NtsValue key) {
+        Object ref = receiver == null ? null : receiver.ref;
+        if (!(ref instanceof NtsDictionary)) return -1;
+        return NtsTable.has((NtsDictionary) ref, key) ? 1 : 0;
+    }
+
     /** `instanceof Set`; the sibling of {@link #isMap} under `NtsTable`. */
     public static boolean isSet(NtsValue value) {
         Object ref = value == null ? null : value.ref;

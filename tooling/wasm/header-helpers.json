@@ -407,6 +407,7 @@
     "nts_symbol_key_for",
     "nts_symbol_new",
     "nts_symbol_to_string",
+    "nts_table_membership",
     "nts_table_new",
     "nts_tag_name",
     "nts_tag_of_reference",

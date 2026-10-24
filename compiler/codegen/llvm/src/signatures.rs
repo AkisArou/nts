@@ -2536,6 +2536,12 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_table_membership",
+        returns: "i32",
+        params: &["i32", "i64", "i32", "i64"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
         name: "nts_table_new",
         returns: "noalias nonnull ptr",
         params: &["double"],

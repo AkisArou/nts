@@ -5,7 +5,7 @@
 //! have undefined-capable storage. Getter results retain their actual absence;
 //! the narrower type an assertion names cannot remove null or undefined.
 
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -147,6 +147,203 @@ pub(super) fn cast_field_failure(hierarchy: &Hierarchy, face: TypeId, member: &s
 }
 
 impl FuncBuilder<'_> {
+    /// A const alias still holds the family's complete tagged result. Its
+    /// consumer decides whether to keep the tag or read a checked payload.
+    /// Actual checker narrowing keeps `narrowed`'s existing proof path.
+    pub(super) fn cast_family_alias_result(
+        &mut self,
+        at: NodeId,
+        value: super::ValueId,
+    ) -> Result<super::ValueId, nts_diagnostics::Diagnostic> {
+        if self.hierarchy.cast_faces.is_empty()
+            || self.kind_of(at) != Some(syntax::IDENTIFIER)
+            || self.values[value.0 as usize].ty != HirType::Erased
+        {
+            return Ok(value);
+        }
+        let Some(Read::Family(family)) = self.actual_field_read(at) else {
+            return Ok(value);
+        };
+        let face = family.face;
+        if !self.hierarchy.cast_faces.contains(&face) {
+            return Ok(value);
+        }
+        let member = family.member.clone();
+        self.cast_family_result(at, value, face, &member)
+    }
+
+    /// A cast supplies no object proof for membership. Reject other tags by
+    /// name until `in` has a catchable `TypeError` path of its own.
+    pub(super) fn require_cast_membership_object(
+        &mut self,
+        at: NodeId,
+        value: super::ValueId,
+        face: TypeId,
+        key: &str,
+    ) {
+        use super::{BinOp, ManagedType, OpKind, Terminator};
+        let origin = self.origin(at);
+        // An assertion provides no object proof. Keep the tag until this
+        // branch; JavaScript throws for non-objects, which remains a named
+        // stop until membership has a catchable TypeError path.
+        let integer = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let tag = self.push(OpKind::TagOf { value }, integer.clone(), origin.clone());
+        let object_tag = self.push(
+            OpKind::ConstInt(i128::from(super::super::tags::OBJECT)),
+            integer,
+            origin.clone(),
+        );
+        let managed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: tag,
+                rhs: object_tag,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let present = self.new_block();
+        let absent = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: managed,
+            then_target: present,
+            then_args: Vec::new(),
+            else_target: absent,
+            else_args: Vec::new(),
+        });
+        self.switch_to(absent);
+        let name = &self.hierarchy.cast_descriptions[&face];
+        let message = self.push(
+            OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on a non-object, whose TypeError this compiler does not yet lower")),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        self.runtime_call("nts_refused", vec![message], HirType::Void, origin.clone());
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(present);
+    }
+
+    /// A record supplies membership through its own key lookup. Other kinds
+    /// continue only when core planned a structural owner or a native answer.
+    pub(super) fn begin_cast_record_membership(
+        &mut self,
+        at: NodeId,
+        value: super::ValueId,
+        face: TypeId,
+        key: &str,
+        brand: bool,
+    ) -> (super::BlockId, super::ValueId) {
+        use super::{Absent, BinOp, ManagedType, OpKind, Terminator};
+        let origin = self.origin(at);
+        let integer = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let text = self.push(
+            OpKind::ConstString(key.to_owned()),
+            HirType::Managed(ManagedType::String),
+            origin.clone(),
+        );
+        let key_value = self.erased(text, Absent::Impossible, &origin);
+        let membership = self.call_runtime(
+            "nts_table_membership",
+            vec![value, key_value],
+            integer.clone(),
+            &origin,
+        );
+        let zero = self.push(OpKind::ConstInt(0), integer, origin.clone());
+        let is_record = self.push(
+            OpKind::Binary {
+                op: BinOp::Ge,
+                lhs: membership,
+                rhs: zero,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let record = self.new_block();
+        let structural = self.new_block();
+        let merge = self.new_block();
+        let result = self.push_block_param(merge, HirType::Bool, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: is_record,
+            then_target: record,
+            then_args: Vec::new(),
+            else_target: structural,
+            else_args: Vec::new(),
+        });
+        self.switch_to(record);
+        let present = if brand {
+            self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone())
+        } else {
+            self.push(
+                OpKind::Binary {
+                    op: BinOp::Ne,
+                    lhs: membership,
+                    rhs: zero,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        };
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![present],
+        });
+        self.switch_to(structural);
+        self.require_planned_cast_membership(at, value, face, key);
+        (merge, result)
+    }
+
+    fn require_planned_cast_membership(
+        &mut self,
+        at: NodeId,
+        value: super::ValueId,
+        face: TypeId,
+        key: &str,
+    ) {
+        use super::{ManagedType, OpKind, Terminator};
+        let origin = self.origin(at);
+        let mut owners = self.hierarchy.access_families.structural_owners(self, face);
+        owners.sort_unstable();
+        owners.dedup();
+        let mut planned = if owners.is_empty() {
+            self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone())
+        } else {
+            self.push(
+                OpKind::InstanceOf {
+                    value,
+                    classes: owners,
+                    by_layout: false,
+                },
+                HirType::Bool,
+                origin.clone(),
+            )
+        };
+        for native in Self::natives_declaring(key) {
+            let test = self.native_test(*native, value, &origin);
+            planned = self.bool_join(test, planned, true, &origin);
+        }
+        let known = self.new_block();
+        let unknown = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: planned,
+            then_target: known,
+            then_args: Vec::new(),
+            else_target: unknown,
+            else_args: Vec::new(),
+        });
+        self.switch_to(unknown);
+        let name = &self.hierarchy.cast_descriptions[&face];
+        let message = self.push(OpKind::ConstString(format!("property membership for `{key}` through structural cast {name} on an object whose layout supplies no membership plan")), HirType::Managed(ManagedType::String), origin.clone());
+        self.runtime_call("nts_refused", vec![message], HirType::Void, origin);
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(known);
+    }
+
     /// Recover the semantic face independently of its erased value storage.
     pub(super) fn erased_cast_face(&self, at: NodeId, value: super::ValueId) -> Option<TypeId> {
         if self.values[value.0 as usize].ty != HirType::Erased {
@@ -248,15 +445,53 @@ impl FuncBuilder<'_> {
         face: TypeId,
         member: &str,
     ) -> Result<super::ValueId, nts_diagnostics::Diagnostic> {
+        // A const alias stores the complete result. Each later use chooses
+        // its own consumer, including aliases of that alias.
+        if self.cast_family_alias_initializer(at) {
+            return Ok(read);
+        }
         // A pattern's node has the binding's post-default type. Its property
         // keeps undefined until defaulted_when has made that decision.
         if !matches!(
             self.kind_of(at),
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+            Some(
+                syntax::PROPERTY_ACCESS_EXPRESSION
+                    | syntax::ELEMENT_ACCESS_EXPRESSION
+                    | syntax::IDENTIFIER
+            )
         ) {
             return Ok(read);
         }
         super::claimed_reads::family_read(self, at, read, face, member)
+    }
+
+    fn cast_family_alias_initializer(&self, mut at: NodeId) -> bool {
+        for _ in 0..32 {
+            let Some(parent) = self.syntactic_parent(at) else {
+                return false;
+            };
+            match self.kind_of(parent) {
+                Some(
+                    syntax::PARENTHESIZED_EXPRESSION
+                    | syntax::AS_EXPRESSION
+                    | syntax::TYPE_ASSERTION_EXPRESSION
+                    | syntax::NON_NULL_EXPRESSION
+                    | syntax::SATISFIES_EXPRESSION,
+                ) => at = parent,
+                Some(syntax::VARIABLE_DECLARATION) => {
+                    return self.declaration_kind(parent)
+                        == nts_semantic_schema::VariableKind::Const
+                        && self.child_slots::<4>(parent).is_some_and(|parts| {
+                            parts[3] == Some(at)
+                                && parts[0].is_some_and(|name| {
+                                    self.kind_of(name) == Some(syntax::IDENTIFIER)
+                                })
+                        });
+                }
+                _ => return false,
+            }
+        }
+        false
     }
 
     /// A transient selector view is licensed only by the managed object tag.
@@ -630,12 +865,13 @@ impl Families {
         let Some(wanted) = properties(probe, face) else {
             return Vec::new();
         };
+        let wanted = planning_properties(&probe.hierarchy, face, wanted);
         self.owners
-            .candidates(wanted)
+            .candidates(&wanted)
             .into_iter()
             .filter(|owner| {
                 self.flow.reaches(*owner, face)
-                    && fits_the_face(probe, &probe.hierarchy, face, *owner, wanted)
+                    && fits_the_face(probe, &probe.hierarchy, face, *owner, &wanted)
             })
             .collect()
     }
@@ -721,13 +957,14 @@ impl Families {
             let Some(properties) = properties(probe, face) else {
                 continue;
             };
+            let properties = planning_properties(hierarchy, face, properties);
             // A spread copies the own properties of whatever object is there,
             // and any object of the face's shape can be: the proof decides
             // which owners license the family, not which shapes a spread sees.
             let structural: Vec<_> = owners
-                .candidates(properties)
+                .candidates(&properties)
                 .into_iter()
-                .filter(|owner| fits_the_face(probe, hierarchy, face, *owner, properties))
+                .filter(|owner| fits_the_face(probe, hierarchy, face, *owner, &properties))
                 .collect();
             let candidates: Vec<_> = structural
                 .iter()
@@ -736,7 +973,7 @@ impl Families {
                 .collect();
             if !structural.is_empty()
                 && structural.iter().all(|owner| {
-                    owns_the_same_shape(probe, *owner, face, properties, &sources.literals)
+                    owns_the_same_shape(probe, *owner, face, &properties, &sources.literals)
                 })
             {
                 result.spread_safe.insert(face);
@@ -817,15 +1054,40 @@ impl Families {
 /// a face whose required members the declaration cannot supply.
 pub(super) fn reserves(probe: &FuncBuilder<'_>, owner: TypeId, face: TypeId) -> bool {
     properties(probe, face).is_some_and(|properties| {
+        let properties = planning_properties(&probe.hierarchy, face, properties);
         candidate_satisfies(
             probe,
             &probe.hierarchy,
             &probe.hierarchy.access_families.flow,
             face,
             owner,
-            properties,
+            &properties,
         )
     })
+}
+
+/// An assertion proves neither presence nor writable storage. Normalize its
+/// contract before owner selection as well as supply and reservation checks;
+/// declared interfaces retain every required member and write contract.
+fn planning_properties<'a>(
+    hierarchy: &Hierarchy,
+    face: TypeId,
+    properties: &'a [PropertyRecord],
+) -> Cow<'a, [PropertyRecord]> {
+    if !hierarchy.cast_faces.contains(&face) {
+        return Cow::Borrowed(properties);
+    }
+    Cow::Owned(
+        properties
+            .iter()
+            .cloned()
+            .map(|mut property| {
+                property.readonly = true;
+                property.optional = true;
+                property
+            })
+            .collect(),
+    )
 }
 
 fn candidate_satisfies(
@@ -1079,19 +1341,6 @@ fn family(
     wanted: &PropertyRecord,
     candidates: &[TypeId],
 ) -> Result<Family, &'static str> {
-    // Reading an asserted shape must preserve the concrete supply's actual
-    // type and absence. It promises no writable storage; interface_field_place
-    // refuses every write through this face, including unlicensed families.
-    let readonly;
-    let wanted = if hierarchy.cast_faces.contains(&face) {
-        readonly = PropertyRecord {
-            readonly: true,
-            ..wanted.clone()
-        };
-        &readonly
-    } else {
-        wanted
-    };
     if candidates.is_empty() {
         return Err("no concrete supplier");
     }

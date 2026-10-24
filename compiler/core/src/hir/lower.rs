@@ -27777,7 +27777,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(value);
         };
         if want == HirType::Erased {
-            return Ok(value);
+            return self.cast_family_alias_result(id, value);
         }
         // **An array of `any` is not a narrowing**, and the emphasis is on `any`
         // rather than on the erasure.
@@ -45366,7 +45366,8 @@ impl<'a> FuncBuilder<'a> {
     /// in 5` throws in JavaScript, and a value that reached here has already
     /// been proved an object by the source. That is the *program's* proof
     /// rather than this compiler's, and it is why an unguarded `unknown` is
-    /// still refused -- the type says so.
+    /// still refused -- the type says so. A cast face instead carries a tag
+    /// guard here: its asserted type supplies no such object proof.
     fn lower_in_over_every_class(
         &mut self,
         id: NodeId,
@@ -45374,6 +45375,7 @@ impl<'a> FuncBuilder<'a> {
         rhs: NodeId,
         key: &str,
         brand: bool,
+        cast_face: Option<TypeId>,
     ) -> Result<ValueId, Diagnostic> {
         // `None` for an ordinary key, which is every key but a private name.
         let owner = self.brand_owner(lhs, brand)?;
@@ -45470,6 +45472,15 @@ impl<'a> FuncBuilder<'a> {
         let origin = self.origin(id);
         // `in` over a value its type lets be absent does not typecheck.
         let value = self.erased(value, Absent::Impossible, &origin);
+        let record_merge = if let Some(face) = cast_face {
+            self.require_cast_membership_object(id, value, face, key);
+            if !brand && property_keys::OBJECT_PROTOTYPE_MEMBERS.contains(&key) {
+                return Ok(self.push(OpKind::ConstBool(true), HirType::Bool, origin));
+            }
+            Some(self.begin_cast_record_membership(id, value, face, key, brand))
+        } else {
+            None
+        };
         if self.module.templates {
             self.call_runtime(
                 "nts_template_reflection",
@@ -45507,6 +45518,29 @@ impl<'a> FuncBuilder<'a> {
             let test = self.native_test(*native, value, &origin);
             answer = self.bool_join(test, answer, true, &origin);
         }
+        answer = self.in_with_optional_memberships(id, value, key, answer, optional)?;
+        if let Some((merge, result)) = record_merge {
+            self.terminate(Terminator::Jump {
+                target: merge,
+                args: vec![answer],
+            });
+            self.switch_to(merge);
+            Ok(result)
+        } else {
+            Ok(answer)
+        }
+    }
+
+    /// Add the presence-bit test for each optional structural member.
+    fn in_with_optional_memberships(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        key: &str,
+        mut answer: ValueId,
+        optional: Vec<TypeId>,
+    ) -> Result<ValueId, Diagnostic> {
+        let origin = self.origin(id);
         // And one arm per type that declares it optionally: the class test it
         // would have had, and the bit its writes recorded.
         //
@@ -45935,7 +45969,7 @@ impl<'a> FuncBuilder<'a> {
         // a compiled program gains no classes. So this is not a different
         // operation, it is the same one with a wider set.
         if self.is_the_object_type(ty) {
-            return self.lower_in_over_every_class(id, lhs, rhs, &key, brand);
+            return self.lower_in_over_every_class(id, lhs, rhs, &key, brand, None);
         }
         // A `Record<string, V>`, whose membership is a *runtime* question.
         //
@@ -46055,6 +46089,24 @@ impl<'a> FuncBuilder<'a> {
         key: &str,
         brand: bool,
     ) -> Result<Option<ValueId>, Diagnostic> {
+        // A cast face's required members are assertions, not presence proofs.
+        // Ask the actual layouts even when every declared arm names the key.
+        if let Some(face) = members
+            .iter()
+            .copied()
+            .find(|member| self.hierarchy.cast_faces.contains(member))
+            && members.iter().all(|member| {
+                self.hierarchy.cast_faces.contains(member)
+                    || matches!(
+                        self.represent(*member),
+                        Some(HirType::Managed(ManagedType::Object(_)))
+                    )
+            })
+        {
+            return self
+                .lower_in_over_every_class(id, lhs, rhs, key, brand, Some(face))
+                .map(Some);
+        }
         if members.iter().all(|member| {
             matches!(
                 self.represent(*member),
@@ -46079,7 +46131,7 @@ impl<'a> FuncBuilder<'a> {
                 )));
             }
             return self
-                .lower_in_over_every_class(id, lhs, rhs, key, brand)
+                .lower_in_over_every_class(id, lhs, rhs, key, brand, None)
                 .map(Some);
         }
         Ok(None)

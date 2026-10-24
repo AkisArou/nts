@@ -1469,6 +1469,14 @@ static SIGNATURES: &[Declared] = &[
     ("nts_symbol_key_for", &[None], None),
     ("nts_symbol_new", &[None], None),
     ("nts_symbol_to_string", &[None], None),
+    (
+        "nts_table_membership",
+        &[None, None],
+        Some(HirType::Int {
+            bits: 32,
+            signed: true,
+        }),
+    ),
     ("nts_table_new", &[Some(HirType::Float { bits: 64 })], None),
     (
         "nts_tag_name",
@@ -2198,6 +2206,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_landing_thrown",
     "nts_promise_pair",
     "nts_promise_state",
+    "nts_table_membership",
     "nts_thrown_class",
     "nts_to_index",
     "nts_value_is_view",

@@ -2901,12 +2901,11 @@ mod structural_cast_array_stop {
 
     use super::*;
 
-    const TEST: &str =
-        "structural_cast_array_stop::the_array_view_stops_by_the_same_name_on_every_backend";
+    const TEST: &str = "structural_cast_array_stop::a_cast_stop_uses_cores_reason_on_every_backend";
     const EXPECTED: &str = "nts: refused at run time: the field `stack` read through structural cast `{ stack?: string }` at nts-workspace:///src/main.ts:11:25 on an object whose layout supplies no accessor for it";
 
     #[test]
-    fn the_array_view_stops_by_the_same_name_on_every_backend() {
+    fn a_cast_stop_uses_cores_reason_on_every_backend() {
         if std::env::var_os("NTS_TSGO").is_none() {
             eprintln!("SKIP structural cast stop: set NTS_TSGO");
             return;
@@ -2949,6 +2948,14 @@ mod structural_cast_array_stop {
             "function kindOf(value: unknown): string {\n  const held = value as { stack?: string };\n  return typeof held.stack;\n}\nexport function aControl(n: number): string {\n  const own: { stack?: string } = { stack: String(n) };\n  return kindOf(own);\n}\nfunction zStopped(n: number): string { return kindOf([n]); }\n",
             &EXPECTED.replace(":11:25", ":2:25"),
         );
+        // An assertion supplies no proof that `in` has an object operand.
+        // JavaScript throws here; until that TypeError is catchable, core's
+        // named stop must survive every backend. The guard changes one thing.
+        check_case(
+            "non-object-in",
+            "function contains(value: unknown): boolean {\n  const held = value as { side: number };\n  return \"side\" in held;\n}\nexport function aControl(n: number): boolean {\n  const value: unknown = n === 27 ? n : { side: n };\n  return typeof value === \"object\" && value !== null && contains(value);\n}\nfunction zStopped(n: number): boolean {\n  const value: unknown = n === 27 ? n : { side: n };\n  return contains(value);\n}\n",
+            "nts: refused at run time: property membership for `side` through structural cast `{ side: number }` at nts-workspace:///src/main.ts:2:25 on a non-object, whose TypeError this compiler does not yet lower",
+        );
     }
 
     fn check_case(label: &str, source: &str, expected: &str) {
@@ -2980,7 +2987,7 @@ mod structural_cast_array_stop {
         assert_eq!(report.disagreements, Vec::<(String, String)>::new());
         assert!(
             !report.aborts.is_empty(),
-            "{label}: the array arm must stop: {report:?}"
+            "{label}: the unsupported arm must stop: {report:?}"
         );
         assert!(
             report.aborts.iter().all(|reason| reason == expected),
@@ -3736,3 +3743,6 @@ mod pairing {
         assert_eq!(got.refused, 1);
     }
 }
+
+#[cfg(test)]
+mod table_membership_tests;

@@ -962,6 +962,11 @@ fn collection_external(name: &str) -> Option<(&'static str, &'static str, &'stat
         "nts_set_new" => (types::SET, "newSet", "(D)Lnts/rt/NtsSet;"),
         // A dictionary: a `Map`'s storage under a type that prints as an
         // object (`NtsDictionary`).
+        "nts_table_membership" => (
+            types::VALUE,
+            "tableMembership",
+            "(Lnts/rt/NtsValue;Lnts/rt/NtsValue;)I",
+        ),
         "nts_table_new" => (types::MAP, "newTable", "(D)Lnts/rt/NtsMap;"),
         "nts_map_get" => (types::TABLE, "get", MAP_KEY_TO_VALUE),
         "nts_map_has" => (types::TABLE, "has", "(Lnts/rt/NtsTable;Lnts/rt/NtsValue;)Z"),

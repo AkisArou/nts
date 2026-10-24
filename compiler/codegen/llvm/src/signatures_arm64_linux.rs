@@ -2505,6 +2505,12 @@ pub const SIGNATURES_ARM64_LINUX: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_table_membership",
+        returns: "i32",
+        params: &["[2 x i64]", "[2 x i64]"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
         name: "nts_table_new",
         returns: "noalias nonnull ptr",
         params: &["double"],

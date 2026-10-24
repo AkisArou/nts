@@ -955,6 +955,21 @@ public final class RuntimeRegression {
         equal(NtsValue.valueToString(NtsValue.ofObject(NtsMap.newTable(0))), "[object Object]",
             "a dictionary");
         check(!NtsValue.isMap(NtsValue.ofObject(NtsMap.newTable(0))), "a dictionary is not a Map");
+        NtsValue memberKey = NtsValue.ofString("key");
+        NtsMap dictionary = NtsMap.newTable(1);
+        equal(NtsValue.tableMembership(NtsValue.ofObject(dictionary), memberKey), 0,
+            "an absent dictionary key");
+        NtsMap.set(dictionary, memberKey, NtsValue.UNDEFINED_VALUE);
+        equal(NtsValue.tableMembership(NtsValue.ofObject(dictionary), memberKey), 1,
+            "a present undefined dictionary value");
+        equal(NtsValue.tableMembership(NtsValue.ofObject(NtsMap.newMap(1)), memberKey), -1,
+            "a Map is not a dictionary");
+        equal(NtsValue.tableMembership(NtsValue.ofNumber(9), memberKey), -1,
+            "a primitive is not a dictionary");
+        NtsMap numberDictionary = NtsMap.newTableOfNumberValues(1);
+        NtsMap.set(numberDictionary, memberKey, NtsValue.ofNumber(0));
+        equal(NtsValue.tableMembership(NtsValue.ofObject(numberDictionary), memberKey), 1,
+            "membership does not read a number value column");
         equal(NtsValue.valueToString(NtsValue.ofObject(NtsSet.newSet(0))), "[object Set]", "Set");
 
         // An array holding itself prints the inner occurrence as empty, as node's join does.

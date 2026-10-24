@@ -1845,6 +1845,11 @@ NTS_ALLOCATES NtsMap *nts_set_new(double kind);
 /* A table, which is a map's storage under a type of its own: see
  * `nts_desc_table`. */
 NTS_ALLOCATES NtsMap *nts_table_new(double kind);
+/* An open receiver's record-key membership: -1 when it is not a record,
+ * otherwise 0 or 1 from the same lookup as `nts_map_has`. The caller has
+ * already applied ToPropertyKey; key is a string or a symbol. No values are
+ * read, so a table's value storage does not affect the answer. */
+NTS_READS_ONLY int32_t nts_table_membership(NtsValue receiver, NtsValue key);
 /* # The kind a keyed call names
  *
  * Every helper here that takes a key ends with `kind`, one of `NTS_KEY_*`: the

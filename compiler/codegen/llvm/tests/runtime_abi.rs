@@ -32,6 +32,10 @@ use std::process::Command;
 
 const PROGRAM: &str = r#"
 class Point { constructor(public x: number) {} }
+export function recordMembership(n: number): boolean {
+  const entry: Record<string, number> = { key: n };
+  return "key" in (entry as unknown as { key: number });
+}
 export function run(values: unknown[]): string {
   const n = BigInt(values.length);
   const seen = new Map<unknown, unknown>();
@@ -131,7 +135,11 @@ fn every_runtime_call_agrees_with_its_declaration() {
             "{platform:?} --rc: {:?}",
             emitted.diagnostics
         );
-        for helper in ["@nts_value_retain(", "@nts_value_release("] {
+        for helper in [
+            "@nts_value_retain(",
+            "@nts_value_release(",
+            "call i32 @nts_table_membership(",
+        ] {
             assert!(
                 emitted.text.contains(helper),
                 "{platform:?} --rc: the program does not call {helper}"
@@ -158,6 +166,7 @@ fn every_runtime_call_agrees_with_its_declaration() {
         for helper in [
             "@nts_map_set(",
             "@nts_map_get(",
+            "call i32 @nts_table_membership(",
             "@nts_is_class(",
             "@nts_value_truthy_fn(",
             "@nts_value_strict_eq(",

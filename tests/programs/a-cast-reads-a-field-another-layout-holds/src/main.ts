@@ -1,7 +1,4 @@
-// run: check
-// Known gap: sideOf/cast refuse at the cast-result alias consumer; only
-// byIn/control currently compiles and compares 29 cases. This record pins
-// that partial result; it is not evidence that the cast arm agrees.
+// The cast and both controls must compare all 87 cases.
 // `(shape as Square).side` on a `Square | Named` -- the idiom every
 // user-defined type guard is written with. `as` is an unchecked assertion
 // with no run-time effect, so node reads `side` off whatever object arrived
@@ -32,3 +29,9 @@ export function cast(n: number): number {
 export function control(n: number): number {
   return byIn((n & 1) === 0 ? { side: n & 7 } : { name: `n${n}` });
 }
+
+// A declared interface with the same member keeps its required contract.
+// Its ordinary typed read must not inherit the cast view's optional plan.
+interface RequiredSquare { side: number }
+function typedSide(shape: RequiredSquare): number { return shape.side; }
+export function typed(n: number): number { return typedSide({ side: n & 7 }); }

@@ -1106,6 +1106,7 @@ pub(super) const ROWS: &[(&str, Support)] = &[
     ("nts_symbol_key_for", Support::WasmHelper),
     ("nts_symbol_new", Support::Intrinsic),
     ("nts_symbol_to_string", Support::WasmHelper),
+    ("nts_table_membership", Support::Intrinsic),
     ("nts_table_new", Support::Intrinsic),
     ("nts_tag_name", Support::WasmHelper),
     (

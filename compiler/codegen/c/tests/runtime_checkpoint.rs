@@ -744,3 +744,12 @@ fn an_append_writes_in_place_only_into_a_grown_string_nobody_else_holds() {
     assert!(report.contains("string append checks passed"), "{report}");
     assert_eq!(checks(&report), 50, "{report}");
 }
+
+#[test]
+fn an_open_records_membership_has_three_distinct_results() {
+    let report = run_suite("table_membership", &[]);
+    assert!(
+        report.contains("all record membership checks passed"),
+        "{report}"
+    );
+}

@@ -2776,6 +2776,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_table_membership",
+        returns: "i32",
+        params: &["ptr align 8 dead_on_return", "ptr align 8 dead_on_return"],
+        attributes: &["nounwind", "willreturn", "memory(read, argmem: readwrite)"],
+    },
+    Signature {
         name: "nts_table_new",
         returns: "noalias nonnull ptr",
         params: &["double"],

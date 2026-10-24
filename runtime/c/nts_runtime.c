@@ -10591,6 +10591,17 @@ __attribute__((always_inline)) bool nts_map_has(const NtsMap *map, NtsValue key,
   return nts_map_find(map, key, nts_hash_key(key, kind), 0, kind) >= 0;
 }
 
+int32_t nts_table_membership(NtsValue receiver, NtsValue key) {
+  if (!NTS_TAG_IS_MANAGED(nts_value_tag(receiver))) {
+    return -1;
+  }
+  const NtsHeader *object = nts_value_reference(receiver);
+  if (!object || object->descriptor != &nts_desc_table) {
+    return -1;
+  }
+  return nts_map_has((const NtsMap *)object, key, NTS_KEY_ERASED) ? 1 : 0;
+}
+
 /* `map.set(k, v)` / `set.add(v)`, returning the collection, which is what both
  * evaluate to in JavaScript. */
 /* `Map.prototype.set` step 6: "If key is -0, set key to +0."
