@@ -3045,6 +3045,13 @@ fn literal_table(program: &Program) -> Vec<String> {
 /// would need escaping rules that do not match JavaScript's, and would carry
 /// its own idea of what a byte means.
 fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) {
+    writer.line(
+        origin,
+        format!(
+            "_Static_assert(NTS_HASHED == {}u, \"literal hash flag differs\");",
+            nts_codegen_common::string_hash::HASHED
+        ),
+    );
     for (index, text) in literals.iter().enumerate() {
         let units: Vec<u16> = text.encode_utf16().collect();
         let name = format!("nts_str_{index}");
@@ -3053,10 +3060,11 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
         // string usable as a C string without copying.
         let wide = units.iter().any(|unit| *unit > 0xFF);
         let (element, descriptor, flags) = if wide {
-            ("uint16_t", "nts_desc_string2", "NTS_TWO_BYTE")
+            ("uint16_t", "nts_desc_string2", "NTS_TWO_BYTE | NTS_HASHED")
         } else {
-            ("unsigned char", "nts_desc_string1", "0")
+            ("unsigned char", "nts_desc_string1", "NTS_HASHED")
         };
+        let hash = nts_codegen_common::string_hash::hash_units(&units);
         let data: Vec<String> = units
             .iter()
             .map(std::string::ToString::to_string)
@@ -3066,7 +3074,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[String]) 
             origin,
             format!(
                 "static const struct {{ NtsHeader header; uint32_t hash; {element} data[{}]; }} \
-                 {name} = {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, 0, {{ {} }} }};",
+                 {name} = {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, {hash}u, {{ {} }} }};",
                 data.len(),
                 units.len(),
                 data.join(", ")
@@ -6378,6 +6386,52 @@ mod tests {
     }
 
     use super::*;
+
+    #[test]
+    fn literal_hashes_are_settled_before_read_only_storage_is_used() {
+        use nts_diagnostics::{Location, SourceId, Span};
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let texts: Vec<String> = [
+            "",
+            "ascii",
+            "caf\u{e9}",
+            "\u{4e16}\u{754c}",
+            "\u{1f600}",
+            "a\0b",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let mut writer = CodeWriter::new();
+        emit_literals(&mut writer, &origin, &texts);
+        for (index, text) in texts.iter().enumerate() {
+            let units: Vec<u16> = text.encode_utf16().collect();
+            let flags = if units.iter().any(|&unit| unit > 255) {
+                "NTS_TWO_BYTE | NTS_HASHED"
+            } else {
+                "NTS_HASHED"
+            };
+            let line = writer
+                .text()
+                .lines()
+                .find(|line| line.contains(&format!("nts_str_{index} =")))
+                .expect("literal emitted");
+            assert!(
+                line.contains(&format!("NTS_IMMORTAL, {flags}, {}", units.len())),
+                "{line}"
+            );
+            assert!(
+                line.contains(&format!(
+                    "}}, {}u, {{",
+                    nts_codegen_common::string_hash::hash_units(&units)
+                )),
+                "{line}"
+            );
+        }
+    }
 
     #[test]
     fn frame_objects_initialize_scalar_and_boolean_fields() {

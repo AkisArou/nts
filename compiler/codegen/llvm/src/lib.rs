@@ -700,10 +700,19 @@ fn literals(program: &Program) -> String {
         let units: Vec<u16> = text.encode_utf16().collect();
         let wide = units.iter().any(|unit| *unit > 0xFF);
         let (element, descriptor, flags) = if wide {
-            ("i16", "@nts_desc_string2", 1)
+            (
+                "i16",
+                "@nts_desc_string2",
+                1 | nts_codegen_common::string_hash::HASHED,
+            )
         } else {
-            ("i8", "@nts_desc_string1", 0)
+            (
+                "i8",
+                "@nts_desc_string1",
+                nts_codegen_common::string_hash::HASHED,
+            )
         };
+        let hash = nts_codegen_common::string_hash::hash_units(&units);
         // One more unit than the string holds, kept at zero, so a narrow one
         // can be handed to C directly.
         let mut data: Vec<String> = units
@@ -715,7 +724,7 @@ fn literals(program: &Program) -> String {
             out,
             "@nts_str_{index} = internal constant {{ %NtsHeader, i32, [{count} x {element}] }} \
              {{ %NtsHeader {{ ptr {descriptor}, i64 {immortal}, i32 {flags}, i32 {length} }}, \
-             i32 0, [{count} x {element}] [{}] }}",
+             i32 {hash}, [{count} x {element}] [{}] }}",
             data.join(", "),
             count = data.len(),
             immortal = nts_core::hir::layout::IMMORTAL,

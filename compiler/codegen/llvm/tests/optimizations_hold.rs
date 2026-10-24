@@ -32,6 +32,37 @@ fn tsgo() -> Option<String> {
     std::path::Path::new(&path).exists().then_some(path)
 }
 
+#[test]
+fn read_only_literals_carry_settled_native_hashes() {
+    let Some((module, _)) = rendered(
+        "literal-hashes",
+        r#"export function pick(i: number): string {
+          const texts = ["", "ascii", "caf\u00e9", "\u4e16\u754c", "\ud83d\ude00", "a\u0000b"];
+          return texts[i % texts.length];
+        }"#,
+    ) else {
+        return;
+    };
+    for text in [
+        "",
+        "ascii",
+        "caf\u{e9}",
+        "\u{4e16}\u{754c}",
+        "\u{1f600}",
+        "a\0b",
+    ] {
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let wide = units.iter().any(|&unit| unit > 255);
+        let flags = nts_codegen_common::string_hash::HASHED | u32::from(wide);
+        let hash = nts_codegen_common::string_hash::hash_units(&units);
+        assert!(
+            module.lines().any(|line| line.starts_with("@nts_str_")
+                && line.contains(&format!("i32 {flags}, i32 {} }}, i32 {hash},", units.len()))),
+            "missing prehashed literal {text:?}"
+        );
+    }
+}
+
 /// The LLVM module for one small program, and the HIR behind it.
 fn rendered(case: &str, source: &str) -> Option<(String, hir::Program)> {
     let tsgo = tsgo()?;

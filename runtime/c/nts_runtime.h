@@ -1144,9 +1144,10 @@ void nts_handle_family_register(uint32_t tag, void (*retain)(void *),
  * `+=` and then used as a key keeps its hash, which is `str-map-keys` (13.2 ->
  * 5.9 us). What it costs is a grown string's slack once it is hashed.
  *
- * Not on an immortal string, which may be a literal in read-only storage and
- * is hashed every time, as every string was before. Every constructor sets
- * `flags` whole, so a new string starts without it.
+ * Compiled literals carry a precomputed hash and this flag in read-only
+ * storage. An immortal without it still hashes on demand without writing:
+ * lifetime alone cannot say whether its storage is writable. Every dynamic
+ * constructor sets `flags` whole, so a new string starts without it.
  *
  * A string's own bit, in the range objects use for presence
  * (`NTS_PRESENCE_SHIFT`): a string has no optional properties, as an array has
