@@ -36,6 +36,22 @@ fn run_suite(name: &str, provider: &[&str]) -> String {
 /// else links the runtime and the deterministic host and nothing else, which
 /// is the point of the deterministic host.
 fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]) -> String {
+    run_source_suite(
+        name,
+        &repository().join(format!("runtime/c/tests/{name}.c")),
+        provider,
+        sources,
+        link,
+    )
+}
+
+fn run_source_suite(
+    name: &str,
+    fixture: &Path,
+    provider: &[&str],
+    sources: &[&str],
+    link: &[&str],
+) -> String {
     let root = repository();
     let runtime = root.join("runtime/c");
     // Keyed by the provider too: one suite runs under two (`rejections`), and
@@ -56,7 +72,7 @@ fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]
         .arg(&runtime)
         .arg("-o")
         .arg(&binary)
-        .arg(runtime.join(format!("tests/{name}.c")))
+        .arg(fixture)
         .args(sources.iter().map(|source| runtime.join(source)))
         .arg(runtime.join("nts_runtime.c"))
         .arg("-lm")
@@ -82,7 +98,8 @@ fn run_suite_with(name: &str, provider: &[&str], sources: &[&str], link: &[&str]
     let report = String::from_utf8_lossy(&run.stdout).into_owned();
     assert!(
         run.status.success(),
-        "the {name} suite disagrees with node:\n{report}"
+        "the {name} suite disagrees with node:\n{report}\n{}",
+        String::from_utf8_lossy(&run.stderr)
     );
     // Removed once it passed, and kept when it did not, since the binary is
     // what a person reads next. Every run made one, per process, and none was
@@ -102,6 +119,40 @@ fn checks(report: &str) -> usize {
         .lines()
         .filter(|line| line.starts_with("ok "))
         .count()
+}
+
+#[test]
+fn collector_progress_and_candidate_indices() {
+    for flags in [
+        vec!["-DNTS_PROVIDER_RC"],
+        vec![
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ] {
+        let report = run_suite("collector", &flags);
+        assert!(checks(&report) >= 15, "{report}");
+    }
+}
+
+#[test]
+fn parse_shaped_iteration_rss_stays_bounded() {
+    // Production allocator: ASan's quarantine deliberately retains freed blocks
+    // and belongs to the separate candidate-index safety test above.
+    let report = run_source_suite(
+        "collector_parse_rss",
+        &repository().join("tests/memory/collector_parse_rss.c"),
+        &["-DNTS_PROVIDER_RC"],
+        &["nts_test_host.c"],
+        &[],
+    );
+    assert_eq!(
+        checks(&report),
+        if cfg!(target_os = "linux") { 3 } else { 2 },
+        "{report}"
+    );
 }
 
 #[test]
@@ -578,12 +629,22 @@ fn the_bigint_upper_endpoint_is_refused_rather_than_converted() {
 
 #[test]
 fn the_collector_reclaims_a_chain_and_keeps_what_is_still_held() {
-    let report = run_suite("cycles", &["-DNTS_PROVIDER_RC"]);
-    assert!(
-        checks(&report) >= 3,
-        "expected at least 3 collector checks, saw {}:\n{report}",
-        checks(&report)
-    );
+    for flags in [
+        vec!["-DNTS_PROVIDER_RC"],
+        vec![
+            "-DNTS_PROVIDER_RC",
+            "-DNTS_POISON=1",
+            "-fsanitize=address,undefined",
+            "-fno-sanitize-recover=all",
+        ],
+    ] {
+        let report = run_suite("cycles", &flags);
+        assert!(
+            checks(&report) >= 3,
+            "expected at least 3 collector checks, saw {}:\n{report}",
+            checks(&report)
+        );
+    }
 }
 
 /// Bytes decode to the string node's `TextDecoder` makes of them: overlong

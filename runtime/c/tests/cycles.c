@@ -52,8 +52,9 @@ static Node *make(void) {
  * Every link but the newest is decremented without reaching zero -- the old
  * head loses the list's reference and gains the new head's -- so every one of
  * them is buffered as a cycle candidate. Dropping the list then takes the
- * newest to zero and cascades; each buffered link it reaches gives its next
- * link back too, and leaves its own emptied shell for the collector.
+ * newest to zero and cascades; each buffered link gives its next link back.
+ * The old runtime left emptied shells for the collector; ordinary death now
+ * unlinks the buffered entry first and returns the block immediately.
  *
  * That is all correct. What was not is what the collector then did with it: it
  * destroyed that link while it was marking the others, and the release took the
@@ -112,7 +113,8 @@ static void a_dying_root_does_not_free_what_a_live_one_holds(void) {
   nts_release((NtsHeader *)keeper); /* buffered first, and still live */
   dying->header.reserved = 2;
   nts_release((NtsHeader *)dying); /* buffered second */
-  nts_release((NtsHeader *)dying); /* and now at zero, left for the collector */
+  nts_release(
+      (NtsHeader *)dying); /* zero: unlink before ordinary destruction */
 
   nts_collect_cycles();
   check(nts_live_count() == baseline + 2,
@@ -123,8 +125,8 @@ static void a_dying_root_does_not_free_what_a_live_one_holds(void) {
   check(nts_live_count() == baseline, "and both are reclaimed once it lets go");
 }
 
-/* A candidate whose count reaches zero gives back what it holds at once, and
- * only its own memory waits for the collector.
+/* A candidate whose count reaches zero gives back both its contents and its
+ * own storage at once, after unlinking the roots entry.
  *
  * It used to wait whole: the buffer names a candidate, so freeing it at zero
  * would leave the buffer pointing at nothing, and the runtime left all of it
@@ -141,12 +143,13 @@ static void a_candidate_at_zero_gives_back_its_contents_at_once(void) {
   check(nts_cycle_candidates() > 0 && nts_live_count() == baseline + 2,
         "a candidate and what it holds are both live while it is held");
 
-  nts_release((NtsHeader *)holder); /* zero, while the buffer names it */
-  check(nts_live_count() == baseline + 1,
-        "at zero, what it held is freed at once and only its shell remains");
+  nts_release((NtsHeader *)holder); /* zero: remove the roots entry first */
+  check(nts_live_count() == baseline,
+        "at zero, the candidate and its contents are freed at once");
 
   nts_collect_cycles();
-  check(nts_live_count() == baseline, "and the collector frees the shell");
+  check(nts_live_count() == baseline,
+        "and the collector never revisits the freed candidate");
 }
 
 int main(void) {

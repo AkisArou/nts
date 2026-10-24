@@ -916,6 +916,23 @@ static inline uintptr_t nts_fresh_count(void) {
 #endif
 }
 
+#define NTS_ROOT_NONE SIZE_MAX
+#ifdef NTS_PROVIDER_RC
+/* The heap prefix's second word is a candidate index while buffered, invalid
+ * otherwise, and a free-list link only after the block is dead. memcpy keeps
+ * those differently typed uses alias-safe; both optimize to one word access.
+ * Regions and foreign holders have no heap prefix and never use this slot. */
+static inline void nts_root_index_store(void *object, size_t index) {
+  memcpy((unsigned char *)object - 8u, &index, sizeof index);
+}
+
+static inline size_t nts_root_index(const void *object) {
+  size_t index;
+  memcpy(&index, (const unsigned char *)object - 8u, sizeof index);
+  return index;
+}
+#endif
+
 void *nts_alloc(size_t bytes) {
   bytes = (bytes + 15u) & ~(size_t)15u;
   nts_env->bytes_held += bytes;
@@ -936,6 +953,7 @@ void *nts_alloc(size_t bytes) {
     /* The list is threaded through the free blocks themselves, in the word
      * after the size -- which is dead while the block is dead. */
     nts_env->recycled[klass] = *(void **)((unsigned char *)block + 8u);
+    nts_root_index_store((unsigned char *)block + 16u, NTS_ROOT_NONE);
     return (unsigned char *)block + 16u;
   }
 #endif
@@ -945,6 +963,7 @@ void *nts_alloc(size_t bytes) {
     abort();
   }
   *block = bytes;
+  nts_root_index_store((unsigned char *)block + 16u, NTS_ROOT_NONE);
   return (unsigned char *)block + 16u;
 #else
   if (bytes > nts_env->bump_left) {
@@ -980,6 +999,10 @@ static void nts_free_block(void *object) {
    * have, and its counts would land in the region's window. */
   if (nts_env->region) {
     fprintf(stderr, "nts: a heap object died inside a region's call\n");
+    abort();
+  }
+  if (nts_root_index(object) != NTS_ROOT_NONE) {
+    fprintf(stderr, "nts: a buffered allocation was freed\n");
     abort();
   }
 #endif
@@ -1853,6 +1876,47 @@ static void nts_release_contents(NtsHeader *object) {
   nts_each_reference(object, nts_release, NTS_EDGES_OWNED);
 }
 
+static void nts_maybe_collect(void);
+
+/* Clear a candidate only while its entry still names it. The collector calls
+ * this before discarding an entry; ordinary death removes it immediately.
+ * A holder's header belongs to its foreign family, with no prefix to read. */
+static void nts_root_clear(NtsHeader *object) {
+#ifdef NTS_PROVIDER_RC
+  if (!nts_is_holder(object)) {
+#if NTS_POISON
+    size_t slot = nts_root_index(object);
+    if ((object->flags & NTS_BUFFERED) == 0 || slot >= nts_env->roots_len ||
+        nts_env->roots[slot] != object) {
+      fprintf(stderr, "nts: a candidate has a stale roots index\n");
+      abort();
+    }
+#endif
+    nts_root_index_store(object, NTS_ROOT_NONE);
+  }
+#endif
+  object->flags &= ~NTS_BUFFERED;
+}
+
+#ifdef NTS_PROVIDER_RC
+static void nts_unbuffer_root(NtsHeader *object) {
+  size_t slot = nts_root_index(object);
+  if (slot >= nts_env->roots_len || nts_env->roots[slot] != object) {
+    fprintf(stderr, "nts: removing a candidate with a stale roots index\n");
+    abort();
+  }
+  nts_root_clear(object);
+  size_t last = --nts_env->roots_len;
+  if (slot != last) {
+    NtsHeader *moved = nts_env->roots[last];
+    nts_env->roots[slot] = moved;
+    if (!nts_is_holder(moved)) {
+      nts_root_index_store(moved, slot);
+    }
+  }
+}
+#endif
+
 /* Objects whose count has reached zero and whose contents have not been given
  * up yet, linked through the count word -- which is free, because the count is
  * zero and the object is going away.
@@ -1880,6 +1944,17 @@ static void nts_destroy(NtsHeader *object) {
   while (nts_env->dying) {
     NtsHeader *dead = nts_env->dying;
     nts_env->dying = (NtsHeader *)dead->reserved;
+#ifdef NTS_PROVIDER_RC
+    /* Bacon/Rajan, ECOOP 2001, Fig. 2 (Release/MarkRoots): Free is deferred
+     * while Roots still names the node. Remove that entry first, and ordinary
+     * synchronous destruction can free its storage now. Never mutate a roots
+     * vector the collector is currently walking; its existing deferred path
+     * handles those deaths. https://doi.org/10.1007/3-540-45337-7_12 */
+    if ((dead->flags & NTS_BUFFERED) && !nts_env->collecting &&
+        !nts_is_holder(dead)) {
+      nts_unbuffer_root(dead);
+    }
+#endif
     /* This may link more objects into the list, which the loop picks up. */
     nts_release_contents(dead);
     if (dead->flags & NTS_BUFFERED) {
@@ -1901,6 +1976,9 @@ static void nts_destroy(NtsHeader *object) {
     nts_free(dead);
   }
   nts_env->draining = false;
+  /* Candidate additions during the drain could not collect: their count
+   * words were links. Revisit admission once every death is settled. */
+  nts_maybe_collect();
 }
 
 /* --- The cycle collector ---------------------------------------------------
@@ -1946,37 +2024,27 @@ static void nts_destroy(NtsHeader *object) {
  * candidates *accumulate*, and here they do not. */
 #define NTS_COLLECT_THRESHOLD 10000u
 
-/* The threshold actually used: the constant above, as many candidates as the
- * last collection left objects alive, or half the objects live now --
- * whichever is largest.
+/* Fixed between collections: at least 10,000 candidates, or the allocations
+ * still live after the last pass. Survivors make tracing a large live graph
+ * amortised rather than repeated at every small batch (json-stringify-doc).
  *
- * A collection traces everything its candidates reach, and that is the live
- * heap, not the buffer. The paragraph above measured a pass with nothing live
- * behind its candidates; a program that walks a large live structure is the
- * other case. `json-stringify-doc` retains and releases each node of a
- * 2,000-row document as it serializes it, every release leaves a count above
- * zero, so every node is a candidate, and every ten thousand of them the
- * collector traced the whole document again: 60% of the row, quadratic in the
- * document. Waiting for as many candidates as there are survivors makes a
- * collection cost about what accumulated since the last one: the row went
- * from 6.7 ms to 2.9.
- *
- * **Bounded, which a threshold read from the live count alone is not.** The
- * live count includes the garbage the next collection exists to find, so a
- * threshold of the whole live count can never be reached by garbage at all --
- * `json-parse` held 313 MB where it holds 11. Half of it can: garbage reaches
- * it by the time it is as large as what is really live. The survivors are
- * fixed when a collection ends, so garbage does not raise them. Either way
- * cyclic garbage waits until it is as large as what is live, and no larger,
- * which is the trade a tracing collector's heap growth makes. The half is
- * there for a program building a large structure between collections, whose
- * survivors are from before it: `json-parse`, 3.6 ms to 3.0. PHP's
- * implementation of the same algorithm made its threshold adaptive for the
- * same reason. */
+ * Do not derive this bound from the live count while garbage accumulates.
+ * That count includes a dead buffered array AND its backing allocation, but
+ * Roots has only its header. live_count/2 can grow just ahead of every newly
+ * added candidate forever; 317 parses reached 1,268,638 roots with epoch 0.
+ * A bound fixed by the last pass cannot be raised by the garbage it must find.
+ * Recheck after destruction too: a drain can defer admission while count words
+ * hold dying-list links. The public release fast path remains unchanged. */
 static size_t nts_collect_threshold(void) {
-  size_t half = (nts_env->allocated - nts_env->reclaimed) / 2u;
-  size_t at = nts_env->collect_at > half ? nts_env->collect_at : half;
+  size_t at = nts_env->collect_at;
   return at > NTS_COLLECT_THRESHOLD ? at : NTS_COLLECT_THRESHOLD;
+}
+
+static void nts_maybe_collect(void) {
+  if (!nts_env->draining && !nts_env->collecting &&
+      nts_env->roots_len >= nts_collect_threshold()) {
+    nts_collect_cycles();
+  }
 }
 
 static void nts_push(NtsHeader ***buffer, size_t *len, size_t *cap,
@@ -2007,20 +2075,38 @@ static void nts_paint(NtsHeader *object, uint32_t color) {
   object->flags = (object->flags & ~NTS_COLOR_MASK) | color;
 }
 
-/* A release that did not reach zero. It might have cut the last reference from
- * outside a cycle, so the object is worth looking at later -- unless its type
- * cannot lead back to itself, in which case there is nothing to look for. */
+/* The two producers -- decrements and fallen foreign holders -- share the
+ * metadata contract. A holder has no heap prefix; its family keeps its header
+ * valid until collector processing and its old deferred lifetime is retained.
+ */
+static void nts_buffer_root(NtsHeader *object) {
+  if (object->flags & NTS_BUFFERED) {
+    return;
+  }
+  object->flags |= NTS_BUFFERED;
+#ifdef NTS_PROVIDER_RC
+#if NTS_POISON
+  if (!nts_is_holder(object) && nts_root_index(object) != NTS_ROOT_NONE) {
+    fprintf(stderr, "nts: buffering an allocation with a stale roots index\n");
+    abort();
+  }
+#endif
+  if (!nts_is_holder(object)) {
+    nts_root_index_store(object, nts_env->roots_len);
+  }
+#endif
+  nts_push(&nts_env->roots, &nts_env->roots_len, &nts_env->roots_cap, object);
+  nts_env->candidates++;
+}
+
+/* A non-zero decrement may have cut the last reference from outside a cycle.
+ * Conservative cyclic descriptors stay conservative. */
 static void nts_possible_root(NtsHeader *object) {
   if (!object->descriptor->cyclic || nts_color(object) == NTS_PURPLE) {
     return;
   }
   nts_paint(object, NTS_PURPLE);
-  if (object->flags & NTS_BUFFERED) {
-    return;
-  }
-  object->flags |= NTS_BUFFERED;
-  nts_push(&nts_env->roots, &nts_env->roots_len, &nts_env->roots_cap, object);
-  nts_env->candidates++;
+  nts_buffer_root(object);
 }
 
 /* The whole release of a counted object -- not null, not immortal -- out of
@@ -2089,10 +2175,7 @@ static NTS_NOINLINE void nts_release_counted(NtsHeader *object) {
     /* Not while destroying: the dying list keeps its next pointer in the
      * count word, so an object on it has no count for the collector to
      * read. */
-    if (!nts_env->draining && !nts_env->collecting &&
-        nts_env->roots_len >= nts_collect_threshold()) {
-      nts_collect_cycles();
-    }
+    nts_maybe_collect();
     return;
   }
 
@@ -2111,21 +2194,19 @@ static NTS_NOINLINE void nts_release_counted(NtsHeader *object) {
   }
   nts_paint(object, NTS_BLACK);
   if (object->flags & NTS_BUFFERED) {
-    /* The candidate buffer is holding it, so its memory has to outlive this
-     * call: freeing it now would leave the buffer pointing at memory that is
-     * gone. What it holds does not. Those references die with it, now, as
-     * they would for any other object -- a button in an `unknown[]` is given
-     * back when the array goes, not at some later collection
-     * (`examples/interop/gtk-values` under counting, once an erased array
-     * became a cycle candidate). So its contents are released through the
-     * dying list as usual, which leaves an emptied shell for the collector to
-     * free (`nts_destroy`, `nts_collect_pass`): the synchronous release of
-     * Bacon and Rajan's collector, where only the free waits.
+    /* Ordinary managed death removes the candidate entry before returning
+     * storage (`nts_destroy`). During collector walks, removal must wait: an
+     * emptied shell keeps the entry valid until the next pass. In either case
+     * its contents go now -- a button in an `unknown[]` must be given back
+     * when the array goes (`examples/interop/gtk-values` under counting).
      *
-     * A holder keeps the old timing. What it holds is its family's to give
-     * back, and the collector does that when it reclaims the holder. */
+     * A holder has no heap prefix for an index, so keeps the old timing.
+     * What it holds is its family's to give back, and the collector does that
+     * when it reclaims the holder. */
     if (!nts_is_holder(object)) {
       nts_destroy(object);
+    } else {
+      nts_maybe_collect();
     }
     return;
   }
@@ -2242,10 +2323,16 @@ static bool nts_collect_pass(void) {
     if (nts_color(root) == NTS_PURPLE && root->reserved > 0 &&
         root->reserved != NTS_IMMORTAL) {
       nts_mark_gray(root);
-      nts_env->roots[kept++] = root;
+      nts_env->roots[kept] = root;
+#ifdef NTS_PROVIDER_RC
+      if (kept != index && !nts_is_holder(root)) {
+        nts_root_index_store(root, kept);
+      }
+#endif
+      kept++;
       continue;
     }
-    root->flags &= ~NTS_BUFFERED;
+    nts_root_clear(root);
     if (nts_color(root) == NTS_BLACK && root->reserved == 0 &&
         !nts_is_holder(root)) {
       /* Set aside, not destroyed. Destroying here runs real releases in the
@@ -2270,7 +2357,7 @@ static bool nts_collect_pass(void) {
    * how a root that is white but still in the buffer stays reachable until
    * its own turn. */
   for (size_t index = 0; index < nts_env->roots_len; index++) {
-    nts_env->roots[index]->flags &= ~NTS_BUFFERED;
+    nts_root_clear(nts_env->roots[index]);
   }
   nts_env->dead_len = 0;
   for (size_t index = 0; index < nts_env->roots_len; index++) {
@@ -11219,12 +11306,7 @@ bool nts_has_pending_work(void) {
 /* A node as a candidate root, the way a release makes an object one. */
 static void nts_holder_root(NtsHeader *node) {
   nts_paint(node, NTS_PURPLE);
-  if (node->flags & NTS_BUFFERED) {
-    return;
-  }
-  node->flags |= NTS_BUFFERED;
-  nts_push(&nts_env->roots, &nts_env->roots_len, &nts_env->roots_cap, node);
-  nts_env->candidates++;
+  nts_buffer_root(node);
 }
 
 static void nts_collect_at_checkpoint(void) {
