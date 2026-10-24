@@ -7947,7 +7947,7 @@ fn prepare_lowered(
     // which decides what lives in a frame, and before counting, which places
     // the reset (the region's handle dies after its last hold) and passes the
     // uncounted clones by.
-    let regions = if options.provider == Provider::ReferenceCounting {
+    let mut regions = if options.provider == Provider::ReferenceCounting {
         let report = regions::rewrite(&mut program);
         // A function every call of which a region now serves is called only as
         // its clone, and a function nothing calls is a C `static` its compiler
@@ -8015,6 +8015,12 @@ fn prepare_lowered(
         .count();
 
     native_dispatch::plan(&mut program);
+
+    // Report against final value/function identities. This inventory only
+    // records Unknown facts; it changes no operation or allocation decision.
+    if options.provider == Provider::ReferenceCounting {
+        regions.placement = regions::placement::inventory(&program);
+    }
 
     Prepared {
         cloned,

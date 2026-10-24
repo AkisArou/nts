@@ -2853,6 +2853,7 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
 /// `nts regions`: see the command's comment in `main`.
 fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
+    let mut locations = SourceLocations::new(&snapshot.sources);
     let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
     println!("{header}");
     if !matches!(prepared.program.provider, hir::Provider::ReferenceCounting) {
@@ -2877,6 +2878,31 @@ fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
                 call.caller, call.callee, refusal.reason, refusal.function
             ),
         }
+    }
+    println!(
+        "{} allocation/storage candidate(s), {} operation visit(s)",
+        regions.placement.sites.len(),
+        regions.placement.visits
+    );
+    for site in &regions.placement.sites {
+        let function = &prepared.program.funcs[site.at.function].name;
+        let verdict = match &site.placement {
+            hir::regions::placement::Placement::Unknown(reason) => {
+                format!("owner unselected; Unknown({})", reason.reason())
+            }
+            hir::regions::placement::Placement::ResetCohort(owner) => {
+                format!("ResetCohort({owner:?})")
+            }
+            hir::regions::placement::Placement::Young { last_drops } => {
+                format!("Young({last_drops:?})")
+            }
+        };
+        println!(
+            "placement {function} %{} {} @ {}: {verdict}",
+            site.at.value.0,
+            site.storage.name(),
+            locations.where_it_spans(&site.origin.location),
+        );
     }
     if let Some(invalid) = invalid {
         eprintln!("{invalid}");

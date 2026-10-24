@@ -35,9 +35,14 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BlockId, Callee, Func, HirType, OpKind, Program, Terminator, ValueId};
 
+pub mod placement;
+
 /// Which calls a region could serve, and why each other candidate cannot.
 #[derive(Debug, Clone, Default)]
 pub struct Report {
+    /// Per-site placement, distinct from the legacy whole-call eligibility.
+    /// No allocation consumer exists until every selected site has a proof.
+    pub placement: placement::Report,
     /// Calls to a function of the program whose result is a reference and
     /// whose call allocates: the calls a region would be for.
     pub candidates: usize,
