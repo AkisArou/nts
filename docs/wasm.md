@@ -1,5 +1,176 @@
 # WebAssembly backend: design and bring-up plan
 
+## Product direction (decision, 2026-10-25)
+
+The first Wasm product milestone is **browser applications with DOM and JS
+integration**. Performance, correctness and the amount of code nts must own
+determine the architecture. There are no production compatibility obligations
+that require preserving the existing emitter: substantial refactoring or
+replacement is acceptable.
+
+Use **one WasmGC-based managed TypeScript backend**, with two explicit build
+profiles: JS-hosted and standalone. Use linear memory for byte buffers,
+interchange and bounded bulk computation. Do not build two complete managed
+heaps or make a second general LLVM/linear-memory Wasm backend the default.
+
+This section records the product decision. It does **not** claim that the
+Binaryen pipeline, standalone runtime or WASI adapter described below exists
+today. The implementation notes and historical evidence follow it.
+
+### Deployments and profiles
+
+Browser and Node are hosts; standalone is a deployment style; WASI supplies
+system interfaces. They do not require four independent compiler backends.
+
+| Deployment | Profile and boundary |
+| --- | --- |
+| Browser, first priority | JS-hosted profile: GC objects/closures, JS strings and references, generated ES modules, DOM/Web API and callback bindings |
+| Node/Bun | The same JS-hosted managed representation, with a different system-service adapter; the native addon target remains another deployment option |
+| Standalone embedding | JS-free profile on a qualified WasmGC engine, initially Wasmtime; owned UTF-16 strings and explicit host imports |
+| WASI commands/components | The standalone core plus WIT/WASI adapters and ordinary canonical-ABI buffers/resources |
+
+One backend means shared lowering and contracts, not identical bytes across
+profiles with different string types or host imports. Resolve the profile once
+when composing the build; do not discover the host inside every operation.
+Document and test the exact engine feature baseline. A missing capability must
+remain visible, rather than silently selecting a different heap or JS fallback.
+Ordinary executables can continue using the native target when a Wasm sandbox,
+portable module or embedded runtime is unnecessary.
+
+### Managed objects, strings and boundary memory
+
+TypeScript object graphs include closures, aliases and cycles. In a browser,
+those graphs can extend through JS objects and DOM callbacks. WasmGC exposes
+individual managed objects and their reference edges to the engine collector.
+A linear heap plus `externref` handles does not by itself solve mixed JS/Wasm
+cycle collection. This lifetime obligation is a principal reason for the GC
+choice; a scalar microbenchmark cannot settle it. See
+[V8's cycle-collection discussion](https://v8.dev/blog/wasm-gc-porting#cycle-collection).
+
+Keep one logical String contract with exact TypeScript UTF-16 semantics,
+including lone code units. Initially use JS strings and recognized string
+builtins in the JS-hosted profile, and GC-owned UTF-16 storage in the standalone
+profile. Boundary conversion and copying must be explicit and measured. Do not
+copy every browser string into a private heap merely to unify physical layout.
+
+Linear memory is appropriate for ABI buffers and deliberately scoped bulk
+kernels with bounds, aliasing, ownership and cleanup contracts. It is not a
+second general object heap. Persistent manual allocations behind GC objects
+require a separate reclamation design; core GC is not an automatic finalizer
+for arbitrary offsets or opaque host resources.
+
+Standalone use does not force a linear managed heap.
+[Wasmtime supports core WasmGC](https://github.com/bytecodealliance/wasmtime/blob/v50.0.0/docs/stability-wasm-proposals.md).
+Qualify the selected engine build and a cycle-collecting collector with actual
+reclamation tests; a feature flag alone is insufficient. Host resources still
+need explicit rooting, disposal and callback-retention contracts.
+
+WASI is an interface choice. Ordinary WIT/canonical-ABI string and list
+transfers use linear memory at the boundary, while internal TypeScript objects
+can remain GC-managed. Do not depend on the separate experimental GC extension
+to the Component Model. Preserve the distinction between Unicode-text
+interfaces and lossless UTF-16-code-unit interfaces. See the
+[Canonical ABI](https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md).
+
+### Compiler ownership and replacement direction
+
+The intended managed-Wasm pipeline is:
+
+```text
+shared prepared HIR -> GC-aware Wasm lowering -> Binaryen optimization/emission
+```
+
+Keep language semantics, numeric facts, aliases, exceptions and reusable
+primitive algorithms in the shared compiler. The Wasm lowering still owns the
+target representation, semantic class identity, GC type plan and host boundary
+contracts. Prefer existing GC-aware optimization and emission machinery over
+maintaining a parallel general optimizer and encoder inside nts.
+[Binaryen](https://github.com/WebAssembly/binaryen) provides the relevant GC and
+reference IR and Wasm optimization machinery; it does not provide TypeScript
+semantics.
+
+The current direct emitter is a temporary implementation and differential
+oracle, not an architecture constraint. Replace or delete its parts when the
+new pipeline is simpler to own and meets the product budgets. Do not retain two
+full production emitters solely for historical comparison.
+
+LLVM remains the native code-generation path and a candidate for narrowly
+specified numeric/bulk kernels with simple values or spans and no managed
+ownership crossing. Its real `externref` support is useful, but does not turn
+the native-pointer LLVM output into a complete managed Wasm runtime. Emscripten
+is not the chosen product-wide foundation. A full linear-memory route would
+still leave nts responsible for its TypeScript collector and host-lifetime
+bridge.
+
+GC requires qualified modern engines and gives less direct control over layout
+and collection. Linear memory offers direct layout/SIMD access and established
+LLVM/C tooling, while moving more lifetime and interoperability machinery into
+nts. Revisit the heap choice for concrete GC-less embedded targets, hard
+real-time requirements, or a complete linear implementation that demonstrates
+a decisive application-level advantage after all lifetime and boundary costs.
+
+### Implementation order and acceptance
+
+1. Specify the two build profiles, engine capabilities and public value,
+   exception, resource and callback contracts.
+2. Build a representative Binaryen-backed slice: objects, arrays, closures,
+   strings, exceptions and actual DOM callback identity/lifetime. Compare it
+   with the current emitter for correctness, not as a requirement to preserve
+   current code.
+3. Measure browser applications: throughput, tail latency, retained/reclaimed
+   memory including cycles, cold compilation and startup, and complete
+   Wasm-plus-glue delivery size. Apply the same acceptance to the qualified
+   standalone engine as that profile becomes available. Replace the old
+   implementation when the product budgets and maintenance case are met.
+4. Add standalone strings/services and WIT/WASI wrapping to the same managed
+   backend. Admit an LLVM bulk-kernel path only where a representative measured
+   gain justifies its additional implementation.
+
+Primitives remain the priority. Implement the architecture in reviewable slices;
+expanding the Test262 population is not part of this work.
+
+### Evidence boundary (2026-10-24 UTC)
+
+Local experiments on compiler pin `ecdc70411ff2` support investigating reusable
+code generation, not a universal heap-speed claim. The LLVM scalar prototype
+used 7.5% less checksum time on Node and 15.8% less on Bun; the loop was near
+parity and Fibonacci was mixed. The prototype adapts an audited numeric slice,
+not the complete native runtime.
+
+The corrected same-source UTF-16 scan used unchanged module bytes and a
+separately sealed harness with no prototype writes in timed processes. At
+256 units and 16 passes, the direct path took 14.4% less time than LLVM
+references on Node; LLVM references took 34.1% less on Bun. Linear/SIMD medians
+were promising but unstable. One diagnostic counter pair is not a timing
+distribution, and separately launched counter and wall processes may occupy
+different engine tiers. The earlier string harness mutated/restored
+`charCodeAt`; its timing rankings remain provisional and are not pooled with
+the corrected run.
+
+Chromium capability probes passed 1,598 DOM/reference assertions and 3,468
+four-arm string assertions. These establish bounded correctness, not browser
+application speed, general DOM binding completeness or automatic mixed-cycle
+reclamation. Binaryen adoption, complete LLVM/Emscripten comparisons, browser
+wall/startup and managed lifetime acceptance are still unmeasured. The local
+source/artifact manifests and full results are retained under
+`~/.cache/nts-handover/wasm-*` on the audit machine; they are exploratory
+evidence, not a portable benchmark suite or landing gate.
+
+### Implemented today
+
+The current backend lowers prepared HIR to a thin symbolic Wasm IR and encodes
+the module directly. It uses engine-managed objects/arrays and generated
+helpers, JS strings, and Node/Browser host glue. Binaryen is not its current
+compiler pipeline. The JS-free standalone profile and WASI adapter above are
+planned; the current host selection has only Node and Browser. Browser loading
+and tests do not yet constitute a complete DOM/React application platform.
+
+## Historical bring-up status
+
+The following dated status and design records preserve their original scope.
+The product direction above supersedes their host ordering, direct-emission
+requirement and fixed WASI-version recommendations.
+
 Status: being reworked on `wasm/rework` (see "Architecture after the rework").
 Earlier: M0 approved by MainClaude, 2026-10-12 (Athens; initial probes recorded
 on 2026-10-11 UTC). Additional exception evidence is recorded below.
@@ -26,9 +197,10 @@ example population has not yet been rerun with this instrument.
 
 ## Architecture after the rework (2026-10-12)
 
-**This section is current.** Text below it that describes the generic Node
-loader, the ABI 2 manifest, string-constant tables or the activation exports
-is superseded; each such section carries a note.
+This section describes the implemented direct emitter and its successive
+changes. It is not the replacement architecture decided above. Text below it
+that describes the generic Node loader, the ABI 2 manifest, string-constant
+tables or activation exports is superseded; each such section carries a note.
 
 The Wasm lane moved to a Claude session on 2026-10-12. The user decided to
 rework M1b before anything lands (plan: `mainctl/WASM-PLAN.md`). The rework
@@ -1274,6 +1446,9 @@ also why the failure's text was missing.
 
 ## Current M1a implementation and evidence
 
+This is the original M1a implementation snapshot, not the current feature
+limit or the newly selected replacement pipeline.
+
 `compiler/codegen/wasm` emits a core module directly from prepared HIR. It
 predeclares callable signatures and imports, assigns typed locals, emits every
 reachable body, records instruction Origins, and validates the completed bytes
@@ -1656,24 +1831,26 @@ frontend work. Record owed.mjs for the final commit and preserve exact pins.
 
 ## Recommendation and build composition
 
-Emit WasmGC directly from verified, prepared HIR. Add a sibling of
-`compiler/codegen/jvm`, with typed GC references and engine-owned collection.
-Use one emitter, one semantic runtime-helper contract, and explicit host
-specialization. Node is the first JS host; browsers follow. A WASI 0.2 component
-host is a later milestone. React plus application code in wasm remains the
-long-run target, measured against React plus the same application in JS.
+The 2026-10-25 product decision at the top of this document replaces the
+original Node-first/direct-emission recommendation. Browser applications with
+DOM and JS integration come first. Keep one semantic runtime-helper contract
+and resolve the host/string profile during build composition. The intended
+replacement uses GC-aware lowering and Binaryen; the implemented backend still
+encodes Wasm directly. React plus application code in Wasm remains an
+application-level acceptance workload, measured against the same application
+in JS.
 
 | Build dimension | Recommendation |
 | --- | --- |
 | Target | `wasm`, with wasm32 offsets only for optional boundary linear memory; GC references have no declared pointer width |
-| Backend | `wasm`, direct binary emission |
+| Backend | `wasm`; intended GC-aware lowering plus Binaryen, currently direct emission |
 | Runtime family | `wasm`, compiler-generated typed helpers plus selected host services |
 | Memory provider | One `HostGc` HIR provider shared with JVM; the engine owns wasm allocations and barriers |
-| Host environment | `js` (Node/browser) or `wasi-0.2` |
+| Host environment | JS-hosted (Browser/Node) or standalone; WASI is an adapter/interface choice, not another object heap |
 | String provider | Explicit `js-string` or `gc-utf16`, derived from the host and checked in the build plan |
 | API profiles | Core ECMAScript first; native host Web APIs where present; TS fallback algorithms where absent |
 | Capabilities | Manifest of required logging, scheduling, clock, Web API, filesystem and network imports; absent required capability refuses |
-| Product | Core module plus generated JS host; later a component wrapping the WASI specialization |
+| Product | Core module plus generated JS host, or a standalone module with explicit imports and optional WIT/WASI wrapping |
 | Debug | Names initially; instruction Origins retained for a later `.ntsdbg`/source-map view |
 
 “One core module” means one core implementation and one module per product,
@@ -1685,17 +1862,20 @@ artifacts declare their host ABI and feature requirements.
 
 A WASI component needs a canonical-ABI adapter, including linear memory for
 ordinary string/list transfers and resource handling. Its interfaces cannot
-simply expose our GC references as WIT values. Keep that memory at the boundary;
-it does not become the object heap. WASI 0.2 is the brief's chosen interface
-version, not a claim that it is the newest version. Runtime support for the
-combined GC/component feature set must be probed on the selected M4 engine.
+simply expose our GC references as ordinary WIT values. Keep that memory at the
+boundary; it does not become the object heap. Select and pin the WASI interface
+version and engine as part of the tested standalone profile. The old 0.2/M4
+milestone is historical, not a current compatibility requirement. Qualify the
+combined engine, collector and component interfaces without depending on the
+experimental component-GC extension.
 See the [canonical ABI](https://component-model.bytecodealliance.org/advanced/canonical-abi.html).
 
-Reject C-to-wasm as the primary path: native HIR layouts and the C runtime
-currently assume eight-byte pointers, while a linear-memory port would bring an
-owned heap and conversion boundaries. Reject a JS implementation of every
-primitive: it loses the reason to compile loops and object operations into wasm.
-Reject a browser/WASI fork of the backend: host choices are data at composition.
+The native LLVM/C layouts are not a target-correct managed Wasm runtime. A full
+linear-memory port would need its own reviewed lifetime and host bridge; it is
+not the selected default. LLVM remains useful for native code and bounded
+numeric/bulk kernels. Keep host choices explicit at composition and compile
+ordinary object operations and loops into Wasm rather than routing every
+primitive through a JS wrapper.
 
 ## Repository map and preparation contract
 
@@ -2574,7 +2754,7 @@ Proposed new dependencies, **none installed or added in M0**:
 | `wasmparser` 0.261.0 | Validation in emission and tests, with an explicit feature set; same release family as encoder |
 | `wasmprinter` matching release | Optional developer/test disassembly; defer unless raw validation diagnostics need it |
 | `wasm-tools` | Optional inspect/component packaging tool in M4; no dependency for M1 users |
-| Binaryen `wasm-opt` | Optional post-pass in M2, pinned version only after measured benefit; never needed to make an emitted module valid |
+| Binaryen `wasm-opt` | Historical M2 plan: an optional post-pass. Superseded by the intended GC-aware Binaryen pipeline in the 2026-10-25 product decision; adoption is not implemented yet |
 | Wasmtime | Candidate M4 engine, not an M1 dependency; version/GC/component compatibility still unprobed |
 | npm packages | None for M1; generated hosts use platform JS APIs and Node builtins |
 
