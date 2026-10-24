@@ -1,0 +1,193 @@
+[
+  {
+    "directory": "third_party/react-compiler",
+    "packages": [
+      {
+        "name": "react_compiler_ast",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_ast/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_diagnostics",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_diagnostics/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_hir",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_hir/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_inference",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_inference/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_lowering",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_lowering/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_optimization",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_optimization/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_reactive_scopes",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_reactive_scopes/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_ssa",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_ssa/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_typeinference",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_typeinference/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_utils",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_utils/Cargo.toml"
+      },
+      {
+        "name": "react_compiler_validation",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler_validation/Cargo.toml"
+      },
+      {
+        "name": "react_compiler",
+        "version": "0.0.1-oidc.0",
+        "manifest": "crates/react_compiler/Cargo.toml"
+      }
+    ],
+    "texts": [
+      {
+        "upstream": "LICENSE",
+        "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+      }
+    ]
+  },
+  {
+    "directory": "third_party/tsrs",
+    "packages": [
+      {
+        "name": "tsrs_ast",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_ast/Cargo.toml"
+      },
+      {
+        "name": "tsrs_astnav",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_astnav/Cargo.toml"
+      },
+      {
+        "name": "tsrs_binder",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_binder/Cargo.toml"
+      },
+      {
+        "name": "tsrs_checker",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_checker/Cargo.toml"
+      },
+      {
+        "name": "tsrs_compiler",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_compiler/Cargo.toml"
+      },
+      {
+        "name": "tsrs_contentmapper",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_contentmapper/Cargo.toml"
+      },
+      {
+        "name": "tsrs_core",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_core/Cargo.toml"
+      },
+      {
+        "name": "tsrs_declarations",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_declarations/Cargo.toml"
+      },
+      {
+        "name": "tsrs_diagnostics",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_diagnostics/Cargo.toml"
+      },
+      {
+        "name": "tsrs_ipc",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_ipc/Cargo.toml"
+      },
+      {
+        "name": "tsrs_module",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_module/Cargo.toml"
+      },
+      {
+        "name": "tsrs_modulespecifiers",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_modulespecifiers/Cargo.toml"
+      },
+      {
+        "name": "tsrs_parser",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_parser/Cargo.toml"
+      },
+      {
+        "name": "tsrs_printer",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_printer/Cargo.toml"
+      },
+      {
+        "name": "tsrs_pseudochecker",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_pseudochecker/Cargo.toml"
+      },
+      {
+        "name": "tsrs_scanner",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_scanner/Cargo.toml"
+      },
+      {
+        "name": "tsrs_sourcemap",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_sourcemap/Cargo.toml"
+      },
+      {
+        "name": "tsrs_spanmap",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_spanmap/Cargo.toml"
+      },
+      {
+        "name": "tsrs_transformers",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_transformers/Cargo.toml"
+      },
+      {
+        "name": "tsrs_tsoptions",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_tsoptions/Cargo.toml"
+      },
+      {
+        "name": "tsrs_vfs",
+        "version": "0.19.0",
+        "manifest": "crates/tsrs_vfs/Cargo.toml"
+      }
+    ],
+    "texts": [
+      {
+        "upstream": "LICENSE",
+        "sha256": "a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47"
+      },
+      {
+        "upstream": "NOTICE",
+        "sha256": "1a4f42d83bf205aaf1b474e1a8c133cc5365003a188ba5f257d8aa4741355118"
+      }
+    ]
+  }
+]

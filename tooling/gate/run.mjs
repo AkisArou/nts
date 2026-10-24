@@ -150,6 +150,8 @@ const STEPS = [
   { name: "example-refusals", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, treeOnly: true, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
+  // Measured offline inventory: 0.03 s wall, 64 MiB peak RSS (2026-10-24).
+  { name: "licenses", slots: 1, treeOnly: true, mem: 0.1, doc: "compiler dependency license texts match the locked closure" },
   // Transitional feature-on path. Cold four-job run: 190.39s, peak process
   // RSS 1,586,488 KiB. Reserve ceil(4 * peak GiB) = 7 GiB for concurrent
   // compiler processes; share the ordinary cargo target/lock.

@@ -188,6 +188,7 @@ export const ASKS = {
   test262: ["valid", "is the test262 pin reachable, the inventory and the features audit current"],
   config: ["valid", "are the nts.config.ts files coherent"],
   "react-sources": ["valid", "do the vendored React sources match their manifest"],
+  "licenses": ["valid", "do full compiler dependency notices match the locked closure"],
   "frontend-tsrs": ["valid", "do native sources, attributions, feature-on Clippy and adapter tests pass"],
   primitives: ["valid", "does every name docs/primitives.md cites exist"],
   records: ["hygiene", "is every record number used once"],
@@ -211,6 +212,12 @@ const COMPARE = [
  * than dropped.
  */
 export const RULES = [
+  {
+    name: "compiler dependency notices",
+    when: (p) => p === "Cargo.lock" || p === "NOTICE" || /(^|\/)Cargo\.toml$/.test(p) || /^(third_party|licenses|tooling\/licenses)\//.test(p),
+    steps: ["licenses"],
+    arms: [],
+  },
   {
     name: "the native TypeScript frontend",
     when: (p) => /^(third_party\/tsrs|compiler\/frontend-tsrs)\//.test(p),

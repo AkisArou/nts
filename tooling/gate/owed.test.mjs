@@ -53,6 +53,13 @@ test("native frontend and vendor changes select feature-on validation", () => {
   }
 });
 
+test("compiler notice inputs select the independent license check", () => {
+  for (const path of ["licenses/packages.json", "tooling/licenses/licenses.ts", "Cargo.lock", "compiler/core/Cargo.toml", "third_party/react-compiler/LICENSE"]) {
+    assert.ok(stepsFor(path).includes("licenses"), path);
+  }
+  assert.ok(!stepsFor("compiler/core/src/lower.rs").includes("licenses"));
+});
+
 test("native dependency and toolchain inputs select feature-on validation", () => {
   for (const path of ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]) {
     assert.ok(reach(path).includes("frontend-tsrs"), path);

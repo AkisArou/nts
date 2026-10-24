@@ -2717,6 +2717,11 @@ react_sources() {
 }
 step "react-sources" react_sources
 
+licenses() {
+  node tooling/licenses/licenses.ts --check
+}
+step "licenses" licenses
+
 # Transitional while tsgo is still the default. The switch deletes the tsrs
 # feature and folds these native checks into workspace Clippy and tests.
 # Upstream stays immutable; the safe adapter is checked with the feature on.

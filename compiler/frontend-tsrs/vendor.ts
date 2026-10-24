@@ -64,7 +64,7 @@ if (!source) {
   if (!check || requested || dryRun) throw new Error("use --source <checkout> --rev <commit>, or --check");
   const commit = verify();
   process.stdout.write(`third_party/tsrs: ${commit}, ${inventory(target).length} files verified\n`);
-  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "licenses.ts"), "--check"], { stdio: "inherit" });
+  if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "../../tooling/licenses/licenses.ts"), "--check"], { stdio: "inherit" });
   if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "roles.ts"), "--check"], { stdio: "inherit" });
   if (!flag("--out")) execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "names.ts"), "--check"], { stdio: "inherit" });
 } else {

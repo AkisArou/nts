@@ -4,7 +4,9 @@ Copyright 2026 The Native TypeScript Authors
 This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file for the full license text.
 
-The native TypeScript frontend includes tsrs (third_party/tsrs/LICENSE and
-NOTICE). Its Rust dependency licence texts and notices are recorded in
-compiler/frontend-tsrs/licenses/README.md and the accompanying packages.json
-and texts directory; include them with binary distributions.
+The compiler distribution includes third-party Rust dependencies, tsrs and
+React Compiler code. Their full licence and notice texts and generated
+inventories are in licenses/ (README.md, packages.json,
+vendor-projects.json and texts/); include that directory with compiler binary
+distributions. Ship notices for linked runtime components separately with
+built programs.
