@@ -7,16 +7,19 @@ as Node. A declaration is a Node, including uncaptured library declarations;
 the source path is always available through its File. No arena/checker handle
 or native numeric identity is public. Collections preserve checker order.
 
-Every semantic question takes the program's **first persistent checker**,
-through `Program::get_type_checker`. Its native guard is held only during
-that question and released before returning any view. Keeping the guard
-between questions would deadlock later pool diagnostics. The checker object
-and its arena persist for the whole program; recycling and leaf freeing stay
-off, stableTypeOrdering stays on. Capture starts on the pristine designated checker, before any pool diagnostics
-run. `Checked::finish(self)` consumes the capture phase and runs diagnostics,
-returning `Finished` with owned diagnostics and syntax-only reborrows. Capture
-never runs concurrently with pool work. Thus checker cache state at capture
-is independent of the configured pool size, and its mutex stays uncontended.
+Every semantic question borrows one persistent capture checker C0, constructed
+independently of Program's diagnostics pool. Its scratch region and checker
+persist for the revision; the borrow is released before returning a view.
+Recycling stays off and stableTypeOrdering stays on. C0 starts pristine and
+never contributes diagnostics. Queries may record checker-local errors, but
+those are never program errors. With a total concurrency of one, finish runs
+the independent diagnostic checker sequentially on the capture thread. With
+N >= 2, a separate large-stack coordinator runs at most N - 1 pool checkers
+concurrently with C0. Without an explicit count the native pool chooses its
+own size, plus C0. `Checked::finish(self)` ends capture and joins diagnostics,
+returning `Finished` with owned diagnostics and syntax-only reborrows. Drop
+also joins before freeing the program, including during unwinding. Capture
+identity and its initial cache state never depend on diagnostic scheduling.
 Question inputs must belong to the same program; cross-program assignability
 is a release-mode assertion naming both config paths, never a bool answer.
 Within each program every route to a logical type/symbol/signature uses that

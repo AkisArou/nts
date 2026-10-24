@@ -1,6 +1,6 @@
 //! Native configuration, program ownership, and borrowed project/file views.
 
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::marker::PhantomData;
@@ -95,9 +95,84 @@ pub struct ProjectSemantics {
 
 struct NativeProject {
     program: &'static Program,
+    capture: RefCell<Option<Box<tsrs_checker::Checker>>>,
+    capture_region: Region,
+    diagnostics_task: RefCell<Option<std::thread::JoinHandle<NativeDiagnostics>>>,
+    diagnostic_results: OnceCell<NativeDiagnostics>,
+    parallel_capture: bool,
     files: Vec<NativeFile>,
     file_index: FxHashMap<P<SourceFile>, usize>,
     strings: crate::strings::StringPool,
+}
+
+struct NativeDiagnostics {
+    ordinary: Vec<P<NativeDiagnostic>>,
+    plain_js: Vec<P<NativeDiagnostic>>,
+    _region: Region,
+    #[cfg(test)]
+    thread: std::thread::ThreadId,
+}
+
+impl NativeDiagnostics {
+    fn collect(program: &'static Program) -> Self {
+        let region = Region::new_scratch(1 << 20);
+        let scope = region.enter();
+        let ctx = Context::default();
+        let mut ordinary = program.get_config_file_parsing_diagnostics().clone();
+        ordinary.extend(program.get_program_diagnostics());
+        ordinary.extend(program.get_syntactic_diagnostics(&ctx, None));
+        ordinary.extend(program.get_semantic_diagnostics(&ctx, None));
+        ordinary.extend(program.get_global_diagnostics(&ctx));
+        let mut plain_js = Vec::new();
+        for &file in program.source_files() {
+            if tsrs_ast::is_plain_js_file(Some(file), program.options().check_js)
+                && !program.skip_type_checking(file, false)
+            {
+                let mut checker = program.get_type_checker_for_file(&ctx, file);
+                plain_js.extend_from_slice(file.bind_diagnostics());
+                plain_js.extend(checker.get_diagnostics_exported(&ctx, file));
+            }
+        }
+        drop(scope);
+        Self {
+            ordinary,
+            plain_js,
+            _region: region,
+            #[cfg(test)]
+            thread: std::thread::current().id(),
+        }
+    }
+}
+
+impl NativeProject {
+    fn start_capture(&mut self) {
+        {
+            let _scope = self.capture_region.enter_scratch();
+            *self.capture.get_mut() = Some(tsrs_checker::new_checker(self.program));
+        }
+        if self.parallel_capture {
+            let program = self.program;
+            *self.diagnostics_task.get_mut() = Some(
+                std::thread::Builder::new()
+                    .name("nts-tsrs-diagnostics".to_owned())
+                    .stack_size(512 << 20)
+                    .spawn(move || NativeDiagnostics::collect(program))
+                    .expect("could not start the native diagnostic thread"),
+            );
+        }
+    }
+
+    fn finish_diagnostics(&self) -> &NativeDiagnostics {
+        self.diagnostic_results.get_or_init(|| {
+            self.diagnostics_task.borrow_mut().take().map_or_else(
+                || NativeDiagnostics::collect(self.program),
+                |task| match task.join() {
+                    Ok(results) => results,
+                    Err(panic) => std::panic::resume_unwind(panic),
+                },
+            )
+        })
+    }
 }
 
 struct NativeFile {
@@ -181,7 +256,7 @@ impl OwnedProgram {
             let config = pin_settings(config, options);
             let mut program_options = ProgramOptions::new(config, Arc::clone(&compiler_host));
             program_options.use_source_of_project_reference = true;
-            program_options.single_threaded = if options.checker_count.is_some_and(|n| n.get() == 1)
+            program_options.single_threaded = if options.checker_count.is_some_and(|n| n.get() <= 2)
             {
                 Tristate::True
             } else if options.checker_count.is_some() {
@@ -196,6 +271,13 @@ impl OwnedProgram {
             // Register ownership immediately, before any further native call.
             owned.projects.push(NativeProject {
                 program,
+                capture: RefCell::new(None),
+                capture_region: Region::new_scratch(1 << 20),
+                diagnostics_task: RefCell::new(None),
+                diagnostic_results: OnceCell::new(),
+                parallel_capture: options
+                    .checker_count
+                    .map_or_else(|| !program.single_threaded(), |count| count.get() > 1),
                 files: Vec::new(),
                 file_index: FxHashMap::default(),
                 strings: crate::strings::StringPool::new(region.clone()),
@@ -216,15 +298,19 @@ impl OwnedProgram {
                 .enumerate()
                 .map(|(index, file)| (file.source, index))
                 .collect();
+            project.start_capture();
         }
-        // Capture starts on the pristine designated checker. Pool diagnostics
-        // run only after Checked::finish consumes all semantic borrows.
+        // Capture's pristine C0 never belongs to the diagnostics pool. At one
+        // checker diagnostics wait for finish; otherwise they run independently.
         drop(scope);
         Ok(owned)
     }
 
     fn finish(&self) {
         let _scope = self.region.enter();
+        for project in &self.projects {
+            project.finish_diagnostics();
+        }
         self.diagnostics.get_or_init(|| self.collect_diagnostics());
         self.plain_js_unfiltered
             .get_or_init(|| self.collect_plain_js_unfiltered());
@@ -272,15 +358,9 @@ impl OwnedProgram {
     }
 
     fn collect_diagnostics(&self) -> Vec<Diagnostic> {
-        let ctx = Context::default();
         let mut native = self.config_diagnostics.clone();
         for project in &self.projects {
-            let program = project.program;
-            native.extend(program.get_config_file_parsing_diagnostics());
-            native.extend(program.get_program_diagnostics());
-            native.extend(program.get_syntactic_diagnostics(&ctx, None));
-            native.extend(program.get_semantic_diagnostics(&ctx, None));
-            native.extend(program.get_global_diagnostics(&ctx));
+            native.extend(&project.finish_diagnostics().ordinary);
         }
         let mut diagnostics: Vec<_> = native.into_iter().map(|d| self.diagnostic(d)).collect();
         diagnostics.extend(crate::environment::initialize().notes());
@@ -290,19 +370,9 @@ impl OwnedProgram {
     }
 
     fn collect_plain_js_unfiltered(&self) -> Vec<Diagnostic> {
-        let ctx = Context::default();
         let mut native = Vec::new();
         for project in &self.projects {
-            let program = project.program;
-            for &file in program.source_files() {
-                if tsrs_ast::is_plain_js_file(Some(file), program.options().check_js)
-                    && !program.skip_type_checking(file, false)
-                {
-                    let mut checker = program.get_type_checker_for_file(&ctx, file);
-                    native.extend_from_slice(file.bind_diagnostics());
-                    native.extend(checker.get_diagnostics_exported(&ctx, file));
-                }
-            }
+            native.extend(&project.finish_diagnostics().plain_js);
         }
         let mut diagnostics: Vec<_> = native.into_iter().map(|d| self.diagnostic(d)).collect();
         diagnostics.sort();
@@ -343,8 +413,9 @@ fn pin_settings(config: P<ParsedCommandLine>, options: &SessionOptions) -> P<Par
         .clone();
     compiler_options.stable_type_ordering = Tristate::True;
     if let Some(count) = options.checker_count {
-        compiler_options.checkers = Some(i64::from(count.get()));
-        compiler_options.single_threaded = if count.get() == 1 {
+        let diagnostics = count.get().saturating_sub(1).max(1);
+        compiler_options.checkers = Some(i64::from(diagnostics));
+        compiler_options.single_threaded = if diagnostics == 1 {
             Tristate::True
         } else {
             Tristate::False
@@ -356,9 +427,14 @@ fn pin_settings(config: P<ParsedCommandLine>, options: &SessionOptions) -> P<Par
 
 impl Drop for OwnedProgram {
     fn drop(&mut self) {
-        // All safe views borrow this owner. No checker handle is retained by
-        // this version yet, and these programs never use update/reuse_program.
+        // Join before freeing on every path, including capture unwinding. The
+        // capture checker is destroyed before its Program and both arenas stay
+        // alive until after freeing. No program uses update/reuse_program.
         for project in self.projects.drain(..).rev() {
+            if project.diagnostics_task.borrow().is_some() {
+                project.finish_diagnostics();
+            }
+            project.capture.borrow_mut().take();
             #[expect(
                 unsafe_code,
                 reason = "sole owner; views ended and no native program data is shared"
@@ -375,7 +451,8 @@ impl Drop for OwnedProgram {
 /// Capture phase of one native revision, on its pristine designated checker.
 ///
 /// Semantic views borrow this value. `finish` consumes it after capture,
-/// runs pool diagnostics, and returns syntax-only access and owned answers.
+/// joins independent pool diagnostics (running them here at one checker), and
+/// returns syntax-only access and owned answers. Capture never feeds that pool.
 /// Dropping the current phase and all its views permits `Session::revise`.
 pub struct Checked<'s> {
     owner: &'s OwnedProgram,
@@ -539,7 +616,11 @@ impl<'s, S: ViewPhase> Project<'s, S> {
     }
     #[must_use]
     pub fn checker_count(self) -> usize {
-        self.native.program.checker_count()
+        if self.native.parallel_capture {
+            self.native.program.checker_count() + 1
+        } else {
+            1
+        }
     }
     pub fn files(self) -> impl ExactSizeIterator<Item = File<'s, S>> {
         self.native.files.iter().map(move |native| File {
@@ -681,14 +762,15 @@ impl<'s, S: ViewPhase> File<'s, S> {
 }
 
 impl<'s> File<'s> {
-    /// Every question acquires the same persistent first checker. No guard
-    /// survives this call, and no pool diagnostics have run yet.
+    /// Every question borrows the same persistent capture checker, outside the
+    /// diagnostics pool. No borrow survives this call; its errors are discarded.
     pub(crate) fn with_checker<R>(
         self,
         question: impl FnOnce(&mut tsrs_compiler::Checker) -> R,
     ) -> R {
-        let mut checker = self.project.program.get_type_checker(&Context::default());
-        question(&mut checker)
+        let _scope = self.project.capture_region.enter_scratch();
+        let mut checker = self.project.capture.borrow_mut();
+        question(checker.as_mut().expect("capture checker initialized"))
     }
     pub(crate) fn node_view(self, native: P<tsrs_ast::Node>) -> Option<crate::Node<'s>> {
         let source = tsrs_ast::get_source_file_of_node(native)?;
@@ -740,12 +822,23 @@ mod tests {
     #[test]
     fn one_checker_is_exact_and_runs_on_the_checking_thread() {
         run(options(1), |session| {
-            let checked = session
-                .open(project())
-                .expect("inline project loads")
-                .finish();
+            let capture = session.open(project()).expect("inline project loads");
+            let native = &capture.owner.projects[0];
+            assert!(native.diagnostics_task.borrow().is_none());
+            assert!(native.diagnostic_results.get().is_none());
+            let checked = capture.finish();
             let project = checked.projects().next().expect("root program");
             assert_eq!(project.checker_count(), 1);
+            assert_eq!(
+                project
+                    .native
+                    .diagnostic_results
+                    .get()
+                    .expect("diagnostics finished")
+                    .thread,
+                std::thread::current().id(),
+                "one checker never starts a second checker thread"
+            );
             assert!(project.native.program.single_threaded());
             let workers = Mutex::new(Vec::new());
             project
@@ -761,6 +854,41 @@ mod tests {
                 *workers.lock().expect("worker list"),
                 vec![(0, std::thread::current().id())]
             );
+        });
+    }
+
+    #[test]
+    fn parallel_capture_uses_a_separate_diagnostic_thread_within_the_total_budget() {
+        run(options(4), |session| {
+            let capture = session.open(project()).expect("inline project loads");
+            assert!(
+                capture.owner.projects[0]
+                    .diagnostics_task
+                    .borrow()
+                    .is_some()
+            );
+            let finished = capture.finish();
+            let project = finished.projects().next().expect("requested project");
+            assert_eq!(project.checker_count(), 4);
+            assert_eq!(project.native.program.checker_count(), 3);
+            assert_ne!(
+                project
+                    .native
+                    .diagnostic_results
+                    .get()
+                    .expect("diagnostics finished")
+                    .thread,
+                std::thread::current().id()
+            );
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "capture unwinds while independent diagnostics run")]
+    fn capture_unwind_joins_diagnostics_before_freeing_the_program() {
+        run(options(4), |session| {
+            let _capture = session.open(project()).expect("inline project loads");
+            panic!("capture unwinds while independent diagnostics run");
         });
     }
 

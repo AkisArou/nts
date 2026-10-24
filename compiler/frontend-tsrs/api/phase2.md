@@ -2,8 +2,8 @@
 
 Phase 1–2 contract for direct capture. Signatures below are declarations,
 not implementations. The implementations live in `src/`. No upstream handle
-is public. Capture is followed by diagnostics through a consuming typestate
-transition; finished views expose syntax and metadata only.
+is public. Capture ends through a consuming typestate transition that joins independent
+diagnostics; finished views expose syntax and metadata only.
 
 `Checked`, `Project`, `File`, `Node` and `List` are borrowed views, neither
 Send nor Sync. Nodes/lists implement Copy, Eq and Hash using one identity
@@ -17,7 +17,7 @@ pub fn run<R: Send>(options: SessionOptions, build: impl FnOnce(&mut Session) ->
 pub struct SessionOptions {
     pub cwd: Utf8PathBuf,
     pub library_path: Option<Utf8PathBuf>,
-    pub checker_count: Option<NonZeroU16>, // None: native default; 1: exactly one
+    pub checker_count: Option<NonZeroU16>, // total concurrency: 1 sequential; N >= 2 means C0 + N - 1 diagnostic checkers
 }
 pub enum CaseSensitivity { Sensitive, Insensitive }
 pub struct ProjectSpec {
@@ -45,7 +45,7 @@ impl<'p> Checked<'p> { // not Copy or Clone
     pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_>>;
     pub fn case_sensitivity(&self) -> CaseSensitivity;
     pub fn inputs(&self) -> Vec<Input>; // observations so far
-    pub fn finish(self) -> Finished<'p>; // consumes capture, runs pool diagnostics
+    pub fn finish(self) -> Finished<'p>; // consumes capture, joins independent diagnostics (runs them at count 1)
 }
 impl Finished<'_> {
     pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>>;

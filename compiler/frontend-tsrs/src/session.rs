@@ -1,7 +1,9 @@
 //! Native checking-thread and program ownership.
 //!
-//! Capture uses one program checker for every semantic question. Diagnostics
-//! run on the configured pool after capture; their handles never feed capture identities.
+//! Capture uses one independently owned checker for every semantic question.
+//! Its diagnostics are never program diagnostics. At a total count of one,
+//! the separate diagnostic pool runs on the same thread after capture; at N >= 2
+//! it runs concurrently with at most N - 1 checkers. Its handles never feed capture identities.
 //! Stable type ordering is pinned on. AST/file views may be live during a
 //! typing question, but no internal checker borrow escapes a query method.
 
@@ -26,7 +28,9 @@ pub struct SessionOptions {
     pub cwd: Utf8PathBuf,
     /// An explicit library override; otherwise tsrs's embedded libraries.
     pub library_path: Option<Utf8PathBuf>,
-    /// One is single-threaded; `None` uses the upstream program's default.
+    /// Total checker concurrency. One runs capture then diagnostics on the same
+    /// thread; N >= 2 reserves one for capture and N - 1 for diagnostics.
+    /// `None` uses the upstream diagnostic pool's default, plus capture.
     /// The supported explicit range is 1 through 256.
     pub checker_count: Option<NonZeroU16>,
 }

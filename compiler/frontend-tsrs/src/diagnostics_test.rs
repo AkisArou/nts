@@ -2,6 +2,63 @@ use std::num::NonZeroU16;
 
 use crate::*;
 
+fn jsx_diagnostics(count: u16, real_error: bool) -> Vec<Diagnostic> {
+    run(options(count), |session| {
+        let mut spec = ProjectSpec::new("tsconfig.json");
+        spec.overlays.insert("tsconfig.json".into(), r#"{"compilerOptions":{"target":"ESNext","module":"ESNext","jsx":"preserve","strict":true,"types":[]},"files":["main.tsx"]}"#.to_owned());
+        let source = format!(
+            "declare namespace JSX {{ interface IntrinsicElements {{ div: {{}} }} }}\nconst x = <div />;\n{}",
+            if real_error {
+                "const wrong: number = 'wrong';"
+            } else {
+                ""
+            }
+        );
+        spec.overlays.insert("main.tsx".into(), source);
+        let checked = session.open(spec).expect("JSX project");
+        {
+            let file = checked
+                .projects()
+                .next()
+                .expect("program")
+                .files()
+                .find(|f| f.path().ends_with("main.tsx"))
+                .expect("JSX file");
+            let mut pending = vec![file.root()];
+            while let Some(node) = pending.pop() {
+                // The type API on this intrinsic tag records TS2304 in the
+                // capture checker; that checker must never supply diagnostics.
+                if node.kind() == tsrs_ast::Kind::Identifier as u16
+                    && node.span().is_some_and(|span| span.start.0 == 77)
+                {
+                    let _ = node.ty();
+                }
+                for edge in node.edges() {
+                    match edge {
+                        Edge::Node { node, .. } => pending.push(node),
+                        Edge::List { list, .. } => pending.extend(list.iter()),
+                    }
+                }
+            }
+        }
+        checked.finish().diagnostics()
+    })
+}
+
+#[test]
+fn capture_type_queries_cannot_pollute_jsx_program_diagnostics() {
+    for count in [1, 4] {
+        assert_eq!(jsx_diagnostics(count, false), []);
+    }
+}
+
+#[test]
+fn independent_diagnostics_still_report_a_real_type_error_exactly_once() {
+    let one = jsx_diagnostics(1, true);
+    assert_eq!(one.iter().map(|d| d.code).collect::<Vec<_>>(), [2322]);
+    assert_eq!(one, jsx_diagnostics(4, true));
+}
+
 fn options(count: u16) -> SessionOptions {
     let mut options = SessionOptions::new("/__nts_js_diagnostics_test__");
     options.checker_count = NonZeroU16::new(count);
