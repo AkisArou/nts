@@ -1,7 +1,8 @@
 //! Safe access to a native TypeScript checked program.
 //!
 //! Upstream handles and arena lifetimes stay private. All frontend work runs
-//! on one large-stack thread; the returned semantic snapshot owns its data.
+//! on a large-stack capture thread with an independent diagnostics pool;
+//! the returned semantic snapshot owns its data.
 //! Native panics propagate to the caller, with no recovery or partial answer.
 
 #[cfg(feature = "tsrs")]
@@ -33,7 +34,7 @@ pub use phase::{CapturePhase, SyntaxPhase, ViewPhase};
 #[cfg(feature = "tsrs")]
 pub use program::{
     Checked, Diagnostic, DiagnosticCategory, File, Finished, LoadError, Project, ProjectSemantics,
-    ProjectSpec, ResolvedImport, SourceChanges,
+    ProjectSpec, Resolved, ResolvedImport, SourceChanges,
 };
 #[cfg(feature = "tsrs")]
 pub use semantic::*;

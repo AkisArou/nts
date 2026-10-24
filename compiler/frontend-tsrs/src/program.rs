@@ -199,8 +199,48 @@ pub(crate) struct OwnedProgram {
     _loader_regions: Arc<ProgramRegions>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BuildMode {
+    Capture,
+    Resolution,
+}
+
 impl OwnedProgram {
     pub(crate) fn open(options: &SessionOptions, spec: &ProjectSpec) -> Result<Self, LoadError> {
+        Self::build(options, spec, BuildMode::Capture)
+    }
+
+    pub(crate) fn resolve(options: &SessionOptions, spec: &ProjectSpec) -> Result<Self, LoadError> {
+        let owned = Self::build(options, spec, BuildMode::Resolution)?;
+        let _scope = owned.region.enter();
+        let mut native = owned.config_diagnostics.clone();
+        for project in &owned.projects {
+            native.extend(project.program.get_config_file_parsing_diagnostics());
+            native.extend(project.program.get_program_diagnostics());
+            native.extend(
+                project
+                    .program
+                    .get_syntactic_diagnostics(&Context::default(), None),
+            );
+        }
+        let mut diagnostics: Vec<_> = native.into_iter().map(|d| owned.diagnostic(d)).collect();
+        diagnostics.extend(crate::environment::initialize().notes());
+        diagnostics.sort();
+        diagnostics.dedup();
+        owned.diagnostics.set(diagnostics).expect("new resolution");
+        // No checker facts exist on a resolution-only revision.
+        owned
+            .plain_js_unfiltered
+            .set(Vec::new())
+            .expect("new resolution");
+        Ok(owned)
+    }
+
+    fn build(
+        options: &SessionOptions,
+        spec: &ProjectSpec,
+        mode: BuildMode,
+    ) -> Result<Self, LoadError> {
         let region = Region::new_scratch(1 << 20);
         let scope = region.enter();
         let loader_regions = Arc::new(ProgramRegions::default());
@@ -298,7 +338,9 @@ impl OwnedProgram {
                 .enumerate()
                 .map(|(index, file)| (file.source, index))
                 .collect();
-            project.start_capture();
+            if mode == BuildMode::Capture {
+                project.start_capture();
+            }
         }
         // Capture's pristine C0 never belongs to the diagnostics pool. At one
         // checker diagnostics wait for finish; otherwise they run independently.
@@ -487,7 +529,7 @@ impl<'s> Checked<'s> {
     pub fn inputs(&self) -> Vec<Input> {
         self.owner.host.inputs()
     }
-    /// Finish all semantic capture before diagnostics can warm any checker.
+    /// End semantic capture and join the independent diagnostic work.
     #[must_use]
     pub fn finish(self) -> Finished<'s> {
         self.owner.finish();
@@ -495,6 +537,51 @@ impl<'s> Checked<'s> {
             owner: self.owner,
             case_sensitivity: self.case_sensitivity,
         }
+    }
+}
+
+/// Resolution-only revision. Building it starts no capture checker or
+/// diagnostic pool. Its diagnostics contain config, program and syntax facts
+/// only; a later ordinary `open`/`finish` performs the one full check.
+///
+/// ```compile_fail
+/// use nts_frontend_tsrs::{Session, ProjectSpec};
+/// fn no_semantic_questions(session: &mut Session) {
+///     let resolved = session.resolve(ProjectSpec::new("tsconfig.json")).unwrap();
+///     let project = resolved.projects().next().unwrap();
+///     let file = project.files().next().unwrap();
+///     let _ = file.root().ty();
+/// }
+/// ```
+#[derive(Debug)]
+pub struct Resolved<'s> {
+    revision: Finished<'s>,
+}
+
+impl<'s> Resolved<'s> {
+    pub(crate) fn new(owner: &'s OwnedProgram, case_sensitivity: CaseSensitivity) -> Self {
+        Self {
+            revision: Finished {
+                owner,
+                case_sensitivity,
+            },
+        }
+    }
+    #[must_use]
+    pub const fn case_sensitivity(&self) -> CaseSensitivity {
+        self.revision.case_sensitivity()
+    }
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>> {
+        self.revision.projects()
+    }
+    #[must_use]
+    pub fn inputs(&self) -> Vec<Input> {
+        self.revision.inputs()
+    }
+    /// Config, program and syntactic diagnostics only; no semantic errors.
+    #[must_use]
+    pub fn diagnostics(&self) -> Vec<Diagnostic> {
+        self.revision.diagnostics()
     }
 }
 
@@ -616,7 +703,9 @@ impl<'s, S: ViewPhase> Project<'s, S> {
     }
     #[must_use]
     pub fn checker_count(self) -> usize {
-        if self.native.parallel_capture {
+        if self.native.capture.borrow().is_none() {
+            0
+        } else if self.native.parallel_capture {
             self.native.program.checker_count() + 1
         } else {
             1
@@ -1133,6 +1222,71 @@ mod tests {
                 let project = checked.projects().next().expect("solution program");
                 assert_eq!(project.root_paths().len(), 0);
                 assert_eq!(project.files().len(), 0);
+            });
+        }
+    }
+
+    #[test]
+    fn resolution_starts_no_checker_and_has_only_config_program_and_syntax_diagnostics() {
+        run(options(4), |session| {
+            {
+                let resolved = session.resolve(project()).expect("resolution only");
+                let project = resolved.projects().next().expect("requested project");
+                assert_eq!(project.checker_count(), 0);
+                assert!(project.native.capture.borrow().is_none());
+                assert!(project.native.diagnostics_task.borrow().is_none());
+                assert!(project.native.diagnostic_results.get().is_none());
+                assert!(!resolved.diagnostics().iter().any(|d| d.code == 2322));
+                assert_ne!(resolved.inputs(), []);
+            }
+            let checked = session.open(project()).expect("full check").finish();
+            assert!(checked.diagnostics().iter().any(|d| d.code == 2322));
+        });
+    }
+
+    fn resolutions(project: Project<'_, SyntaxPhase>) -> Vec<String> {
+        project
+            .files()
+            .flat_map(|file| {
+                file.resolved_imports().map(move |import| {
+                    format!(
+                        "{}: {:?} -> {:?} ({:?})",
+                        file.path(),
+                        import.specifier.utf16(),
+                        import.resolved_path,
+                        import.package_version.map(crate::JsString::utf16)
+                    )
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn workspace_resolution_matches_full_program_imports_without_any_checker() {
+        let cwd = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for count in [1, 4] {
+            let mut options = SessionOptions::new(cwd.clone());
+            options.checker_count = NonZeroU16::new(count);
+            run(options, |session| {
+                let config = "tests/workspace/apps/node/tsconfig.json";
+                let resolution = {
+                    let resolved = session
+                        .resolve(ProjectSpec::new(config))
+                        .expect("resolution");
+                    let project = resolved.projects().next().expect("requested project");
+                    assert_eq!(project.checker_count(), 0);
+                    assert_eq!(project.root_paths().len(), 1);
+                    resolutions(project)
+                };
+                assert_ne!(resolution, [] as [String; 0]);
+                let checked = session
+                    .open(ProjectSpec::new(config))
+                    .expect("full program")
+                    .finish();
+                assert_eq!(
+                    resolution,
+                    resolutions(checked.projects().next().expect("project"))
+                );
             });
         }
     }

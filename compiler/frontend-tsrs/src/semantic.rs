@@ -1,4 +1,4 @@
-//! Direct semantic facts from one persistent first checker per program.
+//! Direct semantic facts from one persistent capture checker per program.
 //!
 //! Views cannot cross a checking-thread boundary:
 //! ```compile_fail

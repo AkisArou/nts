@@ -30,6 +30,7 @@ pub struct SourceChanges {
     pub roots: Option<Vec<Utf8PathBuf>>, // None retains existing extra roots
 }
 impl Session {
+    pub fn resolve(&mut self, spec: ProjectSpec) -> Result<Resolved<'_>, LoadError>;
     pub fn open(&mut self, spec: ProjectSpec) -> Result<Checked<'_>, LoadError>;
     pub fn revise(&mut self, changes: SourceChanges) -> Result<Checked<'_>, LoadError>;
     pub fn options(&self) -> &SessionOptions;
@@ -47,6 +48,13 @@ impl<'p> Checked<'p> { // not Copy or Clone
     pub fn inputs(&self) -> Vec<Input>; // observations so far
     pub fn finish(self) -> Finished<'p>; // consumes capture, joins independent diagnostics (runs them at count 1)
 }
+// Resolution starts no checker. Diagnostics below are config/program/syntax only.
+impl Resolved<'_> {
+    pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>>;
+    pub fn case_sensitivity(&self) -> CaseSensitivity;
+    pub fn diagnostics(&self) -> Vec<Diagnostic>;
+    pub fn inputs(&self) -> Vec<Input>;
+}
 impl Finished<'_> {
     pub fn projects(&self) -> impl ExactSizeIterator<Item = Project<'_, SyntaxPhase>>;
     pub fn case_sensitivity(&self) -> CaseSensitivity;
@@ -62,7 +70,7 @@ impl<'p, S: ViewPhase> Project<'p, S> {
     pub fn config_path(self) -> &'p Utf8Path;
     pub fn cwd(self) -> &'p Utf8Path;
     pub fn root_paths(self) -> impl ExactSizeIterator<Item = &'p Utf8Path>;
-    pub fn checker_count(self) -> usize; // effective count, never misreports 1
+    pub fn checker_count(self) -> usize; // effective total concurrency; zero on resolution-only views
     pub fn files(self) -> impl ExactSizeIterator<Item = File<'p, S>>;
     pub fn semantics(self) -> ProjectSemantics;
 }

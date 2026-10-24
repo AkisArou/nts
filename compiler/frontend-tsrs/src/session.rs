@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::num::NonZeroU16;
 use std::rc::Rc;
 
-use crate::program::{Checked, LoadError, OwnedProgram, ProjectSpec, SourceChanges};
+use crate::program::{Checked, LoadError, OwnedProgram, ProjectSpec, Resolved, SourceChanges};
 use camino::Utf8PathBuf;
 
 /// The host filesystem's name comparison semantics.
@@ -113,6 +113,23 @@ impl Session {
         let program = OwnedProgram::open(&self.options, self.spec.as_ref().expect("project set"))?;
         self.current = Some(program);
         Ok(Checked::new(
+            self.current.as_ref().expect("program set"),
+            self.case_sensitivity,
+        ))
+    }
+
+    /// Resolve config, roots and imports without constructing any checker.
+    /// Syntax-only views and config/program/syntactic diagnostics are available;
+    /// dependency acquisition can settle before the one full ordinary check.
+    pub fn resolve(&mut self, spec: ProjectSpec) -> Result<Resolved<'_>, LoadError> {
+        crate::environment::initialize();
+        self.current = None;
+        self.spec = Some(spec);
+        self.current = Some(OwnedProgram::resolve(
+            &self.options,
+            self.spec.as_ref().expect("project set"),
+        )?);
+        Ok(Resolved::new(
             self.current.as_ref().expect("program set"),
             self.case_sensitivity,
         ))
