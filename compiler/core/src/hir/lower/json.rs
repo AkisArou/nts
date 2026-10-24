@@ -21,6 +21,9 @@
 //!   loop over its code units where it does not -- the JVM and Wasm, until
 //!   their kernels exist.
 //! - **A reference that may be `null`** writes `null` for one.
+//! - **Absent or `undefined` members** are omitted from an object; an
+//!   `undefined` array element writes `null`. Optional members keep presence,
+//!   and erased values keep tags, so `null` remains distinct.
 //! - **An object's members** are its own enumerable string keys, in the order
 //!   `Object.keys` answers them ([`FuncBuilder::enumerable_fields`] and
 //!   `property_order`): array-index keys ascending, then the layout's order,
@@ -32,15 +35,16 @@
 //! - a type whose literals write its keys in more than one order
 //!   (`WrittenOrders::disputed`): an object's keys are in insertion order, and
 //!   the layout holds one order;
-//! - an optional property, which an object gains where it is assigned and so
-//!   in the order it is assigned;
-//! - a value that may be `undefined`, which JSON omits in an object and writes
-//!   as `null` in an array -- and a `string | undefined`'s null pointer cannot
-//!   be told from a `string | null`'s by its representation;
+//! - an optional property that may be added later, or a property the program
+//!   deletes: a later addition can change its position among the keys;
+//! - a top-level value that may be `undefined`, where the result is not a string;
+//! - a reference whose one null pointer would stand for both `null` and
+//!   `undefined`;
 //! - a recursive type, whose cycles `JSON.stringify` must detect;
-//! - `toJSON` and a getter, which are calls; an erased value; a replacer or an
-//!   indent; `Map`, `Set`, `Date` and the other builtins with a JSON form of
-//!   their own.
+//! - `toJSON` and a getter, which are calls; an erased value without one
+//!   supported present representation (`unknown`, `any`, or a mixed union);
+//!   a replacer or an indent; `Map`, `Set`, `Date` and the other builtins with
+//!   a JSON form of their own.
 //!
 //! **One writer per checker type**, not per layout: two types sharing a layout
 //! can differ in what a null pointer in a field means (`string | null` against
