@@ -60,6 +60,7 @@ function scratch(): Scratch {
   mkdirSync(join(home, ".cache/nts-parallel-20261004/mainctl"), { recursive: true });
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   writeFileSync(join(root, "tooling/gate/pinned.sh"), STAND_IN_GATE);
+  writeFileSync(join(root, "tooling/gate/run.mjs"), 'process.stdout.write(JSON.stringify({fake: []}));\n');
   // Narrows interop to what a commit's INTEROP file names, as owed.mjs does.
   writeFileSync(
     join(root, "tooling/gate/owed.mjs"),
@@ -128,6 +129,44 @@ async function until(what: string, ok: () => boolean): Promise<void> {
   }
   assert.fail(`timed out waiting for ${what}`);
 }
+
+test("missing gate environment refuses before queueing or waiting for a held lock", async () => {
+  const s = scratch();
+  const tree = lane(s, "android-env", {
+    "tooling/gate/owed.mjs": 'console.log(\'NTS_GATE_STEPS="dex"\');\n',
+    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({dex: ["android"]}));\n',
+  });
+  s.env.ANDROID_HOME = "";
+  const lock = join(s.home, ".cache/nts-land.lock");
+  writeFileSync(lock, "");
+  const holder = spawn("flock", [lock, "sleep", "60"], { detached: true });
+  try {
+    await until("the lock to be held", () => readFileSync("/proc/locks", "utf8").includes(`${holder.pid} `));
+    const result = spawnSync(process.execPath, [LAND, "HEAD"], { cwd: tree, env: s.env, encoding: "utf8", timeout: 30_000 });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /ANDROID_HOME is missing; required by step dex/);
+    assert.match(result.stderr, /node tooling\/lanes\/land-unit.ts/);
+    assert.equal(existsSync(join(s.home, ".cache/nts-land/queue")), false);
+    assert.equal(gates(s), 0);
+  } finally {
+    process.kill(-holder.pid!, "SIGTERM");
+  }
+});
+
+test("the locked train rechecks capabilities before starting its gate", async () => {
+  const s = scratch();
+  const tree = lane(s, "train-env", {
+    "tooling/gate/owed.mjs": 'console.log(\'NTS_GATE_STEPS="dex"\');\n',
+    "tooling/gate/run.mjs": 'process.stdout.write(JSON.stringify({dex: ["android"]}));\n',
+  });
+  s.env.ANDROID_HOME = "";
+  // Enter at the train half, bypassing the pre-queue check as its flock child does.
+  s.env.NTS_LAND_LOCKED = "1";
+  const result = await land(s, tree).done;
+  assert.equal(result.status, 1, result.out);
+  assert.match(result.out, /ANDROID_HOME is missing; required by step dex/);
+  assert.equal(gates(s), 0);
+});
 
 /** Land every tree at once: the lock is held until all of them are queued. */
 async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {

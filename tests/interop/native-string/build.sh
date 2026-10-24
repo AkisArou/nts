@@ -1,4 +1,5 @@
 #!/bin/sh
+# nts-gate-capabilities: valgrind
 # Build the library and the C program that links it, and check what C
 # receives when TypeScript passes a `string`.
 #

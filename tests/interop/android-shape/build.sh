@@ -1,4 +1,5 @@
 #!/bin/sh
+# nts-gate-capabilities: jvm
 # Build the Android-shaped Java, generate the declarations from it, run the
 # demonstration, and check the declarations against what is committed.
 #

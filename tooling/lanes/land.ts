@@ -46,6 +46,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
+import { gateEnvironmentError } from "../gate/environment.ts";
 import { retireLanding, type Submission } from "./retire.ts";
 import { recordedTopics, revisitLandedTopics, type TopicEvent } from "./topics.ts";
 
@@ -112,6 +113,11 @@ function sharedCheckout(): string {
  * projects when it could narrow them (`NTS_INTEROP_PROJECTS`), else null.
  */
 type Owed = { steps: string[] | "all"; interop: string | null };
+function environmentProblem(tree: string, owed: Owed): string | null {
+  try { return gateEnvironmentError(tree, owed.steps, owed.interop); }
+  catch (error) { fail(`environment preflight: ${(error as Error).message}`); }
+}
+
 function owedSteps(tree: string, range: string): Owed {
   const out = execFileSync("node", ["tooling/gate/owed.mjs", "--range", range], { cwd: tree, encoding: "utf8" });
   const line = out.match(/NTS_GATE_STEPS="([^"]*)"(?: NTS_INTEROP_PROJECTS="([^"]*)")?/);
@@ -455,6 +461,11 @@ function gate(root: string, base: string, landing: string, members: string[]): G
   const owed = owedSteps(GATE_TREE, `${base}..${landing}`);
   say(`${short} on ${base.slice(0, 12)} owes: ${describe(owed)}`);
 
+  // A train can owe capabilities its lock holder's own submission did not.
+  // Recheck the union before starting work, even after pre-queue validation.
+  const problem = environmentProblem(GATE_TREE, owed);
+  if (problem) return { ok: false, run: "", state: "red", message: problem };
+
   claimMarker(short);
   const run = join(STATE, "runs", `${short}-${Date.now()}`);
   mkdirSync(run, { recursive: true });
@@ -622,17 +633,21 @@ async function main(): Promise<void> {
     fail(`run from a tree whose HEAD is ${short}: owed.mjs answers with the rules as that commit has them`);
   }
 
-  if (dryRun) {
+  if (dryRun || process.env.NTS_LAND_LOCKED !== "1") {
     const base = git(["rev-parse", "main"], root);
     if (base === sha) fail(`${short} is main already`);
     // Without the lock the gate tree is someone else's: the rules are this
     // tree's, over the commits since it left main.
     const from = git(["merge-base", base, sha], root);
     const owed = owedSteps(tree, `${from}..${sha}`);
-    const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
-    say(`${short} ${where} owes: ${describe(owed)}`);
-    treeOnly(tree, owed, short);
-    return;
+    const problem = environmentProblem(tree, owed);
+    if (problem) fail(problem);
+    if (dryRun) {
+      const where = from === base ? `on ${base.slice(0, 12)}` : `(replayed onto ${base.slice(0, 12)} when it lands)`;
+      say(`${short} ${where} owes: ${describe(owed)}`);
+      treeOnly(tree, owed, short);
+      return;
+    }
   }
 
   await underTheLock(sha, tree);

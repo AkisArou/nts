@@ -1,4 +1,5 @@
 #!/bin/sh
+# nts-gate-capabilities: jvm
 # Build the Java library, generate the declarations from it, and check them
 # against what is committed.
 #

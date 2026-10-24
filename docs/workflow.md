@@ -97,6 +97,19 @@ node tooling/lanes/land.ts <commit> --dry-run   # what it owes
 node tooling/lanes/land.ts <commit>             # gate and land; ~30 min, run it in the background
 ```
 
+For a detached systemd user unit, start from a login shell and use
+`node tooling/lanes/land-unit.ts <commit> <name>`. It resolves the commit in
+your tree, creates an isolated submission, checks it, then queues it with the
+gate's environment. The unit and log path are printed. The environment list
+lives in `tooling/gate/environment.ts`; avoid a separate shell whitelist.
+
+Landings and full runs refuse missing environment requirements before taking
+the landing lock. Step rows declare capabilities (`jvm`, `android`,
+`valgrind`); an interop project declares its own with a
+`# nts-gate-capabilities: valgrind` header in `build.sh`. The preflight names
+the missing variable and requiring step/project. A landing rechecks the
+combined train's requirements before running it.
+
 Run it from your tree, at the commit you are landing, bare (never inside a
 lock of your own). It:
 

@@ -1,4 +1,5 @@
 #!/bin/sh
+# nts-gate-capabilities: jvm
 # Emit the TypeScript, check the published API against the checked-in capture,
 # then compile and run a plain Java consumer against it.
 #

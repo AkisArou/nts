@@ -9,6 +9,21 @@ import { fullPlan, fullEnvironment } from "./full-plan.ts";
 const scratch = join(homedir(), ".cache/nts-scratch/full-run-tests");
 mkdirSync(scratch, { recursive: true });
 
+test("missing full-run environment refuses before history, lock or setup", t => {
+  const home = mkdtempSync(join(scratch, "missing-env-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
+    env: { ...process.env, HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
+    encoding: "utf8", timeout: 30_000,
+  });
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  for (const name of ["ANDROID_HOME", "JAVA_HOME", "DEBUGINFOD_URLS"]) assert.match(result.stdout, new RegExp(`${name} is missing`));
+  assert.match(result.stdout, /node tooling\/lanes\/land-unit.ts/);
+  assert.doesNotMatch(result.stdout, /unlanded branches older/);
+  assert.equal(existsSync(join(home, ".cache/nts-land.lock")), false);
+  assert.equal(existsSync(join(home, ".cache/nts-full")), false);
+});
+
 function fixture(t: { after(fn: () => void): void }) {
   const directory = mkdtempSync(join(scratch, "run-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
