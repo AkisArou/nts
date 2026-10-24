@@ -106,7 +106,10 @@ fi
 # workspace's node_modules -- linked in. One list, shared with `lane start`,
 # so a gate tree and a lane's tree cannot disagree about what is there; the
 # reasons for each entry are in that script.
-sh "$(dirname -- "$0")/../lanes/inputs.sh" gate "$root" "$tree"
+# Input preparation belongs to the candidate, just like the gate steps below.
+# Main may already have removed an input that a historical commit still needs,
+# or may still require an input that the candidate has removed.
+sh "$tree/tooling/lanes/inputs.sh" gate "$root" "$tree"
 
 echo "gate: $sha in $tree"
 # Set up and stop: what `lane doctor` and this script's own test ask.

@@ -47,6 +47,33 @@ still use any of them. Remove a key manually only after checking every tree's
 uses it. A failed build removes its own staging directory; it cannot replace
 an existing key.
 
+Input preparation runs from the candidate tree's `tooling/lanes/inputs.sh`.
+Each commit supplies its own input rules, including a historical commit on
+the other side of a frontend switch.
+
+After the native frontend switch removes the Go checkout, build a pre-switch
+pin in an isolated historical clone. A worktree alone still shares main's
+input root; the separate clone gives the old bootstrap its own root and uses
+only the old commit's tools:
+
+```sh
+historical="$HOME/.cache/nts-scratch/tsrs-lane/historical-nts"
+git clone --shared --no-checkout "$HOME/Projects/nts" "$historical"
+git -C "$historical" checkout --detach 87ddcddf81833bea463b519ace7ea3adef55389d
+cd "$historical"
+sh tooling/bootstrap/bootstrap.sh --tsgo-only "$PWD"
+NTS_PINS="$historical/pins" node tooling/conformance/pin.ts HEAD
+```
+
+The old bootstrap fetches that commit's submodule gitlink and builds its
+immutable frontend key. No Go code or input checkout is restored on main.
+The Rust object store, Go checkout/cache and compiled pin can take several GB;
+check free disk before building. After the investigation, remove the isolated
+clone (including its `target/` and `pins/`) with
+`command rm -rf "$historical"`. Keep it while any process or saved result
+still uses its binary. The commands above require a post-switch verification;
+that check is part of the native switch handover.
+
 ## A lane's tree
 
 - **Branches are `<lane>/<topic>`**, the prefix from `lanes.json`. Switch topics
