@@ -63,7 +63,10 @@ pub struct LockedPackage {
     pub complaints: BTreeMap<String, (usize, String)>,
 }
 
-pub const LOCK_VERSION: u32 = 1;
+// Recovery now preserves package ownership for bundled sources and selects
+// the declaration's own generated entry. Old memos can name another package's
+// src/index.ts, so their recovered paths must be recomputed once.
+pub const LOCK_VERSION: u32 = 2;
 
 /// Write a package's recovered files under the vendor root.
 ///

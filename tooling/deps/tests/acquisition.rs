@@ -65,7 +65,7 @@ fn fixture(name: &str) -> Utf8PathBuf {
     // Ships its TypeScript, and imports a second file from it.
     write(
         &modules.join("shipped/package.json"),
-        r#"{"name":"shipped","version":"1.0.0","exports":{".":{"source":"./src/index.ts","default":"./dist/index.js"}}}"#,
+        r#"{"name":"shipped","version":"1.0.0","exports":{".":{"@zod/source":"./src/index.ts","default":"./dist/index.js"}}}"#,
     );
     write(
         &modules.join("shipped/src/index.ts"),
@@ -747,4 +747,101 @@ fn what_a_package_needs_survives_a_settled_run() {
         before, after,
         "a settled run reports what the first run found, not silence"
     );
+}
+
+/// A dependency's bundled src/index.ts must not impersonate the package entry.
+/// The selected declaration and the recovered module must publish the same
+/// name; otherwise acquisition's own real checker reports TS2305.
+#[test]
+fn source_maps_keep_package_ownership_and_the_declared_exports() {
+    let root = fixture("map-package-ownership");
+    let modules = root.join("packages/app/node_modules");
+    for (name, export) in [("publisher", "published"), ("embedded", "embedded")] {
+        let package = modules.join(name);
+        write(
+            &package.join("package.json"),
+            &format!(
+                r#"{{"name":"{name}","version":"1.0.0","exports":{{".":{{"types":"./dist/index.d.ts","default":"./dist/index.min.js"}}}}}}"#
+            ),
+        );
+        write(
+            &package.join("dist/index.d.ts"),
+            &format!("export declare const {export}: number;\n"),
+        );
+        write(
+            &package.join("dist/index.js"),
+            &format!("export const {export}=1;\n//# sourceMappingURL=index.js.map\n"),
+        );
+        write(
+            &package.join("dist/index.js.map"),
+            &serde_json::json!({
+                "version":3, "sources":["../src/index.ts"],
+                "sourcesContent":[format!("export const {export}: number = 1;\n")], "mappings":""
+            })
+            .to_string(),
+        );
+        write(
+            &package.join("dist/index.min.js"),
+            "export const unrelated=2;\n//# sourceMappingURL=index.min.js.map\n",
+        );
+        write(
+            &package.join("dist/index.min.js.map"),
+            &serde_json::json!({
+                "version":3,
+                "sources":["../node_modules/embedded/src/index.ts", "../src/body.ts"],
+                "sourcesContent":["export const wrongPackage=99;\n", "export const unrelated=2;\n"],
+                "mappings":""
+            })
+            .to_string(),
+        );
+    }
+    write(
+        &root.join("packages/app/src/main.ts"),
+        "import {published} from 'publisher'; import {embedded} from 'embedded'; export const result=published+embedded;\n",
+    );
+    write(
+        &root.join("packages/app/tsconfig.json"),
+        r#"{"compilerOptions":{"target":"esnext","module":"esnext","moduleResolution":"bundler","types":[],"noEmit":true},"include":["src"]}"#,
+    );
+    write(
+        &root.join("packages/app/package.json"),
+        r#"{"name":"@ws/app","version":"1.0.0","dependencies":{"publisher":"1.0.0","embedded":"1.0.0"}}"#,
+    );
+    let options = nts_deps::Options {
+        tsgo: Some(
+            std::env::var("NTS_TSGO")
+                .expect("the gate prepares the real checker")
+                .into(),
+        ),
+        ..nts_deps::Options::default()
+    };
+    let project = root.join("packages/app");
+    let config = project.join("tsconfig.json");
+    let cold = nts_deps::acquire(&project, &config, &options).unwrap();
+    assert_eq!(cold.acquired(), 2);
+    for (name, export) in [("publisher", "published"), ("embedded", "embedded")] {
+        let entry = root.join(format!(".nts/vendor/{name}@1.0.0/src/index.ts"));
+        let text = std::fs::read_to_string(entry).unwrap();
+        assert!(
+            text.contains(&format!("export const {export}")),
+            "{name}: {text}"
+        );
+        assert!(!text.contains("wrongPackage"));
+        let report = cold
+            .packages
+            .iter()
+            .find(|package| package.name == name)
+            .unwrap();
+        assert!(
+            report
+                .complaints
+                .iter()
+                .all(|complaint| complaint.code != "TS2305"),
+            "the declaration's exported name must survive recovery: {:?}",
+            report.complaints
+        );
+    }
+    let warm = nts_deps::acquire(&project, &config, &options).unwrap();
+    assert_eq!(warm.acquired(), 2);
+    assert!(warm.unchanged);
 }

@@ -255,12 +255,11 @@ pub fn recover_resolved(installed: &Installed, resolved: &[(String, Utf8PathBuf)
 ///
 /// 1. the file the checker resolved, when it is already an implementation --
 ///    a package whose `exports` names TypeScript under a condition tsgo took;
-/// 2. the manifest's own targets for this exact subpath, which is where a
-///    publisher's source condition lives -- `zod` ships `src/index.ts` behind
-///    `@zod/source` and no checker will ever pick it;
-/// 3. the declaration's sibling: `index.d.ts` describes `index.js` sitting
-///    beside it. That is TypeScript's own rule for what a declaration file is
-///    *about*, not a guess that `dist` mirrors `src`.
+/// 2. the declaration's generated sibling: index.d.ts describes index.js.
+///    Its own unary map identifies the source even when a minified bundle
+///    omits the entry barrel and embeds dependencies with the same basename;
+/// 3. the manifest's own targets for this exact subpath. Shipped TypeScript
+///    source conditions still win Route1 before any generated candidate.
 fn implementation_candidates(
     installed: &Installed,
     specifier: &str,
@@ -279,13 +278,6 @@ fn implementation_candidates(
     {
         targets.push(at);
     }
-    if let Some(entry) = offered.iter().find(|entry| entry.specifier == specifier) {
-        for target in &entry.targets {
-            if !targets.contains(target) {
-                targets.push(target.clone());
-            }
-        }
-    }
     if let Some(at) = relative(declaration) {
         // `index.d.ts` -> `index`, `index.d.cts` -> `index`.
         let stem = at
@@ -298,6 +290,13 @@ fn implementation_candidates(
                 if installed.dir.join(&sibling).is_file() && !targets.contains(&sibling) {
                     targets.push(sibling);
                 }
+            }
+        }
+    }
+    if let Some(entry) = offered.iter().find(|entry| entry.specifier == specifier) {
+        for target in &entry.targets {
+            if !targets.contains(target) {
+                targets.push(target.clone());
             }
         }
     }
@@ -557,7 +556,7 @@ fn map_index(package_dir: &Utf8Path) -> MapIndex {
                 let Some(text) = map.contents.get(at).and_then(Option::as_ref) else {
                     continue;
                 };
-                let Some(dest) = vendor_path(&map.root, source) else {
+                let Some(dest) = vendor_path(package_dir, &map.root, source) else {
                     continue;
                 };
                 index.entry(dest).or_insert_with(|| text.clone());
@@ -647,10 +646,10 @@ fn walk_recovered(
         if visited.contains(&at) {
             continue;
         }
-        let Some(text) = index
+        let Some(text) = written
             .get(&at)
             .cloned()
-            .or_else(|| written.get(&at).cloned())
+            .or_else(|| index.get(&at).cloned())
             // A module that emits nothing — a type-only one, or a re-export
             // barrel — is in no map, because there was no output for a map to
             // describe. Some packages ship it anyway, at exactly the path their
@@ -885,7 +884,7 @@ fn harvest(
         let Some(text) = map.contents[index].clone() else {
             continue;
         };
-        let Some(at) = vendor_path(&map.root, &map.sources[index]) else {
+        let Some(at) = vendor_path(package_dir, &map.root, &map.sources[index]) else {
             continue;
         };
         // One logical path, one content. A conflict is a map disagreeing with
@@ -897,7 +896,7 @@ fn harvest(
         placed.push((index, at));
     }
 
-    if placed.len() == 1 {
+    if map.sources.len() == 1 && placed.len() == 1 {
         let entry = placed.remove(0).1;
         walk_recovered(&entry, package_dir, index, written);
         return Harvest::Recovered(entry);
@@ -907,20 +906,22 @@ fn harvest(
     let stem = generated
         .file_name()
         .map(|name| name.split('.').next().unwrap_or(name).to_owned());
-    let named = placed.iter().find(|(_, at)| {
+    let mut named = placed.iter().filter(|(_, at)| {
         stem.as_ref().is_some_and(|stem| {
             at.file_name()
                 .is_some_and(|name| name.split('.').next() == Some(stem.as_str()))
         })
     });
-    match named {
-        Some((_, at)) => {
+    let first = named.next();
+    let unique = named.next().is_none();
+    match first {
+        Some((_, at)) if unique => {
             let entry = at.clone();
             walk_recovered(&entry, package_dir, index, written);
             Harvest::Recovered(entry)
         }
         None if placed.is_empty() => Harvest::Nothing,
-        None => Harvest::Ambiguous {
+        _ => Harvest::Ambiguous {
             sources: placed.len(),
         },
     }
@@ -932,9 +933,20 @@ fn harvest(
 /// written by whoever built the package. Leading `../` is folded away rather
 /// than honoured, and the result is forced to stay inside the vendor root: a
 /// path that would escape is dropped, not clamped.
-fn vendor_path(map_root: &Utf8Path, source: &str) -> Option<Utf8PathBuf> {
-    let joined = map_root.join(source.strip_prefix("./").unwrap_or(source));
-    let mut parts: Vec<&str> = Vec::new();
+fn vendor_path(package_dir: &Utf8Path, map_root: &Utf8Path, source: &str) -> Option<Utf8PathBuf> {
+    // Explicit bundled package names are identities, not disposable prefixes.
+    // A map may also name its own package through an absolute build path.
+    if let Some((package, tail)) = package_source(source) {
+        let own = package_source(package_dir.as_str())
+            .map_or_else(|| package_dir.file_name().unwrap_or(""), |(name, _)| name);
+        return (package == own).then(|| Utf8PathBuf::from(tail));
+    }
+    let relative_root = map_root.strip_prefix(package_dir).ok()?;
+    let joined = relative_root.join(source);
+    let mut parts = Vec::new();
+    // Maps describe the publisher's source tree, which can sit above the
+    // published output root. Project its own coordinates under the vendor
+    // root; never use those parents as filesystem traversal.
     for part in joined.as_str().split('/') {
         match part {
             "" | "." => {}
@@ -944,18 +956,21 @@ fn vendor_path(map_root: &Utf8Path, source: &str) -> Option<Utf8PathBuf> {
             other => parts.push(other),
         }
     }
-    // Keep the tail below the package: everything from the last `node_modules`
-    // or the package directory name onward is noise from the builder's machine.
-    let cut = parts
-        .iter()
-        .rposition(|part| *part == "node_modules")
-        .map_or(0, |at| {
-            // A scoped name is two components, not one.
-            let scoped = parts.get(at + 1).is_some_and(|part| part.starts_with('@'));
-            at + if scoped { 3 } else { 2 }
-        });
-    let tail = parts.get(cut..)?;
-    (!tail.is_empty()).then(|| Utf8PathBuf::from(tail.join("/")))
+    (!parts.is_empty()).then(|| Utf8PathBuf::from(parts.join("/")))
+}
+
+fn package_source(path: &str) -> Option<(&str, &str)> {
+    let (_, inside) = path.rsplit_once("node_modules/")?;
+    let first = inside.find('/').unwrap_or(inside.len());
+    let end = if inside.starts_with('@') {
+        inside
+            .get(first + 1..)?
+            .find('/')
+            .map_or(inside.len(), |at| first + 1 + at)
+    } else {
+        first
+    };
+    Some((&inside[..end], inside.get(end + 1..).unwrap_or("")))
 }
 
 /// Just enough base64 for an inline source map.
@@ -1000,24 +1015,40 @@ mod tests {
 
     #[test]
     fn a_source_that_climbs_out_of_dist_lands_beside_it() {
-        let at = vendor_path(Utf8Path::new("dist/esm"), "../../src/index.ts");
-        assert_eq!(at.as_deref(), Some(Utf8Path::new("src/index.ts")));
-    }
-
-    /// A map that names a path under a bundled `node_modules` — `tar` does
-    /// this — keeps only the part below that package, and cannot escape.
-    #[test]
-    fn a_bundled_dependency_keeps_only_its_own_tail() {
         let at = vendor_path(
-            Utf8Path::new("dist"),
-            "../node_modules/@isaacs/fs-minipass/src/index.ts",
+            Utf8Path::new("/node_modules/own"),
+            Utf8Path::new("/node_modules/own/dist/esm"),
+            "../../src/index.ts",
         );
         assert_eq!(at.as_deref(), Some(Utf8Path::new("src/index.ts")));
     }
 
     #[test]
+    fn a_bundled_dependency_never_becomes_the_owning_packages_entry() {
+        let at = vendor_path(
+            Utf8Path::new("/node_modules/own"),
+            Utf8Path::new("/node_modules/own/dist"),
+            "../node_modules/@isaacs/fs-minipass/src/index.ts",
+        );
+        assert_eq!(at, None);
+        let own = vendor_path(
+            Utf8Path::new("/node_modules/own"),
+            Utf8Path::new("/node_modules/own/dist"),
+            "../../src/index.ts",
+        );
+        assert_eq!(own.as_deref(), Some(Utf8Path::new("src/index.ts")));
+    }
+
+    #[test]
     fn a_source_that_would_escape_the_root_is_dropped() {
-        assert_eq!(vendor_path(Utf8Path::new("dist"), "../../.."), None);
+        assert_eq!(
+            vendor_path(
+                Utf8Path::new("/node_modules/own"),
+                Utf8Path::new("/node_modules/own/dist"),
+                "../../.."
+            ),
+            None
+        );
     }
 
     #[test]
