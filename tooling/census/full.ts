@@ -2,6 +2,7 @@
 //
 //   node tooling/census/full.ts            # main's tip
 //   node tooling/census/full.ts <commit>   # any commit on main
+//   node tooling/census/full.ts <commit> --candidate  # explicit pre-landing wide validation
 //
 // A landing runs the core (`WIDE` in tooling/gate/owed.mjs says which steps it
 // leaves out and why). This runs the rest -- integrity, the profile, addons,
@@ -13,17 +14,21 @@
 // A step that is red here is red on main. Bisect it over the landings since
 // the last green full run (`git log` from the commit its summary names), and
 // fix it before new work. Each run's logs and summary stay under
-// `~/.cache/nts-full/runs/<commit>-<time>`.
+// `~/.cache/nts-full/runs/<commit>-<time>`. Explicit candidates use a separate
+// candidates/{tree,target,runs/CANDIDATE-<sha>-<time>} namespace and never
+// update the main history or re-record policy tables.
 //
 // It waits for memory before it starts and never starts beside a gate: the
 // wide steps are the heaviest there are, and a landing's memory checks are
 // what a neighbour breaks.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { fullPlan, fullEnvironment } from "./full-plan.ts";
 
 import { WIDE } from "../gate/owed.mjs";
 import { branchHealth, healthLines } from "../lanes/health.ts";
@@ -33,17 +38,10 @@ const HOME = join(homedir(), ".cache/nts-full");
 const git = (args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 console.log(healthLines(await branchHealth(ROOT)).join("\n"));
 
-const asked = process.argv[2] ?? "main";
-const resolved = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${asked}^{commit}`], { cwd: ROOT, encoding: "utf8" });
-if (resolved.status !== 0) {
-  console.log(`  NOT RUN: \`${asked}\` names no commit`);
-  process.exit(2);
-}
-const commit = resolved.stdout.trim();
-if (spawnSync("git", ["merge-base", "--is-ancestor", commit, "main"], { cwd: ROOT }).status !== 0) {
-  console.log(`  NOT RUN: ${asked} is not on main -- the full run measures main, and a branch is a landing's to gate`);
-  process.exit(2);
-}
+let plan: ReturnType<typeof fullPlan>;
+try { plan = fullPlan(ROOT, HOME, process.argv.slice(2)); }
+catch (error) { console.log(`  NOT RUN: ${String(error)}`); process.exit(2); }
+const { candidate, commit, label, run } = plan;
 
 // The landing lock, held for the whole run: a full run beside a gate would
 // starve both and red the gate's memory checks, and only holding the lock
@@ -58,9 +56,9 @@ if (available() < 16) {
 
 const steps = [...WIDE];
 const short = commit.slice(0, 12);
-const run = join(HOME, "runs", `${short}-${Date.now()}`);
 mkdirSync(run, { recursive: true });
-console.log(`  full run of ${short} (${git(["log", "-1", "--format=%s", commit])})`);
+writeFileSync(join(run, "full-run.json"), JSON.stringify({ mode: label, commit }, null, 2) + "\n");
+console.log(`  ${label} full run of ${short} (${git(["log", "-1", "--format=%s", commit])})`);
 console.log(`  steps: ${steps.join(" ")}`);
 console.log(`  logs: ${run}`);
 
@@ -68,12 +66,13 @@ const gated = spawnSync("flock", ["-n", "-E", String(BUSY), landLock, "sh", join
   cwd: ROOT,
   stdio: "inherit",
   env: {
+    // Keep the default tree literal discoverable by lane cleanup. The plan
+    // overrides it for candidates; neither candidate tree nor target is shared
+    // with the main full-run history.
     ...process.env,
-    NTS_GATE_STEPS: steps.join(" "),
     NTS_GATE_TREE: join(HOME, "tree"),
     NTS_GATE_TARGET: join(HOME, "target"),
-    NTS_GATE_RUN_DIR: run,
-    NTS_TSGO: process.env.NTS_TSGO ?? join(ROOT, "target/tsgo"),
+    ...fullEnvironment(plan, steps, process.env),
   },
 });
 
@@ -87,7 +86,11 @@ if (!existsSync(summary)) {
   console.log(`  the run wrote no summary (exit ${gated.status}); see ${run}`);
   process.exit(1);
 }
-const verdicts = (JSON.parse(readFileSync(summary, "utf8")).steps ?? []) as { name: string; verdict: string }[];
+const report = JSON.parse(readFileSync(summary, "utf8"));
+report.full_run = { mode: label, commit };
+writeFileSync(summary, JSON.stringify(report, null, 2) + "\n");
+const verdicts = (report.steps ?? []) as { name: string; verdict: string }[];
 const red = verdicts.filter((s) => s.verdict !== "PASS" && s.verdict !== "SKIPPED");
-console.log(red.length === 0 ? `  full run of ${short}: green` : `  full run of ${short}: RED -- ${red.map((s) => `${s.name} ${s.verdict}`).join(", ")}; bisect over the landings since the last green full run`);
-process.exit(red.length === 0 ? 0 : 1);
+const green = report.verdict === "green" && gated.status === 0;
+console.log(green ? `  ${label} full run of ${short}: green` : `  ${label} full run of ${short}: RED -- ${red.map((s) => `${s.name} ${s.verdict}`).join(", ")}; ${candidate ? "fix the candidate before landing" : "bisect over the landings since the last green full run"}`);
+process.exit(green ? 0 : 1);
