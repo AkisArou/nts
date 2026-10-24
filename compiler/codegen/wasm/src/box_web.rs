@@ -355,7 +355,7 @@ mod tests {
             HirType::Erased,
         );
         let tag = value(&mut f, OpKind::TagOf { value: boxed }, U32);
-        let number = value(&mut f, OpKind::Unerase { value: boxed }, F64);
+        let number = value(&mut f, OpKind::unerase(boxed), F64);
         f.blocks.push(block(
             &[],
             &[input, boxed, tag, number],

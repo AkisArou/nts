@@ -2495,6 +2495,9 @@ fn describe_node(record: &nts_semantic_schema::NodeRecord) -> String {
 
 /// One function per header, one block per label, one operation per line.
 fn print_program(program: &hir::Program, locations: &mut SourceLocations<'_>) {
+    for face in &program.cast_faces {
+        println!("cast-face {}", face.0);
+    }
     for func in &program.funcs {
         let params: Vec<String> = func
             .params
@@ -3228,7 +3231,15 @@ fn render_erasure(index: usize, ty: &str, kind: &OpKind, value: nts_core::hir::V
         OpKind::TagOf { .. } => "tag.of",
         _ => "unerase",
     };
-    format!("%{index} = {verb} %{} : {ty}", value.0)
+    let mut rendered = format!("%{index} = {verb} %{} : {ty}", value.0);
+    if let OpKind::Unerase {
+        failure: Some(reason),
+        ..
+    } = kind
+    {
+        let _ = write!(rendered, "\n  ; mismatch {reason:?}");
+    }
+    rendered
 }
 
 fn render_call(
@@ -3432,7 +3443,7 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             classes.len(),
             if *by_layout { " by layout" } else { "" }
         ),
-        OpKind::Erase { value, .. } | OpKind::TagOf { value } | OpKind::Unerase { value } => {
+        OpKind::Erase { value, .. } | OpKind::TagOf { value } | OpKind::Unerase { value, .. } => {
             render_erasure(index, &ty, &op.kind, *value)
         }
         OpKind::Binary { op: bin, lhs, rhs } => {

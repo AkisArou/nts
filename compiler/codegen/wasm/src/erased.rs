@@ -553,6 +553,7 @@ pub(crate) fn unerase(
     body: &mut Body<'_, '_>,
     result: ValueId,
     value: ValueId,
+    failure: Option<&str>,
 ) -> Result<(), Failure> {
     if let Some(map) = body.typed_get(value) {
         return crate::collections::typed_value(body, value, map);
@@ -571,7 +572,18 @@ pub(crate) fn unerase(
         body.instruction(&I::RefCastNonNull(reference.heap_type));
         return Ok(());
     }
-    unerase_to(body, value, &ty)
+    if let Some(why) = failure {
+        // Core's transient face view carries the same reason as its layout
+        // dispatch default. A concrete GC projection can reject it first.
+        if !matches!(ty, HirType::Managed(ManagedType::Object(_))) {
+            return Err(Failure::Invariant(
+                "a named face projection must target an object".into(),
+            ));
+        }
+        unerase_reference(body, value, &ty, Some(why))
+    } else {
+        unerase_to(body, value, &ty)
+    }
 }
 
 /// `value`, erased, read as `ty` and left on the stack; a value it is not is
@@ -645,7 +657,7 @@ pub(crate) fn unerase_to(
             | ManagedType::BoxedBigInt,
         ) => {
             body.instruction(&I::Drop);
-            unerase_reference(body, value, &ty)?;
+            unerase_reference(body, value, &ty, None)?;
         }
         ty => {
             return Err(format!(
@@ -661,6 +673,7 @@ fn unerase_reference(
     body: &mut Body<'_, '_>,
     value: impl Into<Operand>,
     ty: &HirType,
+    failure: Option<&str>,
 ) -> Result<(), Failure> {
     let value = value.into();
     let Physical::Reference(reference) = body.types().value_slot(ty)? else {
@@ -668,7 +681,7 @@ fn unerase_reference(
             "non-reference managed projection".into(),
         ));
     };
-    let why = "an erased value read as an object of a type it is not";
+    let why = failure.unwrap_or("an erased value read as an object of a type it is not");
     // Every typed array is one struct type; its element kind is a field, so a
     // view is told apart by more than its type.
     if let HirType::Managed(ManagedType::View(element)) = ty {
@@ -702,7 +715,11 @@ fn unerase_reference(
     });
     body.instruction(&I::Drop);
     nullish(body, value)?;
-    contract::require(body, why)?;
+    if failure.is_some() {
+        contract::require_compiler(body, why)?;
+    } else {
+        contract::require(body, why)?;
+    }
     body.instruction(&I::RefNull(reference.heap_type));
     body.instruction(&I::End);
     Ok(())

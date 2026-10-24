@@ -185,12 +185,7 @@ fn projection() -> Func {
     let mut ops = Vec::new();
     let input = allocate(&mut f, &mut ops, 3);
     let erased = erase(&mut f, &mut ops, input);
-    let read = emit_value(
-        &mut f,
-        &mut ops,
-        OpKind::Unerase { value: erased },
-        object(1),
-    );
+    let read = emit_value(&mut f, &mut ops, OpKind::unerase(erased), object(1));
     let result = emit_value(
         &mut f,
         &mut ops,
@@ -291,7 +286,7 @@ fn erased_field() -> Func {
         OpKind::FieldGet { object, field: 1 },
         HirType::Erased,
     );
-    let result = emit_value(&mut f, &mut ops, OpKind::Unerase { value: read }, F64);
+    let result = emit_value(&mut f, &mut ops, OpKind::unerase(read), F64);
     finish(f, ops, result)
 }
 fn swap() -> Func {
@@ -409,12 +404,7 @@ fn alias_identity(name: &str, allocated: u32, projected: u32, tested: u32) -> Fu
     let mut ops = Vec::new();
     let input = allocate(&mut f, &mut ops, allocated);
     let erased = erase(&mut f, &mut ops, input);
-    let read = emit_value(
-        &mut f,
-        &mut ops,
-        OpKind::Unerase { value: erased },
-        object(projected),
-    );
+    let read = emit_value(&mut f, &mut ops, OpKind::unerase(erased), object(projected));
     let result = emit_value(
         &mut f,
         &mut ops,
@@ -439,12 +429,7 @@ fn reordered_alias() -> Func {
     set(&mut f, &mut ops, input, 0, ten);
     set(&mut f, &mut ops, input, 1, twenty);
     let erased = erase(&mut f, &mut ops, input);
-    let read = emit_value(
-        &mut f,
-        &mut ops,
-        OpKind::Unerase { value: erased },
-        object(12),
-    );
+    let read = emit_value(&mut f, &mut ops, OpKind::unerase(erased), object(12));
     let x = emit_value(
         &mut f,
         &mut ops,
@@ -469,12 +454,7 @@ fn absent_projection(name: &str, undefined: bool) -> Func {
         },
         HirType::Erased,
     );
-    let pointer = emit_value(
-        &mut f,
-        &mut ops,
-        OpKind::Unerase { value: input },
-        object(1),
-    );
+    let pointer = emit_value(&mut f, &mut ops, OpKind::unerase(input), object(1));
     let erased = emit_value(
         &mut f,
         &mut ops,
@@ -528,12 +508,7 @@ fn bad_projection() -> Func {
     let mut ops = Vec::new();
     let input = emit_value(&mut f, &mut ops, OpKind::Param(0), F64);
     let erased = erase(&mut f, &mut ops, input);
-    let read = emit_value(
-        &mut f,
-        &mut ops,
-        OpKind::Unerase { value: erased },
-        object(1),
-    );
+    let read = emit_value(&mut f, &mut ops, OpKind::unerase(erased), object(1));
     let result = emit_value(
         &mut f,
         &mut ops,

@@ -642,7 +642,7 @@ fn retarget(
     call.ty = HirType::Erased;
     let moved = ValueId(u32::try_from(func.values.len()).unwrap_or(u32::MAX));
     func.values.push(call);
-    func.values[value.0 as usize].kind = OpKind::Unerase { value: moved };
+    func.values[value.0 as usize].kind = OpKind::unerase(moved);
     for block in &mut func.blocks {
         if let Some(position) = block.ops.iter().position(|op| *op == value) {
             block.ops.insert(position, moved);

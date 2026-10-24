@@ -124,7 +124,7 @@ impl FuncBuilder<'_> {
             });
             self.switch_to(stepping);
             let frame = self.push(
-                OpKind::Unerase { value },
+                OpKind::unerase(value),
                 HirType::Managed(ManagedType::Object(generator)),
                 origin.clone(),
             );

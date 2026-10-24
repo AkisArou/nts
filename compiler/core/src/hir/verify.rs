@@ -2294,7 +2294,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
         OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
-        | OpKind::Unerase { value }
+        | OpKind::Unerase { value, .. }
         | OpKind::InstanceOf { value, .. }
         | OpKind::SharedFieldGet { value, .. }
         | OpKind::OpenFieldGet { object: value, .. } => {

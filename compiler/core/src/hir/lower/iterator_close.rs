@@ -444,7 +444,7 @@ impl FuncBuilder<'_> {
             self.switch_to(yes);
             self.lower_arm(|this| {
                 let iterator = this.push(
-                    OpKind::Unerase { value: erased },
+                    OpKind::unerase(erased),
                     HirType::Managed(ManagedType::Object(contract.receiver)),
                     origin.clone(),
                 );
@@ -674,7 +674,7 @@ impl FuncBuilder<'_> {
                         .represent(function_type)
                         .ok_or_else(|| this.unrepresentable(at, "an iterator return function"))?;
                     this.layout_of(at, function_type)?;
-                    this.push(OpKind::Unerase { value: erased }, ty, origin.clone())
+                    this.push(OpKind::unerase(erased), ty, origin.clone())
                 } else {
                     value
                 };

@@ -57,10 +57,7 @@ pub(crate) struct Demand {
 
 /// Whether `ty` is an interface's type, as opposed to a class's or a literal's.
 pub(crate) fn is_face(program: &Program, ty: ClassId) -> bool {
-    program
-        .interface_identities
-        .iter()
-        .any(|identity| identity.types.contains(&ty))
+    program.structural_faces().any(|face| face == ty)
 }
 
 fn record<K: Ord>(map: &mut BTreeMap<K, ObjectUse>, key: K, func: &Func, id: ValueId) {

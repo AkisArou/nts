@@ -374,7 +374,7 @@ impl FuncBuilder<'_> {
             Ok(raw)
         } else {
             Ok(self.push(
-                OpKind::Unerase { value: raw },
+                OpKind::unerase(raw),
                 parameter.ty.clone(),
                 parameter.origin.clone(),
             ))
@@ -503,11 +503,7 @@ impl FuncBuilder<'_> {
         names: (&str, &str),
         origin: &Origin,
     ) -> ValueId {
-        let mut number = self.push(
-            OpKind::Unerase { value: raw },
-            HirType::NUMBER,
-            origin.clone(),
-        );
+        let mut number = self.push(OpKind::unerase(raw), HirType::NUMBER, origin.clone());
         match ty {
             HirType::Int { bits, signed } => {
                 let truncated = self.push(
@@ -584,11 +580,7 @@ impl FuncBuilder<'_> {
         names: (&str, &str),
         origin: &Origin,
     ) -> ValueId {
-        let number = self.push(
-            OpKind::Unerase { value: raw },
-            HirType::BigInt,
-            origin.clone(),
-        );
+        let number = self.push(OpKind::unerase(raw), HirType::BigInt, origin.clone());
         for (op, limit) in [(BinOp::Ge, lo), (BinOp::Le, hi)] {
             let bound = self.push(OpKind::ConstInt(limit), HirType::BigInt, origin.clone());
             self.require_uniform_comparison((op, number, bound), names, origin);

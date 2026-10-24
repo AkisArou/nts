@@ -15,6 +15,8 @@
 //! proven about the twin is about every use. The emitted program reads the
 //! value once instead of once per mention, which every pass after this one
 //! and every backend also pays less for.
+//! A checked view's stop reason is part of its identity: two payload reads
+//! with different failure messages must retain their separate projections.
 //!
 //! **A string is read the same way.** A scanner tests one character several
 //! ways -- `s.charCodeAt(at) === ZERO`, then `isDigit(s.charCodeAt(at))` -- and
@@ -40,7 +42,7 @@ use super::{BlockId, Func, HirType, ManagedType, OpKind, ValueId};
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum Read {
     /// An erased value read as one representation.
-    Unerase(ValueId, HirType),
+    Unerase(ValueId, HirType, Option<String>),
     /// One code unit of a string. Checked and unchecked reads stay apart, so a
     /// read proven in range never takes the answer of one that may be `NaN`.
     Unit {
@@ -61,7 +63,10 @@ enum Read {
 fn read_of(func: &Func, op: ValueId, of: impl Fn(ValueId) -> ValueId) -> Option<Read> {
     let value = &func.values[op.0 as usize];
     match value.kind {
-        OpKind::Unerase { value: erased } => Some(Read::Unerase(of(erased), value.ty.clone())),
+        OpKind::Unerase {
+            value: erased,
+            ref failure,
+        } => Some(Read::Unerase(of(erased), value.ty.clone(), failure.clone())),
         OpKind::StringUnitAt {
             string,
             index,
@@ -163,4 +168,81 @@ pub fn reads_once(func: &mut Func) -> usize {
         obligation.value = of(obligation.value);
     }
     replaced.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hir::{Absent, BinOp, Block, Op, Param, ParamShape, Terminator};
+
+    #[test]
+    fn checked_views_share_only_an_identical_failure_contract() {
+        let origin = nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+            file: nts_diagnostics::SourceId(0),
+            span: nts_diagnostics::Span { start: 0, end: 0 },
+        });
+        let op = |kind, ty| Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        };
+        let view = |failure: Option<&str>| {
+            op(
+                OpKind::Unerase {
+                    value: ValueId(0),
+                    failure: failure.map(str::to_owned),
+                },
+                HirType::Managed(ManagedType::Object(nts_semantic_schema::TypeId(1))),
+            )
+        };
+        for other in [None, Some("the second field")] {
+            let mut func = Func {
+                name: "checked_views".to_owned(),
+                params: vec![Param {
+                    name: "raw".to_owned(),
+                    ty: HirType::Erased,
+                    origin: origin.clone(),
+                    shape: ParamShape::Ordinary,
+                    known: crate::hir::facts::Facts::TOP,
+                    written: None,
+                }],
+                return_type: HirType::Bool,
+                written_return: None,
+                written_return_elements: Vec::new(),
+                result_absent: Absent::Impossible,
+                values: vec![
+                    op(OpKind::Param(0), HirType::Erased),
+                    view(Some("the first field")),
+                    view(Some("the first field")),
+                    view(other),
+                    op(
+                        OpKind::Binary {
+                            op: BinOp::Eq,
+                            lhs: ValueId(2),
+                            rhs: ValueId(3),
+                        },
+                        HirType::Bool,
+                    ),
+                ],
+                blocks: vec![Block {
+                    params: Vec::new(),
+                    ops: (0..5).map(ValueId).collect(),
+                    terminator: Terminator::Return(Some(ValueId(4))),
+                }],
+                origin: origin.clone(),
+                exported: false,
+                initializes_receiver: false,
+                abstract_declaration: false,
+                async_result: None,
+                frame: None,
+                obligations: Vec::new(),
+                exact: crate::hir::ExactArithmetic::default(),
+            };
+            assert_eq!(reads_once(&mut func), 1);
+            let OpKind::Binary { lhs, rhs, .. } = func.values[4].kind else {
+                panic!("fixture comparison")
+            };
+            assert_eq!((lhs, rhs), (ValueId(1), ValueId(3)));
+        }
+    }
 }

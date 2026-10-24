@@ -24,7 +24,7 @@ fn roundtrip(name: &str, ty: HirType, tag: bool) -> Func {
     let result = if tag {
         value(&mut f, OpKind::TagOf { value: boxed }, U32)
     } else {
-        value(&mut f, OpKind::Unerase { value: boxed }, ty)
+        value(&mut f, OpKind::unerase(boxed), ty)
     };
     f.blocks.push(block(
         &[],
@@ -70,7 +70,7 @@ fn nullable_unerasure(name: &str, kind: OpKind, absent: Absent) -> Func {
     let input = value(&mut f, kind, HirType::Erased);
     let reference = value(
         &mut f,
-        OpKind::Unerase { value: input },
+        OpKind::unerase(input),
         HirType::Managed(ManagedType::String),
     );
     let erased = value(

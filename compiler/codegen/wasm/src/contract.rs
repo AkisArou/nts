@@ -106,6 +106,20 @@ pub(crate) fn require(b: &mut Body<'_, '_>, why: &str) -> Result<(), Failure> {
     Ok(())
 }
 
+/// A projection carrying core's compiler-stop contract, rather than an input
+/// restriction. Consume its validity condition and preserve that distinction.
+pub(crate) fn require_compiler(b: &mut Body<'_, '_>, why: &str) -> Result<(), Failure> {
+    b.instruction(&I::I32Eqz);
+    b.instruction(&I::If(BlockType::Empty));
+    let target = compiler_stop(b.m)?;
+    strings::constant(b, &b.func.name.clone());
+    strings::constant(b, why);
+    b.call(target);
+    b.instruction(&I::Unreachable);
+    b.instruction(&I::End);
+    Ok(())
+}
+
 /// The refusal itself, for `why`, where control reaching it is the failed
 /// condition.
 pub(crate) fn refuse(b: &mut Body<'_, '_>, why: &str) -> Result<(), Failure> {

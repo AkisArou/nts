@@ -181,7 +181,7 @@ fn identity(func: &Func, mut value: ValueId) -> ValueId {
             OpKind::Convert(source)
             | OpKind::FieldView { value: source, .. }
             | OpKind::Erase { value: source, .. }
-            | OpKind::Unerase { value: source } => value = source,
+            | OpKind::Unerase { value: source, .. } => value = source,
             _ => return value,
         }
     }

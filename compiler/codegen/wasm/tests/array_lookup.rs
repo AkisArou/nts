@@ -127,7 +127,7 @@ fn at(name: &str, ty: HirType, count: usize, projection: Option<bool>) -> Func {
     );
     let out = match projection {
         Some(true) => b.op(OpKind::TagOf { value: out }, U32),
-        Some(false) => b.op(OpKind::Unerase { value: out }, F64),
+        Some(false) => b.op(OpKind::unerase(out), F64),
         None => out,
     };
     b.finish(out)

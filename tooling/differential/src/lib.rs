@@ -2896,6 +2896,102 @@ fn report(
 }
 
 #[cfg(test)]
+mod structural_cast_array_stop {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
+    use super::*;
+
+    const TEST: &str =
+        "structural_cast_array_stop::the_array_view_stops_by_the_same_name_on_every_backend";
+    const EXPECTED: &str = "nts: refused at run time: the field `stack` read through structural cast `{ stack?: string }` at nts-workspace:///src/main.ts:11:25 on an object whose layout supplies no accessor for it";
+
+    #[test]
+    fn the_array_view_stops_by_the_same_name_on_every_backend() {
+        if std::env::var_os("NTS_TSGO").is_none() {
+            eprintln!("SKIP structural cast stop: set NTS_TSGO");
+            return;
+        }
+        if std::env::var_os("NTS_CAST_STOP_ARM").is_none() {
+            // Each runner reads its backend from the environment. Child test
+            // processes keep that choice isolated from concurrent tests.
+            for backend in ["c", "llvm", "jvm", "wasm"] {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", TEST, "--nocapture"])
+                    .env("NTS_CAST_STOP_ARM", backend)
+                    .env("NTS_BACKEND", backend)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success(),
+                    "{backend}: {}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        }
+        let fixture = include_str!(
+            "../../../tests/outcomes/a-structural-cast-of-an-erased-array-needs-a-field-reader/src/main.ts"
+        );
+        let helpers = fixture.split_once("export function array").unwrap().0;
+        // Each ordinary receiver differs from the stopped arm only in kind.
+        check_case(
+            "missing",
+            &format!(
+                "{helpers}export function aControl(n: number): string {{ return kindOf(new Missing()); }}\nfunction zStopped(n: number): string {{ return kindOf([n]); }}\n"
+            ),
+            EXPECTED,
+        );
+        // A literal of the face's own shape can give Wasm a concrete GC
+        // projection. A mismatch must use the same core reason there too.
+        check_case(
+            "own-shape",
+            "function kindOf(value: unknown): string {\n  const held = value as { stack?: string };\n  return typeof held.stack;\n}\nexport function aControl(n: number): string {\n  const own: { stack?: string } = { stack: String(n) };\n  return kindOf(own);\n}\nfunction zStopped(n: number): string { return kindOf([n]); }\n",
+            &EXPECTED.replace(":11:25", ":2:25"),
+        );
+    }
+
+    fn check_case(label: &str, source: &str, expected: &str) {
+        let path = Utf8PathBuf::from_path_buf(
+            std::env::temp_dir().join(format!("nts-cast-stop-{label}-{}", std::process::id())),
+        )
+        .unwrap();
+        std::fs::create_dir_all(path.join("src")).unwrap();
+        let scratch = Scratch::holding(path);
+        let main = scratch.path.join("src/main.ts");
+        std::fs::write(&main, source).unwrap();
+        let config = scratch.path.join("tsconfig.json");
+        let base = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsconfig.fixtures.json");
+        std::fs::write(
+            &config,
+            serde_json::json!({"extends": base, "include": ["src/main.ts"]}).to_string(),
+        )
+        .unwrap();
+        let control = check(&config, Ok).unwrap();
+        assert_eq!((control.functions, control.checked), (1, 29));
+        assert!(control.agreed(), "{control:?}");
+        std::fs::write(
+            &main,
+            source.replace("function zStopped", "export function zStopped"),
+        )
+        .unwrap();
+        let report = check(&config, Ok).unwrap();
+        assert_eq!(report.functions, 2);
+        assert_eq!(report.disagreements, Vec::<(String, String)>::new());
+        assert!(
+            !report.aborts.is_empty(),
+            "{label}: the array arm must stop: {report:?}"
+        );
+        assert!(
+            report.aborts.iter().all(|reason| reason == expected),
+            "{:?}",
+            report.aborts
+        );
+        assert!(!report.agreed(), "a named compiler stop is not agreement");
+    }
+}
+
+#[cfg(test)]
 mod wasm_compiler_stop_guard {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 

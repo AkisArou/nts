@@ -57,13 +57,14 @@ pub(crate) fn row(
         .program
         .layout(class)
         .ok_or_else(|| Failure::Invariant(format!("unplanned class {class:?}")))?;
-    let methods = m.program.native_methods(layout)?;
     let (by_column, length) = columns(m)?;
-    for (column, slot) in by_column.iter().enumerate() {
-        let body = methods
-            .get(column)
-            .copied()
-            .flatten()
+    for slot in &by_column {
+        // Native columns are shared, but native body aliases assume one
+        // untyped pointer ABI. A Wasm thunk needs this layout's typed body,
+        // even when a missing-field getter never reads its receiver.
+        let body = slot
+            .and_then(|slot| layout.methods.get(slot as usize))
+            .and_then(Option::as_deref)
             .filter(|name| m.hir_func(name).is_none_or(|f| !f.abstract_declaration));
         match (slot, body) {
             (Some(slot), Some(body)) => {

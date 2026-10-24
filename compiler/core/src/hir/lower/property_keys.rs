@@ -283,7 +283,7 @@ fn inherited_membership(
     });
     builder.switch_to(missing);
     let text = builder.push(
-        OpKind::Unerase { value: key },
+        OpKind::unerase(key),
         HirType::Managed(ManagedType::String),
         origin.clone(),
     );

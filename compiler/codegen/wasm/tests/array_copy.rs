@@ -223,7 +223,7 @@ fn erased_concat() -> Func {
     let a = b.dense(HirType::Erased, &[x, y]);
     let result = b.call("nts_array_concat_value", &[a, a], array(HirType::Erased));
     let item = b.get(result, at, HirType::Erased);
-    let item = b.op(OpKind::Unerase { value: item }, F64);
+    let item = b.op(OpKind::unerase(item), F64);
     b.finish(item)
 }
 #[test]

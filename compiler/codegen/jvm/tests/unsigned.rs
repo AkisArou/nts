@@ -178,7 +178,7 @@ fn erased(name: &str, from: &HirType) -> hir::Func {
             },
             HirType::Erased,
         ),
-        op(OpKind::Unerase { value: ValueId(1) }, HirType::NUMBER),
+        op(OpKind::unerase(ValueId(1)), HirType::NUMBER),
     ];
     func(
         name,

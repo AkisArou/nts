@@ -310,7 +310,7 @@ pub(super) fn object_names_with(
                 let op = &func.values[value.0 as usize];
                 match &op.kind {
                     OpKind::Erase { value: inner, .. }
-                    | OpKind::Unerase { value: inner }
+                    | OpKind::Unerase { value: inner, .. }
                     | OpKind::FieldView { value: inner, .. }
                     | OpKind::Convert(inner) => {
                         changed |= note(&mut named, *value, *inner);
@@ -581,7 +581,7 @@ pub(in crate::hir) mod tests {
                 absent: super::super::Absent::Impossible,
                 slots: super::super::Absent::Impossible,
             }), // %5
-            op(OpKind::Unerase { value: ValueId(6) }), // %7  read in the handler
+            op(OpKind::unerase(ValueId(6))),       // %7  read in the handler
         ];
         let mut values = values;
         values.insert(6, op(OpKind::BlockParam(0))); // %6  the handler's parameter

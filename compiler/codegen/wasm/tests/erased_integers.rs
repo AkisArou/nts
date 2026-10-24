@@ -37,7 +37,7 @@ impl Build {
             },
             HirType::Erased,
         );
-        let back = self.op(OpKind::Unerase { value: erased }, F64);
+        let back = self.op(OpKind::unerase(erased), F64);
         self.f
             .blocks
             .push(block(&[], &self.ops, Terminator::Return(Some(back))));

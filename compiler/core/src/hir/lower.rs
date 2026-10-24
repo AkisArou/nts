@@ -520,6 +520,13 @@ struct Hierarchy {
     /// bug; an interface's method that nothing implements is a program with
     /// no implementer, and only the second has a sentence worth printing.
     faces: rustc_hash::FxHashSet<TypeId>,
+    /// The faces that are anonymous object types a cast reads an erased value
+    /// as (`caught as { stack?: string }`), rather than declared interfaces:
+    /// any object may arrive, so their field families are read-only and a
+    /// write through one is refused (`access_families::family`).
+    cast_faces: rustc_hash::FxHashSet<TypeId>,
+    /// Source spellings and locations, independent of selector ABI names.
+    cast_descriptions: rustc_hash::FxHashMap<TypeId, std::sync::Arc<str>>,
     /// The members a type declares as a *method* and lays out as **storage**
     /// -- a slot holding a closure -- because an object literal built at the
     /// type supplies them with an environment.
@@ -1758,6 +1765,7 @@ fn collect_interfaces(
             hierarchy.implements.insert(ty, bases.clone());
         }
     }
+    collect_cast_faces(snapshot, probe, hierarchy);
     // Every class's `implements` list, read from the heritage clause.
     //
     // NOT from `base_types`, whose documentation says "`extends` first, then
@@ -1822,6 +1830,66 @@ fn collect_interfaces(
             .collect();
         if !faces.is_empty() {
             hierarchy.implements.insert(ty, faces);
+        }
+    }
+}
+
+/// Only a target whose existing representation is Managed(Object(target))
+/// can become a cast face. Native brands and other managed kinds keep their
+/// own representation; an assertion can never erase their safety checks.
+fn collect_cast_faces(snapshot: &SemanticSnapshot, probe: &FuncBuilder, hierarchy: &mut Hierarchy) {
+    let mut descriptions = cast_descriptions::Descriptions::new(snapshot);
+    // **And an anonymous object type a cast reads an erased value as.** `caught
+    // as { stack?: string }` checks nothing at run time, so the object that
+    // arrives may be laid out any way at all -- an unrelated class, a literal
+    // without the field -- and a read at the type's own index took whatever sat
+    // there: a wrong answer, and since a class lays its parameter properties out
+    // first, a SIGSEGV (`tests/programs/a-structural-cast-of-an-erased-object-
+    // reads-another-field`). As a face its reads go through a field family,
+    // dispatched by the object's own layout, with `undefined` where the object
+    // has no such field, which is what JavaScript reads. Only a cast of an
+    // erased value: a cast between two representations the checker relates is
+    // a conversion `narrowed` makes or refuses, and reads its own layout.
+    for (index, node) in snapshot.nodes.iter().enumerate() {
+        let operand_at = match node.kind {
+            NodeKind::Syntax(syntax::AS_EXPRESSION) => 0,
+            NodeKind::Syntax(syntax::TYPE_ASSERTION_EXPRESSION) => 1,
+            _ => continue,
+        };
+        let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
+        let Some(target) = snapshot.node_types.get(&id).copied() else {
+            continue;
+        };
+        let anonymous = matches!(
+            snapshot
+                .types
+                .get(target.0 as usize)
+                .map(|record| &record.kind),
+            Some(TypeKind::Object { .. })
+        ) && (named(snapshot, target).is_none()
+            || is_anonymous_shape(snapshot, target));
+        if !anonymous
+            || hierarchy.faces.contains(&target)
+            || probe.represent(target) != Some(HirType::Managed(ManagedType::Object(target)))
+        {
+            continue;
+        }
+        let erased = probe
+            .children(id)
+            .get(operand_at)
+            .and_then(|operand| snapshot.node_types.get(operand))
+            .is_some_and(|operand| probe.represent(*operand) == Some(HirType::Erased));
+        if erased {
+            hierarchy
+                .name
+                .entry(target)
+                .or_insert_with(|| nominal_or_stand_in(snapshot, target));
+            hierarchy.faces.insert(target);
+            hierarchy.cast_faces.insert(target);
+            hierarchy.cast_descriptions.insert(
+                target,
+                std::sync::Arc::from(descriptions.describe(probe, id, operand_at, target)),
+            );
         }
     }
 }
@@ -2539,6 +2607,7 @@ fn collect_hierarchy(
     }
 
     collect_interfaces(snapshot, &probe, &mut hierarchy, &instantiations);
+    probe.hierarchy.cast_faces.clone_from(&hierarchy.cast_faces);
     hierarchy.template_instances = template_instances(snapshot, &instantiations);
     collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
     // After both, because it edits `declares`: a member that becomes storage
@@ -16552,6 +16621,10 @@ pub fn lower_with(
         original_types,
         &mut lowered.program,
     );
+    lowered
+        .program
+        .cast_faces
+        .extend(hierarchy.cast_faces.iter().copied());
     canonicalize_objects(&mut lowered.program);
     expand_layout_tests(&mut lowered.program);
     printed::decide(
@@ -17905,7 +17978,7 @@ fn erased_call(
         }
         let id = ValueId(u32::try_from(values.len()).ok()?);
         values.push(Op {
-            kind: OpKind::Unerase { value: from },
+            kind: OpKind::unerase(from),
             ty: param.ty.clone(),
             origin: origin.clone(),
         });
@@ -18991,12 +19064,8 @@ fn object_representatives(program: &Program) -> rustc_hash::FxHashMap<TypeId, Ty
             }
         }
     }
-    for ty in program
-        .interface_identities
-        .iter()
-        .flat_map(|identity| &identity.types)
-    {
-        representatives.entry(*ty).or_insert(*ty);
+    for ty in program.structural_faces() {
+        representatives.entry(ty).or_insert(ty);
     }
     // A literal allocated in a class's layout keeps itself too: taking the
     // layout's representative would make it the class again, which is the
@@ -19445,7 +19514,7 @@ fn table_key_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     let held = representation_within(snapshot, ty, path, subst)?;
     Some(
@@ -19927,7 +19996,29 @@ pub fn representation_with(
     ty: TypeId,
     subst: &Substitution,
 ) -> Option<HirType> {
-    representation_within(snapshot, ty, &mut Vec::new(), subst)
+    representation_within(
+        snapshot,
+        ty,
+        &mut Vec::new(),
+        &Representation {
+            substitution: subst,
+            cast_faces: &rustc_hash::FxHashSet::default(),
+        },
+    )
+}
+
+/// Cast-face values retain their erased tag through every storage position.
+/// The selector alone forms a transient managed view after testing that tag.
+struct Representation<'a> {
+    substitution: &'a Substitution,
+    cast_faces: &'a rustc_hash::FxHashSet<TypeId>,
+}
+
+impl std::ops::Deref for Representation<'_> {
+    type Target = Substitution;
+    fn deref(&self) -> &Self::Target {
+        self.substitution
+    }
 }
 
 /// [`representation`], refusing a type that contains itself.
@@ -20011,7 +20102,7 @@ fn representation_within(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     if path.contains(&ty) {
         return None;
@@ -20147,7 +20238,7 @@ fn slot_for(
     snapshot: &SemanticSnapshot,
     element: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     if holds_only_absences(snapshot, element) {
         return Some(HirType::Erased);
@@ -20162,7 +20253,7 @@ fn tuple_representation(
     ty: TypeId,
     elements: &[TypeId],
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     let mut shared: Option<HirType> = None;
     let mut mixed = false;
@@ -20247,7 +20338,7 @@ fn generator_element_type(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     let argument = *snapshot
         .type_arguments
@@ -20265,7 +20356,7 @@ fn provided_representation(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     let record = snapshot.types.get(ty.0 as usize)?;
     if !matches!(
@@ -20634,7 +20725,7 @@ fn union_representation(
     snapshot: &SemanticSnapshot,
     members: &[TypeId],
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     let mut shared: Option<HirType> = None;
     // Which absences are present, not how many members carry them:
@@ -20733,7 +20824,7 @@ fn representation_of(
     snapshot: &SemanticSnapshot,
     ty: TypeId,
     path: &mut Vec<TypeId>,
-    subst: &Substitution,
+    subst: &Representation<'_>,
 ) -> Option<HirType> {
     // A template this copy instantiates -- `Inner<T>` in `Outer<number>`'s
     // copy -- is the instantiation `instantiate::materialise` made for it,
@@ -20747,6 +20838,14 @@ fn representation_of(
         Some(Decided::As(representation)) => return Some(representation),
         Some(Decided::Unrepresentable) => return None,
         None => {}
+    }
+    if subst.cast_faces.contains(&ty) {
+        debug_assert_eq!(
+            representation_with(snapshot, ty, subst.substitution),
+            Some(HirType::Managed(ManagedType::Object(ty))),
+            "a cast face must retain an ordinary object representation underneath its erased view"
+        );
+        return Some(HirType::Erased);
     }
     let record = snapshot.types.get(ty.0 as usize)?;
     Some(match &record.kind {
@@ -22866,7 +22965,7 @@ impl<'a> FuncBuilder<'a> {
                 match present {
                     Some(ty) => {
                         let origin = self.origin(link);
-                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                        self.push(OpKind::unerase(receiver), ty, origin)
                     }
                     None => receiver,
                 }
@@ -23360,7 +23459,15 @@ impl<'a> FuncBuilder<'a> {
     /// A type's machine representation, with this instantiation's substitution
     /// applied. The one place the two are combined.
     fn represent(&self, ty: TypeId) -> Option<HirType> {
-        representation_with(self.snapshot, ty, &self.substitution)
+        representation_within(
+            self.snapshot,
+            ty,
+            &mut Vec::new(),
+            &Representation {
+                substitution: &self.substitution,
+                cast_faces: &self.hierarchy.cast_faces,
+            },
+        )
     }
 
     fn push(&mut self, kind: OpKind, ty: HirType, origin: Origin) -> ValueId {
@@ -27602,7 +27709,7 @@ impl<'a> FuncBuilder<'a> {
                 && matches!(&want, HirType::NativePointer(pointee) if super::tags::erased_handle_tag(pointee).is_some())
             {
                 let origin = self.origin(id);
-                let read = self.push(OpKind::Unerase { value }, want.clone(), origin.clone());
+                let read = self.push(OpKind::unerase(value), want.clone(), origin.clone());
                 // A COM object is stored as whichever of its interfaces it
                 // was erased as -- the `IInspectable` a getter answered, or a
                 // `Button` -- and each interface is its own pointer. So the
@@ -27661,7 +27768,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Erased,
                 origin.clone(),
             );
-            return Ok(self.push(OpKind::Unerase { value: erased }, want, origin));
+            return Ok(self.push(OpKind::unerase(erased), want, origin));
         }
         if self.values[value.0 as usize].ty != HirType::Erased {
             return Ok(value);
@@ -27788,7 +27895,7 @@ impl<'a> FuncBuilder<'a> {
         self.materialize(id, &want)?;
         let origin = self.origin(id);
         self.refuse_a_foreign_layout(id, value, &want, &origin)?;
-        Ok(self.push(OpKind::Unerase { value }, want, origin))
+        Ok(self.push(OpKind::unerase(value), want, origin))
     }
 
     /// `x as T` where `x` is a union holding a member whose layout `T`'s is
@@ -28457,7 +28564,10 @@ impl<'a> FuncBuilder<'a> {
                         && (matches!(
                             self.type_of(*object),
                             Some(HirType::Managed(ManagedType::Object(_)))
-                        ) || self.stands_for_its_own_class(*object))
+                        ) || self.stands_for_its_own_class(*object)
+                            || self
+                                .read_type(*object)
+                                .is_some_and(|ty| self.hierarchy.cast_faces.contains(&ty)))
                         && self.names_one_member(*index)
                         && self.literal_name(*index).is_some()
                 }
@@ -29074,7 +29184,7 @@ impl<'a> FuncBuilder<'a> {
                 && self.every_arm_descends_from(id, *target)
             {
                 let origin = self.origin(id);
-                return Ok(self.push(OpKind::Unerase { value }, want.clone(), origin));
+                return Ok(self.push(OpKind::unerase(value), want.clone(), origin));
             }
             // Anything else erased, arriving where something concrete is
             // wanted, is refused rather than passed through. Passing it through
@@ -32439,7 +32549,7 @@ impl<'a> FuncBuilder<'a> {
         self.terminate(Terminator::Unreachable);
         self.switch_to(carry_on);
         Ok(self.push(
-            OpKind::Unerase { value: this },
+            OpKind::unerase(this),
             HirType::Managed(ManagedType::Object(class)),
             origin,
         ))
@@ -32805,7 +32915,7 @@ impl<'a> FuncBuilder<'a> {
             // A promise is never absent.
             let erased = self.erased(promise, Absent::Impossible, &origin);
             let promise = self.push(
-                OpKind::Unerase { value: erased },
+                OpKind::unerase(erased),
                 HirType::Managed(ManagedType::Promise(Box::new(payload.clone()))),
                 origin.clone(),
             );
@@ -33579,7 +33689,7 @@ impl<'a> FuncBuilder<'a> {
         Some(if storage == *payload {
             value
         } else {
-            self.push(OpKind::Unerase { value }, payload.clone(), origin.clone())
+            self.push(OpKind::unerase(value), payload.clone(), origin.clone())
         })
     }
 
@@ -33667,9 +33777,7 @@ impl<'a> FuncBuilder<'a> {
         Ok(match &callback.returns {
             HirType::Void | HirType::Never => None,
             HirType::Erased => Some(answered),
-            returns => {
-                Some(self.push(OpKind::Unerase { value: answered }, returns.clone(), origin))
-            }
+            returns => Some(self.push(OpKind::unerase(answered), returns.clone(), origin)),
         })
     }
 
@@ -40587,16 +40695,8 @@ impl<'a> FuncBuilder<'a> {
             self.switch_to(yes);
         }
         // Both tag tests dominate the payload reads, on every backend.
-        let a_number = self.push(
-            OpKind::Unerase { value: a },
-            HirType::NUMBER,
-            origin.clone(),
-        );
-        let b_number = self.push(
-            OpKind::Unerase { value: b },
-            HirType::NUMBER,
-            origin.clone(),
-        );
+        let a_number = self.push(OpKind::unerase(a), HirType::NUMBER, origin.clone());
+        let b_number = self.push(OpKind::unerase(b), HirType::NUMBER, origin.clone());
         let same_number = self.object_is_numbers(id, a_number, b_number)?;
         self.terminate(Terminator::Jump {
             target: merge,
@@ -41923,7 +42023,7 @@ impl<'a> FuncBuilder<'a> {
             match arm {
                 Ok(job) => {
                     let thenable = self.push(
-                        OpKind::Unerase { value: erased },
+                        OpKind::unerase(erased),
                         HirType::Managed(ManagedType::Object(class)),
                         origin.clone(),
                     );
@@ -41956,11 +42056,7 @@ impl<'a> FuncBuilder<'a> {
         // it; where the checker's type said it could not arrive, that reader's
         // assertion names it rather than reading a null as a number.
         let promise = self.erased(result.promise, Absent::Impossible, &origin);
-        let promise = self.push(
-            OpKind::Unerase { value: promise },
-            erased_promise(),
-            origin.clone(),
-        );
+        let promise = self.push(OpKind::unerase(promise), erased_promise(), origin.clone());
         self.runtime_call(
             "nts_promise_resolve_value",
             vec![promise, erased],
@@ -42187,11 +42283,7 @@ impl<'a> FuncBuilder<'a> {
         let thenable = self.coerce(thenable, &thenable_ty, id)?;
         // See `erased_promise`: the job holds the promise without its payload.
         let erased = self.erased(promise, Absent::Impossible, origin);
-        let promise = self.push(
-            OpKind::Unerase { value: erased },
-            erased_promise(),
-            origin.clone(),
-        );
+        let promise = self.push(OpKind::unerase(erased), erased_promise(), origin.clone());
         let object = self.push(
             OpKind::ObjectNew { frame: false },
             HirType::Managed(ManagedType::Object(closure_type(job))),
@@ -44090,11 +44182,7 @@ impl<'a> FuncBuilder<'a> {
             if *want == HirType::Erased {
                 slot
             } else {
-                lower.push(
-                    OpKind::Unerase { value: slot },
-                    want.clone(),
-                    origin.clone(),
-                )
+                lower.push(OpKind::unerase(slot), want.clone(), origin.clone())
             }
         };
         // A counted walk, which may hand back the position, the element, or
@@ -44172,11 +44260,7 @@ impl<'a> FuncBuilder<'a> {
                 if *element == HirType::Erased {
                     slot
                 } else {
-                    self.push(
-                        OpKind::Unerase { value: slot },
-                        element.clone(),
-                        origin.clone(),
-                    )
+                    self.push(OpKind::unerase(slot), element.clone(), origin.clone())
                 }
             }
             Walk::Text => {
@@ -48100,7 +48184,7 @@ impl<'a> FuncBuilder<'a> {
             let value = match unerase {
                 Some(want) => {
                     let origin = self.origin(*node);
-                    self.push(OpKind::Unerase { value: *value }, want.clone(), origin)
+                    self.push(OpKind::unerase(*value), want.clone(), origin)
                 }
                 None => *value,
             };
@@ -49118,6 +49202,11 @@ impl<'a> FuncBuilder<'a> {
             return Ok(absent);
         }
         Ok(if object {
+            if let Some(name) = self.literal_name(property)
+                && let Some(read) = self.erased_cast_field_read(element, value, &name)?
+            {
+                return Ok(read);
+            }
             let HirType::Managed(ManagedType::Object(type_id)) =
                 self.values[value.0 as usize].ty.clone()
             else {
@@ -49557,6 +49646,12 @@ impl<'a> FuncBuilder<'a> {
         object: ValueId,
         member: NodeId,
     ) -> Result<Place, Diagnostic> {
+        if let Some(face) = self.erased_cast_face(target, object) {
+            let name = self
+                .literal_name(member)
+                .ok_or_else(|| self.unsupported(member, "a computed property name"))?;
+            self.interface_field_place(target, object, face, &name)?;
+        }
         if let Some(place) = self.array_length_place(object, member) {
             return Ok(place);
         }
@@ -51971,7 +52066,7 @@ impl<'a> FuncBuilder<'a> {
         }
         let origin = self.origin(at);
         let erased = self.erased_from(held, at, &origin);
-        let narrow = self.push(OpKind::Unerase { value: erased }, want, origin);
+        let narrow = self.push(OpKind::unerase(erased), want, origin);
         self.bindings.insert(symbol, narrow);
         Some((symbol, held, narrow))
     }
@@ -53504,6 +53599,12 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         ty: HirType,
     ) -> Result<(TypeId, bool), Diagnostic> {
+        if ty == HirType::Erased {
+            let face = self.snapshot.node_types.get(&id).copied();
+            if let Some(face) = face.filter(|face| self.hierarchy.cast_faces.contains(face)) {
+                return Ok((face, true));
+            }
+        }
         let (ty, erase_afterwards) = match ty {
             HirType::Erased => match self.contextual_union_member(id) {
                 Some(member) => (HirType::Managed(ManagedType::Object(member)), true),
@@ -55017,7 +55118,7 @@ impl<'a> FuncBuilder<'a> {
                     origin.clone(),
                 );
                 let cast = self.push(
-                    OpKind::Unerase { value: erased },
+                    OpKind::unerase(erased),
                     HirType::Managed(ManagedType::Object(narrowed)),
                     origin,
                 );
@@ -59594,7 +59695,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(want) = self.tuple_position_representation(id)
             && want != HirType::Erased
         {
-            return Ok(self.push(OpKind::Unerase { value: read }, want, origin));
+            return Ok(self.push(OpKind::unerase(read), want, origin));
         }
         if self.reads_a_tuple(id)
             && let Some(declared @ HirType::Managed(_)) = self.type_of(id)
@@ -61468,6 +61569,18 @@ impl<'a> FuncBuilder<'a> {
         member_name: &str,
     ) -> Result<ValueId, Diagnostic> {
         self.read_from.insert(id, value);
+        if let Some(read) = self.erased_cast_field_read(id, value, member_name)? {
+            return Ok(read);
+        }
+        self.member_storage_of(id, value, member_name)
+    }
+
+    fn member_storage_of(
+        &mut self,
+        id: NodeId,
+        value: ValueId,
+        member_name: &str,
+    ) -> Result<ValueId, Diagnostic> {
         // The other half of the iterator-result decision, and the half that
         // makes the first one honest. See `refuse_unguarded_iterator_value`.
         self.refuse_unguarded_iterator_value(id, value, member_name)?;
@@ -61956,7 +62069,7 @@ impl<'a> FuncBuilder<'a> {
                 let callee = match present {
                     Some(ty) => {
                         let origin = self.origin(callee_node);
-                        self.push(OpKind::Unerase { value: callee }, ty, origin)
+                        self.push(OpKind::unerase(callee), ty, origin)
                     }
                     None => callee,
                 };
@@ -61969,7 +62082,7 @@ impl<'a> FuncBuilder<'a> {
                 let receiver = match present {
                     Some(ty) => {
                         let origin = self.origin(receiver_node);
-                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                        self.push(OpKind::unerase(receiver), ty, origin)
                     }
                     None => receiver,
                 };
@@ -61981,7 +62094,7 @@ impl<'a> FuncBuilder<'a> {
                 let receiver = match present {
                     Some(ty) => {
                         let origin = self.origin(index);
-                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                        self.push(OpKind::unerase(receiver), ty, origin)
                     }
                     None => receiver,
                 };
@@ -62009,7 +62122,7 @@ impl<'a> FuncBuilder<'a> {
                 let receiver = match present {
                     Some(ty) => {
                         let origin = self.origin(link);
-                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                        self.push(OpKind::unerase(receiver), ty, origin)
                     }
                     None => receiver,
                 };
@@ -62025,7 +62138,7 @@ impl<'a> FuncBuilder<'a> {
                 let receiver = match present {
                     Some(ty) => {
                         let origin = self.origin(member);
-                        self.push(OpKind::Unerase { value: receiver }, ty, origin)
+                        self.push(OpKind::unerase(receiver), ty, origin)
                     }
                     None => receiver,
                 };
@@ -62049,7 +62162,7 @@ impl<'a> FuncBuilder<'a> {
             Branch::Present(value) => self.narrowed(id, value),
             Branch::Unerased(value, ty) => {
                 let origin = self.origin(id);
-                Ok(self.push(OpKind::Unerase { value }, ty, origin))
+                Ok(self.push(OpKind::unerase(value), ty, origin))
             }
             Branch::ObjcGetter(receiver, object, property) => {
                 self.send_objc_getter(id, object, &property, Some(receiver))
@@ -62423,6 +62536,9 @@ impl<'a> FuncBuilder<'a> {
             return read.absences(self);
         }
         let ty = self.read_type(node)?;
+        if self.hierarchy.cast_faces.contains(&ty) {
+            return None;
+        }
         let record = self.snapshot.types.get(ty.0 as usize)?;
         let members: Vec<TypeId> = match &record.kind {
             TypeKind::Union(members) => members.clone(),
@@ -64920,6 +65036,11 @@ impl<'a> FuncBuilder<'a> {
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(element);
         let read = if object {
+            if let Some(name) = self.literal_name(property)
+                && let Some(read) = self.erased_cast_field_read(element, value, &name)?
+            {
+                return Ok(read);
+            }
             // **`length` off an array, in an object pattern.**
             // `function f([...{ length }])` is ordinary JavaScript and the tail
             // is an array, which has no *fields* — so this refused as
@@ -65250,7 +65371,7 @@ impl<'a> FuncBuilder<'a> {
         let value = match present {
             Some(ty) => {
                 let origin = self.origin(pattern);
-                self.push(OpKind::Unerase { value }, ty, origin)
+                self.push(OpKind::unerase(value), ty, origin)
             }
             None => value,
         };
@@ -75414,7 +75535,7 @@ impl<'a> FuncBuilder<'a> {
             });
             self.switch_to(read);
             let read_back = self.push(
-                OpKind::Unerase { value: object },
+                OpKind::unerase(object),
                 HirType::NativePointer(root),
                 origin.clone(),
             );
@@ -77142,7 +77263,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         if *element == HirType::Erased && *want != HirType::Erased {
-            return Ok(self.push(OpKind::Unerase { value: read }, want.clone(), origin));
+            return Ok(self.push(OpKind::unerase(read), want.clone(), origin));
         }
         Ok(read)
     }
@@ -77191,7 +77312,7 @@ impl<'a> FuncBuilder<'a> {
             origin.clone(),
         );
         if slot == HirType::Erased && *want != HirType::Erased {
-            return Ok(self.push(OpKind::Unerase { value: read }, want.clone(), origin));
+            return Ok(self.push(OpKind::unerase(read), want.clone(), origin));
         }
         Ok(read)
     }
@@ -77408,7 +77529,7 @@ impl<'a> FuncBuilder<'a> {
             // closed that path, so only a dead placeholder, never the erased
             // result, participates in lowering the rest of the expression.
             HirType::Never => self.push(OpKind::ConstUndefined, HirType::Never, origin),
-            _ => self.push(OpKind::Unerase { value: answered }, ty.clone(), origin),
+            _ => self.push(OpKind::unerase(answered), ty.clone(), origin),
         };
         if let Some(args) = written
             && let HirType::Managed(ManagedType::Object(signature)) =
@@ -81882,7 +82003,7 @@ impl<'a> FuncBuilder<'a> {
             });
             self.switch_to(taken);
             let object = self.push(
-                OpKind::Unerase { value: receiver },
+                OpKind::unerase(receiver),
                 HirType::Managed(ManagedType::Object(class)),
                 origin.clone(),
             );
@@ -82081,7 +82202,7 @@ impl<'a> FuncBuilder<'a> {
                 HirType::Erased,
                 origin.clone(),
             );
-            let held = self.push(OpKind::Unerase { value: held }, narrowed, origin);
+            let held = self.push(OpKind::unerase(held), narrowed, origin);
             return self.call_through_closure(id, member, held, Some(receiver), arguments);
         }
 
@@ -87173,6 +87294,7 @@ mod access_family_functions;
 mod access_family_sites;
 mod assertions;
 mod bigint;
+mod cast_descriptions;
 mod claimed_reads;
 mod closure_context;
 mod elision_patterns;

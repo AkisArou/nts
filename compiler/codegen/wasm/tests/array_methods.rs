@@ -207,7 +207,7 @@ fn optional(empty: bool) -> Func {
         if empty {
             OpKind::TagOf { value: v }
         } else {
-            OpKind::Unerase { value: v }
+            OpKind::unerase(v)
         },
         if empty { U32 } else { F64 },
     );
@@ -281,7 +281,7 @@ fn erased_push() -> Func {
         HirType::Erased,
     );
     b.call("nts_array_set_length_value", &[a, zero], HirType::Void);
-    let result = b.op(OpKind::Unerase { value: item }, F64);
+    let result = b.op(OpKind::unerase(item), F64);
     b.finish(result)
 }
 fn nested() -> Func {
@@ -315,7 +315,7 @@ fn growth() -> Func {
         },
         HirType::Erased,
     );
-    let alias = builder.op(OpKind::Unerase { value: erased }, array(string()));
+    let alias = builder.op(OpKind::unerase(erased), array(string()));
     builder.f.blocks.push(block(
         &[],
         &builder.ops,

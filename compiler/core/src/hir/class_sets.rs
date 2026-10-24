@@ -260,7 +260,7 @@ impl<'p> Facts<'p> {
                 _ => Classes::Any,
             },
             OpKind::ConstNull | OpKind::ConstUndefined => Classes::Exactly(Vec::new()),
-            OpKind::Unerase { value: inner } => match func.value(*inner).kind {
+            OpKind::Unerase { value: inner, .. } => match func.value(*inner).kind {
                 OpKind::Erase { value: source, .. } => self.classes(at, source),
                 _ => Classes::Any,
             },
@@ -638,9 +638,7 @@ fn push_arm(
     let narrowed = append(
         func,
         Op {
-            kind: OpKind::Unerase {
-                value: guard.erased,
-            },
+            kind: OpKind::unerase(guard.erased),
             ty: HirType::Managed(ManagedType::Object(class)),
             origin: origin.clone(),
         },

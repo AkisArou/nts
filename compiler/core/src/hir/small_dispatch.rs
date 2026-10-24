@@ -26,6 +26,8 @@
 //! else. That is the table's own behaviour, spelled where it is read: the
 //! classes tested are read from the rows themselves, so a class this misses
 //! would be one the table also sends to the default.
+//! Cast faces have no positional default: their prefix and own-face rows are
+//! tested too, and an unplanned receiver takes the named stop.
 //!
 //! Past [`MAX_TESTED`] the table stays: it is one indexed load however many
 //! classes there are, and a chain of tests is not (decision 2 of
@@ -112,12 +114,17 @@ fn answer(program: &Program, slot: u32, face: TypeId) -> Option<Answer> {
     let plan = &program.interface_access;
     let default = plan.default_for(slot)?.to_owned();
     let face_layout = super::typed_signatures::layout_of(program, face)?;
-    let positional: Vec<usize> = plan
-        .prefix_receivers(face)?
-        .iter()
-        .filter_map(|ty| super::typed_signatures::layout_of(program, *ty))
-        .chain(std::iter::once(face_layout))
-        .collect();
+    // Cast faces have a named-stop default, so prefix and own-face rows must
+    // be tested too. They cannot be sent to a positional default.
+    let positional: Vec<usize> = if program.cast_faces.contains(&face) {
+        Vec::new()
+    } else {
+        plan.prefix_receivers(face)?
+            .iter()
+            .filter_map(|ty| super::typed_signatures::layout_of(program, *ty))
+            .chain(std::iter::once(face_layout))
+            .collect()
+    };
     let mut tested: Vec<(Vec<TypeId>, String)> = Vec::new();
     for (at, layout) in program.layouts.iter().enumerate() {
         let Some(row) = layout.methods.get(slot as usize).and_then(Option::as_deref) else {
@@ -330,7 +337,7 @@ fn class_arm(
     };
     // The object as its class: the test just made is the tag test an
     // unerase is licensed by.
-    let narrowed = site.push(func, OpKind::Unerase { value: site.erased }, owner.clone());
+    let narrowed = site.push(func, OpKind::unerase(site.erased), owner.clone());
     let mut passed = site.args.clone();
     passed[0] = narrowed;
     let result = site.push(

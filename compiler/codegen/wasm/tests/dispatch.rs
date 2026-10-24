@@ -113,7 +113,7 @@ fn call(class: u32, slot: u32, widened: bool, erased: bool) -> Func {
             },
             HirType::Erased,
         );
-        receiver = op(&mut f, &mut ops, OpKind::Unerase { value }, object(target));
+        receiver = op(&mut f, &mut ops, OpKind::unerase(value), object(target));
     } else if widened {
         receiver = op(&mut f, &mut ops, OpKind::Convert(receiver), object(ROOT));
     }

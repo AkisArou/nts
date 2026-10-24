@@ -1235,9 +1235,7 @@ fn reconcile_fixed_results<S: std::hash::BuildHasher>(
                 absent: Absent::Impossible,
                 slots: Absent::Impossible,
             },
-            (HirType::Erased, concrete) if *concrete != HirType::Erased => {
-                OpKind::Unerase { value: call }
-            }
+            (HirType::Erased, concrete) if *concrete != HirType::Erased => OpKind::unerase(call),
             _ => OpKind::Convert(call),
         };
         func.values.push(Op {
@@ -1848,9 +1846,7 @@ fn convert(
             absent: Absent::Impossible,
             slots: Absent::Impossible,
         },
-        _ if func.values[operand.0 as usize].ty == HirType::Erased => {
-            OpKind::Unerase { value: operand }
-        }
+        _ if func.values[operand.0 as usize].ty == HirType::Erased => OpKind::unerase(operand),
         _ => OpKind::Convert(operand),
     };
 

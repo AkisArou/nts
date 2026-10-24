@@ -1,29 +1,8 @@
-// **Ours, not upstream's: an object's own property, asked about through a
-// cast, reads as absent.** React reads an element's `$$typeof` this way
-// (shared/ReactPerformanceTrackProperties.ts:88):
-//
-//     "$$typeof" in value && hasOwn(value, "$$typeof") ? (value as { $$typeof?: unknown }).$$typeof : undefined
-//
-// with `hasOwn(object: { readonly [key: string]: unknown }, key)` calling
-// `Object.hasOwn`. Given `{ $$typeof: 7 }` typed `object`, node answers
-// `true`, `true`, `7`. Compiled, `in` agrees, but `hasOwn` through the
-// index-signature cast answers `false` and the read through
-// `{ $$typeof?: unknown }` answers `null`. Nothing is refused: these are
-// silent wrong answers.
-//
-// Two controls, each agreeing: `in` on the same value, and the same property
-// read from a binding declared with the record type rather than cast to it.
-//
-// Observed in one function, as here. Written instead as three `observe` calls
-// at the cast sites, the same program ended in SIGSEGV on ede19442c.
-//
-// Found by the React lane, reducing the root behind React's
-// mountChildFibers / reconcileChildFibers module-init skip (ede19442c).
-//
-// **Expected, confirmed under node:**
-//
-//     in, hasOwn, read through a cast       true true 7
-//     read from a typed binding (control)   7
+// The cast field read from this React-derived probe now agrees with node;
+// tests/programs/an-own-property-read-through-a-cast-keeps-its-value guards it.
+// The remaining gap is Object.hasOwn through an index-signature cast. Node
+// answers true, while nts answers false. `in` on the same object agrees, and
+// a property read through a concrete typed binding is the control.
 function hasOwn(object: { readonly [key: string]: unknown }, key: string): boolean {
   return Object.hasOwn(object, key);
 }
@@ -31,11 +10,10 @@ function hasOwn(object: { readonly [key: string]: unknown }, key: string): boole
 function probe(value: object): string {
   const has = "$$typeof" in value;
   const own = hasOwn(value as { readonly [key: string]: unknown }, "$$typeof");
-  const read = (value as { $$typeof?: unknown }).$$typeof;
-  return String(has) + " " + String(own) + " " + String(read);
+  return String(has) + " " + String(own);
 }
 
 const typed: { $$typeof?: unknown } = { $$typeof: 7 };
-observe("in, hasOwn, read through a cast", probe({ $$typeof: 7 }));
+observe("in, hasOwn through a cast", probe({ $$typeof: 7 }));
 observe("read from a typed binding (control)", String(typed.$$typeof));
 done();

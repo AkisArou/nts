@@ -10,9 +10,9 @@ use std::collections::BTreeMap;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    Absent, FuncBuilder, Hierarchy, HirType, MemberKind, NodeId, PropertyRecord, Substitution,
-    TypeId, TypeKind, absent_of_result, field_initialization, interfaces, result_crosses, slot_for,
-    syntax,
+    Absent, FuncBuilder, Hierarchy, HirType, MemberKind, NodeId, PropertyRecord, Representation,
+    Substitution, TypeId, TypeKind, absent_of_result, field_initialization, interfaces,
+    result_crosses, slot_for, syntax,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +138,39 @@ impl Read<'_> {
     }
 }
 
+/// One spelling for the selector's fallback and a backend's failed view cast.
+pub(super) fn cast_field_failure(hierarchy: &Hierarchy, face: TypeId, member: &str) -> String {
+    let face = &hierarchy.cast_descriptions[&face];
+    format!(
+        "the field `{member}` read through structural cast {face} on an object whose layout supplies no accessor for it"
+    )
+}
+
 impl FuncBuilder<'_> {
+    /// Recover the semantic face independently of its erased value storage.
+    pub(super) fn erased_cast_face(&self, at: NodeId, value: super::ValueId) -> Option<TypeId> {
+        if self.values[value.0 as usize].ty != HirType::Erased {
+            return None;
+        }
+        let face = self
+            .member_access(at)
+            .and_then(|(receiver, _)| self.read_type(receiver))
+            .or_else(|| self.field_access_family(at).map(|family| family.face))?;
+        self.hierarchy.cast_faces.contains(&face).then_some(face)
+    }
+
+    pub(super) fn erased_cast_field_read(
+        &mut self,
+        at: NodeId,
+        value: super::ValueId,
+        member: &str,
+    ) -> Result<Option<super::ValueId>, nts_diagnostics::Diagnostic> {
+        let Some(face) = self.erased_cast_face(at, value) else {
+            return Ok(None);
+        };
+        self.interface_field_read(at, value, face, member)
+    }
+
     /// A known allocation has its own concrete layout. Other receivers need
     /// the whole-program own-shape proof, independently of field dispatch.
     pub(super) fn known_allocation(&self, mut value: super::ValueId) -> Option<TypeId> {
@@ -173,6 +205,14 @@ impl FuncBuilder<'_> {
         if self.known_allocation(object) == Some(face) {
             return Ok(None);
         }
+        if self.hierarchy.cast_faces.contains(&face)
+            && self.hierarchy.access_families.get(face, member).is_none()
+        {
+            return Err(self.unsupported(at, &format!(
+                "an unlicensed field `{member}` read through a structural cast of an erased value as {}",
+                self.hierarchy.cast_descriptions[&face]
+            )));
+        }
         let Some(family) = self
             .hierarchy
             .access_families
@@ -185,11 +225,163 @@ impl FuncBuilder<'_> {
         let callee = self
             .accessor_callee(at, face, member, "get ")?
             .ok_or_else(|| self.unsupported(at, "an unlicensed interface field read"))?;
+        if self.values[object.0 as usize].ty == HirType::Erased {
+            self.layout_of(at, face)?;
+            let read = self.read_erased_cast_field(at, object, face, member, callee);
+            return self.cast_family_result(at, read, face, member).map(Some);
+        }
         let read = self.push_an_accessor_call(at, callee, vec![object], ty, self.origin(at));
         // Dispatch chooses the concrete supplier, while the source node's
         // checked narrowing chooses the payload to read. actual_field_read
         // keeps this erased when a supplier's real absence contradicts it.
-        self.narrowed(at, read).map(Some)
+        if self.hierarchy.cast_faces.contains(&face) {
+            self.cast_family_result(at, read, face, member).map(Some)
+        } else {
+            self.narrowed(at, read).map(Some)
+        }
+    }
+
+    fn cast_family_result(
+        &mut self,
+        at: NodeId,
+        read: super::ValueId,
+        face: TypeId,
+        member: &str,
+    ) -> Result<super::ValueId, nts_diagnostics::Diagnostic> {
+        // A pattern's node has the binding's post-default type. Its property
+        // keeps undefined until defaulted_when has made that decision.
+        if !matches!(
+            self.kind_of(at),
+            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::ELEMENT_ACCESS_EXPRESSION)
+        ) {
+            return Ok(read);
+        }
+        super::claimed_reads::family_read(self, at, read, face, member)
+    }
+
+    /// A transient selector view is licensed only by the managed object tag.
+    /// No source-level cast-face slot, argument or return loses its tag.
+    fn read_erased_cast_field(
+        &mut self,
+        at: NodeId,
+        object: super::ValueId,
+        face: TypeId,
+        member: &str,
+        callee: super::Callee,
+    ) -> super::ValueId {
+        use super::{BinOp, ManagedType, OpKind, Terminator};
+        let origin = self.origin(at);
+        let integer = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        let tag = self.push(
+            OpKind::TagOf { value: object },
+            integer.clone(),
+            origin.clone(),
+        );
+        let object_tag = self.push(
+            OpKind::ConstInt(i128::from(super::super::tags::OBJECT)),
+            integer,
+            origin.clone(),
+        );
+        let managed = self.push(
+            OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: tag,
+                rhs: object_tag,
+            },
+            HirType::Bool,
+            origin.clone(),
+        );
+        let present = self.new_block();
+        let other = self.new_block();
+        let merge = self.new_block();
+        let result = self.push_block_param(merge, HirType::Erased, origin.clone());
+        self.terminate(Terminator::Branch {
+            cond: managed,
+            then_target: present,
+            then_args: Vec::new(),
+            else_target: other,
+            else_args: Vec::new(),
+        });
+        self.switch_to(present);
+        let receiver = self.push(
+            OpKind::Unerase {
+                value: object,
+                failure: Some(cast_field_failure(&self.hierarchy, face, member)),
+            },
+            HirType::Managed(ManagedType::Object(face)),
+            origin.clone(),
+        );
+        let read =
+            self.push_an_accessor_call(at, callee, vec![receiver], HirType::Erased, origin.clone());
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![read],
+        });
+        self.switch_to(other);
+        self.read_primitive_cast_field(at, face, tag, member, merge);
+        self.switch_to(merge);
+        result
+    }
+
+    /// Primitive values with no property of this name answer undefined. Other
+    /// kinds keep the named stop until their native property contract is known.
+    fn read_primitive_cast_field(
+        &mut self,
+        at: NodeId,
+        face: TypeId,
+        tag: super::ValueId,
+        member: &str,
+        merge: super::BlockId,
+    ) {
+        use super::{BinOp, OpKind, Terminator};
+        let origin = self.origin(at);
+        let missing = self.new_block();
+        if !super::property_keys::OBJECT_PROTOTYPE_MEMBERS.contains(&member)
+            && !matches!(member, "toFixed" | "toExponential" | "toPrecision")
+        {
+            for allowed in [
+                super::super::tags::NUMBER,
+                super::super::tags::BOOLEAN,
+                super::super::tags::BIGINT,
+            ] {
+                let next = self.new_block();
+                let wanted = self.push(
+                    OpKind::ConstInt(i128::from(allowed)),
+                    self.values[tag.0 as usize].ty.clone(),
+                    origin.clone(),
+                );
+                let matches = self.push(
+                    OpKind::Binary {
+                        op: BinOp::Eq,
+                        lhs: tag,
+                        rhs: wanted,
+                    },
+                    HirType::Bool,
+                    origin.clone(),
+                );
+                self.terminate(Terminator::Branch {
+                    cond: matches,
+                    then_target: missing,
+                    then_args: Vec::new(),
+                    else_target: next,
+                    else_args: Vec::new(),
+                });
+                self.switch_to(next);
+            }
+        }
+        let name = &self.hierarchy.cast_descriptions[&face];
+        let message = self.push(OpKind::ConstString(format!("the field `{member}` read through structural cast {name} on a value whose kind supplies no accessor for it")), HirType::Managed(super::ManagedType::String), origin.clone());
+        self.runtime_call("nts_refused", vec![message], HirType::Void, origin.clone());
+        self.terminate(Terminator::Unreachable);
+        self.switch_to(missing);
+        let undefined = self.push(OpKind::ConstUndefined, HirType::Erased, origin);
+        self.terminate(Terminator::Jump {
+            target: merge,
+            args: vec![undefined],
+        });
     }
 
     pub(super) fn interface_field_place(
@@ -199,6 +391,17 @@ impl FuncBuilder<'_> {
         face: TypeId,
         member: &str,
     ) -> Result<Option<super::Place>, nts_diagnostics::Diagnostic> {
+        // A cast is no evidence that the object has storage for this field.
+        // Refuse before even an unlicensed family can fall back to FieldSet.
+        if self.hierarchy.cast_faces.contains(&face) {
+            return Err(self.unsupported(
+                at,
+                &format!(
+                    "a field `{member}` write through a structural cast of an erased value as {}",
+                    self.hierarchy.cast_descriptions[&face]
+                ),
+            ));
+        }
         let Some(family) = self
             .hierarchy
             .access_families
@@ -297,7 +500,11 @@ impl FuncBuilder<'_> {
         };
         if !matches!(
             self.kind_of(at),
-            Some(syntax::PROPERTY_ACCESS_EXPRESSION | syntax::IDENTIFIER)
+            Some(
+                syntax::PROPERTY_ACCESS_EXPRESSION
+                    | syntax::ELEMENT_ACCESS_EXPRESSION
+                    | syntax::IDENTIFIER
+            )
         ) || !family
             .supplies
             .iter()
@@ -872,6 +1079,19 @@ fn family(
     wanted: &PropertyRecord,
     candidates: &[TypeId],
 ) -> Result<Family, &'static str> {
+    // Reading an asserted shape must preserve the concrete supply's actual
+    // type and absence. It promises no writable storage; interface_field_place
+    // refuses every write through this face, including unlicensed families.
+    let readonly;
+    let wanted = if hierarchy.cast_faces.contains(&face) {
+        readonly = PropertyRecord {
+            readonly: true,
+            ..wanted.clone()
+        };
+        &readonly
+    } else {
+        wanted
+    };
     if candidates.is_empty() {
         return Err("no concrete supplier");
     }
@@ -930,7 +1150,7 @@ fn family(
     {
         return Err("stored record results without one proven source storage contract");
     }
-    let returns = if uniform && same_absences {
+    let returns = if uniform && same_absences && !hierarchy.cast_faces.contains(&face) {
         declared.clone()
     } else {
         HirType::Erased
@@ -938,7 +1158,8 @@ fn family(
     if returns == HirType::Erased && supplies.iter().any(|supply| !result_crosses(&supply.ty)) {
         return Err("a supplier has no erased representation");
     }
-    let eager = supplies.iter().any(|supply| supply.ty != declared)
+    let eager = hierarchy.cast_faces.contains(&face)
+        || supplies.iter().any(|supply| supply.ty != declared)
         || !same_absences
         || supplies
             .iter()
@@ -950,6 +1171,13 @@ fn family(
             .any(|supply| matches!(supply.reader, Reader::Undefined))
     {
         return Err("a writable field missing from a concrete supplier");
+    }
+    if hierarchy.cast_faces.contains(&face)
+        && let Some(absences) = &mut actual_absences
+    {
+        absences.push(super::super::tags::UNDEFINED);
+        absences.sort_unstable();
+        absences.dedup();
     }
     Ok(Family {
         face,
@@ -1076,7 +1304,10 @@ fn storage(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<HirType> {
         probe.snapshot,
         ty,
         &mut Vec::new(),
-        &Substitution::default(),
+        &Representation {
+            substitution: &Substitution::default(),
+            cast_faces: &probe.hierarchy.cast_faces,
+        },
     )
 }
 

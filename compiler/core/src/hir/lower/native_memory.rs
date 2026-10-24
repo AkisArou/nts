@@ -850,7 +850,7 @@ impl FuncBuilder<'_> {
             } else {
                 HirType::NUMBER
             };
-            let read = self.push(OpKind::Unerase { value: given }, read, origin.clone());
+            let read = self.push(OpKind::unerase(given), read, origin.clone());
             self.coerce(read, &present, id)?
         } else {
             self.coerce(given, &present, id)?
@@ -1341,7 +1341,7 @@ impl FuncBuilder<'_> {
             let present = self.push_block_param(merge, want.clone(), origin.clone());
             self.switch_to(read);
             self.materialize(id, &want)?;
-            let read_back = self.push(OpKind::Unerase { value }, want, origin);
+            let read_back = self.push(OpKind::unerase(value), want, origin);
             self.terminate(Terminator::Jump {
                 target: merge,
                 args: vec![read_back],

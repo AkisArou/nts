@@ -1,8 +1,8 @@
 {
   "run": "build",
   "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: in, hasOwn, read through a cast=true false null;read from a typed binding (control)=7;",
-  "node": "exit 1; nts: uncaught Observed: in, hasOwn, read through a cast=true true 7;read from a typed binding (control)=7;",
-  "measured_with": "7d1ed4b502cbc4ab",
+  "nts": "exit 1; nts: uncaught Observed: in, hasOwn through a cast=true false;read from a typed binding (control)=7;",
+  "node": "exit 1; nts: uncaught Observed: in, hasOwn through a cast=true true;read from a typed binding (control)=7;",
+  "measured_with": "758101d4f97bbadb",
   "source": "measured"
 }

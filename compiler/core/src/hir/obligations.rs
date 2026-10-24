@@ -1515,20 +1515,22 @@ impl Slots<'_> {
         let get = |operand: ValueId| ranges.get_at(block, operand);
         match &func.value(value).kind {
             OpKind::ConstInt(literal) => Bounds::exact(*literal),
-            OpKind::Convert(from) | OpKind::Unerase { value: from } => match func.value(*from).ty {
-                HirType::Int { bits, signed } => {
-                    let (lo, hi) = int_range(bits, signed);
-                    Bounds { lo, hi }
+            OpKind::Convert(from) | OpKind::Unerase { value: from, .. } => {
+                match func.value(*from).ty {
+                    HirType::Int { bits, signed } => {
+                        let (lo, hi) = int_range(bits, signed);
+                        Bounds { lo, hi }
+                    }
+                    HirType::BigInt => get(*from),
+                    // The `bigint` an erased value is, where a test proved it is
+                    // one: what made it says, as a uniform closure entry passes
+                    // a written parameter on.
+                    HirType::Erased if matches!(func.value(value).kind, OpKind::Unerase { .. }) => {
+                        self.bigint_transfer(func, numbers, ranges, block, *from)
+                    }
+                    _ => Bounds::FULL,
                 }
-                HirType::BigInt => get(*from),
-                // The `bigint` an erased value is, where a test proved it is
-                // one: what made it says, as a uniform closure entry passes
-                // a written parameter on.
-                HirType::Erased if matches!(func.value(value).kind, OpKind::Unerase { .. }) => {
-                    self.bigint_transfer(func, numbers, ranges, block, *from)
-                }
-                _ => Bounds::FULL,
-            },
+            }
             OpKind::Param(slot) => Bounds::of(
                 func.params
                     .get(*slot as usize)

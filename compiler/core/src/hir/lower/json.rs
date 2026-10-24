@@ -795,7 +795,7 @@ impl FuncBuilder<'_> {
                     let read = if matches!(plan.value, Value::Object { .. }) {
                         value
                     } else {
-                        this.push(OpKind::Unerase { value }, have.clone(), origin.clone())
+                        this.push(OpKind::unerase(value), have.clone(), origin.clone())
                     };
                     this.json_write(out, read, &plan.value, origin)
                 };
@@ -1127,7 +1127,7 @@ impl FuncBuilder<'_> {
             self.json_branch(is, (arm, Vec::new()), (next, Vec::new()));
             self.switch_to(arm);
             let object = self.push(
-                OpKind::Unerase { value: erased },
+                OpKind::unerase(erased),
                 HirType::Managed(ManagedType::Object(*owner)),
                 origin.clone(),
             );

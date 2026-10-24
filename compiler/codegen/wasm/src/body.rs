@@ -2,6 +2,7 @@
 
 use crate::{
     EmitError, FunctionRoute, cfg,
+    erased::unerase,
     error::Failure,
     gc,
     helpers::Helper,
@@ -641,7 +642,7 @@ impl<'b, 'p> Body<'b, 'p> {
                 absent,
                 slots,
             } => self.erase(id, *value, *absent, *slots)?,
-            OpKind::Unerase { value } => crate::erased::unerase(self, id, *value)?,
+            OpKind::Unerase { value, failure } => unerase(self, id, *value, failure.as_deref())?,
             // Asked only whether it is tags with tests of their own, a tag is
             // answered where it is asked (`binary`), and is not made at all.
             OpKind::TagOf { .. } if self.tag_test_of(id).is_some() => return Ok(()),

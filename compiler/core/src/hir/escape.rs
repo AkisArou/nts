@@ -1731,7 +1731,7 @@ mod tests {
             1,
             vec![
                 op(OpKind::Param(0), HirType::Erased),
-                op(OpKind::Unerase { value: ValueId(0) }, object()),
+                op(OpKind::unerase(ValueId(0)), object()),
                 op(
                     OpKind::GlobalSet {
                         global: 0,

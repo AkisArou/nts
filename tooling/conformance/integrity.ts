@@ -445,6 +445,10 @@ const ARRAY_ELEMENT = /^call\.extern nts_array_element\((%\d+), %\d+(?:, %\d+)?\
  * `{ fn, target }` each. See `unerase-is-built`.
  */
 export function unbuiltUnerases(prepared, { byName, byId, byType }) {
+  // Anonymous cast faces dispatch by the concrete receiver. They need no
+  // allocation of the face's own layout; a positional read still violates
+  // that contract and must not gain an exemption from the printed marker.
+  const castFaces = new Set([...prepared.matchAll(/^cast-face (\d+)$/gm)].map((m) => m[1]));
   const allocations = [...prepared.matchAll(/object\.new \S+ : (managed<[^>]+>)/g)].map((m) => m[1]);
   const madeIds = new Set(allocations.flatMap((type) => /^managed<obj#(\d+)>$/.exec(type)?.[1] ?? []));
   // The CLI renders a synthetic frame as `generator#N`, while layouts lists
@@ -547,6 +551,12 @@ export function unbuiltUnerases(prepared, { byName, byId, byType }) {
       const u = /^ {2}%\d+ = unerase (%\d+) : managed<obj#(\d+)>$/.exec(line);
       if (!u || guarded.has(`${block} ${u[1]}`) || boundary(f, u[1])) continue;
       const layout = byId.get(u[2]);
+      if (castFaces.has(u[2])) {
+        const result = /^ {2}(%\d+) = unerase /.exec(line)?.[1];
+        const positional = f.chunk.split("\n").some((line) =>
+          line.includes(` = field.get ${result}.`) || line.trimStart().startsWith(`field.set ${result}.`));
+        if (!positional) continue;
+      }
       if (arrayElement(f, u[1], layout)) continue;
       if (layout && /^Fn[\d_]*__\d+$/.test(layout.name)) continue;
       if (layout ? covered.has(layout.name) : madeIds.has(u[2])) continue;
@@ -907,6 +917,10 @@ function selfTest() {
   const unbuiltImplementor = readLayouts(shapes.replace("  implements Shape\n", ""));
   if (unbuiltUnerases(unerase(10), unbuiltImplementor).length !== 1) return "an unerase to an interface nothing built implements was not caught";
   if (unbuiltUnerases(unerase(10, true), withField).length !== 0) return "an instanceof-guarded unerase was caught";
+  const castFace = `cast-face 10\n${unerase(10)}`;
+  if (unbuiltUnerases(castFace, withField).length !== 0) return "a dispatch-only anonymous cast face was caught";
+  const positionalCast = castFace.replace("  %3 = unerase %0 : managed<obj#10>", "  %3 = unerase %0 : managed<obj#10>\n  %4 = field.get %3.0 : erased");
+  if (positionalCast === castFace || unbuiltUnerases(positionalCast, withField).length !== 1) return "a cast-face marker hid a positional field read";
   if (unbuiltUnerases(unerase(13), lay).length !== 0 || unbuiltUnerases(unerase(6), lay).length !== 0) return "an unerase to a built class or a signature layout was caught";
   const generatorLayoutText = "Declared [39]\n  state : Int32\nConcrete [12345]\n  hir-type managed<generator#7>\n  base 39 -> Declared\n";
   const generatorLayouts = readLayouts(generatorLayoutText);

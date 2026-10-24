@@ -502,7 +502,7 @@ fn explicit_casts_and_erased_container_pairs_keep_the_scan_answers() {
                     origin: origin(),
                 });
                 values.push(Op {
-                    kind: OpKind::Unerase { value: ValueId(1) },
+                    kind: OpKind::unerase(ValueId(1)),
                     ty: wrap(object(1)),
                     origin: origin(),
                 });

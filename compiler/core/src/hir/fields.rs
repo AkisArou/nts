@@ -1058,7 +1058,7 @@ fn rewrites_for(program: &Program, known: &FieldClosures, layouts: &LayoutIndex)
             // `Unerase` below reads the same thing at a narrower class.
             let erased = if static_class.is_some() {
                 None
-            } else if let OpKind::Unerase { value } = func.values[receiver.0 as usize].kind {
+            } else if let OpKind::Unerase { value, .. } = func.values[receiver.0 as usize].kind {
                 Some(value)
             } else {
                 continue;
@@ -1113,7 +1113,7 @@ pub fn devirtualize(program: &mut Program, known: &FieldClosures) -> usize {
         // The receiver read back at the class, which is the cast this pass is
         // entitled to make and the reason it carries `class` at all.
         let receiver = erased.map(|value| super::Op {
-            kind: OpKind::Unerase { value },
+            kind: OpKind::unerase(value),
             ty: HirType::Managed(super::ManagedType::Object(class)),
             origin,
         });
@@ -1146,7 +1146,7 @@ fn field_source(func: &super::Func, value: super::ValueId) -> Option<(super::Val
     let mut at = value;
     for _ in 0..8 {
         match &func.values[at.0 as usize].kind {
-            OpKind::Unerase { value } => at = *value,
+            OpKind::Unerase { value, .. } => at = *value,
             OpKind::FieldGet { object, field } => return Some((*object, *field)),
             _ => return None,
         }

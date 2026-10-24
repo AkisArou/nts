@@ -208,12 +208,7 @@ fn grow() -> Func {
         },
         HirType::Erased,
     );
-    let alias = op(
-        &mut func,
-        &mut entry,
-        OpKind::Unerase { value: erased },
-        array(F64),
-    );
+    let alias = op(&mut func, &mut entry, OpKind::unerase(erased), array(F64));
     let sum0 = op(&mut func, &mut entry, OpKind::ConstFloat(0.0), F64);
     let fill_index = value(&mut func, OpKind::BlockParam(0), U32);
     let read_index = value(&mut func, OpKind::BlockParam(0), U32);
@@ -491,12 +486,7 @@ fn absent_array(name: &str, wrong: bool) -> Func {
             },
             HirType::Erased,
         );
-        op(
-            &mut f,
-            &mut ops,
-            OpKind::Unerase { value: erased },
-            array(F64),
-        )
+        op(&mut f, &mut ops, OpKind::unerase(erased), array(F64))
     } else {
         op(&mut f, &mut ops, OpKind::ConstNull, array(F64))
     };

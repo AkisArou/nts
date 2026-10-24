@@ -1010,7 +1010,7 @@ fn a_dispatched_call_keeps_the_return_its_declaration_promises() {
     let answer = optional
         .values
         .iter()
-        .find(|op| matches!(op.kind, OpKind::Unerase { value } if value.0 as usize == call))
+        .find(|op| matches!(op.kind, OpKind::Unerase { value , .. } if value.0 as usize == call))
         .unwrap_or(&optional.values[call]);
     assert_ne!(
         answer.ty,

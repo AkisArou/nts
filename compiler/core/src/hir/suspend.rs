@@ -1947,7 +1947,7 @@ fn read_settled(
         settled_storage(payload),
     );
     build.values[awaited.0 as usize].kind = if read_by_unerasing(payload) {
-        OpKind::Unerase { value }
+        OpKind::unerase(value)
     } else {
         OpKind::Convert(value)
     };

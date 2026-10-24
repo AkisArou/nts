@@ -179,8 +179,8 @@ mod tests {
     fn the_reads_back_out_are_named_and_need_no_erased_value() {
         let uses = of_param(&func(
             &[
-                (OpKind::Unerase { value: V }, F64),
-                (OpKind::Unerase { value: V }, F64),
+                (OpKind::unerase(V), F64),
+                (OpKind::unerase(V), F64),
                 (
                     OpKind::TagOf { value: V },
                     HirType::Int {
@@ -222,7 +222,7 @@ mod tests {
     #[test]
     fn only_unerases_is_asked_of_every_use() {
         let uses = of_param(&func(
-            &[(OpKind::Unerase { value: V }, F64)],
+            &[(OpKind::unerase(V), F64)],
             &[],
             Terminator::Return(None),
         ));
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn a_block_argument_is_an_erased_use() {
         let jumped = of_param(&func(
-            &[(OpKind::Unerase { value: V }, F64)],
+            &[(OpKind::unerase(V), F64)],
             &[],
             Terminator::Jump {
                 target: BlockId(0),

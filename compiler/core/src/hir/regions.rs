@@ -545,7 +545,7 @@ impl<'p, 's> Facts<'p, 's> {
                 fresh.contains(array) && !self.stale.contains(&slot_of(func, *array, None))
             }
             OpKind::Erase { value: inner, .. }
-            | OpKind::Unerase { value: inner }
+            | OpKind::Unerase { value: inner, .. }
             | OpKind::Convert(inner)
             | OpKind::FieldView { value: inner, .. } => fresh.contains(inner),
             OpKind::BlockParam(_) => uses.param_at.get(&value).is_some_and(|at| {
@@ -614,7 +614,7 @@ impl<'p, 's> Facts<'p, 's> {
                     }
                     match &op.kind {
                         OpKind::Erase { value: inner, .. }
-                        | OpKind::Unerase { value: inner }
+                        | OpKind::Unerase { value: inner, .. }
                         | OpKind::Convert(inner)
                         | OpKind::FieldView { value: inner, .. } => allowed.contains(inner),
                         OpKind::BlockParam(_) => uses.param_at.get(value).is_some_and(|at| {

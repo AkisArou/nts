@@ -4475,7 +4475,7 @@ fn erased_conversion(
             }
             Ok(format!("{name} = {built};"))
         }
-        OpKind::Unerase { value } => {
+        OpKind::Unerase { value, .. } => {
             let (tag, field) = erased_tag(&op.ty).ok_or_else(|| refuse(&op.ty, "read back"))?;
             let read = match field {
                 // Checked, unconditionally: a value of another family here is

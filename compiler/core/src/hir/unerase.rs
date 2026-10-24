@@ -209,7 +209,7 @@ fn single_representation(
             // `number[]` became an `f64` element read where an erased one was
             // declared -- invalid HIR on every backend
             // (`outcomes/an-array-taken-out-of-an-unknown-array-is-read-at-its-old-element`).
-            OpKind::Unerase { value }
+            OpKind::Unerase { value, .. }
                 if uses_a_read(value)
                     && found
                         .as_ref()
@@ -282,7 +282,7 @@ fn rewrite(
     for index in 0..func.values.len() {
         let id = ValueId(u32::try_from(index).unwrap_or(0));
         match func.values[index].kind {
-            OpKind::Unerase { value } if reads.contains(&value) => {
+            OpKind::Unerase { value, .. } if reads.contains(&value) => {
                 replacements.insert(id, value);
             }
             OpKind::TagOf { value } if reads.contains(&value) => {
@@ -685,7 +685,7 @@ fn only_unwrapped_value(func: &Func, value: ValueId, representation: &HirType) -
             // declines instead. Folding an `eq` of two integer constants would
             // let the arm be pruned and this population narrow again, which is a
             // capability change and not this guard's business.
-            OpKind::Unerase { value: used } if *used == value => {
+            OpKind::Unerase { value: used, .. } if *used == value => {
                 if &op.ty != representation {
                     return false;
                 }
@@ -746,7 +746,7 @@ fn unwrap_uses(
     for index in 0..func.values.len() {
         let id = ValueId(u32::try_from(index).unwrap_or(0));
         match func.values[index].kind {
-            OpKind::Unerase { value } if narrowed.contains_key(&value) => {
+            OpKind::Unerase { value, .. } if narrowed.contains_key(&value) => {
                 replacements.insert(id, value);
             }
             OpKind::TagOf { value } => {

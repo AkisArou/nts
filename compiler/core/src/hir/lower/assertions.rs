@@ -179,7 +179,7 @@ pub(super) fn lower(
                 "TypeError",
                 "The asserted native representation does not match the value",
             )?;
-            return Ok(builder.push(OpKind::Unerase { value: erased }, target, origin));
+            return Ok(builder.push(OpKind::unerase(erased), target, origin));
         }
         Some(Check::Class(class)) => {
             let target = HirType::Managed(ManagedType::Object(class));
@@ -203,7 +203,7 @@ pub(super) fn lower(
                 "TypeError",
                 "The asserted native class does not match the value",
             )?;
-            return Ok(builder.push(OpKind::Unerase { value: erased }, target, origin));
+            return Ok(builder.push(OpKind::unerase(erased), target, origin));
         }
         Some(Check::Present) if !deferred && can_throw(builder, id) => {
             if let Some(absent) = builder.absence_of(id, value) {

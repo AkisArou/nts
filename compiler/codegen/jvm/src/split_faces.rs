@@ -46,9 +46,8 @@ use crate::{body, hierarchy, types, widen};
 #[must_use]
 pub(crate) fn is_face(program: &JvmProgram<'_>, layout: &Layout) -> bool {
     program
-        .interface_identities
-        .iter()
-        .any(|identity| identity.types.iter().any(|id| layout.types.contains(id)))
+        .structural_faces()
+        .any(|id| layout.types.contains(&id))
 }
 
 /// Whether `face`'s holders are worth asking for: a face, through which a

@@ -25,7 +25,7 @@ fn program() -> hir::Program {
             },
             HirType::Erased,
         ),
-        (OpKind::Unerase { value: ValueId(2) }, object),
+        (OpKind::unerase(ValueId(2)), object),
         (
             OpKind::FieldGet {
                 object: ValueId(3),

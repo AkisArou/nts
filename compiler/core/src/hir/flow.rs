@@ -1355,7 +1355,7 @@ fn transfer_op(
         // Its facts are about the number it is when it is one -- a written
         // parameter's kind, through a uniform closure entry -- and this is
         // emitted only where a test proved it is one.
-        OpKind::Unerase { value }
+        OpKind::Unerase { value, .. }
             if matches!(
                 op.ty,
                 super::HirType::Int { .. } | super::HirType::Float { .. }

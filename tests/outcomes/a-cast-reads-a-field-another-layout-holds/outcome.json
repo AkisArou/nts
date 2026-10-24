@@ -1,8 +1,8 @@
 {
   "run": "check",
-  "category": "aborted",
-  "nts": "nts: refused at run time: an `as` asserting an object type of a value whose layout is not one: reading through it would read another type's fields",
+  "category": "agrees",
+  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 an erased value where a concrete representation is wanted is not supported by this lowering yet | refused: NTS1003 `cast` cannot be compiled because it calls `sideOf`, and an erased value where a concrete representation is wanted is not supported by this lowering yet",
   "node": null,
-  "measured_with": "18e81a7e0dd40d8a",
+  "measured_with": "0ed593e990ca9c5d",
   "source": "measured"
 }

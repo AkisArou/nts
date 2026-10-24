@@ -192,7 +192,7 @@ fn the_first_parameter_is_the_value() {
     // may be the `Unerase` of the call rather than the call.
     let source_of = |value: u32| -> u32 {
         match function.values[value as usize].kind {
-            OpKind::Unerase { value: inner } => inner.0,
+            OpKind::Unerase { value: inner, .. } => inner.0,
             _ => value,
         }
     };

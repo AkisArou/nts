@@ -239,7 +239,7 @@ fn splittable(func: &Func, web: &[ValueId]) -> Option<HirType> {
         }
         match &op.kind {
             OpKind::TagOf { .. } => {}
-            OpKind::Unerase { value } if members.contains(value) => {
+            OpKind::Unerase { value, .. } if members.contains(value) => {
                 let want = &func.values[index].ty;
                 // A conversion here would be correct and would give back what
                 // the pass exists to remove.
@@ -344,7 +344,7 @@ fn rewrite(func: &mut Func, web: &[ValueId], payload_ty: &HirType) {
             OpKind::TagOf { value } if members.contains(&value) => {
                 replacements.insert(id, value);
             }
-            OpKind::Unerase { value } if members.contains(&value) => {
+            OpKind::Unerase { value, .. } if members.contains(&value) => {
                 replacements.insert(id, payloads[&value]);
             }
             _ => {}
@@ -596,7 +596,7 @@ mod tests {
         let mut it = merged(
             vec![
                 op(OpKind::TagOf { value: ValueId(4) }, tag_type()),
-                op(OpKind::Unerase { value: ValueId(4) }, HirType::NUMBER),
+                op(OpKind::unerase(ValueId(4)), HirType::NUMBER),
             ],
             Terminator::Return(None),
         );

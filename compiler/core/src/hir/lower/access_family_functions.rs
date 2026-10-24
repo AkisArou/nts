@@ -269,6 +269,7 @@ fn defaults(
 /// convention exactly as a stored row is; a named stop where the face's
 /// layout holds no field for the member, so nothing positional answers. The
 /// flag says which.
+/// An erased cast face always stops by name on an unplanned receiver.
 fn default_body(
     context: &Context<'_>,
     program: &Program,
@@ -293,7 +294,15 @@ fn default_body(
     } else {
         family.returns.clone()
     };
-    let Some(answer) = stored(&mut builder, program, family, face, writes, &origin) else {
+    // An erased cast can carry an unplanned receiver (an array, for example).
+    // Only a concrete row licenses its storage; the face's own field position
+    // is not a default for such an object. Known own-face literals have rows.
+    let answer = if context.hierarchy.cast_faces.contains(&family.face) {
+        None
+    } else {
+        stored(&mut builder, program, family, face, writes, &origin)
+    };
+    let Some(answer) = answer else {
         refuse(context, &mut builder, family, writes, &origin);
         return (
             builder.finish(name.to_owned(), params, returns, origin, false),
@@ -329,12 +338,16 @@ fn refuse(
         .name
         .get(&family.face)
         .map_or("an interface", String::as_str);
-    let message = format!(
-        "`{}` {} through `{face}` on an object whose class supplies no accessor for it, \
-         and `{face}` holds no field of its own to read it from",
-        family.member,
-        if writes { "written" } else { "read" },
-    );
+    let message = if context.hierarchy.cast_faces.contains(&family.face) {
+        super::access_families::cast_field_failure(context.hierarchy, family.face, &family.member)
+    } else {
+        format!(
+            "`{}` {} through `{face}` on an object whose class supplies no accessor for it, \
+             and `{face}` holds no field of its own to read it from",
+            family.member,
+            if writes { "written" } else { "read" },
+        )
+    };
     let what = builder.push(
         OpKind::ConstString(message),
         HirType::Managed(ManagedType::String),
@@ -795,7 +808,7 @@ fn converted(
             slots: crate::hir::Absent::Impossible,
         }
     } else if *from == HirType::Erased {
-        OpKind::Unerase { value }
+        OpKind::unerase(value)
     } else {
         OpKind::Convert(value)
     };

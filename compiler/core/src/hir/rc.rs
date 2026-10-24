@@ -1168,7 +1168,7 @@ struct Counted {
 /// back.
 fn another_name_for(kind: &OpKind) -> Option<ValueId> {
     match kind {
-        OpKind::Erase { value, .. } | OpKind::Unerase { value } => Some(*value),
+        OpKind::Erase { value, .. } | OpKind::Unerase { value, .. } => Some(*value),
         OpKind::Call {
             callee: super::Callee::External(name),
             args,

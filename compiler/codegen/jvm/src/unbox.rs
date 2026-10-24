@@ -165,7 +165,7 @@ pub(crate) fn unboxable(func: &Func) -> FxHashSet<ValueId> {
         let user = ValueId(u32::try_from(at).unwrap_or(0));
         match &op.kind {
             OpKind::InstanceOf { .. } => {}
-            OpKind::Unerase { value } if erased(*value) => {
+            OpKind::Unerase { value, .. } if erased(*value) => {
                 // Only to an object: unerasing to a number reads the box's
                 // `num`, which a bare reference does not have.
                 if !matches!(op.ty, HirType::Managed(ManagedType::Object(_))) {

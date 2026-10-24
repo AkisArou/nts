@@ -130,7 +130,7 @@ fn direct(class: u32, erased: bool, slot: u32) -> Func {
             },
             HirType::Erased,
         );
-        receiver = op(&mut f, &mut ops, OpKind::Unerase { value }, object(ROOT));
+        receiver = op(&mut f, &mut ops, OpKind::unerase(value), object(ROOT));
     }
     let result = call(&mut f, &mut ops, receiver, input, slot);
     finish(f, ops, result)

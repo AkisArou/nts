@@ -20,10 +20,10 @@
 // program it guarded went on answering wrongly. A refusal that disappears is
 // not a fix until the program agrees.
 //
-// The fix is a design choice, recorded in the compiler lane's plan: read a
-// structurally cast field by name at run time, or refuse the unerase into a
-// structural type (which would reach `err as { code?: string }` across the
-// node runtime).
+// Fixed: the anonymous cast type is a face whose field reads dispatch by the
+// concrete owner. A missing optional field answers undefined. The paired
+// tests/programs/a-structural-cast-reads-the-concrete-field covers present
+// fields, both orders, wrong-kind fields and a direct-read control.
 class Unrelated {
   first = 11;
   second = 22;
@@ -36,5 +36,6 @@ function stackOf(caught: unknown): string {
   }
   return "not an object";
 }
-observe("unrelated", stackOf(new Unrelated("x0")));
-done();
+export function unrelated(n: number): string {
+  return stackOf(new Unrelated("x" + n));
+}

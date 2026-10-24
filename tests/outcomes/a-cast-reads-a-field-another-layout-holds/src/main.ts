@@ -1,4 +1,7 @@
 // run: check
+// Known gap: sideOf/cast refuse at the cast-result alias consumer; only
+// byIn/control currently compiles and compares 29 cases. This record pins
+// that partial result; it is not evidence that the cast arm agrees.
 // `(shape as Square).side` on a `Square | Named` -- the idiom every
 // user-defined type guard is written with. `as` is an unchecked assertion
 // with no run-time effect, so node reads `side` off whatever object arrived

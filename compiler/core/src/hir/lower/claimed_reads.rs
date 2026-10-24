@@ -88,6 +88,109 @@ pub(super) fn narrowed(
     }
 }
 
+/// A cast-family value remains tagged until its consumer needs a native
+/// payload. A scalar/string read checks that payload; a container additionally
+/// needs the family's uniform source storage contract, not merely object tag.
+pub(super) fn family_read(
+    builder: &mut FuncBuilder<'_>,
+    at: NodeId,
+    read: ValueId,
+    face: super::TypeId,
+    member: &str,
+) -> Result<ValueId, Diagnostic> {
+    let Some(schema) = builder.snapshot.node_types.get(&at).copied() else {
+        return Ok(read);
+    };
+    let Some(want) = builder.represent(schema) else {
+        return Ok(read);
+    };
+    if matches!(want, HirType::Erased | HirType::Void | HirType::Never)
+        || use_of(builder, at) == Use::Asks
+    {
+        return Ok(read);
+    }
+    let what = format!(
+        "the field `{member}` read through structural cast {} with a result of a different kind",
+        builder.hierarchy.cast_descriptions[&face]
+    );
+    if want == HirType::NUMBER {
+        match use_of(builder, at) {
+            Use::Numeric => return to_number(builder, at, read, (0.0, &what)),
+            Use::Equal => return to_number(builder, at, read, (f64::NAN, &what)),
+            _ => {}
+        }
+    }
+    let simple = matches!(
+        want,
+        HirType::Bool
+            | HirType::Float { .. }
+            | HirType::Int { .. }
+            | HirType::BigInt
+            | HirType::Managed(super::ManagedType::String | super::ManagedType::Symbol)
+    );
+    let uniform = builder
+        .hierarchy
+        .access_families
+        .get(face, member)
+        .and_then(|family| family.read_type)
+        .and_then(|ty| builder.represent(ty))
+        == Some(want.clone());
+    if !(simple || want.is_managed() && uniform) {
+        return Err(builder.unsupported(at, &format!("a field `{member}` read through structural cast {} without a uniform native storage contract", builder.hierarchy.cast_descriptions[&face])));
+    }
+    checked_family_payload(builder, at, read, schema, want, &what)
+}
+
+fn checked_family_payload(
+    builder: &mut FuncBuilder<'_>,
+    at: NodeId,
+    read: ValueId,
+    schema: super::TypeId,
+    want: HirType,
+    what: &str,
+) -> Result<ValueId, Diagnostic> {
+    let held = tag_of(builder, at, read);
+    let wanted_tag = tags::of_representation(&want);
+    let mut matches = compare(builder, at, held, BinOp::Eq, wanted_tag);
+    // Pointer storage can represent one declared absence. Keep that same
+    // source contract at its checked read, never accepting other payload tags.
+    if want.is_managed() {
+        let members = match &builder.snapshot.types[schema.0 as usize].kind {
+            super::TypeKind::Union(members) => members.clone(),
+            _ => Vec::new(),
+        };
+        for member in members {
+            if let Some(absence) = super::absence_of_member(builder.snapshot, member) {
+                let tag = match absence {
+                    super::Absence::Null => tags::NULL,
+                    super::Absence::Undefined => tags::UNDEFINED,
+                };
+                let absent = compare(builder, at, held, BinOp::Eq, tag);
+                matches = builder.push(
+                    OpKind::Binary {
+                        op: BinOp::BitOr,
+                        lhs: matches,
+                        rhs: absent,
+                    },
+                    HirType::Bool,
+                    builder.origin(at),
+                );
+            }
+        }
+    }
+    let reject = builder.push(
+        OpKind::Unary {
+            op: super::UnOp::Not,
+            operand: matches,
+        },
+        HirType::Bool,
+        builder.origin(at),
+    );
+    super::assertions::decline_when(builder, at, reject, what)?;
+    builder.materialize(at, &want)?;
+    Ok(builder.push(OpKind::unerase(read), want, builder.origin(at)))
+}
+
 /// Whether `node` is a claimed read whose consumer asks only whether it is
 /// there, so that its value arrives erased: what a consumer that would
 /// otherwise answer from the checker's type -- `typeof`, `=== undefined` --
@@ -310,11 +413,7 @@ fn to_number(
     });
     // The unerase only where the tag says number, which licenses it.
     builder.switch_to(present);
-    let number = builder.push(
-        OpKind::Unerase { value: read },
-        HirType::NUMBER,
-        origin.clone(),
-    );
+    let number = builder.push(OpKind::unerase(read), HirType::NUMBER, origin.clone());
     builder.terminate(Terminator::Jump {
         target: merge,
         args: vec![number],

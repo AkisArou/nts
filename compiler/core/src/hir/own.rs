@@ -3754,7 +3754,7 @@ fn repackages_a_crossing_borrow(
     let mut at = value;
     // Bounded: a chain of repackagings is an erasure and a read-back.
     for _ in 0..8 {
-        let (OpKind::Erase { value: inner, .. } | OpKind::Unerase { value: inner }) =
+        let (OpKind::Erase { value: inner, .. } | OpKind::Unerase { value: inner, .. }) =
             func.values[at.0 as usize].kind
         else {
             break;

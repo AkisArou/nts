@@ -31,7 +31,7 @@ fn materialize_func(func: &mut Func) {
                 {
                     Some((true, value))
                 }
-                OpKind::Unerase { value }
+                OpKind::Unerase { value, .. }
                     if op.ty == HirType::BigInt && func.value(value).ty == HirType::Erased =>
                 {
                     Some((false, value))
@@ -49,7 +49,7 @@ fn materialize_func(func: &mut Func) {
                             frame: None,
                         }
                     } else {
-                        OpKind::Unerase { value }
+                        OpKind::unerase(value)
                     },
                     ty: HirType::Managed(ManagedType::BoxedBigInt),
                     origin,
@@ -163,7 +163,7 @@ mod tests {
         let mut f = func(
             vec![
                 value(OpKind::ConstUndefined, HirType::Erased),
-                value(OpKind::Unerase { value: ValueId(0) }, HirType::BigInt),
+                value(OpKind::unerase(ValueId(0)), HirType::BigInt),
             ],
             vec![ValueId(0), ValueId(1)],
             ValueId(1),
@@ -172,7 +172,10 @@ mod tests {
         assert_eq!(f.blocks[0].ops, vec![ValueId(0), ValueId(2), ValueId(1)]);
         assert!(matches!(
             f.values[2].kind,
-            OpKind::Unerase { value: ValueId(0) }
+            OpKind::Unerase {
+                value: ValueId(0),
+                ..
+            }
         ));
         assert!(
             matches!(&f.values[1].kind, OpKind::Call { callee: Callee::External(name), args, .. }
@@ -216,7 +219,7 @@ mod tests {
                     },
                     HirType::Erased,
                 ),
-                value(OpKind::Unerase { value: ValueId(1) }, HirType::BigInt),
+                value(OpKind::unerase(ValueId(1)), HirType::BigInt),
             ],
             vec![ValueId(0), ValueId(1), ValueId(2)],
             ValueId(2),

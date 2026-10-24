@@ -192,7 +192,7 @@ impl FuncBuilder<'_> {
             else_args: Vec::new(),
         });
         self.switch_to(number);
-        let number = self.push(OpKind::Unerase { value }, HirType::NUMBER, origin);
+        let number = self.push(OpKind::unerase(value), HirType::NUMBER, origin);
         merge.jump(self, number);
         self.switch_to(cold);
         self.non_number_builtin(at, (value, tag), undefined, &merge)?;

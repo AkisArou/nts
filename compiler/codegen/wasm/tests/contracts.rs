@@ -16,7 +16,7 @@ fn cast(name: &str, source: HirType, target: HirType, helper: Option<&str>) -> F
         },
         HirType::Erased,
     );
-    let operation = helper.map_or(OpKind::Unerase { value: erased }, |name| OpKind::Call {
+    let operation = helper.map_or(OpKind::unerase(erased), |name| OpKind::Call {
         callee: Callee::External(name.into()),
         args: vec![erased],
         frame: None,

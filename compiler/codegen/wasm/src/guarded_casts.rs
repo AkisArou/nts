@@ -44,7 +44,9 @@ pub(crate) fn values(func: &Func, objects: &Plan) -> BTreeSet<ValueId> {
         let taken = &func.blocks[then_target.0 as usize];
         for &id in &taken.ops {
             let op = &func.values[id.0 as usize];
-            if op.kind != (OpKind::Unerase { value: *value }) {
+            // A named face projection keeps its own check deliberately:
+            // an unplanned receiver must report core's carried reason.
+            if op.kind != (OpKind::unerase(*value)) {
                 continue;
             }
             let HirType::Managed(ManagedType::Object(target)) = op.ty else {

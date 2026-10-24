@@ -102,7 +102,7 @@ fn aliasing_cannot_hide_an_uninitialized_slot() {
         },
         HirType::Erased,
     );
-    let restored = op(&mut f, &mut ops, OpKind::Unerase { value: erased }, array());
+    let restored = op(&mut f, &mut ops, OpKind::unerase(erased), array());
     let answer = get(&mut f, &mut ops, restored, at);
     f.blocks
         .push(block(&[], &ops, Terminator::Return(Some(answer))));
@@ -183,12 +183,7 @@ fn stores_after_a_guard_that_throws_initialize_every_slot() {
         },
         HirType::Erased,
     );
-    let restored = op(
-        &mut f,
-        &mut stores,
-        OpKind::Unerase { value: erased },
-        array(),
-    );
+    let restored = op(&mut f, &mut stores, OpKind::unerase(erased), array());
     let answer = get(&mut f, &mut stores, restored, other);
     f.blocks
         .push(block(&[], &stores, Terminator::Return(Some(answer))));

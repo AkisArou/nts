@@ -553,11 +553,7 @@ fn dispatch_contexts(
                     if param.ty == HirType::Erased {
                         *value
                     } else {
-                        builder.push(
-                            OpKind::Unerase { value: *value },
-                            param.ty.clone(),
-                            origin.clone(),
-                        )
+                        builder.push(OpKind::unerase(*value), param.ty.clone(), origin.clone())
                     }
                 })
                 .collect();
@@ -669,7 +665,7 @@ fn emit_guard(
                         })?),
                     ),
                 };
-                let actual = builder.push(OpKind::Unerase { value }, ty.clone(), origin.clone());
+                let actual = builder.push(OpKind::unerase(value), ty.clone(), origin.clone());
                 let expected = builder.push(kind, ty.clone(), origin.clone());
                 let equal = {
                     let equal = builder.push(

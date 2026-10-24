@@ -937,6 +937,17 @@ pub struct Op {
     pub origin: Origin,
 }
 
+impl OpKind {
+    /// A payload projection with no backend-specific failure contract.
+    #[must_use]
+    pub const fn unerase(value: ValueId) -> Self {
+        Self::Unerase {
+            value,
+            failure: None,
+        }
+    }
+}
+
 /// A parameter a bridge receives as a boxed record's pointer: its index among
 /// the bridge's C parameters, and the function answering the record's `GType`
 /// (`schema::boxed`, the one derivation the result path reads too).
@@ -1364,6 +1375,10 @@ pub enum OpKind {
     /// it is emitted from one function and nowhere else.
     Unerase {
         value: ValueId,
+        /// Core's named stop when a backend cannot represent this payload
+        /// view. A backend must use it instead of exposing a host cast error.
+        /// Ordinary projections whose representation is proved carry none.
+        failure: Option<String>,
     },
     Binary {
         op: BinOp,
@@ -3336,6 +3351,10 @@ pub struct Program {
     /// One declaration covers all of its used instantiations; their schema
     /// IDs survive canonicalization so later access plans retain each contract.
     pub interface_identities: Vec<InterfaceIdentity>,
+    /// Anonymous object contracts asserted over erased values. They are faces
+    /// even without a declared interface identity, and keep that identity when
+    /// their physical storage merges. Backends consume [`Self::structural_faces`].
+    pub cast_faces: std::collections::BTreeSet<TypeId>,
     /// Variables declared at module scope, indexed by [`OpKind::GlobalGet`].
     pub globals: Vec<Global>,
     /// The memory discipline this program was lowered under.
@@ -4053,6 +4072,15 @@ impl Program {
         self.interface_identities
             .iter()
             .find_map(|identity| identity.names.get(&ty).map(String::as_str))
+    }
+
+    /// Every declared or anonymous structural face, independent of storage.
+    /// An erased cast adds a face in lowering, never a nominal declaration.
+    pub fn structural_faces(&self) -> impl Iterator<Item = TypeId> + '_ {
+        self.interface_identities
+            .iter()
+            .flat_map(|identity| identity.types.iter().copied())
+            .chain(self.cast_faces.iter().copied())
     }
 
     /// The layout of an object type.
@@ -4810,7 +4838,7 @@ fn reference_arguments(
                     {
                         OpKind::ConstNull
                     } else {
-                        OpKind::Unerase { value: *raw }
+                        OpKind::unerase(*raw)
                     },
                     ty: parameter.ty.clone(),
                     origin: func.values[index].origin.clone(),
@@ -4884,7 +4912,7 @@ fn sole_typed_result_read(func: &Func, answer: ValueId, returns: &HirType) -> Op
             // A known reference producer must remain visible to the backend's
             // typed store check even when the declared view has another class.
             (value.ty == *returns || (value.ty.is_managed() && returns.is_managed()))
-                && matches!(value.kind, OpKind::Unerase { value } if value == answer)
+                && matches!(value.kind, OpKind::Unerase { value , .. } if value == answer)
                 && !read_elsewhere(func, answer, *op)
         })
 }
@@ -5085,7 +5113,7 @@ pub(super) fn carried_values(func: &Func, value: ValueId) -> impl Iterator<Item 
         }
         match op.kind {
             OpKind::Erase { value, .. }
-            | OpKind::Unerase { value }
+            | OpKind::Unerase { value, .. }
             | OpKind::Convert(value)
             | OpKind::NativeStringView { string: value }
             | OpKind::FieldView { value, .. } => {
@@ -8447,7 +8475,7 @@ mod tests {
             if literal_null {
                 assert!(matches!(input.kind, OpKind::ConstNull));
             } else {
-                assert!(matches!(input.kind, OpKind::Unerase { value } if value == raw));
+                assert!(matches!(input.kind, OpKind::Unerase { value , .. } if value == raw));
             }
         }
     }

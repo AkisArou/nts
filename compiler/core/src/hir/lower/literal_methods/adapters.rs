@@ -398,7 +398,7 @@ fn checked_result(
     builder.runtime_call("nts_refused", vec![message], HirType::Void, origin.clone());
     builder.terminate(Terminator::Unreachable);
     builder.switch_to(valid);
-    Some(builder.push(OpKind::Unerase { value }, ty.clone(), origin))
+    Some(builder.push(OpKind::unerase(value), ty.clone(), origin))
 }
 
 fn tag_test(builder: &mut FuncBuilder, at: NodeId, value: ValueId, tag: u32) -> ValueId {

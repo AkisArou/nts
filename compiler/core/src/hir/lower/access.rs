@@ -75,6 +75,12 @@ fn source(probe: &FuncBuilder<'_>, mut node: NodeId) -> NodeId {
 
 fn nullable(probe: &FuncBuilder<'_>, receiver: NodeId) -> bool {
     let receiver = source(probe, receiver);
+    if probe
+        .read_type(receiver)
+        .is_some_and(|ty| probe.hierarchy.cast_faces.contains(&ty))
+    {
+        return true;
+    }
     (probe.type_of(receiver) == Some(HirType::Erased)
         && probe.read_type(receiver).is_none_or(|ty| {
             probe

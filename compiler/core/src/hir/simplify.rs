@@ -297,7 +297,7 @@ fn erasure_round_trips(ty: &HirType) -> bool {
 fn erased_tags(func: &mut Func) -> usize {
     let mut folded = 0;
     for index in 0..func.values.len() {
-        if let OpKind::Unerase { value } = func.values[index].kind
+        if let OpKind::Unerase { value, .. } = func.values[index].kind
             && matches!(
                 func.values[value.0 as usize].kind,
                 OpKind::ConstNull | OpKind::ConstUndefined
@@ -308,7 +308,7 @@ fn erased_tags(func: &mut Func) -> usize {
             folded += 1;
             continue;
         }
-        if let OpKind::Unerase { value } = func.values[index].kind
+        if let OpKind::Unerase { value, .. } = func.values[index].kind
             && let OpKind::Erase { value: source, .. } = func.values[value.0 as usize].kind
             && matches!(func.values[source.0 as usize].ty, HirType::Int { bits, .. } if bits <= 32)
             && func.values[index].ty == (HirType::Float { bits: 64 })
@@ -378,7 +378,7 @@ fn identity(func: &Func, value: ValueId) -> Option<ValueId> {
         // preserves every value. A BigInt keeps every bit; a double, a boolean,
         // a reference and a 32-bit integer survive the double an erased number
         // is. A wider native integer does not -- it can round -- so it stays.
-        OpKind::Unerase { value } => {
+        OpKind::Unerase { value, .. } => {
             let OpKind::Erase { value: source, .. } = func.value(*value).kind else {
                 return None;
             };
@@ -453,7 +453,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
 
         OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
-        | OpKind::Unerase { value }
+        | OpKind::Unerase { value, .. }
         | OpKind::InstanceOf { value, .. }
         | OpKind::SharedFieldGet { value, .. }
         | OpKind::OpenFieldGet { object: value, .. } => {

@@ -3163,9 +3163,19 @@ impl Emitter<'_> {
         pool: &mut Pool,
         value: ValueId,
         ty: &HirType,
+        failure: Option<&str>,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<(), Diagnostic> {
-        let Some(target) = crate::hierarchy::held_cast(self.program, ty) else {
+        let message = if let Some(failure) = failure {
+            failure.to_owned()
+        } else if let Some(target) = crate::hierarchy::held_cast(self.program, ty) {
+            format!(
+                "reading a value back as `{}` from a class that fits it by shape without \
+                 extending it -- `{}` carries state, so this backend emits it as a class, and \
+                 the cast would throw",
+                target.name, target.name
+            )
+        } else {
             return Ok(());
         };
         let Some(descriptor) = types::descriptor(self.shape, ty) else {
@@ -3184,16 +3194,7 @@ impl Emitter<'_> {
         }
         code.instance_of(origin, pool, &descriptor);
         code.branch_zero(origin, Compare::Ne, fits);
-        code.const_string(
-            origin,
-            pool,
-            &format!(
-                "reading a value back as `{}` from a class that fits it by shape without \
-                 extending it -- `{}` carries state, so this backend emits it as a class, and \
-                 the cast would throw",
-                target.name, target.name
-            ),
-        );
+        code.const_string(origin, pool, &message);
         code.invoke_static(origin, pool, RUNTIME, "refused", "(Ljava/lang/String;)V");
         code.const_null(origin);
         code.athrow(origin);
@@ -3785,7 +3786,7 @@ impl Emitter<'_> {
                 self.adapt_to(code, Kind::Int, result, origin)?;
                 Ok(Placed::OnStack)
             }
-            OpKind::Unerase { value } if self.fused.contains(value) => {
+            OpKind::Unerase { value, .. } if self.fused.contains(value) => {
                 self.load(code, pool, *value)?;
                 let target = types::kind(ty)
                     .ok_or_else(|| refuse(self.func, "unerasing to an unrepresentable type"))?;
@@ -3799,13 +3800,13 @@ impl Emitter<'_> {
                 }
                 Ok(Placed::OnStack)
             }
-            OpKind::Unerase { value } if self.unboxed.contains(value) => {
+            OpKind::Unerase { value, failure } if self.unboxed.contains(value) => {
                 // Refused before the test is written, so a body this declines
                 // leaves nothing behind: the test's message reached the
                 // constant pool before the refusal discarded the code, and five
                 // modules' `Program` carried a string no instruction loaded.
                 self.refuse_impossible_cast(ty)?;
-                self.test_held_cast(code, pool, *value, ty, origin)?;
+                self.test_held_cast(code, pool, *value, ty, failure.as_deref(), origin)?;
                 // The reference is already the value; the narrowing the middle
                 // end proved still has to be spelled for the verifier.
                 self.load(code, pool, *value)?;
@@ -3816,10 +3817,10 @@ impl Emitter<'_> {
                 }
                 Ok(Placed::OnStack)
             }
-            OpKind::Unerase { value } => {
+            OpKind::Unerase { value, failure } => {
                 // Before the test, as in the arm above.
                 self.refuse_impossible_cast(ty)?;
-                self.test_held_cast(code, pool, *value, ty, origin)?;
+                self.test_held_cast(code, pool, *value, ty, failure.as_deref(), origin)?;
                 self.load(code, pool, *value)?;
                 match ty {
                     HirType::Bool => code.invoke_static(

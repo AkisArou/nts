@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: the field `toFixed` read through structural cast `{ toFixed?: unknown }` at nts-workspace:///src/main.ts:7:26 on a value whose kind supplies no accessor for it",
+  "node": null,
+  "measured_with": "b5340c23af62d807",
+  "source": "measured"
+}

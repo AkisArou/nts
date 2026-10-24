@@ -172,7 +172,7 @@ fn number_value() -> Func {
     let a = b.array(F64, &[ten, twenty]);
     let erased = b.erase(a);
     let read = b.element(erased);
-    let number = b.op(OpKind::Unerase { value: read }, F64);
+    let number = b.op(OpKind::unerase(read), F64);
     b.finish(number)
 }
 

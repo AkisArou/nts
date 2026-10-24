@@ -1428,12 +1428,7 @@ impl<'a> Builder<'a> {
     }
 
     fn object(&mut self, ty: TypeId) -> Result<NodeId, String> {
-        if let Some(interface) = self
-            .program
-            .interface_identities
-            .iter()
-            .find(|i| i.types.contains(&ty))
-        {
+        if self.program.structural_faces().any(|face| face == ty) {
             // An interface with no fields holds nothing a layout must agree
             // on, so its values are any object: the root. Its calls read rows.
             let fieldless = self
@@ -1460,7 +1455,9 @@ impl<'a> Builder<'a> {
             if self.program.interface_access.prefix_receivers(ty).is_none() {
                 return Err(format!(
                     "interface `{}`, whose prefix receivers the plan does not name",
-                    interface.name
+                    self.program
+                        .layout(ty)
+                        .map_or_else(|| format!("{ty:?}"), |layout| layout.name.clone())
                 ));
             }
         }
@@ -1657,27 +1654,25 @@ impl<'a> Builder<'a> {
     fn faces_holding(&self, at: usize) -> Result<Vec<(usize, TypeId)>, String> {
         let layout = &self.program.layouts[at];
         let mut faces: Vec<(usize, TypeId)> = Vec::new();
-        for identity in &self.program.interface_identities {
-            for &face in &identity.types {
-                let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
-                    continue;
-                };
-                if !receivers.iter().any(|ty| layout.types.contains(ty)) {
-                    continue;
-                }
-                let face_at = self
-                    .program
-                    .layouts
-                    .iter()
-                    .position(|l| l.types.contains(&face))
-                    .ok_or_else(|| format!("interface type {face:?} has no layout"))?;
-                // An interface with no fields is the root, above every layout.
-                if self.program.layouts[face_at].fields.is_empty() {
-                    continue;
-                }
-                if face_at != at && !faces.iter().any(|(known, _)| *known == face_at) {
-                    faces.push((face_at, face));
-                }
+        for face in self.program.structural_faces() {
+            let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
+                continue;
+            };
+            if !receivers.iter().any(|ty| layout.types.contains(ty)) {
+                continue;
+            }
+            let face_at = self
+                .program
+                .layouts
+                .iter()
+                .position(|l| l.types.contains(&face))
+                .ok_or_else(|| format!("interface type {face:?} has no layout"))?;
+            // An interface with no fields is the root, above every layout.
+            if self.program.layouts[face_at].fields.is_empty() {
+                continue;
+            }
+            if face_at != at && !faces.iter().any(|(known, _)| *known == face_at) {
+                faces.push((face_at, face));
             }
         }
         faces.sort_by_key(|(face_at, _)| {
@@ -1784,49 +1779,47 @@ impl<'a> Builder<'a> {
     /// interface's storage, or the plan is refused by name: a positional read
     /// through the interface is only valid on such storage.
     fn check_face_chains(&self) -> Result<(), String> {
-        for identity in &self.program.interface_identities {
-            for &face in &identity.types {
-                let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
-                    continue;
-                };
-                let Some(face_at) = self
+        for face in self.program.structural_faces() {
+            let Some(receivers) = self.program.interface_access.prefix_receivers(face) else {
+                continue;
+            };
+            let Some(face_at) = self
+                .program
+                .layouts
+                .iter()
+                .position(|l| l.types.contains(&face))
+            else {
+                continue;
+            };
+            let Some(&face_node) = self.objects.get(&face_at) else {
+                continue;
+            };
+            for receiver in receivers {
+                let Some(at) = self
                     .program
                     .layouts
                     .iter()
-                    .position(|l| l.types.contains(&face))
+                    .position(|l| l.types.contains(receiver))
                 else {
                     continue;
                 };
-                let Some(&face_node) = self.objects.get(&face_at) else {
+                let Some(&node) = self.objects.get(&at) else {
                     continue;
                 };
-                for receiver in receivers {
-                    let Some(at) = self
-                        .program
-                        .layouts
-                        .iter()
-                        .position(|l| l.types.contains(receiver))
-                    else {
-                        continue;
-                    };
-                    let Some(&node) = self.objects.get(&at) else {
-                        continue;
-                    };
-                    let mut current = Some(node);
-                    let mut found = false;
-                    while let Some(here) = current {
-                        if here == face_node {
-                            found = true;
-                            break;
-                        }
-                        current = self.nodes[here.0].base;
+                let mut current = Some(node);
+                let mut found = false;
+                while let Some(here) = current {
+                    if here == face_node {
+                        found = true;
+                        break;
                     }
-                    if !found {
-                        return Err(format!(
-                            "`{}` is held as a prefix of interface `{}`, but its storage does not extend the interface's",
-                            self.program.layouts[at].name, identity.name
-                        ));
-                    }
+                    current = self.nodes[here.0].base;
+                }
+                if !found {
+                    return Err(format!(
+                        "`{}` is held as a prefix of interface `{}`, but its storage does not extend the interface's",
+                        self.program.layouts[at].name, self.program.layouts[face_at].name
+                    ));
                 }
             }
         }

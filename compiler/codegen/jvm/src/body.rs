@@ -166,8 +166,9 @@ fn puts_label(program: &JvmProgram<'_>, func: &Func, value: ValueId) -> bool {
         // the unerase and the cast reloaded it after the label, where this
         // walk had left it `Top`: "Type top (current frame, locals[1])", and
         // eight runtime modules did not verify.
-        OpKind::Unerase { .. } => {
-            crate::hierarchy::held_cast(program, &func.values[value.0 as usize].ty).is_some()
+        OpKind::Unerase { failure, .. } => {
+            failure.is_some()
+                || crate::hierarchy::held_cast(program, &func.values[value.0 as usize].ty).is_some()
         }
         // FieldView is a reference identity with no labels or scratch slot;
         // its emitter stops at the transfer before any downstream assignment.
@@ -244,7 +245,7 @@ fn crossing_values(
             // label** -- twice for the test, once for the cast after `fits` --
             // and is written only after it, so the operand crosses and the
             // result, like a comparison's, does not.
-            if let OpKind::Unerase { value: operand } = func.values[value.0 as usize].kind
+            if let OpKind::Unerase { value: operand, .. } = func.values[value.0 as usize].kind
                 && puts_label(program, func, value)
             {
                 crosses.insert(operand);
@@ -1012,7 +1013,7 @@ mod tests {
                         HirType::Managed(ManagedType::Object(TypeId(1))),
                     ),
                     op(
-                        OpKind::Unerase { value: ValueId(0) },
+                        OpKind::unerase(ValueId(0)),
                         HirType::Managed(ManagedType::Object(TypeId(0))),
                     ),
                 ],

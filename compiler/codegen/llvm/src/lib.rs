@@ -4543,7 +4543,7 @@ fn tagging(
         // Reading the payload back, at the type the checker narrowed to.
         // Unchecked by construction, exactly as the C backend's union read is:
         // the licence comes from the narrowing and from nothing else.
-        OpKind::Unerase { value } => {
+        OpKind::Unerase { value, .. } => {
             let bits = format!("{out}.bits");
             let read = format!("{bits} = extractvalue {ERASED_TYPE} {}, 1", name(*value));
             // A handle is checked, unconditionally, as the C backend's is: its

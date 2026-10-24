@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "aborted",
+  "nts": "nts: refused at run time: the field `stack` read through structural cast `{ stack?: string }` at nts-workspace:///src/main.ts:11:25 on an object whose layout supplies no accessor for it",
+  "node": null,
+  "measured_with": "b5340c23af62d807",
+  "source": "measured"
+}
