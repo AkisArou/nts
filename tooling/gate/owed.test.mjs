@@ -430,11 +430,13 @@ test("without cargo, a path in a crate or compiled into one owes the full gate",
   assert.ok(got.docs < got.all, "a path no crate holds is not escalated");
 });
 
-test("the landing tools owe what every change owes; the registry owes the gate's tests; the inputs owe everything", () => {
+test("land.ts and the registry owe tooling tests; lane.ts owes the baseline; the inputs owe everything", () => {
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
-  for (const p of ["tooling/lanes/land.ts", "tooling/lanes/lane.ts"]) {
-    assert.deepEqual([...stepsFor(p)].sort(), always, p);
-  }
+  // land.ts imports retire.ts and topics.ts, which tooling tests. Its derived
+  // reach now includes tooling as well as the steps every change owes.
+  // The current graph does not execute lane.ts itself in a tooling test.
+  assert.deepEqual([...stepsFor("tooling/lanes/land.ts")].sort(), [...new Set([...always, "tooling"])].sort());
+  assert.deepEqual([...stepsFor("tooling/lanes/lane.ts")].sort(), always);
   owes("tooling/lanes/lanes.json", ["tooling"]);
   assert.ok(stepsFor("tooling/lanes/lanes.json").length < landing().length, "lanes.json owes the full gate");
   // pinned.sh builds every gate tree through it.
