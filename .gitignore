@@ -81,8 +81,8 @@ node_modules
 .nts/
 tsconfig.nts.json
 # Written by `nts build` before 2026-10-07 beside a project that used a
-# platform's packages. The config adding their files is served to tsgo now
-# (`open_adding`) and never written; these are ignored for trees that still
+# platform's packages. Generated roots now go straight to the in-process
+# frontend and are never written; these are ignored for trees that still
 # hold one.
 tsconfig.gir.json
 tsconfig.objc.json

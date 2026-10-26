@@ -31,7 +31,7 @@ impl Converter<'_> {
         node
     }
 
-    /// An opaque node of `type_name` spanning the tsgo node `id`.
+    /// An opaque node of `type_name` spanning the syntax node `id`.
     pub(super) fn raw(&self, type_name: &str, id: NodeId) -> RawNode {
         self.raw_span(type_name, id, self.start(id), self.end(id))
     }
@@ -170,7 +170,7 @@ impl Converter<'_> {
             .token_before(self.start(type_id), ':')
             .unwrap_or_else(|| self.start(type_id));
         let mut node = self.raw_value("TSTypeAnnotation", type_id, start, end);
-        // One tsgo node, two Babel nodes: the annotation keeps no id of its own.
+        // One syntax node, two Babel nodes: the annotation keeps no id of its own.
         node.remove("_nodeId");
         node.insert("typeAnnotation".to_owned(), self.type_value(type_id));
         RawNode::from_value(&Value::Object(node))

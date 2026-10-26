@@ -276,7 +276,7 @@ mod tests {
     /// whole and together, with
     /// their values files: the check a package's `// @ts-nocheck` spares
     /// every program that uses it, made here once, over the namespaces the
-    /// lane's examples import. Needs tsgo and the metadata, and says nothing
+    /// lane's examples import. Needs the metadata, and says nothing
     /// on a machine without them.
     #[test]
     #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]

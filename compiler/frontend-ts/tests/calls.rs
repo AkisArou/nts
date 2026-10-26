@@ -152,14 +152,14 @@ fn tagged_templates_resolve_through_the_same_call_target_table() {
 }
 
 #[test]
-fn syntax_kinds_still_match_the_pinned_tsgo() {
+fn syntax_kinds_match_the_native_frontend() {
     use nts_semantic_schema::NodeKind::Syntax;
     use nts_semantic_schema::syntax;
 
     let snapshot = snapshot();
 
-    // The kind numbers were read off a real encoded program rather than
-    // transcribed. A tsgo bump that renumbers them should fail here rather than
+    // The kind numbers are read off a real native capture rather than
+    // transcribed. A frontend update that renumbers them should fail here rather than
     // silently classify call expressions as something else.
     let has = |kind: u16| snapshot.nodes.iter().any(|n| n.kind == Syntax(kind));
     assert!(has(syntax::SOURCE_FILE), "SOURCE_FILE");

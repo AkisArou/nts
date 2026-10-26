@@ -12,7 +12,7 @@ use nts_semantic_schema::{
 
 use super::FuncBuilder;
 
-// tsgo's CallSignature kind, unnamed in the shared syntax table.
+// The shared CallSignature kind, unnamed in the shared syntax table.
 const CALL_SIGNATURE: u16 = 180;
 
 // Keep the original scan as an independent oracle when production switches

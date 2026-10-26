@@ -81,9 +81,9 @@ fn available() -> bool {
     }
     assert!(
         std::env::var_os("NTS_TESTS_REQUIRE_TOOLING").is_none(),
-        "needs tsgo, clang, pkg-config and cairo-gobject headers"
+        "needs clang, pkg-config and cairo-gobject headers"
     );
-    eprintln!("skipped: needs tsgo, clang, pkg-config and cairo-gobject headers");
+    eprintln!("skipped: needs clang, pkg-config and cairo-gobject headers");
     false
 }
 

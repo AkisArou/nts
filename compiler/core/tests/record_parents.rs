@@ -169,10 +169,9 @@ fn a_classs_extends_stays_in_layout_base() {
     );
 }
 
-/// **A skipped test reports `ok`.** Both tests above return early when `tsgo` is
-/// not built, and a run that measured nothing is indistinguishable from a run
-/// that passed -- which this repository has been bitten by. This one fails
-/// instead, so a green `record_parents` means the fixture was actually lowered.
+/// **A skipped test reports `ok`.** Before the native switch the tests above
+/// returned early without a built frontend. This guard also rejects an empty
+/// result, so a green `record_parents` means the fixture was actually lowered.
 #[test]
 fn the_fixture_lowered_at_all() {
     let lowered = lowered();

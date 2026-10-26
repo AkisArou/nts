@@ -1,4 +1,4 @@
-// The frontend oracle: our tsgo converter against Babel's own parse.
+// The frontend oracle: our syntax converter against Babel's own parse.
 //
 // For each file, parse it with @babel/parser (TypeScript, plus JSX for .tsx)
 // and compare that AST with `nts-react convert`'s output node by node. Both

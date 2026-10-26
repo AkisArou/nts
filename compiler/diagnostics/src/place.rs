@@ -219,8 +219,7 @@ impl FileLocations {
 ///
 /// A refusal without a location is a scavenger hunt: the message says what is
 /// not supported and the program says nothing about where. Offsets are what the
-/// snapshot carries, in UTF-16 code units, because that is what tsgo's encoded
-/// AST carries. This wrapper builds a one-file [`SourceLocations`] view;
+/// snapshot carries, in UTF-16 code units, matching the frontend syntax views. This wrapper builds a one-file [`SourceLocations`] view;
 /// printers with many positions share one view across their whole batch.
 ///
 /// **`sources` rather than the snapshot** so that this crate needs no dependency

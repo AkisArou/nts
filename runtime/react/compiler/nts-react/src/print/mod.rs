@@ -407,7 +407,7 @@ fn renamed_references(
 /// Every node of the original program with an id, as JSON, to tell an
 /// unchanged node from a changed one; and where each JSX element and
 /// fragment is, with its id. Where two nodes share an id -- a self-closing
-/// element and its opening element are one tsgo node -- the id names the
+/// element and its opening element are one syntax node -- the id names the
 /// outer one.
 fn index_nodes(value: &Value, into: &mut FxHashMap<u64, Value>, jsx: &mut Vec<(u32, u32, u64)>) {
     match value {
@@ -601,7 +601,7 @@ impl Printer<'_> {
             .map_or(&[], Vec::as_slice)
     }
 
-    /// The tsgo node `base` is: its own id, or, for a node the compiler
+    /// The syntax node `base` is: its own id, or, for a node the compiler
     /// generated from one the user wrote, the id of the original node with
     /// its span -- how a checker question about compiled code is asked.
     fn original_id(&self, base: &BaseNode) -> Option<u32> {

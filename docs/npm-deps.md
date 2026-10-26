@@ -1,5 +1,9 @@
 # npm dependencies — what is actually there
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 This file used to be an unmeasured argument: it described where a compiler
 might look for a package's original TypeScript, in a plausible order, and
 recommended building a source-acquisition layer in front of the compiler.

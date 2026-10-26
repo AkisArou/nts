@@ -1,5 +1,9 @@
 # npm dependencies — what to do about it
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 Companion to [`npm-deps.md`](npm-deps.md), which records what is true. This
 file records what to do about it, and why in that order.
 

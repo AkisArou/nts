@@ -1,5 +1,9 @@
 # The Apple lane's goal
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 Written 2026-09-23 by the Apple lane session. It works beside MainClaude
 (language features, test262) and the GTK lane. The user decided three things:
 

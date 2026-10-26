@@ -20,9 +20,10 @@
 // load, and CPU time with which kind of core the process landed on -- one
 // module read 2.2x its recorded CPU time under a gate's load with nothing
 // changed, while its instruction count repeats within half a percent. Only
-// the compiler process is counted (`--no-inherit`), not the frontend (tsgo) or
-// anything else it starts, and with the snapshot cache off: a miss that
-// stores the snapshot took runtime/node/assert from 291 G to 524 G. The floor
+// the compiler process is counted (`--no-inherit`), including the in-process
+// native frontend, but not external children. Pre-switch counts excluded tsgo;
+// its snapshot-cache miss took runtime/node/assert from 291 G to 524 G. Those
+// historical counts are not native-frontend measurements. The floor
 // keeps the smallest modules out of it. CPU seconds are printed beside, for
 // the reader.
 //

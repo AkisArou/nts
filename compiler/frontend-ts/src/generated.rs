@@ -8,8 +8,8 @@
 //! program's original roots.
 //!
 //! Only the opening changes. Everything else keyed on the project's config --
-//! its directory, the `nts.config.ts` beside it, the snapshot cache -- still
-//! reads the project's, which is what the caller passed.
+//! its directory and the `nts.config.ts` beside it -- still reads the project's,
+//! which is what the caller passed. The native frontend has no snapshot cache.
 
 use camino::{Utf8Path, Utf8PathBuf};
 

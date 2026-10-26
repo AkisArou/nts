@@ -2026,7 +2026,7 @@ Do not disable all `Layout` work merely because it shares a name with byte layou
 ### Prepared-HIR evidence
 
 Ran the exact pinned binary for the scanned revision, serially, with the shared
-`NTS_TSGO`, against eight projects using `nts hir --prepared`. Compiler SHA-256:
+the pre-switch `NTS_TSGO`, against eight projects using `nts hir --prepared`. Compiler SHA-256:
 `9dcae4df007c2489af18a602c3e58cf16bc2b38939eb00e2ca67afab5a2604a7`.
 All commands exited 0; their stderr was empty. This is inspection evidence,
 not an emission or differential verdict. The CLI's HIR dump can display an

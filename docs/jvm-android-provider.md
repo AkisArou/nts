@@ -1,5 +1,9 @@
 # The JVM and Android provider lane
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 What this lane owns, what it refuses, and where the evidence for each claim is.
 Written for whoever picks it up next, on the assumption they will want to know
 which numbers were measured and which were argued.

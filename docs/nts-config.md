@@ -274,14 +274,14 @@ numbering. It is still rejected, for three reasons:
 - **It is the idiom for aliasing a project's own modules**, not for a platform.
 
 **`types` must be listed.** TypeScript 6 changed `compilerOptions.types` to
-default to `[]`, and tsgo is TypeScript 7: an installed `@types` package is not
+default to `[]`: an installed `@types` package is not
 included by itself (measured: `TS2307` until listed). So a project lists its
 platform package, one line as `@types/node` now needs. `nts build`, `--watch`
 and the language server add it themselves from `nts.config.ts`'s targets,
-through the frontend's generated-roots hook (`tsgo::generated`), so the line is
+through the frontend's generated-roots hook (`frontend-ts::generated`), so the line is
 only for tools that do not ask nts.
 
-**A surface package says so, and the frontend reads it.** Anything tsgo marks
+**A surface package says so, and the frontend reads it.** Anything the frontend marks
 `is_from_external_library` is skipped by `compiled_files`, which is the npm
 lane's rule that code under `node_modules` is not lowered. Measured: a binding
 moved into `node_modules/@types` typechecks, and every class in it is then "of
@@ -372,7 +372,7 @@ cannot tell which it got.
 **Declaration merging across files.** A Swift extension -- UIKit's
 `NSIndexPath.row` on a Foundation class -- is a second `declare module
 "objc:Foundation" { interface NSIndexPath { ... } }` block in UIKit's package,
-which tsgo merges. Measured: the frontend keeps only the declarations of the
+which the checker merges. Measured before the native switch: the frontend keeps only the declarations of the
 first file it decodes (`symbols::intern_declared`, `Deferred::attach`), so the
 class declaration was dropped and `NSString` refused as unrepresentable. The
 frontend now records every file's declarations of a merged symbol
@@ -401,8 +401,9 @@ member tagged `@ntsFramework Foundation UIKit`, since the method is only
 there when UIKit is loaded -- and the platform's binder generates that
 package again with them. Instance members still merge as interfaces, in the
 adding framework's own package.
-Then `--watch` and a language-server proxy over tsgo's own (`cmd/tsgo/lsp.go`),
-which publishes nts's refusals as editor diagnostics beside the checker's.
+A language-server integration remains future work. The pre-switch proposal to
+proxy tsgo's language server is obsolete; nts's refusals still need to appear
+beside checker diagnostics.
 
 **What this replaces.** The Apple lane's bindings derived from a program's
 imports (`objc_bindings`, 2026-09-26) stop being the default for platform

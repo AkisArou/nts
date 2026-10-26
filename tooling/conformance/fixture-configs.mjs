@@ -4,7 +4,8 @@
 //   node tooling/conformance/fixture-configs.mjs
 //
 // **A tsconfig whose `extends` resolves to nothing is not an error anywhere.**
-// TypeScript reports it, tsgo carries on, and `nts` never sees it -- so the
+// Before the native switch TypeScript reported it, tsgo carried on, and nts
+// never saw it -- so the
 // fixture compiles under whatever the defaults are instead of under the config
 // its directory says it uses. Nothing in the gate could tell the difference,
 // because every downstream step reads the *result* of compiling and the result

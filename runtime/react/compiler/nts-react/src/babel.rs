@@ -3,7 +3,7 @@
 //! Upstream's Babel plugin hands the compiler a Babel AST and its scope
 //! information as JSON (compiler/packages/babel-plugin-react-compiler-rust).
 //! Accepting the same input is what lets the parity harness run this crate and
-//! upstream's addon on identical bytes, and it is the oracle the tsgo frontend
+//! upstream's addon on identical bytes, and it is the oracle the native frontend
 //! is measured against.
 
 use anyhow::{Context, Result};

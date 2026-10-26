@@ -33,7 +33,7 @@ ledger records pass or fail for each test. When React releases a new version,
 we move the pin and review which tests changed.
 
 **Application code** goes through three steps:
-1. **tsgo** checks the original TS/TSX. Types come from this checked program.
+1. **The native frontend** checks the original TS/TSX. Types come from this checked program.
 2. **React Compiler** runs, using upstream's Rust port.
 3. **Typed JSX lowering** runs, as the lane's own pass.
 

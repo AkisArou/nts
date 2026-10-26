@@ -57,8 +57,8 @@ fn faces(lowered: &hir::lower::Lowered) -> Vec<(String, String)> {
     rows
 }
 
-/// **The anti-skip arm.** A test that returns early without `tsgo` reports `ok`,
-/// and a filler that produced an empty map would pass every assertion below on an
+/// **The anti-skip arm.** Before the native switch a missing frontend could
+/// return early and report `ok`. An empty map would pass every assertion on an
 /// empty collection — which is the shape of the failure this whole field exists
 /// to stop. So the first thing checked is that the pass ran at all.
 #[test]

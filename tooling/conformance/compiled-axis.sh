@@ -161,7 +161,7 @@ for dir in "${dirs[@]}"; do
     #
     # Both arms are read by `awk` into a list of pass names, and a run that died produces an
     # empty list -- indistinguishable from a run where nothing passed. A peer lost an hour to
-    # exactly this shape on a different instrument: the command exited 1 with
+    # exactly this shape on a pre-switch instrument: the command exited 1 with
     # `No version is set for command tsgo`, printed nothing, and a filter for `NTS1[0-9]{3}`
     # reported a clean bill. **A filter over a stream that was never produced looks like a
     # filter over a stream with nothing in it.**

@@ -1,5 +1,9 @@
 # TypeScript and Java, in both directions
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 A plan for `nts bind` and its opposite, written to be argued with. Every claim
 marked **measured** was checked against this tree on 2026-09-13; everything else
 is a proposal and says so. The point of separating them is that this lane has

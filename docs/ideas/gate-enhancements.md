@@ -54,7 +54,7 @@ concurrent gates are two pools, each believing it owns the machine:
 - **CPU:** each run takes about twice as long. Because the work is CPU-bound,
   two gates side by side finish at about the same time as two in a row.
 - **Memory:** budgets are oversubscribed. This machine hit a global OOM on
-  2026-10-11 (one `tsgo` held about 11 GiB).
+  2026-10-11, before the native switch (one `tsgo` held about 11 GiB).
 - **Timing:** checks that compare against recorded baselines get noisier
   (`compile-times.tsv`, `times.tsv`).
 
@@ -109,7 +109,7 @@ Questions to answer before relying on it:
 - **Identical toolchain.** The remote needs:
   - the Rust toolchain pinned by `rust-toolchain.toml`;
   - clang (and zig where used), a JDK, Android `d8`, and node 24.20;
-  - `tsgo` built from `third_party/typescript-go`;
+  - the vendored native checker and its upstream corpora, prepared by bootstrap;
   - the test262 checkout under `third_party/test262`;
   - cache-held inputs. `~/.cache/nts/apple`, for instance, holds the macOS
     `libuv.a` interop needs.

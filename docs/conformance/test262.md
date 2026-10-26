@@ -1,5 +1,9 @@
 # Test262: protocol, scope, and NativeTS prerequisites
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 This document records the intended Test262 conformance protocol. The
 tooling-only part now exists **and, as of 2026-09-18, has been run against
 the pinned corpus** -- the inventory, the strict-lane assembly and the

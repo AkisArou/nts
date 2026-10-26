@@ -1,8 +1,8 @@
-//! tsgo's syntax tree, converted into the React Compiler's input: the
+//! the frontend's syntax tree, converted into the React Compiler's input: the
 //! Babel-shaped `react_compiler_ast`, with the node ids and positions a Babel
 //! parse of the same file would give.
 //!
-//! Every Babel node carries the tsgo node it came from as its `_nodeId`, so the
+//! Every Babel node carries the syntax node it came from as its `_nodeId`, so the
 //! scope information and, later, the restoration of types can go from any node
 //! the compiler emits back to the checked program. A construct this converter
 //! does not know is an [`Unsupported`]: the file is then left exactly as
@@ -46,7 +46,7 @@ struct Converter<'a> {
 }
 
 impl Converter<'_> {
-    // ---- reading the tsgo tree -------------------------------------------
+    // ---- reading the syntax tree -------------------------------------------
 
     fn kind(&self, id: NodeId) -> u16 {
         self.nodes.kind(id).unwrap_or(0)
@@ -128,7 +128,7 @@ impl Converter<'_> {
 
     // ---- positions -------------------------------------------------------
 
-    /// Where tsgo's node starts, trivia included.
+    /// Where the frontend's node starts, trivia included.
     fn pos(&self, id: NodeId) -> u32 {
         self.record(id).origin.location.span.start
     }
@@ -138,7 +138,7 @@ impl Converter<'_> {
     }
 
     /// Where Babel says the node starts: its first token. JSX text is its own
-    /// content, whitespace and all, so it starts where tsgo says.
+    /// content, whitespace and all, so it starts where the frontend says.
     fn start(&self, id: NodeId) -> u32 {
         if self.kind(id) == k::JSX_TEXT {
             self.pos(id)
@@ -216,7 +216,7 @@ impl Converter<'_> {
         };
         let mut base = self.base_span(root, 0, end);
         base.node_type = Some("File".to_owned());
-        // The program and the file are one tsgo node; only the program keeps
+        // The program and the file are one syntax node; only the program keeps
         // its id, so no two Babel nodes share one.
         base.node_id = None;
         Ok(File {
@@ -231,7 +231,7 @@ impl Converter<'_> {
 
     /// Every comment in the file, in order.
     ///
-    /// tsgo keeps no comments, but it knows where every token is: a comment can
+    /// the snapshot keeps no comments, but it knows where every token is: a comment can
     /// only sit in a node's leading trivia or in a gap between a node's
     /// children, and those gaps hold nothing but punctuation, keywords and
     /// trivia -- strings, templates, regular expressions and JSX text are all

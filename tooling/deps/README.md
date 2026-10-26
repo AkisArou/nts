@@ -81,9 +81,9 @@ is the contract a lockfile already has.
 
 ## Where the specifiers come from
 
-Not from here. tsgo resolves the program this compiler compiles, so its answer
-is the only one that binds, and `resolution.rs` reads it out of
-`--traceResolution`. That is also strictly better informed than a manifest walk:
+Not from here. The in-process frontend resolves the program this compiler
+compiles, so its answer is the only one that binds. `resolution.rs` reads its
+resolved module records without constructing a semantic checker. That is also strictly better informed than a manifest walk:
 it knows which subpath a program imported, which version each importer got, and
 how a subpath *pattern* expanded.
 
@@ -175,7 +175,7 @@ root is dropped rather than clamped. `tar`'s own map names paths under a bundled
 | `resolve.rs` | finding installed packages, the closure, relative-import resolution |
 | `manifest.rs` | `package.json`, and ranking the files its `exports` offers |
 | `recover.rs` | the routes: shipped TypeScript, source maps, base64, module walk |
-| `resolution.rs` | asking tsgo where every specifier went, and what it complained about |
+| `resolution.rs` | reading the native resolver's module records and config/program diagnostics |
 | `emit.rs` | the vendor tree, the generated config, the lock, pruning |
 | `workspace.rs` | monorepo roots, and telling a sibling from a dependency |
 | `report.rs` | what the developer reads |

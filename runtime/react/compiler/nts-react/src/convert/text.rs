@@ -1,6 +1,6 @@
-//! A source file as tsgo and Babel both count it: in UTF-16 code units.
+//! A source file as the frontend and Babel both count it: in UTF-16 code units.
 //!
-//! tsgo's node `pos` includes the leading trivia (whitespace and comments)
+//! the frontend's node `pos` includes the leading trivia (whitespace and comments)
 //! before the token; Babel's `start` does not. Both count UTF-16 code units, as
 //! a JavaScript string index does, so once the trivia is skipped the two agree.
 

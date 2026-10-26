@@ -455,8 +455,8 @@ judge() {
     fi
     return
   fi
-  # **"Could not run" is not "does not build".** A missing `target/tsgo` -- which
-  # is every run from a worktree -- makes *every* module print `REGRESSED`, and
+  # **"Could not run" is not "does not build".** Before the native switch, a
+  # missing `target/tsgo` made every module print `REGRESSED`, and
   # the reader's first thought is that the compiler broke twenty-six modules at
   # once. The reason line below has always said so underneath, and the verdict
   # word is the half that gets quoted. Same shape as the clang-probe contention
@@ -465,7 +465,7 @@ judge() {
   #
   # Still counted as a failure, because a floor that measured nothing is not a
   # pass. Only the label changes.
-  if printf '%s' "$out" | grep -qE 'could not start|transport failed'; then
+  if printf '%s' "$out" | grep -q 'could not start'; then
     echo "NOT MEASURED -- the frontend could not run"
   else
     echo "REGRESSED -- was building on 2026-09-08 and no longer does"

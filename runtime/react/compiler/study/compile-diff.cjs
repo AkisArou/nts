@@ -1,4 +1,4 @@
-// The end-to-end frontend oracle: the React Compiler on our tsgo-converted
+// The end-to-end frontend oracle: the React Compiler on our frontend-converted
 // input against the same compiler on Babel's input.
 //
 // Upstream's Babel plugin runs over each file, and every call it makes into

@@ -30,6 +30,7 @@ import { cpus, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
+import { pruneTestArtifacts } from "./test-artifacts.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
@@ -152,4 +153,8 @@ const slowest = [...results].sort(([, a], [, b]) => (b.seconds ?? 0) - (a.second
   .map(([k, v]) => `${k.split(" ").pop()} ${Math.round(v.seconds ?? 0)}s`).join(", ");
 console.log(`  ${recorded.length} test binaries, ${doctests} doctest crate(s): ${passed} passed, ${failed} failed, ${ignored} ignored` +
   ` (build and doctests ${Math.round(compiled)} s, binaries ${Math.round((Date.now() - started) / 1000 - compiled)} s at ${JOBS} at once; slowest ${slowest})`);
+if (bad.length === 0) {
+  const pruned = pruneTestArtifacts(recorded.map((r) => r.argv[0]));
+  console.log(`  test cache: removed ${pruned.binaries} obsolete executable(s), ${(pruned.bytes / 2 ** 30).toFixed(2)} GiB; current run kept`);
+}
 process.exit(bad.length === 0 ? 0 : 1);

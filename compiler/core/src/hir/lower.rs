@@ -15248,7 +15248,7 @@ fn initializer_function(
 /// **Not `SymbolFlags::MODULE`.** The obvious test, and it is `SymbolFlags(0)`
 /// for both of `path`'s: measured, `posix` declares `NodeId(14877)` and `win32`
 /// declares `NodeId(17028)`, and both are module roots, with no flag set on
-/// either. The frontend maps tsgo's `MODULE` bit when it sees one and a
+/// either. The frontend maps the checker's `MODULE` bit when it sees one and a
 /// namespace-export symbol arrives without it. Testing the flag first was one
 /// line and published nothing.
 ///
@@ -15256,8 +15256,8 @@ fn initializer_function(
 /// this was written -- it read `NamespaceModule | TypeLiteral` under a comment
 /// saying `ValueModule | NamespaceModule`, so the flag genuinely was unusable,
 /// though not for the reason given above. **Correcting it does not change this
-/// paragraph.** `posix` and `win32` still arrive `SymbolFlags(0)`. Compiling
-/// this module tsgo sets `ValueModule` on nine symbols and `NamespaceModule`
+/// paragraph.** `posix` and `win32` still arrive `SymbolFlags(0)`. Before the
+/// native switch, compiling this module set `ValueModule` on nine symbols and `NamespaceModule`
 /// on none, and not one of the nine is a namespace-export symbol: the broken
 /// constant matched nothing here and the fixed one matches those nine.
 ///
@@ -19908,7 +19908,7 @@ fn short(snapshot: &SemanticSnapshot, ty: TypeId) -> String {
 /// `namespace`.
 ///
 /// Falls back to the number for a kind the table does not carry, which is what
-/// a tsgo bump that adds one would produce.
+/// a frontend update that adds one would produce.
 fn spell(kind: u16, fallback: &str) -> String {
     nts_semantic_schema::syntax::name_of(kind).map_or_else(
         || format!("{fallback} of kind {kind}"),
@@ -57854,8 +57854,8 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Explicit type arguments are flattened in among them --
     /// `new Box<number>(xs)` arrives as `[Box, number, xs]` -- so they are
-    /// dropped by asking the same question tsgo asks. Nothing structural
-    /// distinguishes them: a list is not a node here.
+    /// dropped by asking the frontend for its type-node classification. Nothing
+    /// structural distinguishes them: a list is not a node here.
     /// What a closure stores for a capture, and at what type.
     ///
     /// A cell is stored as itself -- the body unwraps it -- and any other
@@ -64938,8 +64938,8 @@ impl<'a> FuncBuilder<'a> {
     /// # The operator is not a child
     ///
     /// A `BinaryExpression` holds its operator as a real token node, so
-    /// [`Self::children`] returns it. A `PrefixUnaryExpression` does not: tsgo
-    /// stores the operator as a `Kind` *field*, which the encoder packs into the
+    /// [`Self::children`] returns it. A `PrefixUnaryExpression` does not: the
+    /// syntax adapter stores the operator as a `Kind` *field*, which the encoder packs into the
     /// node's small data as a dense index — see
     /// [`syntax::prefix_operator`] for why that index is not a `SyntaxKind`
     /// however firmly the encoder's documentation says it is. The only child is

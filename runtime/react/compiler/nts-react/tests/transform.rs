@@ -49,7 +49,7 @@ fn fixtures() -> Utf8PathBuf {
         .expect("checked in")
 }
 
-/// tsgo's `JsxElement`, `JsxSelfClosingElement` and `JsxFragment` kinds.
+/// the frontend's `JsxElement`, `JsxSelfClosingElement` and `JsxFragment` kinds.
 fn is_jsx(kind: u16) -> bool {
     use nts_react::syntax::kinds as k;
     matches!(

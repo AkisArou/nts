@@ -55,7 +55,7 @@ set -eu
 #
 # Not a copy re-exec, which is the other fix and is wrong here: this script
 # locates the repository from its own path, and a copy in `/tmp` reports
-# `no frontend at /tmp/.../target/tsgo`. That was tried.
+# `no frontend at /tmp/.../target/tsgo` before the native switch. That was tried.
 {
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)

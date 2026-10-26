@@ -1,5 +1,9 @@
 # The GTK lane's goal
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 Written 2026-09-23 by the GTK lane session. It works beside MainClaude, whose
 lane is language features and test262. The user decided the three things below.
 

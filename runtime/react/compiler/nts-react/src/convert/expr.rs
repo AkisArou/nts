@@ -24,9 +24,9 @@ use react_compiler_ast::patterns::PatternLike;
 
 use super::{Converted, Converter, k};
 
-/// A second Babel node made from one tsgo node -- the value beside the key of
-/// `{ a }` -- gets the tsgo id with this bit set, so no two Babel nodes share an
-/// id and either still leads back to its tsgo node.
+/// A second Babel node made from one syntax node -- the value beside the key of
+/// `{ a }` -- gets the syntax id with this bit set, so no two Babel nodes share an
+/// id and either still leads back to its syntax node.
 pub const SECOND_NODE: u32 = 1 << 31;
 
 /// What a function, an arrow and a method have in common.
@@ -379,7 +379,7 @@ impl Converter<'_> {
     }
 
     /// `a.b`, `a[b]`, and their optional-chain forms. In Babel every link of a
-    /// chain after its `?.` is an `OptionalMemberExpression`; tsgo marks those
+    /// chain after its `?.` is an `OptionalMemberExpression`; the frontend marks those
     /// links with the `OptionalChain` flag.
     fn member(&self, id: NodeId) -> Converted<Expression> {
         let base = self.base(id);
@@ -490,7 +490,7 @@ impl Converter<'_> {
                 })
             }
             BinaryKind::Comma => {
-                // `a, b, c` nests to the left in tsgo; Babel flattens it.
+                // `a, b, c` nests to the left in the snapshot; Babel flattens it.
                 let mut expressions = match self.expression(left)? {
                     Expression::SequenceExpression(sequence)
                         if self.kind(left) != k::PARENTHESIZED_EXPRESSION =>

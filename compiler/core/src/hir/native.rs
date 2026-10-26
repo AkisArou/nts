@@ -4389,7 +4389,7 @@ fn returned(
 }
 
 /// Whether `ty` -- or its non-null half -- carries the optional brand
-/// `property` (tsgo's escaped name), as `Owned<T>` and `Consumed<T>` do.
+/// `property` (the checker's escaped name), as `Owned<T>` and `Consumed<T>` do.
 fn branded(snapshot: &SemanticSnapshot, ty: TypeId, property: &str) -> bool {
     let kind = |id: TypeId| snapshot.types.get(id.0 as usize).map(|record| &record.kind);
     let ty = match kind(ty) {
@@ -6001,7 +6001,7 @@ fn branded_members(
     let [property] = properties.as_slice() else {
         return None;
     };
-    // tsgo's escaped name: a source name beginning `__` has one more `_`. And
+    // The checker's escaped name: a source name beginning `__` has one more `_`. And
     // `c:types`' own label, as a scalar kind is `@nts/scalars'`: the integer a
     // `CEnum` or a `CBool` crosses as is a kind the strict check holds a value
     // to, so a property a program wrote under the same name is not one.

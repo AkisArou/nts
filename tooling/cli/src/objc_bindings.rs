@@ -228,7 +228,7 @@ impl Generated for ObjcBindings {
         // from a platform package or was generated from the imports, which
         // `tests/interop/apple-binding.sh` asserts. The config the program
         // was opened through said it while it was written to disk; it is
-        // served to tsgo now (`open_adding`).
+        // supplied as generated roots to the in-process frontend.
         if let Some(files) = &answer {
             let store = tsconfig
                 .parent()

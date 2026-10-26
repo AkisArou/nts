@@ -20,7 +20,7 @@ use nts_frontend_ts::Frontend;
 /// Compile an example to C, link it with a harness, run it.
 ///
 /// Returns `None` when the toolchain is unavailable, so a machine without clang
-/// or a tsgo build skips rather than fails.
+/// skips rather than fails. The frontend is built into the test.
 fn run(example: &str, harness: &str) -> Option<String> {
     let output = build_and_run(example, harness)?;
     assert!(

@@ -38,7 +38,7 @@
 // # Not measured is a failure
 //
 // A module whose parsed count disagrees with its summary, whose command
-// fails, or which emits **nothing**, fails -- a binary that cannot start tsgo
+// fails, or which emits **nothing**, fails -- a compiler that cannot capture its input
 // produces exactly zero, and zero must never read as a module that shrank to
 // nothing cleanly. So does a table row naming a module the tree no longer has,
 // and a module the table has no row for.

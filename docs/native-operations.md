@@ -1,5 +1,9 @@
 # Native operations: example-led semantics
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 This is the working revision of the native-operations part of the
 native-values RFC, `native-values-and-resource-flow.md` (removed; in git history).
 That RFC is design history; its proposed API is not a fixed contract.

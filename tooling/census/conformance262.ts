@@ -593,7 +593,7 @@ function classify(row) {
 const EVIDENCE_FILE = join(HERE, "test262-evidence-codes.json");
 
 // Codes that are evidence although valid JavaScript draws them, each because of
-// a named gap in the pinned tsgo's parser -- the file's header has the rules.
+// a named gap in the pinned native checker's parser -- the file's header has the rules.
 const OVERRIDES_FILE = join(HERE, "test262-evidence-overrides.json");
 const OVERRIDES = existsSync(OVERRIDES_FILE) ? JSON.parse(readFileSync(OVERRIDES_FILE, "utf8")).overrides : [];
 /** The complete native checker identity printed by the compiled binary. */

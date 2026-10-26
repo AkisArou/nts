@@ -254,7 +254,7 @@ pub fn recover_resolved(installed: &Installed, resolved: &[(String, Utf8PathBuf)
 /// Three sources, and the second is the one that carries most packages:
 ///
 /// 1. the file the checker resolved, when it is already an implementation --
-///    a package whose `exports` names TypeScript under a condition tsgo took;
+///    a package whose `exports` names TypeScript under a condition the frontend took;
 /// 2. the declaration's generated sibling: index.d.ts describes index.js.
 ///    Its own unary map identifies the source even when a minified bundle
 ///    omits the entry barrel and embeds dependencies with the same basename;

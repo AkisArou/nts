@@ -1,5 +1,9 @@
 # Test262 as a gap census
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 **This is not a conformance report and contains no pass rate.** It compiles a
 slice of Test262 and records *why* each file fails to lower. Nothing is
 executed, nothing is compared against node, and no refusal is promoted to a

@@ -394,8 +394,8 @@ fn quiet_enough(when: &str) -> Option<String> {
         return None;
     }
     // **With its age, which is the difference between a note and an alarm.**
-    // On 2026-09-12 an `emit-jvm` of `tests/programs/library` blocked in
-    // `anon_pipe_read` waiting on a `tsgo` reply that never came -- zero CPU
+    // Before the native switch, on 2026-09-12 an `emit-jvm` of
+    // `tests/programs/library` blocked in `anon_pipe_read` waiting on tsgo -- zero CPU
     // ticks in eleven hours and forty-three minutes -- and this check did its
     // job perfectly: it declined every timed run on the machine for half a day
     // rather than measure against it.

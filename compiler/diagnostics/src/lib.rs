@@ -71,13 +71,13 @@ pub struct RewrittenSegment {
 
 /// A half-open range within a source file, counted in **UTF-16 code units**.
 ///
-/// Offsets rather than line/column, because an offset is what tsgo's encoded AST
+/// Offsets rather than line/column, because an offset is what the snapshot
 /// carries and turning one into a line and a column means reading the file --
 /// a fine price once per diagnostic and an absurd one per node.
 ///
 /// **Code units, not bytes.** This said bytes until 2026-09-27 and it was the
-/// precondition two location fixes had to refute: tsgo numbers a position the
-/// way a JavaScript string index does (`api/proto.go` converts every diagnostic
+/// precondition two pre-switch location fixes had to refute: tsgo numbered a
+/// position the way a JavaScript string index does (`api/proto.go` converts every diagnostic
 /// with `UTF8ToUTF16` before answering, and the AST encoder wraps every `pos` in
 /// the same call), and the React pipeline mixes these spans with the React
 /// compiler's, which count the same way -- `nts-react`'s

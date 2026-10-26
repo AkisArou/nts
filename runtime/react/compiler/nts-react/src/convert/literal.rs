@@ -1,6 +1,6 @@
 //! Literal values, read from the source as a JavaScript lexer reads them.
 //!
-//! tsgo's snapshot keeps no text for string, numeric or bigint literals (their
+//! the frontend's snapshot keeps no text for string, numeric or bigint literals (their
 //! nodes carry extended data, which nts resolves only for template pieces), so
 //! the value comes from the literal as written.
 

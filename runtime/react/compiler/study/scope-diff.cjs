@@ -1,7 +1,7 @@
 // The scope oracle: our ScopeInfo against the one upstream's Babel plugin
 // builds (babel-plugin-react-compiler-rust/src/scope.ts), file by file.
 //
-// Node ids differ between the two sides (tsgo's against Babel's counter), but
+// Node ids differ between the two sides (the frontend's against Babel's counter), but
 // the ASTs are identical (convert-diff.cjs), so every node is named by its
 // span instead: `start-end`, and an identifier also by its name. Then:
 //   - scopes are compared in order: kind, parent, the node they belong to,

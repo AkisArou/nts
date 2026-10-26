@@ -64,7 +64,7 @@ authoritative.
 
 | Area | Observed starting point | Consequence for this RFC |
 | --- | --- | --- |
-| Frontend and IR | [`frontend-ts`](../compiler/frontend-ts/src/lib.rs) obtains checked facts from tsgo; [`emit_llvm`](../tooling/cli/src/main.rs) calls `hir::prepare_with` and emits that program | The current path is checked source → semantic snapshot → typed SSA HIR and shared passes → backend. A separate MIR and `web.*`/`HostRef` instruction family are proposals, not prerequisites. |
+| Frontend and IR | [`frontend-ts`](../compiler/frontend-ts/src/lib.rs) obtains checked facts from the in-process frontend; [`emit_llvm`](../tooling/cli/src/main.rs) calls `hir::prepare_with` and emits that program | The current path is checked source → semantic snapshot → typed SSA HIR and shared passes → backend. A separate MIR and `web.*`/`HostRef` instruction family are proposals, not prerequisites. |
 | Backends | [`C`](../compiler/codegen/c/src/lib.rs), [`LLVM`](../compiler/codegen/llvm/src/lib.rs), and [`JVM`](../compiler/codegen/jvm/src/lib.rs) consume the shared program | Chromium desktop bring-up uses the native lanes. JVM remains a compiler target; a JVM browser host would be a separate JNI/WebView integration project. |
 | Native interop | [`hir/native.rs`](../compiler/core/src/hir/native.rs) carries authored ABI and retention facts; [`native_callback.rs`](../compiler/core/src/hir/native_callback.rs) checks callback constraints | Start with existing foreign calls and callbacks. Reduce missing constructs for the compiler lane instead of introducing a new host IR immediately. |
 | C embedding | [`ts-from-c`](../tests/interop/ts-from-c/README.md) exports a generated header and static library | A compiled library can be called from a renderer-owned C shim; it need not start its own executable or event loop. |
@@ -292,7 +292,7 @@ and host rejection maintenance remain [reduced blockers](../runtime/chromium/con
 ### E4: source facade, limited V8 interop, and packaged origin
 
 Expose the proven subset through normal typed DOM syntax. Treat DOM types
-as host-backed values, not ordinary NTS records just because tsgo knows
+as host-backed values, not ordinary NTS records just because the checker knows
 `lib.dom.d.ts`. Add an explicit same-node round trip to V8 and back plus a
 small typed function call; defer transparent arbitrary JS object behavior
 and network module loading.

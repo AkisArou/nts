@@ -254,7 +254,7 @@ export function withCachedObjects(printed, out, tools) {
  * (`coredumpctl` says `none`); the signal still reaches the verdict.
  *
  * **Why a cap at all.** `identifiers/start-unicode-16.0.0-escaped.js` is 65 KB of
- * source and takes the frontend to **7.2 GB** resident and ten seconds: tsgo
+ * source. Before the native switch it took **7.2 GB** resident and ten seconds: tsgo
  * JSON-encodes one API response that grows with the number of distinct
  * identifiers. Twelve workers reaching that directory together took the whole
  * machine into the kernel's OOM killer three runs in a row, each time at

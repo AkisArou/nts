@@ -38,8 +38,8 @@ fn repository() -> PathBuf {
 
 /// Emit the refusals fixture and return every diagnostic the backend produced.
 fn declined() -> Vec<(String, String)> {
-    // **Found the way the frontend's own tests find it, and not skipped when
-    // absent.** This read `NTS_TSGO` alone and returned `ok` without it, so a
+    // **The in-process frontend always runs.** Before the native switch this
+    // read `NTS_TSGO` alone and returned `ok` without it, so a
     // bare `cargo test --workspace` -- the run everyone makes by habit -- never
     // ran it: on 2026-09-30 a signature spelled `Erased-Callable` refused four
     // callbacks here while six landings in a row read the suite as green. A

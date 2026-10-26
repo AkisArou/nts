@@ -1,5 +1,9 @@
 # Node API conformance
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 What is implemented, what node's own tests say about it, and what stops it
 compiling.
 

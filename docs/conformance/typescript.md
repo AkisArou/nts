@@ -1,5 +1,9 @@
 # TypeScript language and runtime conformance
 
+Dated measurements, commands and tsgo API references below describe the pre-switch
+frontend. The current frontend runs in process; those historical inputs and
+results are kept at their original revisions.
+
 What compiles, what is refused, and what is missing entirely.
 
 Companion to [`nodejs.md`](nodejs.md), which tracks the Node API surface, and to

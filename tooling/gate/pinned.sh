@@ -102,7 +102,7 @@ else
   git -C "$root" worktree add --detach -q "$tree" "$sha"
 fi
 
-# What no commit carries -- the third-party clones, the tsgo binary, the
+# What no commit carries -- the third-party clones and the
 # workspace's node_modules -- linked in. One list, shared with `lane start`,
 # so a gate tree and a lane's tree cannot disagree about what is there; the
 # reasons for each entry are in that script.

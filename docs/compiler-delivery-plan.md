@@ -2,7 +2,7 @@
 
 How lanes work side by side and land is [workflow.md](workflow.md).
 
-**Historical:** the compiler's delivery log up to 2026-10-04. The current plan
+**Historical (pre-switch frontend):** the compiler's delivery log up to 2026-10-04. The current plan
 is [plan.md](plan.md). The original baseline was `c132dbf6e`; delivered changes
 and their acceptance evidence are recorded below.
 

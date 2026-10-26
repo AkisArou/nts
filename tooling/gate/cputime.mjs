@@ -1,7 +1,7 @@
 // The CPU time a child process spends itself, sampled from /proc while it
 // runs: `utime + stime` of the process (every thread of it), not of the
-// children it starts -- the frontend (tsgo) is one, and how much of its work a
-// snapshot saves differs between runs; the lowering is what this measures.
+// children it starts. The native frontend runs in this process, so its CPU
+// time is included; external compiler/linker processes are not.
 //
 // Sampled rather than taken from a wrapper such as /usr/bin/time, which would
 // stand between the caller and the process: a signal would arrive as an exit

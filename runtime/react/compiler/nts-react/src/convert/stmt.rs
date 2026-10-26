@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use super::{Converted, Converter, k};
 
-/// tsgo's `NodeFlags` for a declaration list's keyword.
+/// the frontend's `NodeFlags` for a declaration list's keyword.
 const FLAG_LET: u32 = 1 << 0;
 const FLAG_CONST: u32 = 1 << 1;
 const FLAG_USING: u32 = 1 << 2;
@@ -322,8 +322,8 @@ impl Converter<'_> {
         if !exported {
             return Ok(declaration_statement(declaration));
         }
-        // The declaration keeps the tsgo node's id; the export around it is a
-        // second Babel node made from the same tsgo node.
+        // The declaration keeps the syntax node's id; the export around it is a
+        // second Babel node made from the same syntax node.
         let mut base = self.base(id);
         base.node_id = Some(id.0 | super::expr::SECOND_NODE);
         if is_default {
