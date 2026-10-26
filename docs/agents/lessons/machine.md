@@ -1,5 +1,7 @@
 # The machine and its tools
 
+Historical `tsgo` commands below are pre-switch (tsgo); the current frontend is in process.
+
 The shell, toolchains, disk, memory pressure and git on this box.
 
 Each line is a rule and the reason it exists. Add one when something costs you time that a rule would have saved; delete one when it stops being true.

@@ -1,5 +1,7 @@
 # Measurement
 
+Historical `tsgo` commands below are pre-switch (tsgo); the current frontend is in process.
+
 What a number means: instruments, censuses, counts and the populations they cover. Most wrong conclusions here were correct measurements of the wrong thing.
 
 Each line is a rule and the reason it exists. Add one when something costs you time that a rule would have saved; delete one when it stops being true.

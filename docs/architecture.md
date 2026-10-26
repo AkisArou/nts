@@ -8,7 +8,7 @@ each part lives in the repository. [`README.md`](../README.md) says what nts is.
 ```text
 TypeScript / TSX
       ▼
-tsgo (the Go TypeScript compiler), asked over its API   →  semantic snapshot
+tsrs in process, through its safe native adapter      →  semantic snapshot
       ▼
 HIR lowering        typed SSA; every operation carries its source origin
       ▼
@@ -18,8 +18,8 @@ HIR preparation     specialization · simplification · escape and ownership
 C (→ clang) · LLVM IR · JVM class files (→ DEX) · WasmGC · N-API addons
 ```
 
-Only `compiler/frontend-ts` talks to the TypeScript compiler; everything after it
-reads the versioned semantic snapshot (`compiler/semantic-schema`). Backends emit
+`compiler/frontend-tsrs` owns the native checker's sessions and borrowed views.
+`compiler/frontend-ts` captures their facts into the versioned semantic snapshot (`compiler/semantic-schema`); core and backends read only that snapshot. Backends emit
 what preparation decided and decide nothing a sibling backend would decide
 differently.
 
@@ -40,7 +40,7 @@ Products and targets are declared in `nts.config.ts`; [`nts-config.md`](nts-conf
 ## Repository layout
 
 ```text
-compiler/       frontend-ts (tsgo), semantic-schema, core (HIR), codegen/{c,llvm,jvm,wasm,napi,common},
+compiler/       frontend-ts (capture), frontend-tsrs (safe native adapter), semantic-schema, core (HIR), codegen/{c,llvm,jvm,wasm,napi,common},
                 jvm-emitter (class files), diagnostics
 runtime/        c, jvm, node, ecmascript, web-platform, native, chromium, react, gtk, objc, winrt, sdk
 tooling/        cli (the `nts` binary), gate, conformance, census, bench, differential, suite, deps,
@@ -50,6 +50,6 @@ tests/          the corpora: programs compared with node, refusals, outcomes, me
 benchmarks/     benchmark cases with C++ and Java references
 results/        what the tools measured: benchmarks, test262, conformance records
 docs/           designs, lane notebooks, ideas, and the decision records
-third_party/    typescript-go, test262, node, chromium and other pinned dependencies
+third_party/    tsrs, typescript (corpus), test262, node, chromium and other pinned dependencies
 ```
 

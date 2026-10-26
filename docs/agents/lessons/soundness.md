@@ -1,5 +1,7 @@
 # Soundness
 
+Historical `tsgo` commands below are pre-switch (tsgo); the current frontend is in process.
+
 Reasoning about whether the compiler is right: derivations, preconditions, guards, trust and refusals.
 
 Each line is a rule and the reason it exists. Add one when something costs you time that a rule would have saved; delete one when it stops being true.

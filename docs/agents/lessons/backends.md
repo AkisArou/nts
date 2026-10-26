@@ -1,5 +1,7 @@
 # Backends and runtimes
 
+Historical `tsgo` commands below are pre-switch (tsgo); the current frontend is in process.
+
 Facts specific to the C, LLVM, JVM, Wasm and N-API backends and their runtimes.
 
 Each line is a rule and the reason it exists. Add one when something costs you time that a rule would have saved; delete one when it stops being true.

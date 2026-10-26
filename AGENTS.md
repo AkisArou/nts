@@ -26,7 +26,8 @@ says who owns which paths and which branch prefix each uses.
 Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
 `<lane>/<topic>` (`docs/workflow.md`). `~/Projects/nts` is `main` and is
 landing-only: nobody edits there. It supplies the inputs no commit carries
-(`third_party/*`, `target/tsgo`), and every tree shares its object store.
+(`third_party/*` corpora); the native checker is compiled into nts, and every
+tree shares the object store.
 
 - `git stash` is shared by every worktree: commit work in progress as a `WIP:`
   commit instead.
@@ -81,11 +82,11 @@ fixtures, examples and blockers did not.
 Before you land, run the gate's own commands, not look-alikes:
 `cargo fmt`; `cargo clippy --workspace --all-targets -- -D warnings`;
 `cargo test --no-fail-fast` over every crate you touched *and the backend
-crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_TSGO=$PWD/target/tsgo`
-set; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
+crates* (`-p nts-codegen-{c,llvm,jvm,wasm}`), with `NTS_CHECKERS=1`
+set to bound each test process's checker pool and memory; and `clang-format --style=file --dry-run -Werror` on any `runtime/c` file
 you edited. A core change that passes core's tests has broken a backend's more
-than once; a test without `NTS_TSGO` skips itself and reports ok; and without
-`--no-fail-fast` cargo stops at the first failing test binary and silently
+than once. Frontend tests always run: an in-process capture failure is a
+failure, never a missing executable to skip. Without `--no-fail-fast` cargo stops at the first failing test binary and silently
 skips the rest. After committing, read `git show --name-status HEAD`: a new
 file left untracked is a commit nobody can build.
 
@@ -130,10 +131,10 @@ then a guard once fixed), `tests/memory/`.
   compiling what they can. Read stderr.
 - `nts hir` shows raw lowering; `nts hir --prepared --backend <b>` is what a
   backend sees.
-- The snapshot cache is keyed by content: the frontend's own source, tsgo's
-  identity and every file an answer read. Another `NTS_TSGO` or a rebuilt
-  frontend is a new question, so neither needs `NTS_NO_SNAPSHOT_CACHE=1` any
-  more; that variable stays for ruling the cache out of a defect.
+- The native producer captures every request; it has no persistent snapshot
+  cache. Any reuse must validate all recorded host observations through the
+  adapter, including failed lookups and directory reads: the deleted cache
+  silently kept a missing sibling module missing after the file appeared.
 
 ## The machine
 
@@ -146,7 +147,7 @@ then a guard once fixed), `tests/memory/`.
 - One cargo target per worktree: two trees sharing one reuse each other's
   compiled crates and run the wrong code. A target is 15–40 GB; delete its
   `debug/incremental` after a test run and check `df -h /` before starting one.
-- A tsgo snapshot of a large program takes gigabytes: cap parallel frontends,
+- A native snapshot of a large program can take gigabytes: cap parallel frontends,
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
   heavy job of yours at a time, a heavy phase started only when `MemAvailable`

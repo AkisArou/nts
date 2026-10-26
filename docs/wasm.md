@@ -1560,7 +1560,7 @@ node tooling/wasm/check-scalars.mjs /tmp/nts-wasm tests/wasm/scalars/src/main.ts
 The loader exports `instantiate(bytes, manifest)` and `load(moduleUrl,
 manifestUrl)`; `load` defaults to the sibling `program.json`. Loading evaluates
 the module initializer once and returns a frozen namespace with live getters.
-Use `NTS_TSGO` to select the repository's pinned frontend for compilation/tests.
+The linked native frontend is pinned with the compiler; use `NTS_CHECKERS=1` in batch runners to bound their per-process checker memory.
 
 `Backend::Wasm` is recognized explicitly. `Backend::ALL` is still exactly
 `[C, Llvm, Jvm]`, with a regression assertion; existing gate loops are unchanged.
