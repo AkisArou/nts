@@ -2,9 +2,9 @@
 
 How lanes work side by side and land is [workflow.md](workflow.md).
 
-Current plan, 2026-10-04. The original baseline was `c132dbf6e`; delivered
-changes and their acceptance evidence are recorded below. Main owns this plan
-and the compiler work; platform and runtime peers retain their lanes.
+**Historical:** the compiler's delivery log up to 2026-10-04. The current plan
+is [plan.md](plan.md). The original baseline was `c132dbf6e`; delivered changes
+and their acceptance evidence are recorded below.
 
 ## Implemented architecture
 

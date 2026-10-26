@@ -3,6 +3,12 @@
 What each document is for. If a document is not listed here, it is either a
 lane's own (under `runtime/<lane>/docs/`) or it should be added.
 
+## Where we are going
+
+- [`plan.md`](plan.md): the plan: the phases, their order, and what each is waiting on.
+- [`decisions.md`](decisions.md): every product decision the user has made, in one place.
+- [`foundations/`](foundations): the foundations every program is built from (numbers, strings, tables, memory, ...): the map, and one design per foundation.
+
 ## How we work
 
 - [`../AGENTS.md`](../AGENTS.md): the rules every contributor follows: landing, the gate, fixtures, the shared tree.
@@ -28,8 +34,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 
 ## Current designs
 
-- [`foundations/`](foundations): the foundations every program is built from (numbers, strings, tables, memory, ...): the map, and one design per foundation.
-- [`compiler-delivery-plan.md`](compiler-delivery-plan.md): the compiler's current plan and what is landed.
+- [`compiler-delivery-plan.md`](compiler-delivery-plan.md): the compiler's delivery log up to 2026-10-04 (historical; the plan is [`plan.md`](plan.md)).
 - [`any-unknown.md`](any-unknown.md): `any` and `unknown`, erased values and how they are recovered.
 - [`async.md`](async.md): promises, async functions and the host seam.
 - [`interfaces-by-shape.md`](interfaces-by-shape.md): interfaces satisfied by shape, and field families.
