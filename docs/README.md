@@ -28,6 +28,7 @@ lane's own (under `runtime/<lane>/docs/`) or it should be added.
 
 ## Current designs
 
+- [`foundations/`](foundations): the foundations every program is built from (numbers, strings, tables, memory, ...): the map, and one design per foundation.
 - [`compiler-delivery-plan.md`](compiler-delivery-plan.md): the compiler's current plan and what is landed.
 - [`any-unknown.md`](any-unknown.md): `any` and `unknown`, erased values and how they are recovered.
 - [`async.md`](async.md): promises, async functions and the host seam.

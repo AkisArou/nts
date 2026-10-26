@@ -16,6 +16,7 @@
         "compiler/core/",
         "compiler/diagnostics/",
         "compiler/semantic-schema/",
+        "docs/foundations/",
         "docs/records/",
         "tests/programs/",
         "tests/interop/",
